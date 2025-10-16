@@ -11,7 +11,7 @@ pdf2image>=1.16.0
 Pillow>=10.0.0
 pytesseract>=0.3.10
 PyMuPDF==1.26.1
-nltk>=3.8.1
+psutil>=5.9.0
 
 # AI and ML
 openai>=1.0.0
@@ -19,8 +19,6 @@ yake>=0.4.8
 langdetect>=1.0.9
 rapidfuzz>=3.0.0
 easyocr>=1.7.2
-torch>=2.0.0
-torchvision>=0.15.0
 opencv-python-headless>=4.10.0.84
 sentence-transformers>=2.2.2
 scikit-learn>=1.2.0
@@ -28,8 +26,11 @@ scipy>=1.10.0
 numpy>=1.24.0
 pandas>=2.0.0
 spacy>=3.8.0
+faiss-cpu>=1.7.4
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
+# Transliteration (for Marathi/Sanskrit)
+indic-transliteration>=2.3.0
 # Production server
 gunicorn>=21.0.0
 whitenoise>=6.0.0
