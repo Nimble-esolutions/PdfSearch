@@ -7,14 +7,14 @@ services:
       - "6379:6379"
 
   web:
-    image: dev-one-58pibn:latest
     build: .
+    #image: dev-one-58pibn:latest
     command: sh -c "./start.sh"
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
-      - sqlite_data:/app/flowdocs/db.sqlite3   # persist SQLite DB
-      - ./backups:/app/backups                # persist backups
+      - db_volume:/app/flowdocs/flowdocs     # database SQLite volume
+      - backups_volume:/app/backups             # persist backups
     ports:
       - "8000:8000"
     environment:
@@ -22,8 +22,10 @@ services:
       - REDIS_URL=redis://redis:6379/1
     depends_on:
       - redis
-    restart: unless-stopped   # <--- add this line
+    restart: unless-stopped
+
 volumes:
+  db_volume:
+  backups_volume:
   static_volume:
   media_volume:
-  sqlite_data:
