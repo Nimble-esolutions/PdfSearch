@@ -92,7 +92,6 @@ mmh3==5.2.0
 mpmath==1.3.0
 multidict==6.6.3
 murmurhash==1.0.13
-mysqlclient==2.2.7
 networkx==3.5
 ninja==1.13.0
 numpy==2.2.6
@@ -108,7 +107,6 @@ opentelemetry-proto==1.36.0
 opentelemetry-sdk==1.36.0
 opentelemetry-semantic-conventions==0.57b0
 orjson==3.11.3
-oscrypto==1.3.0
 outcome==1.3.0.post0
 overrides==7.7.0
 packaging==25.0
@@ -134,7 +132,6 @@ Pygments==2.19.2
 pyHanko==0.29.1
 pyhanko-certvalidator==0.27.0
 PyMuPDF==1.26.1
-PyMySQL==1.1.1
 pyparsing==3.2.3
 pypdf==5.7.0
 PyPDF2==3.0.1
@@ -143,9 +140,7 @@ pyproject_hooks==1.2.0
 pyreadline3==3.5.4
 PySocks==1.7.1
 pytesseract==0.3.13
-python-bidi==0.6.6
 python-dateutil==2.9.0.post0
-python-decouple==3.8
 python-docx==1.2.0
 python-dotenv==1.1.1
 pytz==2025.2
@@ -156,7 +151,6 @@ regex==2024.11.6
 reportlab==4.4.2
 requests==2.32.4
 requests-oauthlib==2.0.0
-rich==14.0.0
 rpds-py==0.27.1
 rsa==4.9.1
 safetensors==0.5.3
@@ -182,7 +176,6 @@ srsly==2.5.1
 svglib==1.5.1
 sympy==1.14.0
 tabulate==0.9.0
-tenacity==9.1.2
 thinc==8.3.6
 threadpoolctl==3.6.0
 tifffile==2025.8.28
@@ -218,4 +211,6 @@ xhtml2pdf==0.2.17
 yake==0.6.0
 yarl==1.20.1
 zipp==3.23.0
-nltk>=3.8.1
+faiss-cpu==1.7.4
+indic-transliteration==2.3.0
+psutil>=5.9.0
