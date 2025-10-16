@@ -1,0 +1,479 @@
+{% load static i18n %}
+<!DOCTYPE html>
+<html lang="{{ request.LANGUAGE_CODE }}">
+<head>
+  <meta charset="UTF-8">
+  <title>{% trans "Search With AI - CC & RCS Maharashtra" %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{% trans 'Commissioner for Co-operation and Registrar, Cooperative Societies, Maharashtra State, Pune' %}">
+   <!-- ✅ Faster font loading for Safari -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Google Font for Marathi / Devanagari -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari&display=block" rel="stylesheet">
+
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="{% static 'main/css/style.css' %}">
+  
+
+</head>
+<body>
+
+<!-- Top Utility Bar -->
+<div class="bg-dark text-white small px-3 py-1">
+  <div class="container d-flex justify-content-end align-items-center">
+    <div class="text-end">
+      <a href="{% url 'login' %}" class="text-white text-decoration-none me-2">{% trans "Admin Login" %}</a> |
+      <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" class="text-white text-decoration-none me-2">{% trans "Home" %}</a> |
+      <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6" class="text-white text-decoration-none me-2">{% trans "Locate Us" %}</a> |
+      
+      <form action="{% url 'set_language' %}" method="post" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        {% if request.LANGUAGE_CODE == 'en' %}
+          <input type="hidden" name="language" value="mr">
+          <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0">मराठी</button>
+        {% else %}
+          <input type="hidden" name="language" value="en">
+          <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0">English</button>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+</div>
+
+<header class="banner-header">
+  <picture>
+    <!-- Mobile banner -->
+    <source media="(max-width: 768px)" srcset="{% static 'main/images/banner-mobile-1.jpg' %}">
+    <!-- Desktop banner (default) -->
+    <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}" alt="Banner" class="banner-img">
+  </picture>
+
+  <div class="banner-text">
+    <h5>{% trans "AI Enabled Search" %}</h5>
+    <h6>{% trans "Registrar Co-operative Societies" %}</h6>
+  </div>
+</header>
+
+
+<!-- Chat Section -->
+<div class="container-fluid p-0">
+  <div class="chat-container">
+
+      <div id="chatMain"></div>
+
+      <div class="chat-input">
+         <img src="{% static 'main/images/Option-1 BOT.png' %}" alt="Ask Icon" style="height:50px;">
+          <input type="text" id="userQuery" placeholder="💬 {% trans 'Ask your question...' %}">
+          <button id="sendBtn">{% trans "Search" %}</button>
+
+          <!-- Original chat icons (desktop) -->
+          <!-- WhatsApp button -->
+<a href="https://wa.me/919421200000" target="_blank" class="whatsapp-link">
+  <picture>
+    <source media="(max-width: 768px)" srcset="{% static 'main/images/wh-btn-mobile.jpg' %}">
+    <img src="{% static 'main/images/wh-btn.jpg' %}" alt="WhatsApp" style="height:40px; cursor:pointer;">
+  </picture>
+</a>
+
+<!-- Feedback button -->
+<a href="https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform" target="_blank" class="feedback-link">
+  <picture>
+    <source media="(max-width: 768px)" srcset="{% static 'main/images/fd-btn-mobile.jpg' %}">
+    <img src="{% static 'main/images/fd-btn.jpg' %}" alt="Feedback" style="height:40px; cursor:pointer;">
+  </picture>
+</a>
+
+      </div>
+
+      <small id="wordCounter" style="color: gray; font-size: 12px; display: block; margin-left: 10px; margin-top: 2px;">
+        0/30 words
+      </small>
+
+      <!-- ✅ Disclaimer -->
+      <div class="text-center" style="font-size: 13px; color: #666;">
+          ⚠️ Sahkar AI can make mistakes. Check important info with Head Office.
+      </div>
+
+      
+
+  </div>
+</div>
+
+<!-- Footer -->
+<footer class="bg-light py-2  border-top">
+  <div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <small>{% trans " All rights reserved© Registrar Co-operative Societies." %}</small>
+      </div>
+      <div class="d-flex gap-3">
+       <!-- <a href="http://india.gov.in/" target="_blank"><img src="{% static 'main/images/' %}" alt="Logo 1" height="20"></a>
+        <a href="http://validator.w3.org/check?uri=referer" target="_blank"><img src="{% static 'main/images/' %}" alt="Logo 2" height="20"></a>
+        <a href="http://jigsaw.w3.org/css-validator/check/referer" target="_blank"><img src="{% static 'main/images/' %}" alt="Logo 3" height="20"></a>
+        -->
+        <a href="https://nimble-esolutions.com/" target="_blank"><img src="{% static 'main/images/footer-logo-nimble.jpg' %}" alt="Logo 4" height="40"></a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const chatMain = document.getElementById('chatMain');
+const sendBtn = document.getElementById('sendBtn');
+const userQuery = document.getElementById('userQuery');
+
+// Show welcome message
+window.addEventListener("DOMContentLoaded", function(){
+    const welcome = `{{ welcome_message|safe }}`;
+    if(welcome) appendMessage(welcome, "gpt");
+});
+
+sendBtn.addEventListener('click', sendMessage);
+userQuery.addEventListener('keypress', e => { if(e.key === 'Enter') sendMessage(); });
+
+function sendMessage(){
+    const query = userQuery.value.trim();
+    if(!query) return;
+
+    // 🔹 Word limit check (30 words)
+    const wordCount = query.split(/\s+/).length;
+    if(wordCount > 30){
+        appendMessage("⚠️ Your query is too long (max 30 words). Please shorten it.", "gpt");
+        return;
+    }
+
+    appendMessage(query, 'user');
+    userQuery.value = '';
+    sendBtn.disabled = true;
+
+    // ------------------- Sequential Loading Effect -------------------
+    const typingDiv = appendMessage('', 'gpt', true);
+    typingDiv.classList.add('typing');
+
+    const stages = [" Searching", " Analyzing", " Composing"];
+    let stageIndex = 0;
+
+    function showStage() {
+        typingDiv.innerHTML = `<strong>${stages[stageIndex]}</strong> <span>•</span><span>•</span><span>•</span>`;
+        stageIndex++;
+        if(stageIndex < stages.length) {
+            setTimeout(showStage, 2000); // move to next stage after 1.5s
+        }
+    }
+    showStage();
+    // ----------------------------------------------------------------
+
+    const formData = new FormData();
+    formData.append('query', query);
+
+    fetch("{% url 'search_query' %}", {
+        method: "POST",
+        headers: {'X-CSRFToken': '{{ csrf_token }}'},
+        body: formData,
+        credentials: "same-origin"
+    })
+    .then(res => res.json())
+    .then(data => {
+        typingDiv.remove();
+        if(data.answer){
+            typeEffect(data.answer, data.references || []);
+        } else if(data.error){
+            appendMessage('⚠️ Error: ' + data.error, 'gpt');
+        }
+    })
+    .catch(err => {
+        typingDiv.remove();
+        appendMessage('⚠️ Something went wrong. Please try again later.', 'gpt');
+        console.error(err);
+    });
+}
+
+function appendMessage(text, sender, isLoading=false){
+    const div = document.createElement('div');
+    div.className = sender === 'user' ? 'user-msg' : 'gpt-msg';
+
+    // safer for Safari: preserve ligatures
+    if (isLoading) {
+        div.textContent = text;
+    } else {
+        text.split("\n").forEach((line, idx) => {
+            if (idx > 0) div.appendChild(document.createElement("br"));
+            div.appendChild(document.createTextNode(line));
+        });
+    }
+
+    chatMain.appendChild(div);
+    chatMain.scrollTop = chatMain.scrollHeight;
+    if(isLoading) return div;
+    return div;
+}
+
+
+// Typing effect for GPT answers
+function typeEffect(text, references = []) {
+    const div = document.createElement('div');
+    div.className = 'gpt-msg';
+    chatMain.appendChild(div);
+
+    let cursor = document.createElement("span");
+    cursor.className = "cursor";
+    div.appendChild(cursor);
+
+    // ✅ Use grapheme cluster segmentation (handles Marathi properly)
+    const segmenter = new Intl.Segmenter('mr', { granularity: 'grapheme' });
+    const graphemes = [...segmenter.segment(text)].map(seg => seg.segment);
+
+    let i = 0;
+    function typing() {
+        if (i < graphemes.length) {
+            cursor.insertAdjacentHTML("beforebegin", 
+                graphemes[i] === "\n" ? "<br>" : graphemes[i]);
+            chatMain.scrollTop = chatMain.scrollHeight;
+            i++;
+            setTimeout(typing, 20);
+        } else {
+            cursor.remove();
+
+            if (references.length > 0) {
+                const refDiv = document.createElement('div');
+                refDiv.className = "references";
+                refDiv.innerHTML = "<strong>📚 References:</strong>";
+                references.forEach(ref => {
+                    const card = document.createElement('div');
+                    card.className = "ref-card";
+                    card.innerHTML = `
+                        <a href="${ref.url}" target="_blank">${ref.title}</a>
+                        <small>${ref.folder} • ${ref.uploaded_at}</small>
+                    `;
+                    refDiv.appendChild(card);
+                });
+                div.appendChild(refDiv);
+            }
+        }
+    }
+    typing();
+}
+
+
+// ------------------ Word Counter ------------------
+const wordCounter = document.getElementById("wordCounter");
+
+userQuery.addEventListener("input", function () {
+    const words = this.value.trim().split(/\s+/).filter(w => w.length > 0);
+    const count = words.length;
+
+    wordCounter.textContent = `${count}/30 words`;
+
+    if (count > 30) {
+        wordCounter.style.color = "red";
+        sendBtn.disabled = true;
+    } else {
+        wordCounter.style.color = "gray";
+        sendBtn.disabled = (count === 0);
+    }
+});
+
+// ------------------ Language toggle update ------------------
+document.querySelectorAll('form[action="{% url "set_language" %}"]').forEach(form => {
+    form.addEventListener('submit', () => {
+        const langInput = form.querySelector('input[name="language"]');
+        if(langInput) document.documentElement.lang = langInput.value;
+    });
+});
+</script>
+
+
+
+
+<style>
+body, input, button, .gpt-msg, .user-msg, 
+.banner-text, .chat-input input, .chat-input button {
+    font-family: 'Noto Sans Devanagari', 'Mangal', 'Kohinoor Devanagari', 
+                 'Lohit Devanagari', 'Segoe UI', sans-serif !important;
+    font-size: 16px;  /* Safari sometimes scales weird, this stabilizes */
+    line-height: 1.5;
+}
+
+html {
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+}
+.chat-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    height: 80vh;
+    padding: 15px;
+    background: #f0f0f0; 
+}
+#chatMain {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 5px;
+}
+.user-msg {
+    align-self: flex-end;
+    background-color:#f7eee2;
+    color: #000;
+    padding: 10px 15px;
+    border-radius: 20px 20px 0 20px;
+    max-width: 70%;
+    word-wrap: break-word;
+}
+.gpt-msg {
+    align-self: flex-start;
+    background-color: #fff;
+    padding: 10px 15px;
+    border-radius: 20px 20px 20px 0;
+    max-width: 100%;
+    word-wrap: break-word;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    white-space: normal;
+    
+}
+.typing span {
+    display: inline-block;
+    animation: blink 1.2s infinite;
+}
+@keyframes blink {
+    0%, 20% { opacity: 0; }
+    50% { opacity: 1; }
+    100% { opacity: 0; }
+}
+.cursor {
+    display: inline-block;
+    width: 2px;
+    background: black;
+    margin-left: 2px;
+    animation: blink 1s infinite;
+}
+
+/* Chat Input */
+.chat-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 10px;
+}
+.chat-input input[type="text"] {
+    flex: 1;
+    border-radius: 25px;
+    padding: 10px 10px;
+    border: 1px solid #ccc;
+}
+.chat-input button {
+    border-radius: 25px;
+    padding: 5px 5px;
+    background-color: #e97e15;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+}
+.chat-input button:hover {
+    background-color: #e97e15;
+}
+
+/* References */
+.references {
+    font-size: 0.85rem;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.ref-card {
+    background: #f1f8e9;
+    border-left: 4px solid #8bc34a;
+    padding: 6px 10px;
+    border-radius: 8px;
+}
+.ref-card a {
+    color: #33691e;
+    text-decoration: none;
+    font-weight: 600;
+}
+.ref-card small {
+    display: block;
+    font-size: 0.75rem;
+    color: #666;
+}
+
+/* Banner */
+.banner-header {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+}
+.banner-img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+.banner-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #000;
+    z-index: 2;
+    padding: 0 10px;
+    width: 100%;
+    max-width: 90%;
+}
+.banner-text h5 {
+    font-weight: bold;
+    margin-bottom: 5px;
+    font-size: 1.5rem;
+}
+.banner-text h6 {
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    /* Banner smaller */
+    .banner-text h5 { font-size: 1rem; }
+    .banner-text h6 { font-size: 0.7rem; }
+
+    /* Center heading */
+    .banner-text { top: 50%; }
+ 
+    /* Chat Input - hide BOT image */
+    .chat-input img[alt="Ask Icon"] { display: none !important; }
+
+    /* Input & buttons inline */
+    .chat-input { gap: 3px; padding-right: 5px; }
+
+    /* Make icons smaller on mobile */
+    .chat-input a.whatsapp-link img,
+    .chat-input a.feedback-link img {
+        height: 10px;
+        width: auto;
+    }
+
+    /* Make icons visible inline */
+    .chat-input a { display: inline-flex !important; align-items: center; }
+
+    /* Optional small adjustment for last icon spacing */
+    .chat-input a:last-child { margin-right: 0; }
+}
+
+
+</style>
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Under Maintenance - CC & RCS Maharashtra</title>
+    <meta name="description" content="Commissioner for Cooperation and Registrar, Cooperative Societies, Maharashtra State - System Under Maintenance">
+    <meta name="keywords" content="Maharashtra, Cooperative Societies, CC RCS, Maintenance, System Update">
+    <meta name="author" content="CC & RCS Maharashtra">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/images/MahaIT_Logo.png">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="assets/css/style.css">
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .animated-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(255, 152, 0, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 87, 34, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(255, 193, 7, 0.2) 0%, transparent 50%);
+            animation: backgroundShift 20s ease-in-out infinite;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { transform: translateX(0) translateY(0); }
+            25% { transform: translateX(-2%) translateY(-1%); }
+            50% { transform: translateX(2%) translateY(1%); }
+            75% { transform: translateX(-1%) translateY(2%); }
+        }
+
+        /* Floating Particles */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        .particle {
+            position: absolute;
+            background: rgba(255, 152, 0, 0.1);
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .particle:nth-child(1) { width: 4px; height: 4px; left: 10%; animation-delay: 0s; }
+        .particle:nth-child(2) { width: 6px; height: 6px; left: 20%; animation-delay: 1s; }
+        .particle:nth-child(3) { width: 3px; height: 3px; left: 30%; animation-delay: 2s; }
+        .particle:nth-child(4) { width: 5px; height: 5px; left: 40%; animation-delay: 3s; }
+        .particle:nth-child(5) { width: 4px; height: 4px; left: 50%; animation-delay: 4s; }
+        .particle:nth-child(6) { width: 7px; height: 7px; left: 60%; animation-delay: 5s; }
+        .particle:nth-child(7) { width: 3px; height: 3px; left: 70%; animation-delay: 0.5s; }
+        .particle:nth-child(8) { width: 5px; height: 5px; left: 80%; animation-delay: 1.5s; }
+        .particle:nth-child(9) { width: 4px; height: 4px; left: 90%; animation-delay: 2.5s; }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(-100px) rotate(360deg); opacity: 0; }
+        }
+
+        /* Futuristic Header */
+        .header {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 152, 0, 0.2);
+            position: relative;
+            z-index: 10;
+        }
+
+        .banner-container {
+            position: relative;
+            width: 100%;
+            max-height: 200px;
+            overflow: hidden;
+        }
+
+        .banner-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: cover;
+            filter: brightness(0.8) contrast(1.2);
+        }
+
+        .banner-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #fff;
+            z-index: 2;
+            width: 90%;
+            text-shadow: 0 0 20px rgba(255, 152, 0, 0.5);
+        }
+
+        .banner-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(45deg, #ff9800, #ff5722, #ffc107);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 3s ease-in-out infinite;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .banner-subtitle {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #ff9800;
+            text-shadow: 0 0 10px rgba(255, 152, 0, 0.5);
+        }
+
+        /* Futuristic Content Card */
+        .content-card {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(20px);
+            border-radius: 30px;
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 152, 0, 0.1);
+            padding: 3rem;
+            text-align: center;
+            max-width: 800px;
+            width: 100%;
+            border: 1px solid rgba(255, 152, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .content-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 152, 0, 0.1), transparent);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .logo {
+            width: 100px;
+            height: auto;
+            margin-bottom: 2rem;
+            filter: drop-shadow(0 0 20px rgba(255, 152, 0, 0.5));
+            animation: logoGlow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes logoGlow {
+            from { filter: drop-shadow(0 0 20px rgba(255, 152, 0, 0.5)); }
+            to { filter: drop-shadow(0 0 30px rgba(255, 152, 0, 0.8)); }
+        }
+
+        .main-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 4rem;
+            font-weight: 900;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #ff9800, #ff5722, #ffc107, #ff9800);
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 2s ease-in-out infinite;
+            text-shadow: 0 0 30px rgba(255, 152, 0, 0.5);
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            color: #ff9800;
+            margin-bottom: 2rem;
+            font-weight: 500;
+            text-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+        }
+
+        .description {
+            font-size: 1.2rem;
+            color: #ccc;
+            margin-bottom: 2rem;
+            line-height: 1.8;
+        }
+
+        /* Futuristic Status Badge */
+        .status-badge {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .maintenance {
+            background: linear-gradient(45deg, #ff9800, #ff5722);
+            color: #000;
+            box-shadow: 
+                0 0 20px rgba(255, 152, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(255, 152, 0, 0.5); }
+            50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(255, 152, 0, 0.8); }
+        }
+
+        /* Futuristic Countdown */
+        .countdown-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 1.5rem;
+            margin: 3rem 0;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .countdown-item {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 
+                0 10px 20px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 152, 0, 0.2);
+            border: 1px solid rgba(255, 152, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .countdown-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent, rgba(255, 152, 0, 0.1), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .countdown-item:hover::before {
+            opacity: 1;
+        }
+
+        .countdown-number {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #ff9800;
+            display: block;
+            text-shadow: 0 0 20px rgba(255, 152, 0, 0.5);
+            animation: numberGlow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes numberGlow {
+            from { text-shadow: 0 0 20px rgba(255, 152, 0, 0.5); }
+            to { text-shadow: 0 0 30px rgba(255, 152, 0, 0.8); }
+        }
+
+        .countdown-label {
+            font-size: 0.9rem;
+            color: #ccc;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 0.5rem;
+        }
+
+        /* Maintenance Activities */
+        .activities-container {
+            margin: 3rem 0;
+            text-align: left;
+        }
+
+        .activities-title {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #ff9800;
+            font-size: 1.3rem;
+            font-weight: 600;
+            text-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+        }
+
+        .activities-list {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 152, 0, 0.2);
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .activity-item:hover {
+            background: rgba(255, 152, 0, 0.1);
+            transform: translateX(10px);
+        }
+
+        .activity-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .activity-icon {
+            margin-right: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .activity-text {
+            color: #ccc;
+            font-size: 1.1rem;
+        }
+
+        .activity-text strong {
+            color: #ff9800;
+        }
+
+        /* Futuristic Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+
+        .feature-card {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            border: 1px solid rgba(255, 152, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent, rgba(255, 152, 0, 0.1), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            border-color: rgba(255, 152, 0, 0.5);
+            box-shadow: 0 20px 40px rgba(255, 152, 0, 0.2);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #ff9800, #ff5722);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: iconFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes iconFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .feature-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #ff9800;
+        }
+
+        .feature-description {
+            font-size: 0.9rem;
+            color: #ccc;
+            line-height: 1.6;
+        }
+
+        /* Futuristic Contact Info */
+        .contact-info {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 152, 0, 0.2);
+        }
+
+        .contact-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #ff9800;
+            text-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+        }
+
+        .contact-item {
+            margin-bottom: 1rem;
+            color: #ccc;
+            font-size: 1.1rem;
+        }
+
+        .contact-item strong {
+            color: #ff9800;
+            text-shadow: 0 0 5px rgba(255, 152, 0, 0.3);
+        }
+
+        /* Status Updates */
+        .status-update {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: rgba(255, 152, 0, 0.1);
+            border-radius: 15px;
+            border-left: 4px solid #ff9800;
+            border: 1px solid rgba(255, 152, 0, 0.3);
+        }
+
+        .status-update p {
+            margin: 0;
+            color: #ff9800;
+            font-size: 1.1rem;
+        }
+
+        /* Futuristic Footer */
+        .footer {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px);
+            padding: 2rem;
+            text-align: center;
+            border-top: 1px solid rgba(255, 152, 0, 0.2);
+        }
+
+        .footer-text {
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .main-title {
+                font-size: 2.5rem;
+            }
+            
+            .content-card {
+                padding: 2rem;
+                margin: 1rem;
+            }
+            
+            .countdown-container {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 1rem;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="animated-bg"></div>
+    
+    <!-- Floating Particles -->
+    <div class="particles">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+
+    <!-- Header Section -->
+    <header class="header">
+        <div class="banner-container">
+            <img src="assets/images/banner-opt-2-wotxt.png" alt="Maharashtra Government Banner" class="banner-image">
+            <div class="banner-overlay">
+                <h1 class="banner-title">Commissioner for Cooperation and Registrar,</h1>
+                <h2 class="banner-subtitle">Cooperative Societies (CC and RCS), Maharashtra State, Pune</h2>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="content-card">
+            <!-- Logo -->
+            <img src="assets/images/MahaIT_Logo.png" alt="Maharashtra IT Logo" class="logo">
+            
+            <!-- Maintenance Icon -->
+            <div class="maintenance-icon">
+                <i class="fas fa-tools" style="font-size: 4rem; color: #ff9800; animation: iconFloat 3s ease-in-out infinite;"></i>
+            </div>
+            
+            <!-- Main Title -->
+            <h1 class="main-title">Under Maintenance</h1>
+            
+            <!-- Subtitle -->
+            <p class="subtitle">System Upgrade in Progress</p>
+            
+            <!-- Status Badge -->
+            <div class="status-badge maintenance">
+                <i class="fas fa-wrench fa-spin"></i> Maintenance Mode
+            </div>
+            
+            <!-- Description -->
+            <p class="description">
+                We're currently performing scheduled maintenance to improve our AI-powered document search system. 
+                Our team is working hard to enhance performance, security, and add new features for better user experience.
+            </p>
+            
+            <!-- Countdown Timer -->
+            <div class="countdown-container" id="countdown">
+                <div class="countdown-item">
+                    <span class="countdown-number" id="hours">02</span>
+                    <span class="countdown-label">Hours</span>
+                </div>
+                <div class="countdown-item">
+                    <span class="countdown-number" id="minutes">30</span>
+                    <span class="countdown-label">Minutes</span>
+                </div>
+                <div class="countdown-item">
+                    <span class="countdown-number" id="seconds">45</span>
+                    <span class="countdown-label">Seconds</span>
+                </div>
+            </div>
+            
+            <!-- Maintenance Activities -->
+            <div class="activities-container">
+                <h3 class="activities-title">Current Activities</h3>
+                <div class="activities-list">
+                    <div class="activity-item">
+                        <i class="fas fa-check-circle activity-icon" style="color: #4CAF50;"></i>
+                        <span class="activity-text">Database optimization - <strong>Completed</strong></span>
+                    </div>
+                    <div class="activity-item">
+                        <i class="fas fa-spinner fa-spin activity-icon" style="color: #ff9800;"></i>
+                        <span class="activity-text">AI model updates - <strong>In Progress</strong></span>
+                    </div>
+                    <div class="activity-item">
+                        <i class="fas fa-clock activity-icon" style="color: #666;"></i>
+                        <span class="activity-text">Security patches - <strong>Pending</strong></span>
+                    </div>
+                    <div class="activity-item">
+                        <i class="fas fa-clock activity-icon" style="color: #666;"></i>
+                        <span class="activity-text">Performance testing - <strong>Scheduled</strong></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- What's Being Improved -->
+            <div class="features-grid">
+                <div class="feature-card">
+                    <i class="fas fa-tachometer-alt feature-icon"></i>
+                    <h4 class="feature-title">Performance</h4>
+                    <p class="feature-description">Faster search results and improved response times with optimized algorithms</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-shield-alt feature-icon"></i>
+                    <h4 class="feature-title">Security</h4>
+                    <p class="feature-description">Enhanced security measures and advanced data protection protocols</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-magic feature-icon"></i>
+                    <h4 class="feature-title">AI Features</h4>
+                    <p class="feature-description">Smarter AI algorithms for better document analysis and search accuracy</p>
+                </div>
+            </div>
+            
+            <!-- Contact Information -->
+            <div class="contact-info">
+                <h3 class="contact-title">Need Immediate Assistance?</h3>
+                <div class="contact-item">
+                    <strong><i class="fas fa-envelope"></i> Emergency Email:</strong> support@ccrs.maharashtra.gov.in
+                </div>
+                <div class="contact-item">
+                    <strong><i class="fas fa-phone"></i> Helpline:</strong> +91-20-XXXX-XXXX (24/7)
+                </div>
+                <div class="contact-item">
+                    <strong><i class="fas fa-clock"></i> Maintenance Window:</strong> 02:00 AM - 06:00 AM IST
+                </div>
+            </div>
+            
+            <!-- Status Updates -->
+            <div class="status-update">
+                <p>
+                    <i class="fas fa-info-circle" style="animation: iconFloat 2s ease-in-out infinite;"></i> 
+                    <strong>Last Update:</strong> <span id="lastUpdate">Just now</span> | 
+                    <strong>Progress:</strong> 75% Complete
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p class="footer-text">
+            © 2025 Commissioner for Cooperation and Registrar, Cooperative Societies, Maharashtra State. All rights reserved.
+        </p>
+    </footer>
+
+    <!-- JavaScript for countdown and animations -->
+    <script>
+        // Countdown timer
+        function updateCountdown() {
+            // Set maintenance end time (2.5 hours from now for demo)
+            const now = new Date().getTime();
+            const maintenanceEnd = now + (2.5 * 60 * 60 * 1000); // 2.5 hours
+            
+            function tick() {
+                const now = new Date().getTime();
+                const distance = maintenanceEnd - now;
+                
+                if (distance < 0) {
+                    document.getElementById('countdown').innerHTML = '<div style="text-align: center; color: #4CAF50; font-size: 1.5rem; padding: 2rem;"><i class="fas fa-check-circle" style="font-size: 3rem; margin-bottom: 1rem; animation: iconFloat 2s ease-in-out infinite;"></i><br>Maintenance Complete!</div>';
+                    return;
+                }
+                
+                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                
+                document.getElementById('hours').textContent = hours.toString().padStart(2, '0');
+                document.getElementById('minutes').textContent = minutes.toString().padStart(2, '0');
+                document.getElementById('seconds').textContent = seconds.toString().padStart(2, '0');
+            }
+            
+            tick(); // Run immediately
+            setInterval(tick, 1000); // Update every second
+        }
+        
+        // Update last update time
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-IN', { 
+                hour12: true, 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            document.getElementById('lastUpdate').textContent = timeString;
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCountdown();
+            updateLastUpdateTime();
+            
+            // Update last update time every 30 seconds
+            setInterval(updateLastUpdateTime, 30000);
+            
+            // Add hover effects to feature cards
+            const featureCards = document.querySelectorAll('.feature-card');
+            featureCards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-10px) scale(1.02)';
+                    this.style.transition = 'all 0.3s ease';
+                });
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0) scale(1)';
+                });
+            });
+
+            // Add hover effects to activity items
+            const activityItems = document.querySelectorAll('.activity-item');
+            activityItems.forEach(item => {
+                item.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateX(10px)';
+                    this.style.transition = 'all 0.3s ease';
+                });
+                item.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateX(0)';
+                });
+            });
+
+            // Add click effects to status badge
+            const statusBadge = document.querySelector('.status-badge');
+            statusBadge.addEventListener('click', function() {
+                this.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    this.style.transform = 'scale(1)';
+                }, 150);
+            });
+        });
+    </script>
+</body>
+</html>

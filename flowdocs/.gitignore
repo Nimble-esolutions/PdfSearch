@@ -1,0 +1,7 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Secrets
+*.env
+flowdocs/flowdocs/settings.py
