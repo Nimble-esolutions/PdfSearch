@@ -14,6 +14,7 @@ urlpatterns = [
 
     # Dashboard
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('dashboard/', views.dashboard, name='dashboard_pdfs'),
     path('dashboard/folder/<int:folder_id>/', views.dashboard, name='dashboard'),
     path('dashboard/subfolder/<int:subfolder_id>/', views.dashboard, name='dashboard'),
     path('dashboard/users/', views.user_list_view, name='user_list'),
