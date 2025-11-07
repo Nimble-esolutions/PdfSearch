@@ -47,6 +47,20 @@ cd /app/flowdocs
 python manage.py migrate --noinput || echo "⚠️ Migration issue, please check logs."
 echo "------------------------------------------------------------"
 
+# -------------------- ✅ ChromaDB Setup --------------------
+CHROMA_DIR=/app/chroma_db
+echo "🧠 Checking ChromaDB vector store..."
+if [ ! -d "$CHROMA_DIR" ]; then
+    mkdir -p "$CHROMA_DIR"
+    echo "✅ Created Chroma directory: $CHROMA_DIR"
+else
+    echo "ℹ️ Chroma directory already exists: $CHROMA_DIR"
+fi
+# Optional: clear old data on each deploy
+# rm -rf "$CHROMA_DIR"/* && echo "♻️ Cleared old Chroma vectors"
+
+echo "------------------------------------------------------------"
+
 # -------------------- Superuser --------------------
 echo "👤 Checking for admin superuser..."
 python manage.py shell -c "
