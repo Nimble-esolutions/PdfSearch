@@ -1,24 +1,20 @@
+# utils.py
 import os
 import re
 import fitz  # PyMuPDF
 import numpy as np
 from openai import OpenAI
+import uuid
 from langdetect import detect, DetectorFactory, LangDetectException
 from django.conf import settings
+from .models import Folder, PDFFile
+from .vectorstore import pdf_collection  # 🔹 NEW: use Chroma collection
 from indic_transliteration import sanscript as sc
 from indic_transliteration.sanscript import transliterate
-from .models import Folder, PDFFile
+from django.urls import reverse
+#from .text_utils import split_text_into_chunks  # adjust if you have a helper function
+#from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Optional: FAISS for semantic search
-try:
-    import faiss
-    _HAS_FAISS = True
-    print("[DEBUG] FAISS imported successfully")
-except ImportError:
-    _HAS_FAISS = False
-    print("[⚠️] FAISS not available. Semantic search disabled.")
-
-# ---------------- Seed for consistent language detection ----------------
 DetectorFactory.seed = 0
 
 # ---------------- OpenAI Setup ----------------
@@ -30,12 +26,8 @@ if OPENAI_API_KEY:
 else:
     print("[❌] OpenAI API key not found")
 
-# ---------------- PDF Text Extraction (No OCR) ----------------
+# ---------------- PDF Text Extraction ----------------
 def extract_text_from_pdf(file_path: str) -> str:
-    """
-    Extracts text from PDF using PyMuPDF only.
-    OCR is disabled for faster processing.
-    """
     if not os.path.exists(file_path):
         print(f"[❌] File not found: {file_path}")
         return ""
@@ -47,12 +39,10 @@ def extract_text_from_pdf(file_path: str) -> str:
             page_text = page.get_text("text")
             if page_text.strip():
                 text += page_text + "\n"
-            else:
-                print(f"[⚠️] Page {page_number} of {os.path.basename(file_path)} has no text")
         doc.close()
-        print(f"[✅] Extracted text length from {os.path.basename(file_path)}: {len(text)}")
+        print(f"[✅] Extracted text from {os.path.basename(file_path)} (len={len(text)})")
     except Exception as e:
-        print(f"[❌] PyMuPDF extraction failed: {e}")
+        print(f"[❌] PDF extraction failed: {e}")
 
     return text.strip()
 
@@ -64,168 +54,135 @@ def transliterate_marathi_to_english(text: str) -> str:
         print(f"[⚠️] Transliteration failed: {e}")
         return text
 
+
 # ---------------- Chunking ----------------
-def chunk_text(text: str, chunk_size=1200, overlap=200):
+def split_text_into_chunks(text, max_words=500):
+    """
+    Splits text into chunks by word count instead of character length.
+    """
+    words = text.replace("\n", " ").split()
+    return [" ".join(words[i:i + max_words]) for i in range(0, len(words), max_words)]
+
+
+def chunk_text(text: str, chunk_size=800, overlap=100):
     chunks = []
     start = 0
     while start < len(text):
         end = min(start + chunk_size, len(text))
         chunks.append(text[start:end])
         start += chunk_size - overlap
-    print(f"[DEBUG] Total chunks created: {len(chunks)}")
+    print(f"[DEBUG] Created {len(chunks)} chunks")
     return chunks
 
-# ---------------- FAISS Embedding ----------------
-def get_embeddings(texts: list, model="text-embedding-3-large"):
-    if not client:
-        raise RuntimeError("OpenAI API not configured")
-    resp = client.embeddings.create(input=texts, model=model)
-    embeddings = [np.array(d.embedding, dtype=np.float32) for d in resp.data]
-    print(f"[DEBUG] Created embeddings for {len(texts)} chunks")
-    return embeddings
-
-# ---------------- Rule + Semantic Search ----------------
-import re
-import numpy as np
-import faiss
-
-# ---------------- Helper: Devanagari to ASCII ----------------
-def devanagari_to_ascii(num_str):
-    mapping = "०१२३४५६७८९"
-    return "".join(str(mapping.index(ch)) if ch in mapping else ch for ch in num_str)
-
-# ---------------- Main search function ----------------
-def search_pdfs(folder, user_query: str):
-    pdf_files = PDFFile.objects.filter(folder=folder)
-    if not pdf_files:
-        print(f"[⚠️] No PDFs found in folder: {folder.name}")
-        return "", []  # <-- return empty context
-
-    matched_contexts = []
-    matched_files_metadata = []
-
-    # ---------------- Rule detection ----------------
-    rule_match = re.search(r"नियम\s*([०१२३४५६७८९0-9]+)", user_query)
-    if rule_match:
-        print(f"[DEBUG] Rule detected in query: {rule_match.group(0)}")
-
-    # ---------------- Semantic embedding of query ----------------
-    query_embedding = None
-    if _HAS_FAISS and client:
-        try:
-            emb_resp = client.embeddings.create(
-                model="text-embedding-3-small",
-                input=user_query
-            )
-            query_embedding = np.array(emb_resp.data[0].embedding, dtype=np.float32)
-            print("[DEBUG] Query embedding created successfully")
-        except Exception as e:
-            print(f"[❌] Query embedding failed: {e}")
-
-    for pdf in pdf_files:
-        pdf_title = pdf.title
+# ---------------- Index to Chroma ----------------
+def index_pdf_to_chroma(pdf):
+    """Extract text from PDF and add to Chroma with proper metadata."""
+    try:
+        # 1️⃣ Extract text
         pdf_path = pdf.file.path
-        print(f"[DEBUG] Processing PDF: {pdf_title}")
+        doc = fitz.open(pdf_path)
+        full_text = ""
+        for page in doc:
+            full_text += page.get_text("text") + "\n"
+        doc.close()
 
-        try:
-            pdf_text = extract_text_from_pdf(pdf_path)
-        except Exception as e:
-            print(f"[❌] Failed to extract {pdf_title}: {e}")
-            continue
+        # 2️⃣ Split text into smaller chunks (important for embeddings)
+        chunks = split_text_into_chunks(full_text, max_words=500)  # use your own chunking method
 
-        if not pdf_text.strip():
-            print(f"[⚠️] PDF {pdf_title} has no text")
-            continue
+        # 3️⃣ Prepare Chroma data
+        metadatas = [{
+            "file_id": pdf.id,
+            "file_name": pdf.file.name,
+            "folder": pdf.folder.name,
+        } for _ in chunks]
 
-        snippets = []
-        score = 0
-
-        # ---------------- Rule-based search ----------------
-        if rule_match:
-            num = rule_match.group(1)
-            regex = re.compile(rf"नियम\s*{num}")
-            for m in regex.finditer(pdf_text):
-                start, end = max(0, m.start() - 600), min(len(pdf_text), m.end() + 800)
-                snippet = pdf_text[start:end]
-                snippets.append(snippet)
-                score += 3
-                print(f"[DEBUG] Rule match found in {pdf_title}: {snippet[:80]}...")
-
-        # ---------------- Semantic Search ----------------
-        pdf_chunks = chunk_text(pdf_text)
-        if _HAS_FAISS and query_embedding is not None and pdf_chunks:
-            try:
-                chunk_embeddings = get_embeddings(pdf_chunks, model="text-embedding-3-small")
-                embeddings_matrix = np.vstack(chunk_embeddings)
-                index = faiss.IndexFlatL2(embeddings_matrix.shape[1])
-                index.add(embeddings_matrix)
-
-                k = min(5, len(pdf_chunks))
-                distances, indices = index.search(np.array([query_embedding]), k=k)
-
-                for i, idx in enumerate(indices[0]):
-                    if idx < 0 or idx >= len(pdf_chunks):
-                        continue
-                    matched_chunk = pdf_chunks[idx]
-                    snippets.append(matched_chunk)
-                    score += 2
-                    print(f"[DEBUG] Semantic match {i+1} in {pdf_title}: {matched_chunk[:80]}...")
-            except Exception as e:
-                print(f"[❌] Semantic search failed for {pdf_title}: {e}")
-
-        # ---------------- Add context & metadata ----------------
-        if snippets and score > 0:
-            matched_contexts.append(" ... ".join(snippets))
-            matched_files_metadata.append({
-                "title": pdf_title,
-                "folder": getattr(pdf.folder, "name", None),
-                "url": getattr(pdf.file, "url", None),
-                "uploaded_at": pdf.uploaded_at.strftime("%Y-%m-%d") if getattr(pdf, "uploaded_at", None) else None,
-                "score": score,
-            })
-            print(f"[DEBUG] Added context from {pdf_title}, score: {score}")
-
-    # ---------------- Deduplicate PDFs ----------------
-    unique_refs = {}
-    for ref in matched_files_metadata:
-        key = ref.get("title")
-        if key not in unique_refs:
-            unique_refs[key] = ref
-        else:
-            existing = unique_refs[key]
-            # Prefer higher score or detected folder
-            if ref.get("score", 0) > existing.get("score", 0):
-                unique_refs[key] = ref
-
-    matched_files_metadata = list(unique_refs.values())
-
-    # ---------------- Select top N PDFs ----------------
-    TOP_N = 3
-    if matched_files_metadata:
-        matched_files_metadata = sorted(
-            matched_files_metadata, key=lambda x: x.get("score", 0), reverse=True
+        # 4️⃣ Add to Chroma
+        pdf_collection.add(
+            documents=chunks,            # ✅ list of text chunks
+            metadatas=metadatas,         # ✅ parallel metadata list
+            ids=[str(uuid.uuid4()) for _ in chunks],
         )
-        top_refs = matched_files_metadata[:TOP_N]
-        combined_context = "\n\n".join(matched_contexts)
+
+        print(f"[✅] Indexed {pdf.file.name} with {len(chunks)} chunks.")
+
+    except Exception as e:
+        print(f"[❌] Failed to index {pdf.file.name} in Chroma: {e}")
+
+# ---------------- Chroma Search ----------------
+def search_pdfs(folder=None, user_query: str = ""):
+    """Search PDFs using ChromaDB. If folder=None, searches across all."""
+    try:
+        from django.conf import settings
+        import os
+
+        folder_name = folder.name if folder else None
+        print(f"[Chroma 🔍] Searching in folder: {folder_name or 'ALL'}")
+
+        # Build query for Chroma
+        where_clause = {"folder": folder_name} if folder_name else None
+        results = pdf_collection.query(
+            query_texts=[user_query],
+            n_results=10,
+            where=where_clause,
+        )
+
+        if not results or not results.get("documents") or not results["documents"][0]:
+            print("[⚠️] No relevant chunks found in Chroma.")
+            return "", []
+
+        contexts = results["documents"][0]
+        metadatas = results["metadatas"][0]
+
+        seen_files = set()
+        unique_refs = []
+        combined_context_parts = []
+
+        for ctx, meta in zip(contexts, metadatas):
+            file_name = meta.get("file_name")  # e.g. pdfs/MCS_Rules_1961.pdf
+            folder_meta = meta.get("folder")
+
+            if not file_name:
+                continue
+
+            if file_name not in seen_files:
+                seen_files.add(file_name)
+
+                # ✅ Build full media URL
+                pdf_url = f"{settings.MEDIA_URL}{file_name}"
+
+                unique_refs.append({
+                    "title": os.path.basename(file_name),
+                    "folder": folder_meta,
+                    "url": pdf_url,
+                    "uploaded_at": None,
+                    "score": 10,
+                })
+
+            combined_context_parts.append(ctx)
+
+            # Limit to 5 unique PDFs
+            if len(unique_refs) >= 5:
+                break
+
+        # ✅ Combine and truncate context for GPT
+        combined_context = "\n\n".join(combined_context_parts)
         combined_context = truncate_context(combined_context, max_words=22500)
-        print(f"[DEBUG] Total combined context length: {len(combined_context)}")
+
+        # ✅ Generate GPT answer
         answer = generate_gpt4_answer(
             user_question=user_query,
             context=combined_context,
-            references=top_refs,
-            max_words=400
+            references=unique_refs,
+            max_words=500,
         )
-        print("[DEBUG] GPT answer generated")
-        return answer, top_refs
-    else:
-        print(f"[DEBUG] No matching content found in folder: {folder.name}")
-        return "", []  # <-- crucial: return empty if no match
 
+        print(f"[✅] Found {len(unique_refs)} unique reference document(s).")
+        return answer, unique_refs
 
-
-
-# ---------------- Language Detection ----------------
-DetectorFactory.seed = 0
+    except Exception as e:
+        print(f"[❌] Chroma search failed: {e}")
+        return "", []
+# ---------------- Helper Functions ----------------
 def detect_language(text: str) -> str:
     if not text.strip():
         return "en"
@@ -238,31 +195,29 @@ def detect_language(text: str) -> str:
     except LangDetectException:
         return "en"
 
-# ---------------- Truncate Context ----------------
 def truncate_context(text: str, max_words=22500) -> str:
     words = text.split()
     return " ".join(words[:max_words]) if len(words) > max_words else text
 
-# ---------------- GPT Answer ----------------
-def generate_gpt4_answer(user_question: str, context: str, references: list = None, max_words=400) -> str:
+def generate_gpt4_answer(user_question: str, context: str, references: list = None, max_words=500) -> str:
     if not client:
         return "OpenAI API key not configured."
-    context = truncate_context(context, max_words=22500)
+    context = truncate_context(context)
     lang = detect_language(user_question)
 
     if lang == "mr":
-        system_msg = "तू एक मदत करणारा सहाय्यक आहेस. उत्तर फक्त मराठीत द्या, 400 शब्दांमध्ये."
+        system_msg = "तू एक मदत करणारा सहाय्यक आहेस. उत्तर फक्त मराठीत द्या, 500 शब्दांमध्ये."
         prompt = f"खालील संदर्भांचा वापर करून उत्तर द्या:\n\nप्रश्न: {user_question}\n\nसंदर्भ:\n{context}"
     else:
-        system_msg = "You are a helpful assistant. Answer in English only, max 400 words."
+        system_msg = "You are a helpful assistant. Answer in English only, max 500 words."
         prompt = f"Using the following context, answer:\n\nQ: {user_question}\n\nContext:\n{context}"
 
     if references:
-        ref_list = "\n".join([f"- {r.get('title')} ({r.get('url')})" for r in references])
+        ref_list = "\n".join([f"- {r.get('title')}" for r in references])
         prompt += f"\n\nSources:\n{ref_list}"
 
     resp = client.chat.completions.create(
-        model="gpt-5",
+        model="gpt-4-turbo",
         messages=[
             {"role": "system", "content": system_msg},
             {"role": "user", "content": prompt},
@@ -270,12 +225,8 @@ def generate_gpt4_answer(user_question: str, context: str, references: list = No
     )
 
     ans = resp.choices[0].message.content.strip()
-    words = ans.split()
-    if len(words) > max_words:
-        ans = " ".join(words[:max_words]) + "..."
-    return ans
+    return " ".join(ans.split()[:max_words])
 
-# ---------------- Detect Folder by Keywords ----------------
 def detect_folder_by_keywords(query):
     folders = Folder.objects.all()
     query_words = query.lower().split()
