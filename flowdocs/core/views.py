@@ -90,8 +90,8 @@ def dashboard(request, folder_id=None):
     # ---------------- If viewing a specific folder (PDFs) ----------------
     if folder_id:
         folder = get_object_or_404(Folder, id=folder_id)
-
-        # PDF Upload (Admin/Superadmin only)
+    #START-Kunjika
+    # PDF Upload (Admin/Superadmin only)
         if request.method == "POST" and (role in ["admin", "superadmin"]):
             form = UploadForm(request.POST, request.FILES)
             if form.is_valid():
@@ -99,17 +99,19 @@ def dashboard(request, folder_id=None):
                 pdf.folder = folder
                 pdf.uploaded_by = request.user
 
-                # 🔹 Extract and save keywords (from keywords_input)
+    # 🔹 Extract and save keywords
                 raw_keywords = form.cleaned_data.get("keywords_input", "")
-                if raw_keywords:
-                    pdf.keywords = [
-                        k.strip().lower() for k in raw_keywords.split(",") if k.strip()
-                    ]
-                else:
-                    pdf.keywords = []
-
+                pdf.keywords = [k.strip().lower() for k in raw_keywords.split(",") if k.strip()]
                 pdf.save()
+
+    # 🔹 Index PDF into ChromaDB
+                from .utils import index_pdf_to_chroma
+                index_pdf_to_chroma(pdf)
+
+                messages.success(request, f"PDF '{pdf.title}' indexed successfully.")
                 return redirect("dashboard", folder_id=folder.id)
+            else:
+                messages.error(request, "Invalid form submission.")
         else:
             form = UploadForm()
 
@@ -121,6 +123,7 @@ def dashboard(request, folder_id=None):
             "dashboard_pdfs.html",
             {"folder": folder, "pdfs": pdfs, "form": form, "role": role},
         )
+
 
     # ---------------- Show all folders ----------------
     folders = Folder.objects.annotate(pdf_count=Count("files")).order_by("name")
@@ -250,30 +253,15 @@ def home_view(request):
 
 
 # ---------------- Search Query ----------------
-
-from django.shortcuts import render
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import traceback
-
-from .models import PDFFile, Folder
-from .utils import (
-    generate_gpt4_answer,
-    search_pdfs,
-    transliterate_marathi_to_english,
-    detect_folder_by_keywords,
-    detect_language,truncate_context
-)
-
-
 @csrf_exempt
 def search_query(request):
+    from .utils import search_pdfs  # use function from utils.py
+
     if request.method == "GET":
         welcome_message = (
             "🙏 नमस्कार, मी तुमचा AI सहाय्यक आहे. "
-            "मी आपल्या प्रश्नांची उत्तरे सरकारी दस्तऐवज यांचा संदर्भ घेऊन देऊ शकतो."
+            "मी आपल्या प्रश्नांची उत्तरे संदर्भ घेऊन देऊ शकतो."
         )
-        print("[DEBUG] GET request - rendering search page")
         return render(request, "search.html", {"welcome_message": welcome_message})
 
     elif request.method == "POST":
@@ -282,146 +270,30 @@ def search_query(request):
             print(f"[DEBUG] User query received: {query}")
 
             if not query:
-                print("[DEBUG] Empty query submitted")
                 return JsonResponse({"answer": "कृपया आपला प्रश्न विचारा 🙏", "references": []})
 
-            user_lang = detect_language(query)
-            print(f"[DEBUG] Detected language: {user_lang}")
+            # 🔹 Directly search in ChromaDB (across all folders)
+            answer, refs = search_pdfs(folder=None, user_query=query)
 
-            # ---------------- Detect Folder ----------------
-            detected_folder = detect_folder_by_keywords(query)
-            if detected_folder:
-                print(f"[DEBUG] Detected folder: {detected_folder.name} (ID: {detected_folder.id})")
-            else:
-                all_folder_names = Folder.objects.values_list("name", flat=True)
-                folder_list_str = ", ".join(all_folder_names)
-                fallback_message = (
-                    "क्षमस्व, आपल्या प्रश्नाचे उत्तर संदर्भासाठी असलेल्या दस्तऐवजांमध्ये उपलब्ध नाही आहे. "
-                    f"उपलब्ध category: {folder_list_str}"
-                )
-                print("[DEBUG] No folder detected for query")
-                return JsonResponse({"answer": fallback_message, "references": []})
-
-            # ---------------- Track session for follow-ups ----------------
-            last_locked_folder_id = request.session.get("last_folder")
-            current_detected_folder_id = detected_folder.id
-            print(f"[DEBUG] Last locked folder ID: {last_locked_folder_id}")
-
-            if last_locked_folder_id and current_detected_folder_id != last_locked_folder_id:
-                # New topic, reset session
-                print("[DEBUG] New topic detected, resetting session variables")
-                request.session["first_query_done"] = False
-                request.session["last_folder"] = None
-                request.session["folder_locked"] = False
-
-            # ---------------- First Query: Acts + Detected Folder ----------------
-            if not request.session.get("first_query_done"):
-                print("[DEBUG] Processing first query for this session")
-                combined_context = []
-                all_refs = []
-
-                # 1️⃣ Search Detected folder first
-                print(f"[DEBUG] Searching detected folder: {detected_folder.name}")
-                detected_answer, detected_refs = search_pdfs(detected_folder, query)
-                if detected_refs:
-                    print(f"[DEBUG] Detected folder matched {len(detected_refs)} PDFs")
-                    combined_context.append(detected_answer)
-                    for ref in detected_refs:
-                        ref["folder"] = "detected"
-                    all_refs.extend(detected_refs)
-
-                # 2️⃣ Search Acts folder (include only relevant PDFs)
-                acts_folder = Folder.objects.filter(name__icontains="acts").first()
-                if acts_folder:
-                    print(f"[DEBUG] Searching Acts folder: {acts_folder.name}")
-                    acts_answer, acts_refs = search_pdfs(acts_folder, query)
-                    # Include only Acts PDFs with score >= 7
-                    acts_refs = [ref for ref in acts_refs if ref.get("score", 0) >= 7]
-                    if acts_refs:
-                        print(f"[DEBUG] Relevant Acts PDFs found: {len(acts_refs)}")
-                        combined_context.append(acts_answer)
-                        for ref in acts_refs:
-                            ref["folder"] = "acts"
-                        all_refs.extend(acts_refs)
-                    else:
-                        print("[DEBUG] No relevant Acts PDFs, skipping Acts folder")
-
-                if not all_refs:
-                    print("[DEBUG] No relevant PDFs found in either folder")
-                    return JsonResponse({
-                        "answer": "⚠️ दिलेल्या PDFs मध्ये तुमच्या प्रश्नाशी संबंधित माहिती सापडली नाही.",
-                        "references": []
-                    })
-
-                # ---------------- Sort and pick top N ----------------
-                TOP_N = 3
-                # Sort by score descending, detected folder refs first if tie
-                all_refs = sorted(
-                    all_refs,
-                    key=lambda x: (x.get("score", 0), 1 if x.get("folder") == "detected" else 0),
-                    reverse=True
-                )
-                top_refs = all_refs[:TOP_N]
-                print(f"[DEBUG] Total top references selected: {len(top_refs)}")
-
-                # ---------------- Combine context and truncate ----------------
-                combined_context_text = "\n\n".join(combined_context)
-                combined_context_text = truncate_context(combined_context_text, max_words=22500)
-                print(f"[DEBUG] Total combined context length: {len(combined_context_text)}")
-
-                # ---------------- Generate GPT answer ----------------
-                combined_answer = generate_gpt4_answer(
-                    user_question=query,
-                    context=combined_context_text,
-                    references=top_refs,
-                    max_words=400
-                )
-                combined_answer += "\n\nआपल्याला यासंदर्भात अधिक माहिती हवी असल्यास कृपया प्रश्न अधिक विस्तारीत स्वरूपात विचारावा."
-                print("[DEBUG] GPT answer generated for first query")
-
-                # Lock folder for follow-ups
-                request.session["last_folder"] = detected_folder.id
-                request.session["folder_locked"] = True
-                request.session["first_query_done"] = True
-                print(f"[DEBUG] Folder locked for follow-ups: {detected_folder.name}")
-
+            if not answer:
                 return JsonResponse({
-                    "answer": combined_answer,
-                    "references": top_refs
+                    "answer": "क्षमस्व, आपल्या प्रश्नाचे उत्तर संदर्भासाठी असलेल्या दस्तऐवजांमध्ये उपलब्ध नाही आहे.",
+                    "references": []
                 })
 
-            # ---------------- Follow-up Queries (Locked Folder) ----------------
-            if request.session.get("folder_locked"):
-                folder_id = request.session.get("last_folder")
-                folder = Folder.objects.get(id=folder_id)
-                print(f"[DEBUG] Processing follow-up query for folder: {folder.name}")
-
-                answer, top_refs = search_pdfs(folder, query)
-                if not top_refs:
-                    print("[DEBUG] No PDFs matched in locked folder")
-                    return JsonResponse({
-                        "answer": "⚠️ दिलेल्या PDFs मध्ये तुमच्या प्रश्नाशी संबंधित माहिती सापडली नाही.",
-                        "references": []
-                    })
-
-                print(f"[DEBUG] Follow-up answer generated with {len(top_refs)} references")
-                return JsonResponse({"answer": answer, "references": top_refs})
+            # Return answer and top references
+            return JsonResponse({
+                "answer": answer,
+                "references": refs
+            })
 
         except Exception as e:
+            import traceback
             print(f"[ERROR] {traceback.format_exc()}")
             return JsonResponse({
                 "answer": "⚠️ काहीतरी चूक झाली आहे. कृपया पुन्हा प्रयत्न करा.",
                 "references": []
             })
-
-
-
-
-
-
-
-
-
 
 #===========================user list=================
 
@@ -502,6 +374,8 @@ def rename_folder(request, folder_id):
 from django.shortcuts import redirect, get_object_or_404
 from django.contrib import messages
 from .models import PDFFile  # adjust your PDF model import
+from .vectorstore import pdf_collection
+from .utils import extract_text_from_pdf, chunk_text
 
 def rename_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, id=pdf_id)
@@ -516,6 +390,17 @@ def rename_pdf(request, pdf_id):
         if new_title:
             pdf.title = new_title
             pdf.save()
+            #START-Kunjika # Extract text and index to Chroma
+            pdf_path = pdf.file.path
+            text = extract_text_from_pdf(pdf_path)
+            chunks = chunk_text(text)
+
+            pdf_collection.add(
+                documents=chunks,
+                metadatas=[{"file_name": pdf.title, "folder": folder.name}],
+                ids=[f"{pdf.title}_chunk_{i}" for i in range(len(chunks))]
+            )
+            print(f"[Chroma] Indexed {len(chunks)} chunks for {pdf.title}")
             messages.success(request, "PDF renamed successfully.")
         else:
             messages.error(request, "Title cannot be empty.")
