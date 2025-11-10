@@ -5,10 +5,11 @@ import fitz  # PyMuPDF
 import numpy as np
 from openai import OpenAI
 import uuid
+import hashlib
 from langdetect import detect, DetectorFactory, LangDetectException
 from django.conf import settings
 from .models import Folder, PDFFile
-from .vectorstore import pdf_collection  # 🔹 NEW: use Chroma collection
+from .vectorstore import pdf_collection_large,pdf_collection_small, embedding_large, embedding_small
 from indic_transliteration import sanscript as sc
 from indic_transliteration.sanscript import transliterate
 from django.urls import reverse
@@ -56,12 +57,30 @@ def transliterate_marathi_to_english(text: str) -> str:
 
 
 # ---------------- Chunking ----------------
-def split_text_into_chunks(text, max_words=500):
+def split_text_into_chunks(text, chunk_size=500, overlap=50):
     """
-    Splits text into chunks by word count instead of character length.
+    Split text into overlapping word-based chunks.
+    - chunk_size: max words in each chunk
+    - overlap: repeated words between chunks for better context
     """
     words = text.replace("\n", " ").split()
-    return [" ".join(words[i:i + max_words]) for i in range(0, len(words), max_words)]
+    chunks = []
+    start = 0
+    total_words = len(words)
+
+    while start < total_words:
+        end = start + chunk_size
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+
+        # Move forward with overlap for context continuity
+        start = end - overlap  
+
+        if start < 0:
+            start = 0
+
+    return chunks
+
 
 
 def chunk_text(text: str, chunk_size=800, overlap=100):
@@ -76,111 +95,137 @@ def chunk_text(text: str, chunk_size=800, overlap=100):
 
 # ---------------- Index to Chroma ----------------
 def index_pdf_to_chroma(pdf):
-    """Extract text from PDF and add to Chroma with proper metadata."""
     try:
-        # 1️⃣ Extract text
         pdf_path = pdf.file.path
+        file_name = pdf.file.name
+        folder_name = pdf.folder.name
+       # file_id = pdf.id
+
+    #print(f"[✅] File id : {file_name} ({file_id} id).")
+        # 🔍 Checksum to avoid duplicates
+        with open(pdf_path, "rb") as f:
+            pdf_hash = hashlib.md5(f.read()).hexdigest()
+
+        existing = pdf_collection_large.get(where={"file_name": file_name})
+        if existing and len(existing["ids"]) > 0:
+            existing_hash = existing["metadatas"][0].get("hash")
+            if existing_hash == pdf_hash:
+                print(f"⚠️ Skipping {file_name} — already indexed.")
+                return
+
+        # ✅ Extract text
         doc = fitz.open(pdf_path)
-        full_text = ""
-        for page in doc:
-            full_text += page.get_text("text") + "\n"
+        full_text = "\n".join([page.get_text("text") for page in doc])
         doc.close()
 
-        # 2️⃣ Split text into smaller chunks (important for embeddings)
-        chunks = split_text_into_chunks(full_text, max_words=500)  # use your own chunking method
+        # ✅ Chunk text
+        chunks = split_text_into_chunks(full_text, chunk_size=500,overlap=100)  # ← your function
 
-        # 3️⃣ Prepare Chroma data
+        print("[✅] Split into chunks.")
+
+        # ✅ Metadata per chunk
         metadatas = [{
-            "file_id": pdf.id,
-            "file_name": pdf.file.name,
-            "folder": pdf.folder.name,
+          #  "file_id": file_id,
+            "file_name": file_name,
+            "folder": folder_name,
+            "hash": pdf_hash,
         } for _ in chunks]
 
-        # 4️⃣ Add to Chroma
-        pdf_collection.add(
-            documents=chunks,            # ✅ list of text chunks
-            metadatas=metadatas,         # ✅ parallel metadata list
-            ids=[str(uuid.uuid4()) for _ in chunks],
+        # ✅ Add to Chroma (NO embedding_function here)
+        pdf_collection_large.add(
+            documents=chunks,
+            metadatas=metadatas,
+            ids=[str(uuid.uuid4()) for _ in chunks]
         )
 
-        print(f"[✅] Indexed {pdf.file.name} with {len(chunks)} chunks.")
+        print(f"[✅] Indexed {file_name} ({len(chunks)} chunks).")
 
     except Exception as e:
         print(f"[❌] Failed to index {pdf.file.name} in Chroma: {e}")
 
 # ---------------- Chroma Search ----------------
-def search_pdfs(folder=None, user_query: str = ""):
-    """Search PDFs using ChromaDB. If folder=None, searches across all."""
+from django.core.cache import cache
+
+def truncate_context(text, max_words=20000):
+    words = text.split()
+    return " ".join(words[:max_words])
+
+def search_pdfs(user_query: str = ""):
+    """Search PDFs directly from ChromaDB (no folder logic)."""
     try:
-        from django.conf import settings
-        import os
+        # ✅ Cache key (safe for Marathi text)
+        query_hash = hashlib.md5(
+            user_query.strip().lower().encode("utf-8")
+        ).hexdigest()
 
-        folder_name = folder.name if folder else None
-        print(f"[Chroma 🔍] Searching in folder: {folder_name or 'ALL'}")
+        cache_key = f"chroma:global:{query_hash}"
 
-        # Build query for Chroma
-        where_clause = {"folder": folder_name} if folder_name else None
-        results = pdf_collection.query(
+        # ✅ Return from cache if present
+        cached = cache.get(cache_key)
+        if cached:
+            print("[⚡ Cache Hit: Redis]")
+            return cached["answer"], cached["refs"]
+
+        print("[Chroma 🔍] Global search (no folder filter)…")
+
+        # ✅ Pure global vector search in Chroma
+        results = pdf_collection_large.query(
             query_texts=[user_query],
-            n_results=10,
-            where=where_clause,
+            n_results=10
         )
 
         if not results or not results.get("documents") or not results["documents"][0]:
-            print("[⚠️] No relevant chunks found in Chroma.")
+            print("[⚠️] No documents found in Chroma.")
             return "", []
 
-        contexts = results["documents"][0]
-        metadatas = results["metadatas"][0]
+        docs = results["documents"][0]
+        metas = results["metadatas"][0]
 
-        seen_files = set()
         unique_refs = []
-        combined_context_parts = []
+        context_parts = []
+        seen_files = set()
 
-        for ctx, meta in zip(contexts, metadatas):
-            file_name = meta.get("file_name")  # e.g. pdfs/MCS_Rules_1961.pdf
-            folder_meta = meta.get("folder")
+        for doc, meta in zip(docs, metas):
+            file_name = meta.get("file_name")
 
-            if not file_name:
+            # Skip invalid or repeated files
+            if not file_name or file_name in seen_files:
                 continue
 
-            if file_name not in seen_files:
-                seen_files.add(file_name)
+            seen_files.add(file_name)
+            pdf_url = f"{settings.MEDIA_URL}{file_name}"
 
-                # ✅ Build full media URL
-                pdf_url = f"{settings.MEDIA_URL}{file_name}"
+            # ✅ Prepare reference
+            unique_refs.append({
+                "title": os.path.basename(file_name),
+                "url": pdf_url,
+                "score": 10,
+            })
 
-                unique_refs.append({
-                    "title": os.path.basename(file_name),
-                    "folder": folder_meta,
-                    "url": pdf_url,
-                    "uploaded_at": None,
-                    "score": 10,
-                })
+            context_parts.append(doc)
 
-            combined_context_parts.append(ctx)
-
-            # Limit to 5 unique PDFs
+            # Limit number of references
             if len(unique_refs) >= 5:
                 break
 
-        # ✅ Combine and truncate context for GPT
-        combined_context = "\n\n".join(combined_context_parts)
-        combined_context = truncate_context(combined_context, max_words=22500)
+        # ✅ Combine text for GPT
+        context_text = truncate_context("\n\n".join(context_parts), max_words=22000)
 
-        # ✅ Generate GPT answer
+        # ✅ Generate final answer from GPT
         answer = generate_gpt4_answer(
             user_question=user_query,
-            context=combined_context,
+            context=context_text,
             references=unique_refs,
-            max_words=500,
+            max_words=1000,
         )
 
-        print(f"[✅] Found {len(unique_refs)} unique reference document(s).")
+        # ✅ Save to cache (24 hours)
+        cache.set(cache_key, {"answer": answer, "refs": unique_refs}, timeout=86400)
+
         return answer, unique_refs
 
     except Exception as e:
-        print(f"[❌] Chroma search failed: {e}")
+        print(f"[❌] Chroma Search Failed: {e}")
         return "", []
 # ---------------- Helper Functions ----------------
 def detect_language(text: str) -> str:
