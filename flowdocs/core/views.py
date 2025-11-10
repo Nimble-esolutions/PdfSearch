@@ -253,10 +253,9 @@ def home_view(request):
 
 
 # ---------------- Search Query ----------------
+from .utils import search_pdfs
 @csrf_exempt
 def search_query(request):
-    from .utils import search_pdfs  # use function from utils.py
-
     if request.method == "GET":
         welcome_message = (
             "🙏 नमस्कार, मी तुमचा AI सहाय्यक आहे. "
@@ -272,29 +271,24 @@ def search_query(request):
             if not query:
                 return JsonResponse({"answer": "कृपया आपला प्रश्न विचारा 🙏", "references": []})
 
-            # 🔹 Directly search in ChromaDB (across all folders)
-            answer, refs = search_pdfs(folder=None, user_query=query)
+            # ✅ RAG search
+            answer, refs = search_pdfs(user_query=query)
 
             if not answer:
                 return JsonResponse({
-                    "answer": "क्षमस्व, आपल्या प्रश्नाचे उत्तर संदर्भासाठी असलेल्या दस्तऐवजांमध्ये उपलब्ध नाही आहे.",
+                    "answer": "क्षमस्व, आपल्या प्रश्नाचे उत्तर उपलब्ध नाही.",
                     "references": []
                 })
 
-            # Return answer and top references
-            return JsonResponse({
-                "answer": answer,
-                "references": refs
-            })
+            return JsonResponse({"answer": answer, "references": refs})
 
         except Exception as e:
             import traceback
-            print(f"[ERROR] {traceback.format_exc()}")
+            print("[ERROR]", traceback.format_exc())
             return JsonResponse({
-                "answer": "⚠️ काहीतरी चूक झाली आहे. कृपया पुन्हा प्रयत्न करा.",
+                "answer": "⚠️ काहीतरी चूक झाली आहे.",
                 "references": []
             })
-
 #===========================user list=================
 
 from django.shortcuts import render
@@ -374,7 +368,7 @@ def rename_folder(request, folder_id):
 from django.shortcuts import redirect, get_object_or_404
 from django.contrib import messages
 from .models import PDFFile  # adjust your PDF model import
-from .vectorstore import pdf_collection
+from .vectorstore import pdf_collection_large
 from .utils import extract_text_from_pdf, chunk_text
 
 def rename_pdf(request, pdf_id):
@@ -395,7 +389,7 @@ def rename_pdf(request, pdf_id):
             text = extract_text_from_pdf(pdf_path)
             chunks = chunk_text(text)
 
-            pdf_collection.add(
+            pdf_collection_large.add(
                 documents=chunks,
                 metadatas=[{"file_name": pdf.title, "folder": folder.name}],
                 ids=[f"{pdf.title}_chunk_{i}" for i in range(len(chunks))]
