@@ -243,8 +243,65 @@ def detect_language(text: str) -> str:
 def truncate_context(text: str, max_words=22500) -> str:
     words = text.split()
     return " ".join(words[:max_words]) if len(words) > max_words else text
-
 def generate_gpt4_answer(user_question: str, context: str, references: list = None, max_words=500) -> str:
+    if not client:
+        return "OpenAI API key not configured."
+
+    context = truncate_context(context)
+    lang = detect_language(user_question)
+
+    if lang == "mr":
+        system_msg = (
+            "तू एक अत्यंत शिस्तबद्ध सहाय्यक आहेस. "
+            "उत्तर खालील कठोर फॉरमॅटमध्येच द्यावे:"
+            "\n\n"
+            "STRICT RULES:\n"
+            "1) उत्तर क्रमांकित यादीमध्ये द्या (1., 2., 3., ...).\n"
+            "2) प्रत्येक क्रमांक **नवीन ओळीत** सुरू केला पाहिजे.\n"
+            "3) प्रत्येक बिंदूचा शीर्षक **ठळक** (bold) असावा.\n"
+            "4) प्रत्येक बिंदू लहान, स्पष्ट परिच्छेदात असावा.\n"
+            "5) markdown formatting वापरावे.\n"
+            "6) कोणतेही मुद्दे एका ओळीत एकत्र टाकू नका.\n"
+        )
+
+        user_prompt = (
+            f"खालील संदर्भ वापरून प्रश्नाचे नीटसंरचित उत्तर लिहा:\n\n"
+            f"प्रश्न:\n{user_question}\n\n"
+            f"संदर्भ:\n{context}"
+        )
+
+    else:
+        system_msg = (
+            "You must answer in STRICT markdown:\n"
+            "1. Each numbered point must start on a **new line**.\n"
+            "2. Each point must have a **bold title**.\n"
+            "3. Use short paragraphs.\n"
+            "4. Never merge numbered points in one line.\n"
+        )
+
+        user_prompt = (
+            f"Use this context to answer:\n\n"
+            f"Question:\n{user_question}\n\n"
+            f"Context:\n{context}"
+        )
+
+    if references:
+        src = "\n".join([f"- {r.get('title')}" for r in references])
+        user_prompt += f"\n\nSources:\n{src}"
+
+    response = client.chat.completions.create(
+        model="gpt-4-turbo",
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+
+    answer = response.choices[0].message.content.strip()
+
+    # ✅ DO NOT REMOVE NEWLINES (critical)
+    return answer
+def generate_gpt4_answerOLD(user_question: str, context: str, references: list = None, max_words=500) -> str:
     if not client:
         return "OpenAI API key not configured."
     context = truncate_context(context)
