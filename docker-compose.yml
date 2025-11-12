@@ -11,10 +11,18 @@ services:
     #image: dev-one-58pibn:latest
     command: sh -c "./start.sh"
     volumes:
+     # - static_volume:/app/staticfiles
+     # - media_volume:/app/media
+     # - db_volume:/app/flowdocs/flowdocs     # database SQLite volume
+     # - backups_volume:/app/backups             # persist backups
+     # - chroma_volume:/app/flowdocs/chroma_db  # 
+
       - static_volume:/app/staticfiles
-      - media_volume:/app/media
-      - db_volume:/app/flowdocs/flowdocs     # database SQLite volume
-      - backups_volume:/app/backups             # persist backups
+      - media_volume:/app/flowdocs/media/pdfs        #updated
+      - db_volume:/app/flowdocs/flowdocs             # ✅ correct folder (outer)
+      - backups_volume:/app/backups
+      - chroma_volume:/app/flowdocs/chroma_db
+      
     ports:
       - "8000:8000"
     environment:
@@ -29,3 +37,4 @@ volumes:
   backups_volume:
   static_volume:
   media_volume:
+  chroma_volume:
