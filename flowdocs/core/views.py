@@ -178,9 +178,50 @@ def create_folder(request):
     return redirect("dashboard")
 
 
-# ---------------- Delete PDF ----------------
+
+# ---------------- Delete PDF + remove from chroma_db ----------------
+from .vectorstore import pdf_collection_large, pdf_collection_small
+
 @login_required
 def delete_pdf(request, file_id):
+    pdf = get_object_or_404(PDFFile, pk=file_id)
+
+    # ✅ Permission check
+    if request.user.role not in ["admin", "superadmin"] and pdf.uploaded_by != request.user:
+        messages.error(request, "You don't have permission to delete this PDF.")
+        return redirect(request.META.get("HTTP_REFERER", "dashboard"))
+
+    pdf_filename = pdf.file.name  # example → uploads/policies/xyz.pdf
+
+    try:
+        # ✅ 1. Delete from ChromaDB (large embedding collection)
+        try:
+            pdf_collection_large.delete(where={"file_name": pdf_filename})
+            print(f"[Chroma✅] Deleted chunks from large model for: {pdf_filename}")
+        except Exception as e:
+            print(f"[Chroma⚠️] Large delete failed: {e}")
+
+        # ✅ 2. Delete from small embedding collection (if you use it)
+        try:
+            pdf_collection_small.delete(where={"file_name": pdf_filename})
+            print(f"[Chroma✅] Deleted chunks from small model for: {pdf_filename}")
+        except Exception as e:
+            print(f"[Chroma⚠️] Small delete failed: {e}")
+
+        # ✅ 3. Delete file from storage
+        if pdf.file:
+            pdf.file.delete(save=False)
+
+        # ✅ 4. Delete Django DB entry
+        pdf.delete()
+
+        messages.success(request, "PDF + embeddings deleted successfully.")
+    except Exception as e:
+        messages.error(request, f"Error deleting PDF: {e}")
+
+    return redirect(request.META.get("HTTP_REFERER", "dashboard"))
+
+def delete_pdfOLD(request, file_id):
     pdf = get_object_or_404(PDFFile, pk=file_id)
 
     # SCGI users can delete only their own uploads; Admin/Superadmin can delete any
