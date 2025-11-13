@@ -66,4 +66,5 @@ RUN [ -f ./start.sh ] && chmod +x ./start.sh
 #|| true
 
 # -------------------- Default Command --------------------
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "flowdocs.wsgi:application"]
+#CMD ["gunicorn", "--bind", "0.0.0.0:8000", "flowdocs.wsgi:application"]
+CMD ["./start.sh"]
