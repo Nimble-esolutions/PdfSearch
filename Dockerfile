@@ -10,21 +10,37 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # -------------------- System Dependencies --------------------
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libffi-dev \
-    libpq-dev \
-    pkg-config \
-    libjpeg-dev \
-    zlib1g-dev \
-    libfreetype6-dev \
-    libpng-dev \
-    libblas-dev \
-    liblapack-dev \
-    gfortran \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-mar \
+        poppler-utils \
+        libpq-dev \
+        gcc \
+        g++ \
+        libcairo2 \
+        libcairo2-dev \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libgdk-pixbuf2.0-0 \
+        libjpeg-dev \
+        zlib1g-dev \
+        libpng-dev \
+        libtiff-dev \
+        libwebp-dev \
+        libopenjp2-7-dev \
+        libfreetype6-dev \
+        liblcms2-dev \
+        libharfbuzz-dev \
+        libfribidi-dev \
+        libxcb1-dev \
+        libffi-dev \
+        pkg-config \
+        curl \
+        sqlite3 \
+        gosu \
+        bash && \
+    rm -rf /var/lib/apt/lists/*
 # -------------------- Install Python Dependencies --------------------
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
