@@ -32,6 +32,11 @@ RUN apt-get update && \
         libpq-dev \
         gcc \
         g++ \
+        libcairo2 \
+        libcairo2-dev \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libgdk-pixbuf2.0-0 \
         libjpeg-dev \
         zlib1g-dev \
         libpng-dev \
