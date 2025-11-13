@@ -17,61 +17,80 @@ echo "  DEBUG=$DEBUG"
 echo "  ALLOWED_HOSTS=$ALLOWED_HOSTS"
 echo "------------------------------------------------------------"
 
-# -------------------- SQLite Backup & Restore --------------------
-DB_PATH=/app/flowdocs/flowdocs/db.sqlite3
-BACKUP_DIR=/app/backups
+# -------------------- Database Path and Volumes --------------------
+
+DB_PATH="/app/flowdocs/db.sqlite3"                # ✅ New mount path
+OLD_DB_PATH="/app/flowdocs/flowdocs/db.sqlite3"   # 🔄 Legacy path for backward compat
+BACKUP_DIR="/app/backups"
 mkdir -p "$BACKUP_DIR"
 
-# Restore if DB missing but backup exists
+# ===============================================================
+# 3️⃣ Restore / Move DB from Old Path or Backup
+# ===============================================================
 if [ ! -f "$DB_PATH" ]; then
-    latest_backup=$(ls -t $BACKUP_DIR/db_backup_*.sqlite3 2>/dev/null | head -n 1)
-    if [ -n "$latest_backup" ]; then
-        echo "♻️ Restoring DB from $latest_backup"
-        cp "$latest_backup" "$DB_PATH"
-        chown appuser:appuser "$DB_PATH"
-        echo "✅ Restore complete"
-    fi
-fi
+    echo "⚠️ No database found at $DB_PATH"
 
-# Now backup current DB
+    if [ -f "$OLD_DB_PATH" ]; then
+        echo "📦 Found old database at $OLD_DB_PATH → moving to new location..."
+        mv "$OLD_DB_PATH" "$DB_PATH"
+    else
+        latest_backup=$(ls -t $BACKUP_DIR/db_backup_*.sqlite3 2>/dev/null | head -n 1)
+        if [ -n "$latest_backup" ]; then
+            echo "♻️ Restoring DB from latest backup: $latest_backup"
+            cp "$latest_backup" "$DB_PATH"
+        else
+            echo "🆕 No existing DB found. A fresh one will be created."
+        fi
+    fi
+else
+    echo "✅ Database found at $DB_PATH"
+fi
+echo "------------------------------------------------------------"
+# 4️⃣ Backup current database
+# ===============================================================
 if [ -f "$DB_PATH" ]; then
     BACKUP_FILE="$BACKUP_DIR/db_backup_$(date +%F_%H%M%S).sqlite3"
-    echo "📦 Backing up DB to $BACKUP_FILE"
-    cp "$DB_PATH" "$BACKUP_FILE" && echo "✅ Backup successful"
-fi
-
-
-# -------------------- Migrations --------------------
-echo "🗃️ Applying migrations..."
-cd /app/flowdocs
-python manage.py migrate --noinput || echo "⚠️ Migration issue, please check logs."
-echo "------------------------------------------------------------"
-
-# -------------------- ✅ ChromaDB Setup --------------------
-CHROMA_DIR=/app/chroma_db
-echo "🧠 Checking ChromaDB vector store..."
-if [ ! -d "$CHROMA_DIR" ]; then
-    mkdir -p "$CHROMA_DIR"
-    echo "✅ Created Chroma directory: $CHROMA_DIR"
+    echo "💾 Backing up database to $BACKUP_FILE"
+    cp "$DB_PATH" "$BACKUP_FILE"
+    echo "✅ Backup complete"
 else
-    echo "ℹ️ Chroma directory already exists: $CHROMA_DIR"
+    echo "⚠️ No database file to backup"
 fi
-# Optional: clear old data on each deploy
-# rm -rf "$CHROMA_DIR"/* && echo "♻️ Cleared old Chroma vectors"
-
 echo "------------------------------------------------------------"
 
-# -------------------- Superuser --------------------
+# ===============================================================
+# 5️⃣ Run migrations
+# ===============================================================
+echo "🗃️ Running Django migrations..."
+cd /app/flowdocs
+python manage.py migrate --noinput || echo "⚠️ Migration failed. Please check logs."
+echo "✅ Migrations complete"
+echo "------------------------------------------------------------"
+
+# 6️⃣ Create superuser if not exists
+# ===============================================================
 echo "👤 Checking for admin superuser..."
 python manage.py shell -c "
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
     User.objects.create_superuser('admin', 'admin@gmail.com', 'admin123')
-    print('✅ Superuser created: admin/admin123')
+    print('✅ Superuser created: admin / admin123')
 else:
     print('ℹ️ Superuser already exists')
-" || echo "⚠️ Superuser creation failed."
+"
+echo "------------------------------------------------------------"
+# 7️⃣ Initialize ChromaDB
+# ===============================================================
+CHROMA_DIR="/app/flowdocs/chroma_db"
+echo "🧠 Initializing ChromaDB directory..."
+
+if [ ! -d "$CHROMA_DIR" ]; then
+    mkdir -p "$CHROMA_DIR"
+    echo "✅ Created new Chroma directory: $CHROMA_DIR"
+else
+    echo "ℹ️ Chroma directory already exists: $CHROMA_DIR"
+fi
 echo "------------------------------------------------------------"
 
 # -------------------- Static files --------------------
