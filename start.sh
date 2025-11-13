@@ -23,6 +23,35 @@ echo "------------------------------------------------------------"
 # ===============================================================
 # 2️⃣ Database Paths and Volumes
 # ===============================================================
+# ===============================================================
+# 2️⃣ Ensure key directories and permissions (new block)
+# ===============================================================
+echo "[entrypoint] Ensuring directories and permissions..."
+mkdir -p \
+    /app/flowdocs \
+    /app/flowdocs/chroma_db \
+    /app/flowdocs/media \
+    /app/backups \
+    /app/staticfiles
+
+echo "[entrypoint] Fixing permissions for mounted volumes..."
+chown -R appuser:appuser \
+    /app/flowdocs \
+    /app/flowdocs/chroma_db \
+    /app/flowdocs/media \
+    /app/backups \
+    /app/staticfiles
+
+chmod -R 770 \
+    /app/flowdocs \
+    /app/flowdocs/chroma_db \
+    /app/flowdocs/media \
+    /app/backups \
+    /app/staticfiles
+
+echo "✅ Directories and permissions ready"
+echo "------------------------------------------------------------"
+
 DB_PATH="/app/flowdocs/db.sqlite3"
 OLD_DB_PATH="/app/flowdocs/flowdocs/db.sqlite3"
 BACKUP_DIR="/app/backups"
