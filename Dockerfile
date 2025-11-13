@@ -61,7 +61,7 @@ RUN mkdir -p \
 USER appuser
 
 # -------------------- Entrypoint --------------------
-ENTRYPOINT ["/app/flowdocs/entrypoint.sh"]
+ENTRYPOINT ["/app/flowdocs/start.sh"]
 
 # -------------------- Default Command --------------------
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "flowdocs.wsgi:application"]
