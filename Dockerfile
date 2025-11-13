@@ -52,11 +52,21 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # =====================================================================
+# 👤 Create Non-Root App User
+# =====================================================================
+RUN adduser --disabled-password --gecos '' ${APP_USER} && \
+    mkdir -p ${APP_HOME} && \
+    chown -R ${APP_USER}:${APP_USER} ${APP_HOME} ${WORKDIR}
+
+# =====================================================================
 # 📦 Python Dependencies
 # =====================================================================
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
+
+#RUN pip install --no-cache-dir --upgrade pip && \
+#    pip install --no-cache-dir -r requirements.txt
 
 # =====================================================================
 # 🧾 Application Code
@@ -79,12 +89,6 @@ RUN bash -lc 'if [ -d "flowdocs" ] && [ -f "flowdocs/manage.py" ]; then \
       echo "collectstatic skipped (flowdocs/manage.py not found)"; \
     fi'
 
-# =====================================================================
-# 👤 Create Non-Root App User
-# =====================================================================
-RUN adduser --disabled-password --gecos '' ${APP_USER} && \
-    mkdir -p ${APP_HOME} && \
-    chown -R ${APP_USER}:${APP_USER} ${APP_HOME} ${WORKDIR}
 
 # =====================================================================
 # 🧮 SQLite JSON Migration Runner
