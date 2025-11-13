@@ -1,9 +1,12 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting FlowDocs application..."
+echo "🚀 Starting FlowDocs Django application..."
+echo "------------------------------------------------------------"
 
-# -------------------- Environment setup --------------------
+# ===============================================================
+# 1️⃣ Environment setup
+# ===============================================================
 export SECRET_KEY=${SECRET_KEY:-"django-insecure-change-me-in-production"}
 export DEBUG=${DEBUG:-"True"}
 export ALLOWED_HOSTS=${ALLOWED_HOSTS:-"*"}
@@ -12,17 +15,21 @@ export OPENAI_API_KEY=${OPENAI_API_KEY:-""}
 export CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-""}
 export CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-""}
 
-echo "Environment summary:"
+echo "🌍 Environment summary:"
 echo "  DEBUG=$DEBUG"
 echo "  ALLOWED_HOSTS=$ALLOWED_HOSTS"
 echo "------------------------------------------------------------"
 
-# -------------------- Database Path and Volumes --------------------
-
-DB_PATH="/app/flowdocs/db.sqlite3"                # ✅ New mount path
-OLD_DB_PATH="/app/flowdocs/flowdocs/db.sqlite3"   # 🔄 Legacy path for backward compat
+# ===============================================================
+# 2️⃣ Database Paths and Volumes
+# ===============================================================
+DB_PATH="/app/flowdocs/db.sqlite3"
+OLD_DB_PATH="/app/flowdocs/flowdocs/db.sqlite3"
 BACKUP_DIR="/app/backups"
-mkdir -p "$BACKUP_DIR"
+CHROMA_DIR="/app/flowdocs/chroma_db"
+CHROMA_BACKUP_DIR="$BACKUP_DIR/chroma_backup"
+
+mkdir -p "$BACKUP_DIR" "$CHROMA_BACKUP_DIR"
 
 # ===============================================================
 # 3️⃣ Restore / Move DB from Old Path or Backup
@@ -46,6 +53,8 @@ else
     echo "✅ Database found at $DB_PATH"
 fi
 echo "------------------------------------------------------------"
+
+# ===============================================================
 # 4️⃣ Backup current database
 # ===============================================================
 if [ -f "$DB_PATH" ]; then
@@ -59,7 +68,29 @@ fi
 echo "------------------------------------------------------------"
 
 # ===============================================================
-# 5️⃣ Run migrations
+# 5️⃣ Restore ChromaDB (if needed)
+# ===============================================================
+echo "🧠 Checking ChromaDB vector store..."
+if [ ! -d "$CHROMA_DIR" ]; then
+    echo "📂 Creating new Chroma directory at $CHROMA_DIR"
+    mkdir -p "$CHROMA_DIR"
+elif [ -z "$(ls -A $CHROMA_DIR)" ]; then
+    # empty chroma folder, try restore
+    latest_chroma_backup=$(ls -dt $CHROMA_BACKUP_DIR/chroma_backup_* 2>/dev/null | head -n 1)
+    if [ -n "$latest_chroma_backup" ]; then
+        echo "♻️ Restoring ChromaDB from backup: $latest_chroma_backup"
+        cp -r "$latest_chroma_backup"/* "$CHROMA_DIR"/
+        echo "✅ ChromaDB restore complete"
+    else
+        echo "🆕 No ChromaDB backup found. Starting fresh."
+    fi
+else
+    echo "✅ ChromaDB already present."
+fi
+echo "------------------------------------------------------------"
+
+# ===============================================================
+# 6️⃣ Run migrations
 # ===============================================================
 echo "🗃️ Running Django migrations..."
 cd /app/flowdocs
@@ -67,7 +98,8 @@ python manage.py migrate --noinput || echo "⚠️ Migration failed. Please chec
 echo "✅ Migrations complete"
 echo "------------------------------------------------------------"
 
-# 6️⃣ Create superuser if not exists
+# ===============================================================
+# 7️⃣ Create superuser if not exists
 # ===============================================================
 echo "👤 Checking for admin superuser..."
 python manage.py shell -c "
@@ -80,26 +112,32 @@ else:
     print('ℹ️ Superuser already exists')
 "
 echo "------------------------------------------------------------"
-# 7️⃣ Initialize ChromaDB
-# ===============================================================
-CHROMA_DIR="/app/flowdocs/chroma_db"
-echo "🧠 Initializing ChromaDB directory..."
 
-if [ ! -d "$CHROMA_DIR" ]; then
-    mkdir -p "$CHROMA_DIR"
-    echo "✅ Created new Chroma directory: $CHROMA_DIR"
+# ===============================================================
+# 8️⃣ Backup ChromaDB
+# ===============================================================
+echo "🧠 Backing up ChromaDB..."
+if [ -d "$CHROMA_DIR" ] && [ "$(ls -A $CHROMA_DIR)" ]; then
+    CHROMA_BACKUP_PATH="$CHROMA_BACKUP_DIR/chroma_backup_$(date +%F_%H%M%S)"
+    mkdir -p "$CHROMA_BACKUP_PATH"
+    cp -r "$CHROMA_DIR"/* "$CHROMA_BACKUP_PATH"/
+    echo "✅ ChromaDB backup saved at $CHROMA_BACKUP_PATH"
 else
-    echo "ℹ️ Chroma directory already exists: $CHROMA_DIR"
+    echo "⚠️ No ChromaDB data to backup"
 fi
 echo "------------------------------------------------------------"
 
-# -------------------- Static files --------------------
-echo "🧹 Collecting static files..."
+# ===============================================================
+# 9️⃣ Collect static files
+# ===============================================================
+echo "🎨 Collecting static files..."
 python manage.py collectstatic --noinput --clear || echo "⚠️ Static collection failed"
 echo "------------------------------------------------------------"
 
-# -------------------- Start Gunicorn --------------------
-echo "🔥 Starting Gunicorn..."
+# ===============================================================
+# 🔟 Start Gunicorn server
+# ===============================================================
+echo "🔥 Starting Gunicorn (Django app)..."
 exec gunicorn \
     --bind 0.0.0.0:8000 \
     --workers 4 \
