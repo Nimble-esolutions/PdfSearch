@@ -9,7 +9,7 @@ services:
   web:
     build: .
     #image: dev-one-58pibn:latest
-    command: sh -c "./start.sh"
+    command: ./start.sh
     volumes:
      # - static_volume:/app/staticfiles
      # - media_volume:/app/media
