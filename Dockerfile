@@ -61,7 +61,9 @@ RUN mkdir -p \
 USER appuser
 
 # -------------------- Entrypoint --------------------
-ENTRYPOINT ["/app/flowdocs/start.sh"]
+# Make start script executable (if present)
+RUN [ -f ./start.sh ] && chmod +x ./start.sh 
+#|| true
 
 # -------------------- Default Command --------------------
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "flowdocs.wsgi:application"]
