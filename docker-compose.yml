@@ -19,7 +19,7 @@ services:
 
       - static_volume:/app/staticfiles
       - media_volume:/app/flowdocs/media/pdfs        #updated
-      - db_volume:/app/flowdocs/flowdocs             # ✅ correct folder (outer)
+      - db_volume:/app/flowdocs             # ✅ correct folder (outer)
       - backups_volume:/app/backups
       - chroma_volume:/app/flowdocs/chroma_db
       
