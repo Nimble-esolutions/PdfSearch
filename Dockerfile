@@ -32,11 +32,6 @@ RUN apt-get update && \
         libpq-dev \
         gcc \
         g++ \
-        libcairo2 \
-        libcairo2-dev \
-        libpango-1.0-0 \
-        libpangoft2-1.0-0 \
-        libgdk-pixbuf-2.0-0 \
         libjpeg-dev \
         zlib1g-dev \
         libpng-dev \
@@ -53,11 +48,11 @@ RUN apt-get update && \
         curl \
         sqlite3 \
         gosu \
-        bash \
+        bash && \ 
         build-essential \
         cargo \
         cmake \
-    && rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/*
 
 # =====================================================================
 # 📦 Python Dependencies
@@ -273,21 +268,6 @@ exec gosu "${APP_USER}:${APP_USER}" "$@"
 EOSH
 
 RUN chmod +x /usr/local/bin/entrypoint.sh
-# ---------------------------------------------------------------------
-# 🗃 Run JSON → SQLite migrations (run as root so DB can be created)
-# ---------------------------------------------------------------------
-#echo "[entrypoint] Running JSON → SQLite migrations ($SQLITE_DB_PATH)"
-#python3 /usr/local/bin/apply_sqlite_json.py || {
-#    echo "[entrypoint] Migration step failed"
-#    exit 1
-#}
-
-# ---------------------------------------------------------------------
-# 👤 Drop privileges and start Django app
-# ---------------------------------------------------------------------
-#echo "[entrypoint] Starting app as ${APP_USER}"
-#exec gosu "${APP_USER}:${APP_USER}" "$@"
-#RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # =====================================================================
 # 🌐 Networking & Health Check
