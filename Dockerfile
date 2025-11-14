@@ -285,9 +285,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # ---------------------------------------------------------------------
 # 👤 Drop privileges and start Django app
 # ---------------------------------------------------------------------
-echo "[entrypoint] Starting app as ${APP_USER}"
-exec gosu "${APP_USER}:${APP_USER}" "$@"
-RUN chmod +x /usr/local/bin/entrypoint.sh
+#echo "[entrypoint] Starting app as ${APP_USER}"
+#exec gosu "${APP_USER}:${APP_USER}" "$@"
+#RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # =====================================================================
 # 🌐 Networking & Health Check
