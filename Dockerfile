@@ -251,9 +251,6 @@ export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/flowdocs/db.sqlite3}"
 export MIGRATIONS_JSON="${MIGRATIONS_JSON:-/app/flowdocs}"
 export FORCE_MIGRATIONS="${FORCE_MIGRATIONS:-0}"
 
-# ---------------------------------------------------------------------
-# 📁 Ensure required directories exist (important for Docker volumes)
-# ---------------------------------------------------------------------
 mkdir -p \
     "${APP_HOME}" \
     "$(dirname "${SQLITE_DB_PATH}")" \
@@ -263,9 +260,6 @@ mkdir -p \
     /app/media \
     /app/backups
 
-# ---------------------------------------------------------------------
-# 🔧 Fix permissions ONLY if directories are owned by root
-# ---------------------------------------------------------------------
 fix_dir_perm() {
     DIR=$1
     if [ -d "$DIR" ]; then
@@ -287,6 +281,17 @@ fix_dir_perm /app/backups
 fix_dir_perm /app/staticfiles
 fix_dir_perm /app/media
 
+echo "[entrypoint] Running JSON → SQLite migrations ($SQLITE_DB_PATH)"
+python3 /usr/local/bin/apply_sqlite_json.py || {
+    echo "[entrypoint] Migration step failed"
+    exit 1
+}
+
+echo "[entrypoint] Starting app as ${APP_USER}"
+exec gosu "${APP_USER}:${APP_USER}" "$@"
+EOSH
+
+RUN chmod +x /usr/local/bin/entrypoint.sh
 # ---------------------------------------------------------------------
 # 🗃 Run JSON → SQLite migrations (run as root so DB can be created)
 # ---------------------------------------------------------------------
