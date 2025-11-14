@@ -95,9 +95,23 @@ else
     echo "⚠️ No database file to backup"
 fi
 echo "------------------------------------------------------------"
-
 # ===============================================================
-# 5️⃣ Restore ChromaDB (if needed)
+# 🧩 5️⃣ Apply JSON → SQLite Data Migration
+# ===============================================================
+echo "🧩 Applying JSON → SQLite migrations..."
+
+if [ -x "/usr/local/bin/apply_sqlite_json.py" ]; then
+    python /usr/local/bin/apply_sqlite_json.py || {
+        echo "❌ JSON migration failed!"
+    }
+    echo "✅ JSON → SQLite migration completed"
+else
+    echo "⚠️ JSON migration script not found!"
+fi
+
+echo "------------------------------------------------------------"
+# ===============================================================
+#  Restore ChromaDB (if needed)
 # ===============================================================
 echo "🧠 Checking ChromaDB vector store..."
 if [ ! -d "$CHROMA_DIR" ]; then
