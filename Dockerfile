@@ -269,7 +269,9 @@ python3 /usr/local/bin/apply_sqlite_json.py || {
 }
 # Start app
 echo "[entrypoint] Starting Gunicorn as ${APP_USER}"
-exec gosu "${APP_USER}:${APP_USER}" gunicorn flowdocs.wsgi:application --bind 0.0.0.0:8000
+cd /app/flowdocs/Flowdocs
+exec gosu "${APP_USER}:${APP_USER}" gunicorn Flowdocs.flowdocs.wsgi:application --bind 0.0.0.0:8000
+#exec gosu "${APP_USER}:${APP_USER}" gunicorn flowdocs.wsgi:application --bind 0.0.0.0:8000
 
 # Drop privileges and start app
 #echo "[entrypoint] Starting app as ${APP_USER}"
