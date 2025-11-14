@@ -241,6 +241,7 @@ RUN chmod +x /usr/local/bin/apply_sqlite_json.py
 # =====================================================================
 # 🚀 Entrypoint Script
 # =====================================================================
+RUN cat > /usr/local/bin/entrypoint.sh << 'EOSH'
 #!/usr/bin/env bash
 set -euo pipefail
 
