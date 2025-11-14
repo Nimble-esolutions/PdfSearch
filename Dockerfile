@@ -48,10 +48,10 @@ RUN apt-get update && \
         curl \
         sqlite3 \
         gosu \
-        bash && \ 
+        bash \
         build-essential \
         cargo \
-        cmake \
+        cmake && \
     rm -rf /var/lib/apt/lists/*
 
 # =====================================================================
