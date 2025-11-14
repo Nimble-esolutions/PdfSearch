@@ -246,47 +246,28 @@ RUN cat > /usr/local/bin/entrypoint.sh << 'EOSH'
 set -euo pipefail
 
 export APP_USER="${APP_USER:-appuser}"
-export APP_HOME="${APP_HOME:-/home/${APP_USER}}"
-export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/flowdocs/db.sqlite3}"
+export APP_HOME="${APP_HOME:-/home/appuser}"
+export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/flowdocs/flowdocs/db.sqlite3}"
 export MIGRATIONS_JSON="${MIGRATIONS_JSON:-/app/flowdocs}"
 export FORCE_MIGRATIONS="${FORCE_MIGRATIONS:-0}"
 
-mkdir -p \
-    "${APP_HOME}" \
-    "$(dirname "${SQLITE_DB_PATH}")" \
-    /app/flowdocs/flowdocs \
-    /app/flowdocs/chroma_db \
-    /app/staticfiles \
-    /app/media \
-    /app/backups
+# Ensure dirs & ownership even with mounted volumes
+mkdir -p "${APP_HOME}" "$(dirname "${SQLITE_DB_PATH}")" /app/staticfiles /app/media /app/backups
 
-fix_dir_perm() {
-    DIR=$1
-    if [ -d "$DIR" ]; then
-        OWNER=$(stat -c '%U' "$DIR" || echo "")
-        if [ "$OWNER" = "root" ]; then
-            echo "[entrypoint] Fixing permissions for $DIR"
-            chown -R "${APP_USER}:${APP_USER}" "$DIR" || true
-            chmod -R 770 "$DIR" || true
-        else
-            echo "[entrypoint] Permissions OK: $DIR (owner=${OWNER})"
-        fi
-    fi
-}
+# 🔧 Fix permissions for SQLite and backups (handles mounted volumes)
+echo "[entrypoint] Fixing permissions for /app/flowdocs and /app/backups"
+chown -R "${APP_USER}:${APP_USER}" /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
+chmod -R 770 /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
 
-echo "[entrypoint] Checking/fixing permissions on mounted volumes..."
-fix_dir_perm /app/flowdocs/flowdocs
-fix_dir_perm /app/flowdocs/chroma_db
-fix_dir_perm /app/backups
-fix_dir_perm /app/staticfiles
-fix_dir_perm /app/media
 
-echo "[entrypoint] Running JSON → SQLite migrations ($SQLITE_DB_PATH)"
+# Run migrations as root (SQLite file is created if missing)
+echo "[entrypoint] Running JSON -> SQLite migrations (DB=${SQLITE_DB_PATH})"
 python3 /usr/local/bin/apply_sqlite_json.py || {
     echo "[entrypoint] Migration step failed"
     exit 1
 }
 
+# Drop privileges and start app
 echo "[entrypoint] Starting app as ${APP_USER}"
 exec gosu "${APP_USER}:${APP_USER}" "$@"
 EOSH
@@ -295,11 +276,11 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # ---------------------------------------------------------------------
 # 🗃 Run JSON → SQLite migrations (run as root so DB can be created)
 # ---------------------------------------------------------------------
-echo "[entrypoint] Running JSON → SQLite migrations ($SQLITE_DB_PATH)"
-python3 /usr/local/bin/apply_sqlite_json.py || {
-    echo "[entrypoint] Migration step failed"
-    exit 1
-}
+#echo "[entrypoint] Running JSON → SQLite migrations ($SQLITE_DB_PATH)"
+#python3 /usr/local/bin/apply_sqlite_json.py || {
+#    echo "[entrypoint] Migration step failed"
+#    exit 1
+#}
 
 # ---------------------------------------------------------------------
 # 👤 Drop privileges and start Django app
