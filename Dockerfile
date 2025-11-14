@@ -267,10 +267,13 @@ python3 /usr/local/bin/apply_sqlite_json.py || {
     echo "[entrypoint] Migration step failed"
     exit 1
 }
+# Start app
+echo "[entrypoint] Starting Gunicorn as ${APP_USER}"
+exec gosu "${APP_USER}:${APP_USER}" gunicorn flowdocs.wsgi:application --bind 0.0.0.0:8000
 
 # Drop privileges and start app
-echo "[entrypoint] Starting app as ${APP_USER}"
-exec gosu "${APP_USER}:${APP_USER}" "$@"
+#echo "[entrypoint] Starting app as ${APP_USER}"
+#exec gosu "${APP_USER}:${APP_USER}" "$@"
 EOSH
 
 RUN chmod +x /usr/local/bin/entrypoint.sh
