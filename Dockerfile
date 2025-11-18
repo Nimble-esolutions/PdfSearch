@@ -12,7 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_USER=appuser \
     APP_HOME=/home/appuser \
     WORKDIR=/app \
-    SQLITE_DB_PATH=/app/flowdocs/flowdocs/db.sqlite3 \
+    #SQLITE_DB_PATH=/app/flowdocs/flowdocs/db.sqlite3 \
+    SQLITE_DB_PATH=/app/flowdocs/db.sqlite3 \
     MIGRATIONS_JSON="/app/flowdocs/" \
     FORCE_MIGRATIONS=0
 
