@@ -244,43 +244,43 @@ RUN chmod +x /usr/local/bin/apply_sqlite_json.py
 # =====================================================================
 # 🚀 Entrypoint Script
 # =====================================================================
-#RUN cat > /usr/local/bin/entrypoint.sh << 'EOSH'
-#!/usr/bin/env bash
-#set -euo pipefail
+RUN cat > /usr/local/bin/entrypoint.sh << 'EOSH'
+!/usr/bin/env bash
+set -euo pipefail
 
-#export APP_USER="${APP_USER:-appuser}"
-#export APP_HOME="${APP_HOME:-/home/appuser}"
-#export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/flowdocs/flowdocs/db.sqlite3}"
-#export MIGRATIONS_JSON="${MIGRATIONS_JSON:-/app/flowdocs}"
-#export FORCE_MIGRATIONS="${FORCE_MIGRATIONS:-0}"
+export APP_USER="${APP_USER:-appuser}"
+export APP_HOME="${APP_HOME:-/home/appuser}"
+export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/flowdocs/flowdocs/db.sqlite3}"
+export MIGRATIONS_JSON="${MIGRATIONS_JSON:-/app/flowdocs}"
+export FORCE_MIGRATIONS="${FORCE_MIGRATIONS:-0}"
 
 # Ensure dirs & ownership even with mounted volumes
-#mkdir -p "${APP_HOME}" "$(dirname "${SQLITE_DB_PATH}")" /app/staticfiles /app/media /app/backups
+mkdir -p "${APP_HOME}" "$(dirname "${SQLITE_DB_PATH}")" /app/staticfiles /app/media /app/backups
 
 # 🔧 Fix permissions for SQLite and backups (handles mounted volumes)
-#echo "[entrypoint] Fixing permissions for /app/flowdocs and /app/backups"
-#chown -R "${APP_USER}:${APP_USER}" /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
-#chmod -R 770 /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
+echo "[entrypoint] Fixing permissions for /app/flowdocs and /app/backups"
+chown -R "${APP_USER}:${APP_USER}" /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
+chmod -R 770 /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
 
 
 # Run migrations as root (SQLite file is created if missing)
-#echo "[entrypoint] Running JSON -> SQLite migrations (DB=${SQLITE_DB_PATH})"
-#python3 /usr/local/bin/apply_sqlite_json.py || {
-    #echo "[entrypoint] Migration step failed"
-    #exit 1
-#}
+echo "[entrypoint] Running JSON -> SQLite migrations (DB=${SQLITE_DB_PATH})"
+python3 /usr/local/bin/apply_sqlite_json.py || {
+    echo "[entrypoint] Migration step failed"
+    exit 1
+}
 # Start app
-#echo "[entrypoint] Starting Gunicorn as ${APP_USER}"
-#cd /app/flowdocs/Flowdocs
-#exec gosu "${APP_USER}:${APP_USER}" gunicorn Flowdocs.flowdocs.wsgi:application --bind 0.0.0.0:8000
-#exec gosu "${APP_USER}:${APP_USER}" gunicorn flowdocs.wsgi:application --bind 0.0.0.0:8000
+echo "[entrypoint] Starting Gunicorn as ${APP_USER}"
+cd /app/flowdocs/Flowdocs
+exec gosu "${APP_USER}:${APP_USER}" gunicorn Flowdocs.flowdocs.wsgi:application --bind 0.0.0.0:8000
+exec gosu "${APP_USER}:${APP_USER}" gunicorn flowdocs.wsgi:application --bind 0.0.0.0:8000
 
 # Drop privileges and start app
-#echo "[entrypoint] Starting app as ${APP_USER}"
-#exec gosu "${APP_USER}:${APP_USER}" "$@"
-#EOSH
+echo "[entrypoint] Starting app as ${APP_USER}"
+exec gosu "${APP_USER}:${APP_USER}" "$@"
+EOSH
 
-#RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # =====================================================================
 # 🌐 Networking & Health Check
@@ -292,9 +292,9 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # =====================================================================
 # 🎯 Default Entrypoint & Command
 # =====================================================================
-#ENTRYPOINT ["entrypoint.sh"]
-#CMD ["./start.sh"]
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["./start.sh"]
 #ENTRYPOINT ["./start.sh"]
 
-CMD ["/app/start.sh"]
-ENTRYPOINT ["/app/start.sh"]
+#CMD ["/app/start.sh"]
+#ENTRYPOINT ["/app/start.sh"]
