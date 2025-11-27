@@ -293,5 +293,8 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # 🎯 Default Entrypoint & Command
 # =====================================================================
 #ENTRYPOINT ["entrypoint.sh"]
-CMD ["./start.sh"]
-ENTRYPOINT ["./start.sh"]
+#CMD ["./start.sh"]
+#ENTRYPOINT ["./start.sh"]
+
+CMD ["/app/start.sh"]
+ENTRYPOINT ["/app/start.sh"]
