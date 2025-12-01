@@ -10,8 +10,7 @@ from django.contrib import messages
 from django.db import IntegrityError
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate, login, logout
-
-
+from .forms import UserRegisterForm
 
 from .models import PDFFile, Folder, CustomUser
 from .forms import UploadForm
