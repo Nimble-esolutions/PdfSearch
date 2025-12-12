@@ -12,6 +12,7 @@ from openai import OpenAI
 from django.conf import settings
 from django.core.cache import cache
 from .models import Folder
+from difflib import SequenceMatcher
 
 from indic_transliteration import sanscript as sc
 from indic_transliteration.sanscript import transliterate
@@ -300,7 +301,7 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
 
 
 # ------------------ Search PDFs (fast path) ------------------
-def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 3) -> Tuple[str, List[Dict[str, Any]]]:
+def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Fast search that:
      - uses precomputed chunk embeddings saved on PDFs
@@ -411,7 +412,7 @@ def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 3) -> Tu
     return answer, refs
 
 # ------------------ GPT answer ------------------
-def generate_gpt_answer(user_question: str, context: str, references: List[Dict[str, Any]] = None, max_words: int = 400) -> str:
+def generate_gpt_answer(user_question: str, context: str, references: List[Dict[str, Any]] = None, max_words: int = 200) -> str:
     """
     Query the LLM with a small, high-quality context. Use cached responses if available.
     """
@@ -425,10 +426,10 @@ def generate_gpt_answer(user_question: str, context: str, references: List[Dict[
 
     lang = detect_language(user_question)
     if lang == "mr":
-        system_msg = "तुम्ही एक सहाय्यक आहात. मराठीतून उत्तर द्या. मर्यादा 400 शब्द."
+        system_msg = "तुम्ही एक सहाय्यक आहात. मराठीतून उत्तर द्या. मर्यादा 200 शब्द."
         prompt = f"प्रश्न: {user_question}\n\nसंदर्भ:\n{context}"
     else:
-        system_msg = "You are a helpful assistant. Answer concisely in English, max 400 words."
+        system_msg = "You are a helpful assistant. Answer concisely in English, max 200 words."
         prompt = f"Q: {user_question}\n\nContext:\n{context}"
 
     if references:
@@ -466,8 +467,8 @@ def generate_gpt_answer(user_question: str, context: str, references: List[Dict[
         traceback.print_exc()
         return "⚠️ Couldn't generate answer right now. Please try again later."
 
-# ---------------- Detect Folder by Keywords ----------------
-def detect_folder_by_keywords(query):
+# ---------------- Detect Folder by Keywords matching by single word----------------
+def detect_folder_by_Single_keywords(query):
     """
     Returns a Folder model instance based on keyword matching.
     """
@@ -497,3 +498,258 @@ def detect_folder_by_keywords(query):
     top_folder = folder_scores[0][0]
 
     return top_folder   # IMPORTANT — return Folder instance, not string
+
+#---------------- Detect Folder by Key phrases matching by multiple word----------------
+def fuzzy_ratio(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+from difflib import SequenceMatcher
+
+def fuzzy_ratio(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def detect_folder_by_keywords(query):
+    """
+    Detects the best matching folder based on:
+    - direct phrase match
+    - reverse phrase match
+    - fuzzy similarity
+    Includes full debug output.
+    """
+    print("\n========== 🔍 KEYWORD DEBUG INFO ==========")
+    print(f"📝 User Query: {query}\n")
+
+    folders = Folder.objects.all()
+    query_lower = query.lower().strip()
+
+    best_folder = None
+    best_score = 0.0
+
+    for folder in folders:
+        # Skip folders without keywords
+        if not folder.keywords:
+            continue
+
+        # Normalize folder keyword list (remove empty items)
+        if isinstance(folder.keywords, list):
+            folder_keywords = [
+                k.strip().lower()
+                for k in folder.keywords
+                if k and k.strip()
+            ]
+        else:
+            folder_keywords = [
+                k.strip().lower()
+                for k in folder.keywords.split(",")
+                if k and k.strip()
+            ]
+
+        print(f"📁 Folder: {folder.name}")
+        print(f"🔑 Keywords: {folder_keywords}")
+
+        folder_score = 0.0
+        matched_phrases = []
+
+        for phrase in folder_keywords:
+            sim = fuzzy_ratio(query_lower, phrase)
+
+            # 1️⃣ direct substring match
+            if phrase in query_lower:
+                folder_score += 1.0
+                matched_phrases.append(f"{phrase} (substring)")
+                continue
+
+            # 2️⃣ reversed substring match
+            if query_lower in phrase:
+                folder_score += 0.8
+                matched_phrases.append(f"{phrase} (reverse-substring)")
+                continue
+
+            # 3️⃣ fuzzy similarity > 0.60
+            if sim > 0.60:
+                folder_score += sim
+                matched_phrases.append(f"{phrase} (fuzzy={sim:.2f})")
+
+        print(f"🔍 Matches: {matched_phrases}")
+        print(f"⭐ Folder Score: {folder_score}\n")
+
+        if folder_score > best_score:
+            best_folder = folder
+            best_score = folder_score
+
+    # 🎯 If NO meaningful match, return NONE
+    if best_score < 0.70:  # Minimum threshold for reliability
+        print("🎯 Final Detected Folder: None (no strong match)")
+        print("============================================\n")
+        return None
+
+    print(f"🎯 Final Detected Folder: {best_folder.name}")
+    print("============================================\n")
+
+    return best_folder
+
+
+#---------------- detect multiple folders for search query ----------------
+def detect_folder_by_keywords_multi(query, min_score_threshold=0.50):
+    """
+    Modified version:
+    - Returns ALL folders with score >= threshold
+    - Not just a single best folder
+    - Keeps your fuzzy + substring logic fully intact
+    """
+
+    print("\n========== 🔍 KEYWORD DEBUG INFO (MULTI-FOLDER) ==========")
+    print(f"📝 User Query: {query}\n")
+
+    folders = Folder.objects.all()
+    query_lower = query.lower().strip()
+
+    scored = []  # will store (folder, score)
+
+    for folder in folders:
+        if not folder.keywords:
+            continue
+
+        # normalize keywords
+        if isinstance(folder.keywords, list):
+            folder_keywords = [k.strip().lower() for k in folder.keywords if k.strip()]
+        else:
+            folder_keywords = [k.strip().lower() for k in folder.keywords.split(",") if k.strip()]
+
+        print(f"📁 Folder: {folder.name}")
+        print(f"🔑 Keywords: {folder_keywords}")
+
+        folder_score = 0.0
+        matched_phrases = []
+
+        for phrase in folder_keywords:
+            sim = fuzzy_ratio(query_lower, phrase)
+
+            # direct match
+            if phrase in query_lower:
+                folder_score += 1.0
+                matched_phrases.append(f"{phrase} (substring)")
+                continue
+
+            # reversed
+            if query_lower in phrase:
+                folder_score += 0.8
+                matched_phrases.append(f"{phrase} (reverse-substring)")
+                continue
+
+            # fuzzy
+            if sim > 0.60:
+                folder_score += sim
+                matched_phrases.append(f"{phrase} (fuzzy={sim:.2f})")
+
+        print(f"🔍 Matches: {matched_phrases}")
+        print(f"⭐ Folder Score: {folder_score}\n")
+
+        if folder_score >= min_score_threshold:
+            scored.append((folder, folder_score))
+
+    # sort desc by score
+    scored = sorted(scored, key=lambda x: x[1], reverse=True)
+
+    if not scored:
+        print("🎯 Final Detected Folders: None ≥ threshold\n")
+        return []
+
+    print("🎯 Final Detected Folders (ALL ≥ threshold):")
+    for f, s in scored:
+        print(f"   - {f.name} (score={s})")
+    print("============================================\n")
+
+    return scored
+
+
+#----------------for general queries ----------------
+def is_general_query(query):
+    q = query.lower().strip()
+
+    general_keywords = [
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "good day",
+        "hello",
+        "hi",
+        "how are you",
+        "thanks",
+        "thank you",
+        "who are you",
+        "today",
+        "date",
+        "day today",
+        "what is today",
+        "time",
+    ]
+
+    # if query fully contains any general phrase → treat as general
+    return any(g in q for g in general_keywords)
+
+#--------------- Best folder selection (semantic + keyword hybrid) ----------------
+#--------------- Best folder selection (semantic + keyword hybrid) ----------------
+def semantic_folder_search(query, top_n=3):
+    """
+    Returns top folders ranked by semantic relevance.
+    Debug mode shows:
+      - Folder scanned
+      - Best PDF match inside folder
+      - Semantic FAISS score
+      - Ranking summary
+    """
+
+    print("\n====================== 🔍 SEMANTIC FOLDER SEARCH DEBUG ======================")
+    print(f"📝 User Query: {query}\n")
+
+    folders = Folder.objects.all()
+    results = []  # list of (folder, score, answer, refs)
+
+    for folder in folders:
+        try:
+            print(f"📁 Scanning Folder: {folder.name}")
+
+            # search inside folder using embeddings + FAISS
+            answer, refs = search_pdfs_fast(folder, query, top_n_pdfs=1)
+
+            if not refs:
+                print("   ⚠ No relevant PDFs found in this folder.\n")
+                continue
+
+            best_ref = refs[0]
+            score = best_ref.get("score", 0)
+            pdf_title = best_ref.get("title", "Unknown PDF")
+
+            if score > 0:
+                print(f"   ✔ Match Found → PDF: {pdf_title} | Score: {score}")
+                results.append((folder, score, answer, refs))
+            else:
+                print(f"   ❌ Score = 0 → Ignored\n")
+
+            print("")  # spacing
+
+        except Exception as e:
+            print(f"   ❌ Error scanning folder: {e}\n")
+            continue  # ignore broken folder
+
+    if not results:
+        print("🚫 No folder returned any meaningful match.")
+        print("==========================================================================\n")
+        return []
+
+    # sort by semantic score
+    results = sorted(results, key=lambda x: x[1], reverse=True)
+
+    print("🏆 FINAL SEMANTIC RANKING:")
+    rank = 1
+    for folder, score, answer, refs in results:
+        print(f"   {rank}. {folder.name} — Score: {score}")
+        rank += 1
+
+    print(f"\n🎯 Top {top_n} folders selected.")
+    print("==========================================================================\n")
+
+    return results[:top_n]
+
+
