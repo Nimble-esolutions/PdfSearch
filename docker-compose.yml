@@ -22,6 +22,7 @@ services:
       - db_volume:/app/flowdocs             # ✅ correct folder (outer)
       - backups_volume:/app/backups
       - chroma_volume:/app/flowdocs/chroma_db
+      - faiss_volume:/app/flowdocs/faiss_indexes
      
     ports:
       - "8000:8000"
@@ -38,3 +39,4 @@ volumes:
   static_volume:
   media_volume:
   chroma_volume:
+  faiss_volume:
