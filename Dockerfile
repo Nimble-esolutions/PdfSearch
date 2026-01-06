@@ -90,8 +90,9 @@ RUN bash -lc 'if [ -d "flowdocs" ] && [ -f "flowdocs/manage.py" ]; then \
 # =====================================================================
 # 👤 Create Non-Root App User (UID/GID 1000:1000 to match host user)
 # =====================================================================
-RUN adduser --disabled-password --gecos '' --uid 1000 --gid 1000 ${APP_USER} || \
-    (groupadd -g 1000 ${APP_USER} && useradd -u 1000 -g 1000 -m -s /bin/bash ${APP_USER}) && \
+RUN groupadd -g 1000 ${APP_USER} 2>/dev/null || true && \
+    useradd -u 1000 -g 1000 -m -s /bin/bash ${APP_USER} 2>/dev/null || \
+    adduser --disabled-password --gecos '' --uid 1000 --gid 1000 ${APP_USER} && \
     mkdir -p ${APP_HOME} && \
     chown -R ${APP_USER}:${APP_USER} ${APP_HOME} ${WORKDIR}
 
