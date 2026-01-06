@@ -33,6 +33,11 @@ class Folder(models.Model):
 class PDFFile(models.Model):
     title = models.CharField(max_length=200)
     file = models.FileField(upload_to="pdfs/")
+    # in your models.py (PDFFile)
+    extracted_text = models.TextField(null=True, blank=True)         # Newly added
+    page_chunks = models.JSONField(default=list, blank=True)         # list[str] Newly added
+    chunk_embeddings = models.JSONField(default=list, blank=True)    # list[list[float]] Newly added
+
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="uploaded_pdfs"
     )
@@ -55,3 +60,5 @@ class PDFFile(models.Model):
 
     def __str__(self):
         return f"{self.title} (Folder: {self.folder.name if self.folder else 'No Folder'})"
+
+

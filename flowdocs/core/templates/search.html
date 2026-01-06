@@ -242,13 +242,12 @@ function typeEffect(text, references = []) {
             if (references.length > 0) {
                 const refDiv = document.createElement('div');
                 refDiv.className = "references";
-                refDiv.innerHTML = "<strong>📚 References:</strong>";
+                refDiv.innerHTML = "<strong>📚 Reference Docs:</strong>";
                 references.forEach(ref => {
                     const card = document.createElement('div');
                     card.className = "ref-card";
                     card.innerHTML = `
-                        <a href="${ref.url}" target="_blank">${ref.title}</a>
-                        <small>${ref.folder} • ${ref.uploaded_at}</small>
+                        <a href="${ref.url}" target="_blank">${ref.title}</a>                       
                     `;
                     refDiv.appendChild(card);
                 });
