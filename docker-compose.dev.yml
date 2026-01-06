@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   redis:
-    image: redis:7-alpine
+    image: ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine
     container_name: flowdocs-redis-dev
     ports:
       - "${REDIS_PORT:-6379}:6379"
