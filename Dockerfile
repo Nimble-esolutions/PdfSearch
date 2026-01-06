@@ -68,6 +68,7 @@ WORKDIR ${WORKDIR}
 # =====================================================================
 # 🧰 Runtime System Dependencies (no build tools!)
 # =====================================================================
+# Install runtime libraries - Python packages will pull in needed dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         tesseract-ocr \
@@ -78,22 +79,24 @@ RUN apt-get update && \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
         libgdk-pixbuf-2.0-0 \
-        libjpeg62-turbo \
         zlib1g \
-        libpng16-16 \
         libtiff5 \
-        libwebp6 \
         libopenjp2-7 \
         libfreetype6 \
-        liblcms2-2 \
-        libharfbuzz0b \
         libfribidi0 \
         libxcb1 \
-        libffi8 \
         curl \
         sqlite3 \
         gosu \
         bash && \
+    # Install additional runtime libraries that may be needed
+    apt-get install -y --no-install-recommends \
+        libjpeg62-turbo \
+        libpng16-16 \
+        libwebp6 \
+        liblcms2-2 \
+        libharfbuzz0b \
+        libffi8 2>/dev/null || true && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
