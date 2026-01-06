@@ -8,19 +8,12 @@ def remove_index_safely(apps, schema_editor):
     Remove the GIN index only if it exists (PostgreSQL only).
     SQLite doesn't support GIN indexes, so this index was never created.
     """
-    db_vendor = connection.vendor
+    db_vendor = schema_editor.connection.vendor
     if db_vendor == 'postgresql':
         # Only try to remove index on PostgreSQL
-        with connection.cursor() as cursor:
-            # Check if index exists
-            cursor.execute("""
-                SELECT indexname FROM pg_indexes 
-                WHERE tablename = 'core_pdffile' 
-                AND indexname = 'core_pdffil_search__1650a6_gin'
-            """)
-            if cursor.fetchone():
-                # Index exists, remove it
-                cursor.execute('DROP INDEX IF EXISTS core_pdffil_search__1650a6_gin')
+        with schema_editor.connection.cursor() as cursor:
+            # Check if index exists and remove it
+            cursor.execute('DROP INDEX IF EXISTS core_pdffil_search__1650a6_gin')
     # For SQLite, do nothing - the index was never created
 
 
@@ -36,10 +29,22 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Conditionally remove index only for PostgreSQL
-        migrations.RunPython(
-            remove_index_safely,
-            reverse_remove_index,
+        # Use SeparateDatabaseAndState to:
+        # - Update migration state (remove index from state)
+        # - Conditionally execute database operation (only on PostgreSQL)
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunPython(
+                    remove_index_safely,
+                    reverse_remove_index,
+                ),
+            ],
+            state_operations=[
+                migrations.RemoveIndex(
+                    model_name='pdffile',
+                    name='core_pdffil_search__1650a6_gin',
+                ),
+            ],
         ),
         migrations.RemoveField(
             model_name='pdffile',
