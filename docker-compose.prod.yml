@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   redis:
+    # Using official Redis image from Docker Hub (authenticate to avoid rate limits)
     image: redis:7-alpine
     container_name: flowdocs-redis-prod
     ports:
