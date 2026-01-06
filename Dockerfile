@@ -1,5 +1,47 @@
 # =====================================================================
-# 🐍 Use Python 3.10 slim image for better performance
+# 🏗️ Stage 1: Build Stage (for compiling Python packages)
+# =====================================================================
+FROM python:3.10-slim as builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies only
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc \
+        g++ \
+        libpq-dev \
+        libcairo2-dev \
+        libpango1.0-dev \
+        libgdk-pixbuf2.0-dev \
+        libjpeg-dev \
+        zlib1g-dev \
+        libpng-dev \
+        libtiff-dev \
+        libwebp-dev \
+        libopenjp2-7-dev \
+        libfreetype6-dev \
+        liblcms2-dev \
+        libharfbuzz-dev \
+        libfribidi-dev \
+        libxcb1-dev \
+        libffi-dev \
+        pkg-config \
+        build-essential \
+        cargo \
+        cmake && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --user -r requirements.txt
+
+# =====================================================================
+# 🚀 Stage 2: Runtime Stage (final image)
 # =====================================================================
 FROM python:3.10-slim
 
@@ -14,7 +56,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     WORKDIR=/app \
     SQLITE_DB_PATH=/app/flowdocs/db.sqlite3 \
     MIGRATIONS_JSON="/app/flowdocs/" \
-    FORCE_MIGRATIONS=0
+    FORCE_MIGRATIONS=0 \
+    PATH=/home/appuser/.local/bin:$PATH
 
 # =====================================================================
 # 📂 Working Directory
@@ -22,70 +65,36 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR ${WORKDIR}
 
 # =====================================================================
-# 🧰 System Dependencies
+# 🧰 Runtime System Dependencies (no build tools!)
 # =====================================================================
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         tesseract-ocr \
         tesseract-ocr-mar \
         poppler-utils \
-        libpq-dev \
-        gcc \
-        g++ \
+        libpq5 \
         libcairo2 \
-        libcairo2-dev \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
         libgdk-pixbuf-2.0-0 \
-        libjpeg-dev \
-        zlib1g-dev \
-        libpng-dev \
-        libtiff-dev \
-        libwebp-dev \
-        libopenjp2-7-dev \
-        libfreetype6-dev \
-        liblcms2-dev \
-        libharfbuzz-dev \
-        libfribidi-dev \
-        libxcb1-dev \
-        libffi-dev \
-        pkg-config \
+        libjpeg62-turbo \
+        zlib1g \
+        libpng16-16 \
+        libtiff5 \
+        libwebp6 \
+        libopenjp2-7 \
+        libfreetype6 \
+        liblcms2-2 \
+        libharfbuzz0b \
+        libfribidi0 \
+        libxcb1 \
+        libffi8 \
         curl \
         sqlite3 \
         gosu \
-        bash \
-        build-essential \
-        cargo \
-        cmake && \
-    rm -rf /var/lib/apt/lists/*
-
-# =====================================================================
-# 📦 Python Dependencies
-# =====================================================================
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# =====================================================================
-# 🧾 Application Code
-# =====================================================================
-COPY . .
-COPY .env* ./ 
-#|| true
-
-# Make start script executable (if present)
-RUN [ -f ./start.sh ] && chmod +x ./start.sh 
-#|| true
-
-# Create static and media directories
-RUN mkdir -p /app/staticfiles /app/media
-
-# Collect static files (for Django-based apps)
-RUN bash -lc 'if [ -d "flowdocs" ] && [ -f "flowdocs/manage.py" ]; then \
-      cd flowdocs && STATIC_ROOT=/app/staticfiles python manage.py collectstatic --noinput --clear; \
-    else \
-      echo "collectstatic skipped (flowdocs/manage.py not found)"; \
-    fi'
+        bash && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # =====================================================================
 # 👤 Create Non-Root App User (UID/GID 1000:1000 to match host user)
@@ -95,6 +104,31 @@ RUN groupadd -g 1000 ${APP_USER} 2>/dev/null || true && \
     adduser --disabled-password --gecos '' --uid 1000 --gid 1000 ${APP_USER} && \
     mkdir -p ${APP_HOME} && \
     chown -R ${APP_USER}:${APP_USER} ${APP_HOME} ${WORKDIR}
+
+# =====================================================================
+# 📦 Copy Python packages from builder stage
+# =====================================================================
+COPY --from=builder --chown=${APP_USER}:${APP_USER} /root/.local /home/${APP_USER}/.local
+
+# =====================================================================
+# 🧾 Application Code
+# =====================================================================
+COPY --chown=${APP_USER}:${APP_USER} . .
+
+# Make start script executable
+RUN [ -f ./start.sh ] && chmod +x ./start.sh || true
+
+# Create static and media directories
+RUN mkdir -p /app/staticfiles /app/media && \
+    chown -R ${APP_USER}:${APP_USER} /app/staticfiles /app/media
+
+# Collect static files (for Django-based apps)
+RUN bash -lc 'if [ -d "flowdocs" ] && [ -f "flowdocs/manage.py" ]; then \
+      cd flowdocs && STATIC_ROOT=/app/staticfiles python manage.py collectstatic --noinput --clear; \
+    else \
+      echo "collectstatic skipped (flowdocs/manage.py not found)"; \
+    fi' && \
+    chown -R ${APP_USER}:${APP_USER} /app/staticfiles
 
 # =====================================================================
 # 🧮 SQLite JSON Migration Runner
@@ -255,9 +289,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # =====================================================================
 # 🎯 Default Entrypoint & Command
 # =====================================================================
-#ENTRYPOINT ["entrypoint.sh"]
-#CMD ["./start.sh"]
 ENTRYPOINT ["./start.sh"]
-
-#CMD ["/app/start.sh"]
-#ENTRYPOINT ["/app/start.sh"]
