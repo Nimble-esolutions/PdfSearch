@@ -2,8 +2,8 @@ version: '3.8'
 
 services:
   redis:
-    # Using official Redis image from Docker Hub (authenticate to avoid rate limits)
-    image: redis:7-alpine
+    # Using official Redis image from Quay.io (no rate limits, always up-to-date)
+    image: quay.io/redis/redis:7-alpine
     container_name: flowdocs-redis-dev
     ports:
       - "${REDIS_PORT:-6379}:6379"
