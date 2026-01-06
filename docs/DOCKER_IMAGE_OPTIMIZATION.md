@@ -1,5 +1,7 @@
 # Docker Image Size Optimization
 
+> **⚠️ NOTE**: This optimization was attempted but caused build failures. The project has been reverted to a working single-stage build. See `DOCKER_BUILD_FIX.md` for details.
+
 ## Problem
 
 The Docker image was 4GB+ in size, causing:
@@ -8,7 +10,7 @@ The Docker image was 4GB+ in size, causing:
 - Slow image pulls in production
 - GitHub Actions timeouts
 
-## Root Causes Identified
+## Root Causes Identified (Theoretical)
 
 ### 1. Build Tools Left in Final Image (~1-2GB)
 - `build-essential` (~500MB)
@@ -32,7 +34,7 @@ The Docker image was 4GB+ in size, causing:
 - Apt cache cleaned but build tools remained
 - Python package caches not fully cleaned
 
-## Solution: Multi-Stage Build
+## Solution: Multi-Stage Build (⚠️ FAILED - Caused Build Errors)
 
 ### Stage 1: Builder (Build Dependencies)
 - Installs: `gcc`, `g++`, `build-essential`, `cargo`, `cmake`, all `-dev` packages
@@ -45,11 +47,16 @@ The Docker image was 4GB+ in size, causing:
 - Minimal system dependencies
 - **This is the final image** - much smaller
 
-## Size Reduction
+### Why It Failed
+The multi-stage build failed because incorrect runtime package names were used (e.g., `libjpeg62-turbo`, `libpng16-16`). These exact package names don't exist in Debian repositories. See `DOCKER_BUILD_FIX.md` for full analysis.
 
-**Before:** 4GB+  
-**After:** ~1-1.5GB  
-**Reduction:** 60-75% smaller
+## Size Reduction (Not Implemented)
+
+**Current:** 4GB+ (single-stage, working)  
+**Target:** ~1-1.5GB (multi-stage, failed)  
+**Status:** Optimization reverted due to build failures
+
+**Current Approach:** Keep single-stage build for reliability. Image size is acceptable trade-off for working builds.
 
 ## Key Changes
 
