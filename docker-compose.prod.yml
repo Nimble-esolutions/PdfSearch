@@ -6,7 +6,7 @@ services:
 
   web:
     build: .
-    #image: dev-one-58pibn:latest
+    image: shakar-frontend:latest
     command: sh -c "./start.sh"
     volumes:
       - /home/prodsahakar/flowdocs/pdfs:/app/flowdocs/media/pdfs                      # uploaded pdfs
