@@ -1,7 +1,7 @@
 # =====================================================================
-# 🐍 Use Python 3.11 slim image for better performance
+# 🐍 Use Python 3.10 slim image for better performance
 # =====================================================================
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 # =====================================================================
 # 🌱 Environment Variables
@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_USER=appuser \
     APP_HOME=/home/appuser \
     WORKDIR=/app \
-    SQLITE_DB_PATH=/app/flowdocs/flowdocs/db.sqlite3 \
+    SQLITE_DB_PATH=/app/flowdocs/db.sqlite3 \
     MIGRATIONS_JSON="/app/flowdocs/" \
     FORCE_MIGRATIONS=0
 
@@ -32,6 +32,11 @@ RUN apt-get update && \
         libpq-dev \
         gcc \
         g++ \
+        libcairo2 \
+        libcairo2-dev \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libgdk-pixbuf-2.0-0 \
         libjpeg-dev \
         zlib1g-dev \
         libpng-dev \
@@ -48,7 +53,10 @@ RUN apt-get update && \
         curl \
         sqlite3 \
         gosu \
-        bash && \
+        bash \
+        build-essential \
+        cargo \
+        cmake && \
     rm -rf /var/lib/apt/lists/*
 
 # =====================================================================
@@ -239,7 +247,7 @@ set -euo pipefail
 
 export APP_USER="${APP_USER:-appuser}"
 export APP_HOME="${APP_HOME:-/home/appuser}"
-export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/flowdocs/flowdocs/db.sqlite3}"
+export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/flowdocs/db.sqlite3}"
 export MIGRATIONS_JSON="${MIGRATIONS_JSON:-/app/flowdocs}"
 export FORCE_MIGRATIONS="${FORCE_MIGRATIONS:-0}"
 
@@ -248,8 +256,8 @@ mkdir -p "${APP_HOME}" "$(dirname "${SQLITE_DB_PATH}")" /app/staticfiles /app/me
 
 # 🔧 Fix permissions for SQLite and backups (handles mounted volumes)
 echo "[entrypoint] Fixing permissions for /app/flowdocs and /app/backups"
-chown -R "${APP_USER}:${APP_USER}" /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
-chmod -R 770 /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
+chown -R "${APP_USER}:${APP_USER}" /app/flowdocs /app/backups /app/staticfiles /app/media || true
+chmod -R 770 /app/flowdocs /app/backups /app/staticfiles /app/media || true
 
 
 # Run migrations as root (SQLite file is created if missing)

@@ -18,7 +18,7 @@ echo "  ALLOWED_HOSTS=$ALLOWED_HOSTS"
 echo "------------------------------------------------------------"
 
 # -------------------- SQLite Backup & Restore --------------------
-DB_PATH=/app/flowdocs/flowdocs/db.sqlite3
+DB_PATH=/app/flowdocs/db.sqlite3
 BACKUP_DIR=/app/backups
 mkdir -p "$BACKUP_DIR"
 
