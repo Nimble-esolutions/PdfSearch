@@ -1,0 +1,53 @@
+name: Mirror Redis Image to GHCR
+
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    # Run daily at 2 AM UTC to keep Redis image updated
+    - cron: '0 2 * * *'
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/mirror-redis.yml'
+
+jobs:
+  mirror-redis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest Redis image from Docker Hub
+        run: |
+          docker pull redis:7-alpine
+          docker pull redis:latest
+
+      - name: Tag Redis images for GHCR
+        run: |
+          docker tag redis:7-alpine ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine
+          docker tag redis:7-alpine ghcr.io/nimble-esolutions/pdfsearch/redis:latest
+          docker tag redis:latest ghcr.io/nimble-esolutions/pdfsearch/redis:latest-full
+
+      - name: Push Redis images to GHCR
+        run: |
+          docker push ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine
+          docker push ghcr.io/nimble-esolutions/pdfsearch/redis:latest
+          docker push ghcr.io/nimble-esolutions/pdfsearch/redis:latest-full
+
+      - name: Verify pushed images
+        run: |
+          echo "✅ Successfully mirrored Redis images to GHCR"
+          echo "Available tags:"
+          echo "  - ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine"
+          echo "  - ghcr.io/nimble-esolutions/pdfsearch/redis:latest"
+          echo "  - ghcr.io/nimble-esolutions/pdfsearch/redis:latest-full"
+

@@ -2,8 +2,8 @@ version: '3.8'
 
 services:
   redis:
-    # Using official Redis image from Quay.io (no rate limits, always up-to-date)
-    image: quay.io/redis/redis:7-alpine
+    # Using Redis image mirrored to GHCR (always latest, no rate limits)
+    image: ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine
     container_name: flowdocs-redis-prod
     ports:
       - "${REDIS_PORT:-6379}:6379"
