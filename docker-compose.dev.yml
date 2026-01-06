@@ -22,6 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: flowdocs-web-dev
+    user: "1000:1000"  # Match host user prodsahakar (uid:gid)
     command: sh -c "./start.sh"
     volumes:
       # PDFs storage - configurable via VOLUME_BASE_PATH

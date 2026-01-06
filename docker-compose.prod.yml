@@ -29,6 +29,7 @@ services:
   web:
     image: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest
     container_name: flowdocs-web-prod
+    user: "1000:1000"  # Match host user prodsahakar (uid:gid)
     command: sh -c "./start.sh"
     volumes:
       # PDFs storage - configurable via VOLUME_BASE_PATH
