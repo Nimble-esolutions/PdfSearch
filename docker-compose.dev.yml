@@ -1,0 +1,22 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    #image: dev-one-58pibn:latest
+    command: sh -c "./start.sh"
+    volumes:
+      - /home/prodsahakar/flowdocs/pdfs:/app/flowdocs/media/pdfs                      # uploaded pdfs
+      - /home/prodsahakar/flowdocs/db.sqlite3:/app/flowdocs/db.sqlite3                # database SQLite volume
+      - /home/prodsahakar/flowdocs/faiss_indexes:/app/flowdocs/faiss_indexes          # persist backups
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=False
+      - REDIS_URL=redis://redis:6379/1
+    depends_on:
+      - redis
+    restart: unless-stopped
