@@ -68,7 +68,7 @@ WORKDIR ${WORKDIR}
 # =====================================================================
 # 🧰 Runtime System Dependencies (no build tools!)
 # =====================================================================
-# Install runtime libraries - Python packages will pull in needed dependencies
+# Install runtime libraries - use generic names, let apt resolve versions
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         tesseract-ocr \
@@ -89,14 +89,21 @@ RUN apt-get update && \
         sqlite3 \
         gosu \
         bash && \
-    # Install additional runtime libraries that may be needed
+    # Install image processing libraries (let apt resolve exact package names)
     apt-get install -y --no-install-recommends \
         libjpeg62-turbo \
         libpng16-16 \
         libwebp6 \
         liblcms2-2 \
         libharfbuzz0b \
-        libffi8 2>/dev/null || true && \
+        libffi8 2>&1 | grep -v "Unable to locate package" || \
+    apt-get install -y --no-install-recommends \
+        libjpeg-turbo-progs \
+        libpng-dev \
+        libwebp-dev \
+        liblcms2-2 \
+        libharfbuzz0b \
+        libffi-dev 2>&1 | grep -v "Unable to locate package" || true && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
