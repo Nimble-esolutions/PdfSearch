@@ -14,8 +14,9 @@ RUN apt-get update && \
         g++ \
         libpq-dev \
         libcairo2-dev \
-        libpango1.0-dev \
-        libgdk-pixbuf2.0-dev \
+        libpango-1.0-dev \
+        libpangoft2-1.0-dev \
+        libgdk-pixbuf-2.0-dev \
         libjpeg-dev \
         zlib1g-dev \
         libpng-dev \
