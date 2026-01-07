@@ -183,23 +183,25 @@ def delete_folder(request, folder_id):
 # ---------------- Add Subcategory ----------------
 @login_required
 def add_subcategory(request):
+    """
+    Creates a new folder/category.
+    Note: Parent folder feature was removed in migration 0009.
+    Subcategories are now standalone folders.
+    """
     if request.method == "POST":
-        parent_id = request.POST.get("parent_id")
         sub_name = request.POST.get("subcategory_name", "").strip()
 
-        if parent_id and sub_name:
-            parent = get_object_or_404(Folder, id=parent_id)
-            subcategory, created = Folder.objects.get_or_create(
+        if sub_name:
+            _, created = Folder.objects.get_or_create(
                 name=sub_name,
-                parent=parent,
                 defaults={'created_by': request.user}
             )
             if created:
-                messages.success(request, f"Subcategory '{sub_name}' added under '{parent.name}'.")
+                messages.success(request, f"Category '{sub_name}' created successfully.")
             else:
-                messages.info(request, f"Subcategory '{sub_name}' already exists under '{parent.name}'.")
+                messages.info(request, f"Category '{sub_name}' already exists.")
         else:
-            messages.error(request, "Subcategory name is required.")
+            messages.error(request, "Category name is required.")
 
     return redirect('dashboard')
 

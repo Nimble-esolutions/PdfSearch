@@ -34,7 +34,7 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-!y2+0!gjaq*)3f16^1xd5ufs85!^-^t%4)7p&!ng7z7m2x-m&t')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True').lower() == 'False'
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,dev.ai-sahakar.net,one.ai-sahakar.net,www.ai-sahakar.net,ai-sahakar.net,testserver').split(',')
 if '*' in ALLOWED_HOSTS:
@@ -147,7 +147,6 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 AUTH_USER_MODEL = 'core.CustomUser'
-# OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 
 from django.utils.translation import gettext_lazy as _

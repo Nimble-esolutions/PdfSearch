@@ -35,19 +35,30 @@ mkdir -p \
     /app/staticfiles
 
 echo "[entrypoint] Fixing permissions for mounted volumes..."
-chown -R appuser:appuser \
-    /app/flowdocs \
-    /app/flowdocs/chroma_db \
-    /app/flowdocs/media \
-    /app/backups \
-    /app/staticfiles
-
-chmod -R 770 \
-    /app/flowdocs \
-    /app/flowdocs/chroma_db \
-    /app/flowdocs/media \
-    /app/backups \
-    /app/staticfiles
+# Only chown if running as root (for initial setup), otherwise assume permissions are correct
+if [ "$(id -u)" = "0" ]; then
+    chown -R appuser:appuser \
+        /app/flowdocs \
+        /app/flowdocs/chroma_db \
+        /app/flowdocs/media \
+        /app/backups \
+        /app/staticfiles 2>/dev/null || true
+    
+    chmod -R 770 \
+        /app/flowdocs \
+        /app/flowdocs/chroma_db \
+        /app/flowdocs/media \
+        /app/backups \
+        /app/staticfiles 2>/dev/null || true
+else
+    # Running as non-root (uid 1000), ensure directories exist with correct permissions
+    chmod -R 770 \
+        /app/flowdocs \
+        /app/flowdocs/chroma_db \
+        /app/flowdocs/media \
+        /app/backups \
+        /app/staticfiles 2>/dev/null || true
+fi
 
 echo "✅ Directories and permissions ready"
 echo "------------------------------------------------------------"
