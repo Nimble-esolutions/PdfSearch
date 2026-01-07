@@ -68,11 +68,16 @@ OLD_DB_PATH="/app/flowdocs/flowdocs/db.sqlite3"
 BACKUP_DIR="/app/backups"
 CHROMA_DIR="/app/flowdocs/chroma_db"
 CHROMA_BACKUP_DIR="$BACKUP_DIR/chroma_backup"
+FAISS_DIR="/app/flowdocs/faiss_indexes"
 
-mkdir -p "$BACKUP_DIR" "$CHROMA_BACKUP_DIR"
+# Init data paths (baked into image for fresh deployments)
+INIT_DB="/app/init/db.sqlite3"
+INIT_FAISS="/app/init/faiss_indexes"
+
+mkdir -p "$BACKUP_DIR" "$CHROMA_BACKUP_DIR" "$FAISS_DIR"
 
 # ===============================================================
-# 3️⃣ Restore / Move DB from Old Path or Backup
+# 3️⃣ Restore / Move DB from Old Path, Backup, or Init Data
 # ===============================================================
 if [ ! -f "$DB_PATH" ]; then
     echo "⚠️ No database found at $DB_PATH"
@@ -85,6 +90,10 @@ if [ ! -f "$DB_PATH" ]; then
         if [ -n "$latest_backup" ]; then
             echo "♻️ Restoring DB from latest backup: $latest_backup"
             cp "$latest_backup" "$DB_PATH"
+        elif [ -f "$INIT_DB" ]; then
+            echo "📦 Initializing database from baseline init data..."
+            cp "$INIT_DB" "$DB_PATH"
+            echo "✅ Database initialized from /app/init/db.sqlite3"
         else
             echo "🆕 No existing DB found. A fresh one will be created."
         fi
@@ -93,6 +102,24 @@ else
     echo "✅ Database found at $DB_PATH"
 fi
 echo "------------------------------------------------------------"
+
+# ===============================================================
+# 3.5️⃣ Restore FAISS Indexes from Init Data (if empty)
+# ===============================================================
+if [ -z "$(ls -A $FAISS_DIR 2>/dev/null)" ]; then
+    echo "⚠️ No FAISS indexes found at $FAISS_DIR"
+    if [ -d "$INIT_FAISS" ] && [ "$(ls -A $INIT_FAISS 2>/dev/null)" ]; then
+        echo "📦 Initializing FAISS indexes from baseline init data..."
+        cp -r "$INIT_FAISS"/* "$FAISS_DIR"/
+        echo "✅ FAISS indexes initialized ($(ls -1 $FAISS_DIR | wc -l | tr -d ' ') files copied)"
+    else
+        echo "ℹ️ No init FAISS data available. Indexes will be built on first use."
+    fi
+else
+    echo "✅ FAISS indexes found at $FAISS_DIR ($(ls -1 $FAISS_DIR | wc -l | tr -d ' ') files)"
+fi
+echo "------------------------------------------------------------"
+
 
 # ===============================================================
 # 4️⃣ Backup current database

@@ -104,3 +104,13 @@ Thumbs.db
 logs/
 *.log
 
+# =====================================================
+# INIT DATA - Include baseline data for fresh deployments
+# =====================================================
+# The init/ folder contains pre-populated data:
+# - db.sqlite3: Baseline SQLite database 
+# - faiss_indexes/: Pre-built vector search indexes
+# This is explicitly INCLUDED (not ignored) in the build
+# to enable instant startup without manual data copying.
+# Note: Runtime volumes can override this baseline data.
+

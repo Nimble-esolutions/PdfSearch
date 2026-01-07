@@ -176,3 +176,11 @@ tmp/
 local/
 dev/staticfiles/
 "*.zip" 
+
+# =====================================================
+# INIT DATA EXCEPTION - Baseline data for deployments
+# =====================================================
+# The init/ folder contains pre-populated production data
+# that should be tracked to enable instant fresh deployments
+!init/
+!init/**
