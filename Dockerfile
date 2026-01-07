@@ -104,7 +104,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # 🧾 Application Code
 # =====================================================================
 COPY . .
-COPY .env* ./ || true
+
 
 # Make start script executable
 RUN [ -f ./start.sh ] && chmod +x ./start.sh 
