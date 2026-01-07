@@ -4,13 +4,15 @@ on:
   push:
     branches:
       - dev
+      - "feature/**" # Optional: Test builds on feature branches
     paths:
-      - 'Dockerfile'
-      - 'requirements.txt'
-      - 'flowdocs/**'
-      - 'start.sh'
-      - '.dockerignore'
-      - '.github/workflows/docker-build.yml'
+      - "Dockerfile"
+      - "requirements.txt"
+      - "flowdocs/**"
+      - "start.sh"
+      - ".dockerignore"
+      - ".github/workflows/docker-build.yml"
+      - "init/**"
 
 jobs:
   build:
@@ -18,7 +20,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -45,16 +47,22 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,format=short
+            type=schedule,pattern={{date 'YYYYMMDD'}}
+            type=ref,event=branch
+            type=ref,event=pr
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:buildcache,mode=max
           platforms: linux/amd64
-
