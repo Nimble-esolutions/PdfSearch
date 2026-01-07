@@ -135,13 +135,23 @@ echo "------------------------------------------------------------"
 # ===============================================================
 # 6️⃣ Run migrations
 # ===============================================================
+#echo "🗃️ Running Django migrations..."
+#cd /app/flowdocs
+#python manage.py migrate --noinput || echo "⚠️ Migration failed. Please check logs."
+#echo "✅ Migrations complete"
+
 echo "🗃️ Running Django migrations..."
-cd /app/flowdocs
-python manage.py migrate --noinput || echo "⚠️ Migration failed. Please check logs."
-echo "✅ Migrations complete"
+set +e
+python manage.py migrate --noinput
+MIGRATION_STATUS=$?
+set -e
+
+if [ $MIGRATION_STATUS -ne 0 ]; then
+    echo "⚠️ Migration failed — continuing startup to avoid container crash"
+else
+    echo "✅ Migrations applied successfully"
+fi
 echo "------------------------------------------------------------"
-
-
 
 # ===============================================================
 # 7️⃣ Create superuser if not exists
@@ -182,11 +192,21 @@ echo "------------------------------------------------------------"
 # ===============================================================
 # 🔟 Start Gunicorn server
 # ===============================================================
+#echo "🔥 Starting Gunicorn (Django app)..."
+#exec gunicorn \
+#    --bind 0.0.0.0:8000 \
+#    --workers 4 \
+#    --timeout 300 \
+ #   --access-logfile - \
+#    --error-logfile - \
+#    flowdocs.wsgi:application
+
 echo "🔥 Starting Gunicorn (Django app)..."
-exec gunicorn \
+exec gosu appuser:appuser gunicorn \
     --bind 0.0.0.0:8000 \
-    --workers 4 \
+    --workers 2 \
     --timeout 300 \
     --access-logfile - \
     --error-logfile - \
     flowdocs.wsgi:application
+
