@@ -4,28 +4,25 @@
 from django.db import migrations, models
 
 
+def drop_gin_index(apps, schema_editor):
+    """
+    Safely drop the GIN index only on PostgreSQL.
+    On SQLite, the index was likely never created (skipped by Django),
+    so attempting to drop it might cause 'no such index' or tokenizer errors.
+    """
+    if schema_editor.connection.vendor == 'postgresql':
+        try:
+            schema_editor.execute('DROP INDEX IF EXISTS "core_pdffil_search__1650a6_gin"')
+        except Exception as e:
+            print(f"Warning: Could not drop index on PostgreSQL: {e}")
+    else:
+        print("Skipping index removal on non-PostgreSQL backend (SQLite safe)")
+
 class Migration(migrations.Migration):
     """
     Migration 0007: Remove PostgreSQL-specific search fields and add text_content.
     
-    Root Cause Fix:
-    ---------------
-    Migration 0006 added a SearchVectorField with a GIN index. On PostgreSQL,
-    both the field and index are created. On SQLite, the GIN index creation
-    is silently skipped (PostgreSQL-specific), BUT Django's migration state
-    still records that the index exists.
-    
-    When this migration tries to remove the search_vector field, SQLite's
-    schema editor attempts to rebuild the table and checks Django's state
-    which claims an index exists - causing the error:
-    "error in index core_pdffil_search__1650a6_gin after drop column"
-    
-    Solution:
-    ---------
-    Use SeparateDatabaseAndState to:
-    1. On PostgreSQL: Run all operations normally (index exists, remove it)
-    2. On SQLite: Only update state for index removal (index never existed)
-       Then run the field operations normally.
+    Refactored to be safe for SQLite by using RunPython for conditional index dropping.
     """
 
     dependencies = [
@@ -34,8 +31,6 @@ class Migration(migrations.Migration):
 
     operations = [
         # Step 1: Remove index - use SeparateDatabaseAndState
-        # On PostgreSQL, this removes the actual index
-        # On SQLite, we only update state (index was never created)
         migrations.SeparateDatabaseAndState(
             state_operations=[
                 # Update Django's state to remove the index
@@ -46,13 +41,7 @@ class Migration(migrations.Migration):
             ],
             database_operations=[
                 # Only run on PostgreSQL - on SQLite index was never created
-                migrations.RunSQL(
-                    sql=[
-                        # PostgreSQL: drop the index if it exists
-                        ('DROP INDEX IF EXISTS "core_pdffil_search__1650a6_gin"', []),
-                    ],
-                    reverse_sql=[],  # No reverse needed
-                ),
+                migrations.RunPython(drop_gin_index, reverse_code=migrations.RunPython.noop),
             ],
         ),
         
