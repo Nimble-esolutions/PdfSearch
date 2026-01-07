@@ -11,17 +11,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_SETTINGS_MODULE=flowdocs.settings
 
 # ===============================
-# Set work directory
+# Work directory
 # ===============================
 WORKDIR /app
 
 # ===============================
-# System dependencies
+# System dependencies (FIXED)
 # ===============================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     sqlite3 \
     curl \
+    pkg-config \
+    cmake \
+    meson \
+    libcairo2 \
+    libcairo2-dev \
+    libgirepository1.0-dev \
+    gir1.2-cairo-1.0 \
     && rm -rf /var/lib/apt/lists/*
 
 # ===============================
@@ -32,22 +39,22 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # ===============================
-# Copy project files
+# Copy project
 # ===============================
 COPY . .
 
 # ===============================
-# Make start.sh executable
+# Permissions
 # ===============================
 RUN chmod +x start.sh
 
 # ===============================
-# Expose port
+# Port
 # ===============================
 EXPOSE 8000
 
 # ===============================
-# Health check
+# Healthcheck
 # ===============================
 HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:8000/ || exit 1
