@@ -4,11 +4,6 @@
 from django.db import migrations, models
 
 
-def noop(apps, schema_editor):
-    """No-op function for state-only operations."""
-    pass
-
-
 class Migration(migrations.Migration):
     """
     Migration 0007: Remove PostgreSQL-specific search fields and add text_content.
@@ -40,7 +35,7 @@ class Migration(migrations.Migration):
     operations = [
         # Step 1: Remove index - use SeparateDatabaseAndState
         # On PostgreSQL, this removes the actual index
-        # On SQLite, we use RunPython with a conditional to only remove on PostgreSQL
+        # On SQLite, we only update state (index was never created)
         migrations.SeparateDatabaseAndState(
             state_operations=[
                 # Update Django's state to remove the index

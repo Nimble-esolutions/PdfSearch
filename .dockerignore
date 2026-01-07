@@ -1,0 +1,106 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+.gitmodules
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Python cache and virtual environments
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Django specific
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+*.pot
+*.pyc
+media/
+staticfiles/
+flowdocs/media/
+flowdocs/pdf_cache/
+flowdocs/faiss_indexes/
+flowdocs/chroma_db/
+*.pkl
+*.pickle
+
+# Environment files (use env.template instead)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Docker files (don't include in build context)
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# Backup files
+*.bak
+*.backup
+*.sqlite3.backup
+backups/
+flowdocs/data_backup.json
+flowdocs/backups/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Node modules (if any)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Logs
+logs/
+*.log
+

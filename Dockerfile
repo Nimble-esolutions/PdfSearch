@@ -1,7 +1,6 @@
 # =====================================================================
-# 🐍 Use Python 3.11 slim image for better performance
+# 🐍 Use Python 3.10 slim image for better performance
 # =====================================================================
-#FROM python:3.11-slim
 FROM python:3.10-slim
 
 # =====================================================================
@@ -13,7 +12,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_USER=appuser \
     APP_HOME=/home/appuser \
     WORKDIR=/app \
-    #SQLITE_DB_PATH=/app/flowdocs/flowdocs/db.sqlite3 \
     SQLITE_DB_PATH=/app/flowdocs/db.sqlite3 \
     MIGRATIONS_JSON="/app/flowdocs/" \
     FORCE_MIGRATIONS=0
@@ -59,7 +57,6 @@ RUN apt-get update && \
         build-essential \
         cargo \
         cmake && \
-         bash && \
     rm -rf /var/lib/apt/lists/*
 
 # =====================================================================
@@ -90,10 +87,13 @@ RUN bash -lc 'if [ -d "flowdocs" ] && [ -f "flowdocs/manage.py" ]; then \
       echo "collectstatic skipped (flowdocs/manage.py not found)"; \
     fi'
 
+
 # =====================================================================
-# 👤 Create Non-Root App User
+# 👤 Create Non-Root App User (UID/GID 1000:1000 to match host user)
 # =====================================================================
-RUN adduser --disabled-password --gecos '' ${APP_USER} && \
+RUN groupadd -g 1000 ${APP_USER} 2>/dev/null || true && \
+    useradd -u 1000 -g 1000 -m -s /bin/bash ${APP_USER} 2>/dev/null || \
+    adduser --disabled-password --gecos '' --uid 1000 --gid 1000 ${APP_USER} && \
     mkdir -p ${APP_HOME} && \
     chown -R ${APP_USER}:${APP_USER} ${APP_HOME} ${WORKDIR}
 
@@ -244,43 +244,7 @@ RUN chmod +x /usr/local/bin/apply_sqlite_json.py
 # =====================================================================
 # 🚀 Entrypoint Script
 # =====================================================================
-#RUN cat > /usr/local/bin/entrypoint.sh << 'EOSH'
-#!/usr/bin/env bash
-#set -euo pipefail
-
-#export APP_USER="${APP_USER:-appuser}"
-#export APP_HOME="${APP_HOME:-/home/appuser}"
-#export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/flowdocs/flowdocs/db.sqlite3}"
-#export MIGRATIONS_JSON="${MIGRATIONS_JSON:-/app/flowdocs}"
-#export FORCE_MIGRATIONS="${FORCE_MIGRATIONS:-0}"
-
-# Ensure dirs & ownership even with mounted volumes
-#mkdir -p "${APP_HOME}" "$(dirname "${SQLITE_DB_PATH}")" /app/staticfiles /app/media /app/backups
-
-# 🔧 Fix permissions for SQLite and backups (handles mounted volumes)
-#echo "[entrypoint] Fixing permissions for /app/flowdocs and /app/backups"
-#chown -R "${APP_USER}:${APP_USER}" /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
-#chmod -R 770 /app/flowdocs/flowdocs /app/backups /app/staticfiles /app/media || true
-
-
-# Run migrations as root (SQLite file is created if missing)
-#echo "[entrypoint] Running JSON -> SQLite migrations (DB=${SQLITE_DB_PATH})"
-#python3 /usr/local/bin/apply_sqlite_json.py || {
-    #echo "[entrypoint] Migration step failed"
-    #exit 1
-#}
-# Start app
-#echo "[entrypoint] Starting Gunicorn as ${APP_USER}"
-#cd /app/flowdocs/Flowdocs
-#exec gosu "${APP_USER}:${APP_USER}" gunicorn Flowdocs.flowdocs.wsgi:application --bind 0.0.0.0:8000
-#exec gosu "${APP_USER}:${APP_USER}" gunicorn flowdocs.wsgi:application --bind 0.0.0.0:8000
-
-# Drop privileges and start app
-#echo "[entrypoint] Starting app as ${APP_USER}"
-#exec gosu "${APP_USER}:${APP_USER}" "$@"
-#EOSH
-
-#RUN chmod +x /usr/local/bin/entrypoint.sh
+# Note: Entrypoint logic is handled by start.sh script
 
 # =====================================================================
 # 🌐 Networking & Health Check
@@ -292,9 +256,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # =====================================================================
 # 🎯 Default Entrypoint & Command
 # =====================================================================
-#ENTRYPOINT ["entrypoint.sh"]
-#CMD ["./start.sh"]
 ENTRYPOINT ["./start.sh"]
-
-#CMD ["/app/start.sh"]
-#ENTRYPOINT ["/app/start.sh"]
