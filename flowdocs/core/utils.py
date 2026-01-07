@@ -468,7 +468,7 @@ def generate_gpt_answer(user_question: str, context: str, references: List[Dict[
         return "⚠️ Couldn't generate answer right now. Please try again later."
 
 # ---------------- Detect Folder by Keywords matching by single word----------------
-def detect_folder_by_Single_keywords(query):
+def detect_folder_by_single_keywords(query):
     """
     Returns a Folder model instance based on keyword matching.
     """
@@ -501,10 +501,7 @@ def detect_folder_by_Single_keywords(query):
 
 #---------------- Detect Folder by Key phrases matching by multiple word----------------
 def fuzzy_ratio(a, b):
-    return SequenceMatcher(None, a, b).ratio()
-from difflib import SequenceMatcher
-
-def fuzzy_ratio(a, b):
+    """Calculate similarity ratio between two strings."""
     return SequenceMatcher(None, a, b).ratio()
 
 
