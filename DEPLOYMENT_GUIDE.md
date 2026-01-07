@@ -7,6 +7,7 @@ To fix the OpenAI API key error in your deployed application, you need to set th
 ### Required Environment Variables
 
 1. **Django Settings**
+
    ```
    SECRET_KEY=your-secret-key-here
    DEBUG=True
@@ -14,17 +15,20 @@ To fix the OpenAI API key error in your deployed application, you need to set th
    ```
 
 2. **Database Configuration**
+
    ```
    DB_ENGINE=django.db.backends.sqlite3
    DB_NAME=db.sqlite3
    ```
 
 3. **API Keys** (CRITICAL - This fixes the 401 error)
+
    ```
-   OPENAI_API_KEY=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
+   OPENAI_API_KEY=your-openai-api-key-here
    ```
 
 4. **CORS and CSRF Settings**
+
    ```
    CORS_ALLOWED_ORIGINS=https://dev.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000
    CSRF_TRUSTED_ORIGINS=https://dev.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000
@@ -57,6 +61,7 @@ To fix the OpenAI API key error in your deployed application, you need to set th
 ## Verification
 
 After setting the environment variables and redeploying:
+
 1. Check the application logs for any errors
 2. Test the search functionality to ensure OpenAI API is working
 3. Verify that static files are loading correctly
