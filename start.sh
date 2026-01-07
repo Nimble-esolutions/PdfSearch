@@ -141,28 +141,7 @@ python manage.py migrate --noinput || echo "⚠️ Migration failed. Please chec
 echo "✅ Migrations complete"
 echo "------------------------------------------------------------"
 
-# ===============================================================
-# 🗄️  Generate fresh JSON fixture backup (Django dumpdata)
-# ===============================================================
-JSON_BACKUP_DIR="/app/backups/json_backups"
-mkdir -p "$JSON_BACKUP_DIR"
 
-TIMESTAMP=$(date +%F_%H%M%S)
-JSON_BACKUP_FILE="$JSON_BACKUP_DIR/data_backup_$TIMESTAMP.json"
-LATEST_FIXTURE="/app/flowdocs/data_backup.json"
-
-echo "🗄️ Regenerating Django JSON backup..."
-if python manage.py dumpdata --natural-foreign --natural-primary --indent 2 > "$JSON_BACKUP_FILE"; then
-    echo "📦 JSON backup created: $JSON_BACKUP_FILE"
-    
-    # Update the latest fixture
-    cp "$JSON_BACKUP_FILE" "$LATEST_FIXTURE"
-    echo "🔄 Updated latest fixture at: $LATEST_FIXTURE"
-else
-    echo "❌ Failed to generate JSON backup!"
-fi
-
-echo "------------------------------------------------------------"
 
 # ===============================================================
 # 7️⃣ Create superuser if not exists
