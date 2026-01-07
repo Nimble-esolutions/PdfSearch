@@ -1,6 +1,7 @@
 from django.db import migrations
 
 class Migration(migrations.Migration):
+
     dependencies = [
         ('core', '0006_pdffile_content_pdffile_search_vector_and_more'),
     ]
