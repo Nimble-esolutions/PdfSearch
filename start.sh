@@ -79,8 +79,8 @@ mkdir -p "$BACKUP_DIR" "$CHROMA_BACKUP_DIR" "$FAISS_DIR"
 # ===============================================================
 # 3️⃣ Restore / Move DB from Old Path, Backup, or Init Data
 # ===============================================================
-if [ ! -f "$DB_PATH" ]; then
-    echo "⚠️ No database found at $DB_PATH"
+if [ ! -s "$DB_PATH" ]; then
+    echo "⚠️ No/Empty database found at $DB_PATH"
 
     if [ -f "$OLD_DB_PATH" ]; then
         echo "📦 Found old database at $OLD_DB_PATH → moving to new location..."
