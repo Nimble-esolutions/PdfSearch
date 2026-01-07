@@ -80,6 +80,18 @@ RUN [ -f ./start.sh ] && chmod +x ./start.sh
 # Create static and media directories
 RUN mkdir -p /app/staticfiles /app/media
 
+# =====================================================================
+# 📦 Init Data (Baseline for Fresh Deployments)
+# =====================================================================
+# Copy init folder with pre-populated database and FAISS indexes
+# This provides instant startup capability without manual data copying
+# Runtime volume mounts will override this baseline data if present
+RUN mkdir -p /app/init/faiss_indexes
+COPY init/db.sqlite3 /app/init/db.sqlite3
+COPY init/faiss_indexes/ /app/init/faiss_indexes/
+RUN chmod -R 644 /app/init/*.sqlite3 && \
+    chmod -R 755 /app/init/faiss_indexes
+
 # Collect static files (for Django-based apps)
 RUN bash -lc 'if [ -d "flowdocs" ] && [ -f "flowdocs/manage.py" ]; then \
       cd flowdocs && STATIC_ROOT=/app/staticfiles python manage.py collectstatic --noinput --clear; \
