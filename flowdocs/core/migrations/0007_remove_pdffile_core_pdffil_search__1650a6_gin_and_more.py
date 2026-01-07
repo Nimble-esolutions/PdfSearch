@@ -1,11 +1,7 @@
 from django.db import migrations, models, connection
 
 
-def remove_gin_index(apps, schema_editor):
-    """
-    Safely remove PostgreSQL-only GIN index.
-    SQLite will skip this entirely.
-    """
+def drop_gin_index_if_postgres(apps, schema_editor):
     if connection.vendor == "postgresql":
         schema_editor.execute(
             "DROP INDEX IF EXISTS core_pdffil_search__1650a6_gin;"
@@ -19,7 +15,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(remove_gin_index, migrations.RunPython.noop),
+        migrations.RunPython(
+            drop_gin_index_if_postgres,
+            migrations.RunPython.noop
+        ),
 
         migrations.RemoveField(
             model_name='pdffile',
