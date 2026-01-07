@@ -39,9 +39,10 @@ RUN apt-get update && \
 
 # 📦 Install Python Dependencies
 # We build wheels to be copied to the runtime stage
+# REMOVED --no-deps to ensure all transitive dependencies are built
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements.txt
+    pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
 
 # =====================================================================
 # 🚀 STAGE 2: Runtime (Minimal Image)
@@ -96,7 +97,7 @@ RUN groupadd -g 1000 ${APP_USER} 2>/dev/null || true && \
 COPY --from=builder /build/wheels /wheels
 COPY --from=builder /build/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --no-index --find-links=/wheels /wheels/*.whl && \
+    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt && \
     rm -rf /wheels
 
 # =====================================================================
