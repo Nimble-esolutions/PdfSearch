@@ -1,0 +1,136 @@
+version: '3.8'
+
+# ===============================
+# Multi-Instance Docker Compose Configuration
+# ===============================
+# This configuration supports multiple instances (dev, testing, staging, etc.)
+# by using the INSTANCE_NAME environment variable for unique identification.
+#
+# Volume Strategy:
+#   - DEFAULT: Uses Docker named volumes (works everywhere, no host directory needed)
+#              Data persists in Docker's volume storage
+#   - OPTIONAL: To use bind volumes, uncomment bind volume lines and comment named volume lines
+#               Set VOLUME_BASE_PATH environment variable (e.g., /data/flowdocs-dev)
+#
+# Required Environment Variables:
+#   - INSTANCE_NAME: Unique identifier (e.g., dev, testing, staging)
+#   - WEB_PORT: Port for web service (default: 8000)
+#   - REDIS_PORT: Port for Redis service (default: 6379)
+#
+# Optional Environment Variables:
+#   - VOLUME_BASE_PATH: Base path for bind volumes (if using bind volumes)
+#                       Example: /data/flowdocs-dev
+#   - SECRET_KEY: Django secret key
+#   - OPENAI_API_KEY: OpenAI API key
+#   - ALLOWED_HOSTS: Comma-separated list of allowed hosts
+# ===============================
+
+services:
+  redis:
+    # Using Redis image mirrored to GHCR (always latest, no rate limits)
+    image: ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine
+    container_name: flowdocs-${INSTANCE_NAME:-dev}-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      # Named volume (default) - works without host directory
+      # Uncomment the bind volume line below and comment this line to use bind volumes
+      - redis_data:/data
+      # Bind volume (optional) - uncomment to use host directory
+      # - ${VOLUME_BASE_PATH}/redis:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowdocs-network
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flowdocs-${INSTANCE_NAME:-dev}-web
+    user: "1000:1000"  # Match host user (uid:gid)
+    command: sh -c "./start.sh"
+    volumes:
+      # Database SQLite - critical data, must persist
+      # Named volume (default) - works without host directory
+      # Uncomment the bind volume line below and comment this line to use bind volumes
+      - db_data:/app/flowdocs/db.sqlite3
+      # Bind volume (optional) - uncomment to use host directory
+      # - ${VOLUME_BASE_PATH}/db.sqlite3:/app/flowdocs/db.sqlite3
+      
+      # FAISS indexes for vector search - critical data, must persist
+      # Named volume (default)
+      - faiss_indexes_data:/app/flowdocs/faiss_indexes
+      # Bind volume (optional) - uncomment to use host directory
+      # - ${VOLUME_BASE_PATH}/faiss_indexes:/app/flowdocs/faiss_indexes
+      
+      # Media directory - all media files (PDFs, images, etc.) - critical data, must persist
+      # Named volume (default)
+      - media_data:/app/flowdocs/media
+      # Bind volume (optional) - uncomment to use host directory
+      # - ${VOLUME_BASE_PATH}/media:/app/flowdocs/media
+      
+      # Optional: Mount source code for live reloading (uncomment if needed for development)
+      # - ./flowdocs:/app/flowdocs
+      # - ./requirements.txt:/app/requirements.txt
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      # Instance Identification
+      - INSTANCE_NAME=${INSTANCE_NAME:-dev}
+      
+      # Django Settings
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-me-in-development}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,dev.ai-sahakar.net}
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-flowdocs.settings}
+      
+      # API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/1
+      
+      # CORS and CSRF Settings
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
+      
+      # Database Path (for migrations script)
+      - SQLITE_DB_PATH=/app/flowdocs/db.sqlite3
+      - MIGRATIONS_JSON=/app/flowdocs/
+      - FORCE_MIGRATIONS=0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - flowdocs-network
+
+# Named volumes (default) - works without host directory structure
+# Data persists in Docker's volume storage
+# Volume names are instance-specific via the name property
+volumes:
+  redis_data:
+    name: flowdocs-${INSTANCE_NAME:-dev}-redis-data
+  db_data:
+    name: flowdocs-${INSTANCE_NAME:-dev}-db
+  faiss_indexes_data:
+    name: flowdocs-${INSTANCE_NAME:-dev}-faiss-indexes
+  media_data:
+    name: flowdocs-${INSTANCE_NAME:-dev}-media
+
+networks:
+  flowdocs-network:
+    name: flowdocs-${INSTANCE_NAME:-dev}-network
+    driver: bridge
