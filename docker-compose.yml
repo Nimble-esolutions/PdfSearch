@@ -7,8 +7,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - static_vol:/app/staticfiles
-      - media_vol:/app/flowdocs/media/pdfs        #updated
+      - static_volume:/app/staticfiles
+      - media_volume:/app/flowdocs/media/pdfs        #updated
+      - db_volume:/app/flowdocs   
      
     env_file:
       - .env
@@ -17,5 +18,5 @@ services:
 volumes:
   static_volume:
   media_volume:
-
+  db_volume:
 
