@@ -13,7 +13,6 @@ from django.db import IntegrityError
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count
-
 from .models import PDFFile, Folder, CustomUser
 from .forms import UploadForm
 from .forms import UserRegisterForm
@@ -29,7 +28,8 @@ from .utils import (
     detect_folder_by_keywords_multi,
     TOP_K_CHUNKS,
     MAX_CONTEXT_WORDS,
-    generate_gpt_answer
+    generate_gpt_answer,
+    classify_query
 )
 
 CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)
@@ -297,9 +297,168 @@ def dashboard(request, folder_id=None):
     folders = Folder.objects.annotate(pdf_count=Count('files', distinct=True)).order_by("name")
     return render(request, "dashboard.html", {"folders": folders, "role": role})
 
-# -------------- New logic for folder search --------------
+
 @csrf_exempt
 def search_query(request):
+    print("\n\n================ SEARCH QUERY START ================")
+
+    if request.method == "GET":
+        print("📥 GET Request received")
+        welcome_message = (
+            "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; "
+            "मी आधी अपलोड केलेल्या दस्तऐवजांचा उपयोग करून उत्तर देईन."
+        )
+        return render(request, "search.html", {"welcome_message": welcome_message})
+
+    if request.method == "POST":
+        try:
+            query = request.POST.get("query", "").strip()
+            print("📝 User Query:", query)
+
+            if not query:
+                print("❌ Empty query")
+                return JsonResponse({
+                    "answer": "कृपया आपला प्रश्न विचारा 🙏",
+                    "references": []
+                })
+
+            # --------------------------------------------------
+            # 1️⃣ GENERAL GREETING
+            # --------------------------------------------------
+            if is_general_query(query):
+                print("💬 General query detected")
+                return JsonResponse({
+                    "answer": "नमस्कार! कशासाठी मदत करू शकतो?",
+                    "references": []
+                })
+
+            # --------------------------------------------------
+            # 2️⃣ FOLDER DETECTION
+            # --------------------------------------------------
+            detected = detect_folder_by_keywords_multi(
+                query,
+                min_score_threshold=0.40
+            )
+
+            print("📂 Detected folders:", detected)
+
+            locked_folders = []
+
+            if detected:
+                top_folder, top_score = detected[0]
+                second_score = detected[1][1] if len(detected) > 1 else 0.0
+
+                print("🏆 Top folder:", top_folder.name, "| Score:", top_score)
+
+                if top_score >= 0.65 and (top_score - second_score) >= 0.15:
+                    print("🔒 Hard locking folder:", top_folder.name)
+                    locked_folders = [top_folder]
+                else:
+                    print("🔓 Soft locking multiple folders")
+                    locked_folders = [folder for folder, _ in detected]
+
+            # --------------------------------------------------
+            # 3️⃣ RETRIEVE CONTEXT FROM LOCKED FOLDERS
+            # --------------------------------------------------
+            if locked_folders:
+
+                all_refs = []
+                combined_context_parts = []
+
+                for folder in locked_folders:
+                    print("\n➡ Searching inside folder:", folder.name)
+
+                    context, refs = search_pdfs_fast(
+                        folder,
+                        query,
+                        top_n_pdfs=3
+                    )
+
+                    if context.strip():
+                        combined_context_parts.append(context)
+                        all_refs.extend(refs)
+
+                if not combined_context_parts:
+                    print("❌ No context retrieved from locked folders")
+                    return JsonResponse({
+                        "answer": "क्षमस्व — या विषयाशी संबंधित माहिती या विभागात उपलब्ध नाही.",
+                        "references": []
+                    })
+
+                # Merge contexts
+                combined_context = truncate_context(
+                    "\n\n".join(combined_context_parts),
+                    MAX_CONTEXT_WORDS
+                )
+
+                print("📦 Final merged context length:", len(combined_context))
+
+                # --------------------------------------------------
+                # 4️⃣ CLASSIFY QUERY TYPE
+                # --------------------------------------------------
+                query_type = classify_query(query)
+                print("📂 Query Type:", query_type)
+
+                # --------------------------------------------------
+                # 5️⃣ GPT CALL (ONLY HERE)
+                # --------------------------------------------------
+                answer = generate_gpt_answer(
+                    user_question=query,
+                    context=combined_context,
+                    query_type=query_type,
+                    language="mr"
+                )
+
+                print("================ SEARCH QUERY END ================\n")
+
+                return JsonResponse({
+                    "answer": answer,
+                    "references": all_refs[:3]
+                })
+
+            # --------------------------------------------------
+            # 6️⃣ ACT FOLDER FALLBACK
+            # --------------------------------------------------
+            print("⚠ No folder matched. Trying ACT fallback.")
+
+            acts_folder = Folder.objects.filter(name__icontains="act").first()
+
+            if acts_folder:
+                context, refs = search_pdfs_fast(acts_folder, query)
+
+                if context.strip():
+                    query_type = classify_query(query)
+
+                    answer = generate_gpt_answer(
+                        user_question=query,
+                        context=context,
+                        query_type=query_type,
+                        language="mr"
+                    )
+
+                    return JsonResponse({
+                        "answer": answer,
+                        "references": refs
+                    })
+
+            # --------------------------------------------------
+            # 7️⃣ FINAL FALLBACK
+            # --------------------------------------------------
+            print("❌ Nothing found anywhere")
+
+            return JsonResponse({
+                "answer": "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही.",
+                "references": []
+            })
+
+        except Exception:
+            traceback.print_exc()
+            return JsonResponse({
+                "answer": "⚠️ काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
+                "references": []
+            })
+
+def search_queryoldLogic(request):
     if request.method == "GET":
         welcome_message = (
             "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; "
@@ -324,7 +483,7 @@ def search_query(request):
                 return JsonResponse({
                     "answer": "नमस्कार! कशासाठी मदत करू शकतो?",
                     "references": []
-                })
+                })            
 
             # --------------------------------------------------
             # 2️⃣ KEYWORD-BASED FOLDER DETECTION
@@ -410,11 +569,16 @@ def search_query(request):
                         MAX_CONTEXT_WORDS
                     )
 
+                   # Determine query type
+                    query_type = classify_query(query)
+
                     answer = generate_gpt_answer(
                         user_question=query,
-                        context=combined_context,
-                        references=final_refs,
-                        max_words=400
+                        pdf_queryset=PDFFile.objects.filter(
+                            title__in=[r["title"] for r in final_refs]
+                        ),
+                        query_type=query_type,
+                        language="mr"
                     )
 
                     return JsonResponse({
@@ -456,5 +620,391 @@ def search_query(request):
                 "references": []
             })
 
+def search_query1(request):
+    if request.method == "GET":
+        welcome_message = (
+            "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; मी आधी अपलोड केलेल्या दस्तऐवजांचा उपयोग करून उत्तर देईन."
+        )
+        return render(request, "search.html", {"welcome_message": welcome_message})
+
+    if request.method == "POST":
+        try:
+            query = request.POST.get("query", "").strip()
+            if not query:
+                return JsonResponse({"answer": "कृपया आपला प्रश्न विचारा 🙏", "references": []})
+
+            # check cached answer first (global cache; can also be per-user)
+            cache_key = f"search_ans:{hash(query)}"
+            cached = cache.get(cache_key)
+            if cached:
+                return JsonResponse(cached)
+
+            # detect folder by keywords (existing logic in your project)
+            # simple fallback: try to match a folder name token
+            detected_folder = None
+            # attempt to use Folder.keywords if available
+            # (assuming detect_folder_by_keywords exists in another util)
+            
+            detected_folder = detect_folder_by_keywords(query)
+
+            if not detected_folder:
+                # try name-based fallback
+                detected_folder = Folder.objects.filter(name__icontains="act").first()  # cheap fallback
+                # If still none, return helpful message
+                if not detected_folder:
+                    available = ", ".join(list(Folder.objects.values_list("name", flat=True)[:50]))
+                    return JsonResponse({
+                        "answer": f"क्षमस्व — संदर्भासाठी योग्य category सापडले नाही. उपलब्ध आहेत: {available}",
+                        "references": []
+                    })
+
+            # perform fast search using precomputed embeddings + FAISS
+            answer, refs = search_pdfs_fast(detected_folder, query, top_n_pdfs=3)
+
+            # store in cache
+            payload = {"answer": answer or "⚠️ संबंधित माहिती उपलब्ध नाही.", "references": refs}
+            cache.set(cache_key, payload, CACHE_TTL)
+
+            return JsonResponse(payload)
+
+        except Exception:
+            traceback.print_exc()
+            return JsonResponse({"answer": "⚠️ काहीतरी चूक झाली आहे. पुन्हा प्रयत्न करा.", "references": []})
+
+#CACHE_TTL = 600   # (or your setting)
+
+# -------------- Search : uses caching and fast search from multiple --------------
+def search_query19dec25(request):
+    if request.method == "GET":
+        welcome_message = (
+            "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; मी आधी अपलोड केलेल्या दस्तऐवजांचा उपयोग करून उत्तर देईन."
+        )
+        return render(request, "search.html", {"welcome_message": welcome_message})
+
+    if request.method == "POST":
+        try:
+            query = request.POST.get("query", "").strip()
+            if not query:
+                return JsonResponse({
+                    "answer": "कृपया आपला प्रश्न विचारा 🙏",
+                    "references": []
+                })
+
+            # --------------- GENERAL QUESTION (NO REFERENCES) ---------------
+            if is_general_query(query):
+                ql = query.lower()
+
+                # Greetings
+                if "good" in ql and ("morning" in ql or "afternoon" in ql or "evening" in ql or "day" in ql):
+                    return JsonResponse({
+                        "answer": "Good day! How can I assist you today?",
+                        "references": []
+                    })
+
+                if "hello" in ql or "hi" in ql or "नमस्कार" in ql:
+                    return JsonResponse({"answer": "नमस्कार! कशासाठी मदत करू शकतो?", "references": []})
+
+                # Default fallback for any greeting
+                return JsonResponse({"answer": "How can I assist you today?", "references": []})
 
 
+            # -------------------------------
+            # 2️⃣ FOLDER DETECTION (multi)
+            # -------------------------------
+            # detect_folder_by_keywords_multi returns list of (folder, score) sorted desc
+            candidate_folders = detect_folder_by_keywords_multi(query, min_score_threshold=0.2)
+
+            # If we have candidate folders, search each and aggregate results
+            if candidate_folders:
+                print(f"🔎 Searching {len(candidate_folders)} candidate folders for query: {query}")
+
+                # aggregated scores keyed by PDF title (use PDF ID if you have it in refs)
+                aggregated_pdf_scores = {}  # key -> {"score": float, "meta": {...}}
+
+                for folder, folder_score in candidate_folders:
+                    try:
+                        print(f"   ➤ Searching folder: {folder.name} (folder_score={folder_score})")
+                        # tune per-folder top results; keep small to limit work
+                        _, refs = search_pdfs_fast(folder, query, top_n_pdfs=2)
+
+                        if not refs:
+                            print(f"     ⚠ No refs from {folder.name}")
+                            continue
+
+                        for r in refs:
+                            # stable key: prefer 'url' if unique, else 'title'
+                            key = r.get("url") or r.get("title") or str(r.get("uploaded_at")) or folder.name
+                            r_score = float(r.get("score", 0) or 0)
+
+                            # incorporate folder_score as a multiplicative weight (tunable)
+                            combined_score = r_score + float(folder_score)
+
+                            if key in aggregated_pdf_scores:
+                                aggregated_pdf_scores[key]["score"] += combined_score
+                            else:
+                                meta = {
+                                    "title": r.get("title"),
+                                    "folder": r.get("folder") or folder.name,
+                                    "url": r.get("url"),
+                                    "uploaded_at": r.get("uploaded_at"),
+                                }
+                                aggregated_pdf_scores[key] = {"score": combined_score, "meta": meta}
+
+                    except Exception as e:
+                        print(f"     ❌ Error searching folder {folder.name}: {e}")
+                        continue
+
+                # If we found aggregated PDFs, pick top ones and build context
+                if aggregated_pdf_scores:
+                    sorted_pdfs = sorted(
+                        [
+                            {"key": k, "score": v["score"], "meta": v["meta"]}
+                            for k, v in aggregated_pdf_scores.items()
+                        ],
+                        key=lambda x: x["score"],
+                        reverse=True
+                    )
+
+                    top_n_pdfs_overall = 3
+                    top_selection = sorted_pdfs[:top_n_pdfs_overall]
+
+                    # Build final_refs in the shape expected by the frontend
+                    final_refs = []
+                    for sel in top_selection:
+                        m = sel["meta"]
+                        final_refs.append({
+                            "title": m.get("title"),
+                            "folder": m.get("folder"),
+                            "url": m.get("url"),
+                            "uploaded_at": m.get("uploaded_at"),
+                            "score": sel["score"],
+                        })
+
+                    # Build combined_context from the selected PDFs' page_chunks
+                   # After aggregated PDFs selected:
+                    combined_snippets = []
+
+                    for ref in final_refs:
+                        try:
+                            pdf_obj = None
+
+                            # Extract filename safely
+                            if ref.get("url"):
+                                filename = os.path.basename(ref["url"])  # e.g., "MCS1.pdf"
+                                pdf_obj = PDFFile.objects.filter(file__icontains=filename).first()
+
+                            # Fallback: search by title if no URL match
+                            if not pdf_obj and ref.get("title"):
+                                pdf_obj = PDFFile.objects.filter(title=ref["title"]).first()
+
+                            if pdf_obj:
+                                snippets = getattr(pdf_obj, "page_chunks", [])[:TOP_K_CHUNKS]
+
+                                combined_snippets.append(
+                                    f"--- {ref['title']} (in {ref['folder']}) ---"
+                                )
+                                combined_snippets.extend(snippets)
+
+                            else:
+                                print(f"⚠ Could not map PDF to DB: {ref}")
+
+                        except Exception as e:
+                            print(f"⚠ Failed to load snippets for {ref.get('title')}: {e}")
+                            continue
+
+                    # Build final context
+                    combined_context = "\n\n".join(combined_snippets)
+                    combined_context = truncate_context(combined_context, max_words=MAX_CONTEXT_WORDS)
+
+                    # Generate the answer using existing generator (which handles language detection & caching)
+                    answer = generate_gpt_answer(user_question=query, context=combined_context, references=final_refs, max_words=400)
+
+                    if answer and answer.strip():
+                        return JsonResponse({"answer": answer, "references": final_refs})
+
+                # If we reach here, candidate folders yielded no useful PDF/context → fallthrough to acts folder
+
+            # -----------------------------------
+            # 3️⃣ NO FOLDER FOUND or no useful results → SEARCH IN "ACTS"
+            # -----------------------------------
+            acts_folder = Folder.objects.filter(name__icontains="act").first()
+
+            if not acts_folder:
+                return JsonResponse({
+                    "answer": "क्षमस्व — कोणत्याही category मध्ये माहिती आढळली नाही.",
+                    "references": []
+                })
+
+            answer, refs = search_pdfs_fast(acts_folder, query, top_n_pdfs=3)
+
+            if answer.strip():
+                return JsonResponse({"answer": answer, "references": refs})
+
+            # -----------------------------------
+            # 3A. ACT FOLDER ALSO HAS NO ANSWER
+            # -----------------------------------
+            return JsonResponse({
+                "answer": "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही.",
+                "references": []
+            })
+
+        except Exception as e:
+            print("Error:", e)
+            return JsonResponse({
+                "answer": "⚠️ काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
+                "references": []
+            })
+
+
+def search_query_old(request):
+    if request.method == "GET":
+        welcome_message = (
+            "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; मी आधी अपलोड केलेल्या दस्तऐवजांचा उपयोग करून उत्तर देईन."
+        )
+        return render(request, "search.html", {"welcome_message": welcome_message})
+
+    if request.method == "POST":
+        try:
+            query = request.POST.get("query", "").strip()
+            if not query:
+                return JsonResponse({
+                    "answer": "कृपया आपला प्रश्न विचारा 🙏",
+                    "references": []
+                })
+
+            # --------------- GENERAL QUESTION (NO REFERENCES) ---------------
+            if is_general_query(query):
+                ql = query.lower()
+
+                # Greetings
+                if "good" in ql and ("morning" in ql or "afternoon" in ql or "evening" in ql or "day" in ql):
+                    return JsonResponse({
+                        "answer": "Good day! How can I assist you today?",
+                        "references": []
+                    })
+
+                if "hello" in ql or "hi" in ql or "नमस्कार" in ql:
+                    return JsonResponse({"answer": "नमस्कार! कशासाठी मदत करू शकतो?", "references": []})
+
+                # Default fallback for any greeting
+                return JsonResponse({"answer": "How can I assist you today?", "references": []})
+
+
+            # -------------------------------
+            # 2️⃣ FOLDER DETECTION
+            # -------------------------------
+            detected_folder = detect_folder_by_keywords(query)
+
+            # -------------------------------
+            # 2A. FOLDER FOUND → SEARCH IT
+            # -------------------------------
+            if detected_folder:
+                answer, refs = search_pdfs_fast(detected_folder, query, top_n_pdfs=2)
+
+                if answer.strip():
+                    return JsonResponse({"answer": answer, "references": refs})
+
+                # Folder found but no context in PDFs → fallback to Acts below
+
+            # -----------------------------------
+            # 3️⃣ NO FOLDER FOUND → SEARCH IN "ACTS"
+            # -----------------------------------
+            acts_folder = Folder.objects.filter(name__icontains="act").first()
+
+            if not acts_folder:
+                return JsonResponse({
+                    "answer": "क्षमस्व — कोणत्याही category मध्ये माहिती आढळली नाही.",
+                    "references": []
+                })
+
+            answer, refs = search_pdfs_fast(acts_folder, query, top_n_pdfs=3)
+
+            if answer.strip():
+                return JsonResponse({"answer": answer, "references": refs})
+
+            # -----------------------------------
+            # 3A. ACT FOLDER ALSO HAS NO ANSWER
+            # -----------------------------------
+            return JsonResponse({
+                "answer": "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही.",
+                "references": []
+            })
+
+        except Exception as e:
+            print("Error:", e)
+            return JsonResponse({
+                "answer": "⚠️ काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
+                "references": []
+            })
+
+# -------------- New logic with semanitc folder search --------------
+def search_query_New(request):
+    if request.method == "GET":
+        welcome_message = (
+            "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; मी आधी अपलोड केलेल्या दस्तऐवजांचा उपयोग करून उत्तर देईन."
+        )
+        return render(request, "search.html", {"welcome_message": welcome_message})
+
+    if request.method == "POST":
+        try:
+            query = request.POST.get("query", "").strip()
+
+            if not query:
+                return JsonResponse({
+                    "answer": "कृपया आपला प्रश्न विचारा 🙏",
+                    "references": []
+                })
+
+            # -------------------------------
+            # 1️⃣ GENERAL GREETINGS / SMALL TALKS
+            # -------------------------------
+            if is_general_query(query):
+                return JsonResponse({
+                    "answer": "How can I assist you today?",
+                    "references": []
+                })
+
+            # -------------------------------
+            # 2️⃣ SEMANTIC FOLDER SEARCH (NEW)
+            # -------------------------------
+            results = semantic_folder_search(query, top_n=3)
+
+            if not results:
+                return JsonResponse({
+                    "answer": "क्षमस्व — कोणत्याही category मध्ये माहिती आढळली नाही.",
+                    "references": []
+                })
+
+            # best result:
+            best_folder, best_score, best_answer, best_refs = results[0]
+
+            if best_answer.strip():
+                return JsonResponse({
+                    "answer": best_answer,
+                    "references": best_refs
+                })
+
+            # -------------------------------
+            # 3️⃣ FALLBACK — SEARCH IN 'ACT' FOLDER
+            # -------------------------------
+            acts_folder = Folder.objects.filter(name__icontains="act").first()
+
+            if acts_folder:
+                answer, refs = search_pdfs_fast(acts_folder, query, top_n_pdfs=3)
+                if answer.strip():
+                    return JsonResponse({"answer": answer, "references": refs})
+
+            # -------------------------------
+            # 4️⃣ FINAL FALLBACK  
+            # -------------------------------
+            return JsonResponse({
+                "answer": "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही.",
+                "references": []
+            })
+
+        except Exception as e:
+            print("Error:", e)
+            return JsonResponse({
+                "answer": "⚠️ काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
+                "references": []
+            })
