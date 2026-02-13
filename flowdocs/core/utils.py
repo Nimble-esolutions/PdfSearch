@@ -4,6 +4,7 @@ import json
 import math
 import pathlib
 import traceback
+import re
 from typing import List, Tuple, Optional, Dict, Any
 
 import fitz  # PyMuPDF
@@ -52,6 +53,133 @@ TOP_K_CHUNKS = getattr(settings, "TOP_K_CHUNKS", 5)
 EMBEDDING_TTL = getattr(settings, "EMBEDDING_TTL", 60 * 60 * 24 * 7)  # 7 days
 SEARCH_CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)  # 10 minutes
 
+# ------------------Query type------------------
+EXACT_LEGAL_PATTERNS = [
+    r"\bsection\s+\d+",
+    r"\brule\s+\d+",
+    r"\bapplication\s+\d+",
+    r"\bअर्ज\s+\d+",
+    r"\d+\s*\(\d+\)",
+    r"\bकागदपत्रे\b",
+    r"\bनियम\b",
+    r"\bअधिनियम\b",
+    r"\bflat\b",
+    r"\bनिबंधक\b",
+    r"\bact\b",
+    r"\bकायदा\b",
+    r"\blaw\b",
+    r"\bअभिहस्तांतरण\b",
+    r"\bगृहनिर्माण\b"
+]
+
+INFORMATIVE_KEYWORDS = [
+    "किती", "दर", "शुल्क", "फी", "कमाल", "मर्यादा", "रक्कम",
+    "how much", "fee", "rate", "charges", "limit", "amount"
+]
+
+LEGAL_CONTEXT_WORDS = [
+    "document",  "legal", "दस्तऐवज"
+]
+
+# ==========================================================
+# 🔎 1. SECTION BASED EXTRACTION (Primary Filter)
+# ==========================================================
+def extract_relevant_section(full_text, query):
+    print("\n========== 🔍 SECTION EXTRACTION START ==========")
+
+    keywords = [w.strip() for w in query.split() if len(w.strip()) > 3]
+
+    print("🔑 Keywords used:", keywords)
+
+    lines = full_text.split("\n")
+    matched_lines = []
+
+    for i, line in enumerate(lines):
+        for word in keywords:
+            if word in line:
+                print(f"✅ Match found in line {i}: {line[:120]}")
+                matched_lines.append(line)
+                break
+
+    if not matched_lines:
+        print("❌ No keyword-based section found")
+        print("========== 🔍 SECTION EXTRACTION END ==========\n")
+        return ""
+
+    section_text = "\n".join(matched_lines)
+
+    print("📄 Total matched lines:", len(matched_lines))
+    print("========== 🔍 SECTION EXTRACTION END ==========\n")
+
+    return section_text
+
+
+# ==========================================================
+# 🧠 2. SEMANTIC CHUNK SEARCH (Fallback)
+# ==========================================================
+def cosine_similarity(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    return dot / (norm_a * norm_b)
+
+
+def semantic_chunk_search(query, pdf_obj):
+    print("\n========== 🧠 SEMANTIC SEARCH START ==========")
+
+    if not pdf_obj.page_chunks or not pdf_obj.chunk_embeddings:
+        print("❌ No embeddings found.")
+        print("========== 🧠 SEMANTIC SEARCH END ==========\n")
+        return ""
+
+    query_embedding = client.embeddings.create(
+        model=settings.OPENAI_EMBED_MODEL,
+        input=query
+    ).data[0].embedding
+
+    scores = []
+    for i, emb in enumerate(pdf_obj.chunk_embeddings):
+        score = cosine_similarity(query_embedding, emb)
+        scores.append((score, pdf_obj.page_chunks[i]))
+
+    scores.sort(reverse=True, key=lambda x: x[0])
+    top_chunks = [chunk for _, chunk in scores[:3]]
+
+    print("✅ Top 3 chunks selected")
+    print("========== 🧠 SEMANTIC SEARCH END ==========\n")
+
+    return "\n\n".join(top_chunks)
+# ==========================================================
+# 📚 3. FINAL CONTEXT BUILDER
+# ==========================================================
+def build_final_context(query, pdf_obj):
+    print("\n========== 📚 CONTEXT BUILD START ==========")
+
+    full_text = pdf_obj.text_content
+
+    print("📄 Full text length:", len(full_text))
+
+    # STEP 1 — Section extraction
+    section = extract_relevant_section(full_text, query)
+
+    if section:
+        print("✅ Section extraction success")
+        print("📄 Section length:", len(section))
+        print("📄 Section preview:\n", section[:400])
+        print("========== 📚 CONTEXT BUILD END ==========\n")
+        return section
+
+    # STEP 2 — Semantic fallback
+    print("⚠ Section not found. Using semantic search...")
+
+    semantic_context = semantic_chunk_search(query, pdf_obj)
+
+    print("📄 Semantic context length:", len(semantic_context))
+    print("📄 Semantic preview:\n", semantic_context[:400])
+
+    print("========== 📚 CONTEXT BUILD END ==========\n")
+    return semantic_context
+
 # ------------------ Helpers ------------------
 def transliterate_marathi_to_english(text: str) -> str:
     try:
@@ -59,7 +187,53 @@ def transliterate_marathi_to_english(text: str) -> str:
     except Exception:
         return text
 
+# ------------------ Define query type ------------------
+def classify_query(query: str) -> str:
+    print("\n================ QUERY CLASSIFICATION START ================")
+    print("🔍 Original Query:", query)
 
+    if not query.strip():
+        print("⚠ Empty query received")
+        return "NON_LEGAL"
+
+    # --------------------------------------------------
+    # 1️⃣ EXACT LEGAL QUERY (Highest Priority)
+    # --------------------------------------------------
+    for pattern in EXACT_LEGAL_PATTERNS:
+        if re.search(pattern, query, re.IGNORECASE):
+            print("✅ Classified as EXACT_LEGAL")
+            print("📌 Matched Pattern:", pattern)
+            print("================ QUERY CLASSIFICATION END ================\n")
+            return "EXACT_LEGAL"
+
+    # --------------------------------------------------
+    # 2️⃣ INFORMATIVE LEGAL QUERY
+    # --------------------------------------------------
+    for word in INFORMATIVE_KEYWORDS:
+        if re.search(rf"\b{re.escape(word)}\b", query, re.IGNORECASE):
+            print("✅ Classified as LEGAL_INFORMATIVE")
+            print("📌 Matched Keyword:", word)
+            print("================ QUERY CLASSIFICATION END ================\n")
+            return "LEGAL_INFORMATIVE"
+
+    # --------------------------------------------------
+    # 3️⃣ CONTEXTUAL LEGAL QUERY
+    # --------------------------------------------------
+    for word in LEGAL_CONTEXT_WORDS:
+        if re.search(rf"\b{re.escape(word)}\b", query, re.IGNORECASE):
+            print("✅ Classified as LEGAL_CONTEXTUAL")
+            print("📌 Matched Word:", word)
+            print("================ QUERY CLASSIFICATION END ================\n")
+            return "LEGAL_CONTEXTUAL"
+
+    # --------------------------------------------------
+    # 4️⃣ NON LEGAL
+    # --------------------------------------------------
+    print("⚠ Classified as NON_LEGAL")
+    print("================ QUERY CLASSIFICATION END ================\n")
+    return "NON_LEGAL"
+
+# ------------------ Define query Language ------------------
 def detect_language(text: str) -> str:
     if not text or not text.strip():
         return "en"
@@ -111,6 +285,146 @@ def extract_text_from_pdf_path(path: str) -> str:
         traceback.print_exc()
         return ""
     return "\n".join(text_parts).strip()
+
+# ---------------- Build a strict legal extraction prompt ----------------
+def build_strict_extraction_prompt(question, context, language="mr"):
+    print("\n========== [BUILD STRICT LEGAL PROMPT v2] ==========")
+    print("📝 Question:", question)
+    print("📄 Context length:", len(context))
+
+    prompt = f"""
+You are a legal document extractor.
+
+IMPORTANT RULES:
+1. Identify the relevant section in the context that directly answers the question.
+2. Copy the COMPLETE section exactly as written.
+3. Preserve numbering, bullet points, formatting.
+4. Do NOT summarize.
+5. Do NOT modify wording.
+6. Do NOT add explanation.
+7. If relevant section not found, reply exactly:
+"दिलेल्या दस्तऐवजामध्ये सदर माहिती उपलब्ध नाही."
+
+Question:
+{question}
+
+Context:
+{context}
+
+Return:
+- Complete process (if available)
+- List of all documents exactly as written
+- No additional explanation
+- No rewording
+"""
+
+    print("✅ Strict legal extraction prompt built")
+    return prompt
+
+
+def build_strict_extraction_promptOLD(question: str, context: str, lang: str) -> str:
+    print("\n========== [BUILD STRICT LEGAL PROMPT] ==========")
+    print("📝 Question:", question)
+    print("🌐 Language:", lang)
+    print("📄 Context Length:", len(context))
+
+    if lang == "mr":
+        prompt = f"""
+तू कायदेशीर दस्तऐवजातील माहिती शब्दशः काढणारा सहाय्यक आहेस.
+
+अत्यंत कडक नियम:
+1. उत्तर फक्त खाली दिलेल्या CONTEXT मधूनच द्यायचे.
+2. अर्जाची संपूर्ण प्रक्रिया द्यायची.
+3. अर्जासोबत जोडावयाच्या सर्व कागदपत्रांची संपूर्ण यादी द्यायची.
+4. माहिती जशी दस्तऐवजात आहे तशीच शब्दशः द्यायची.
+5. कोणतेही स्पष्टीकरण, अर्थ लावणे किंवा अतिरिक्त माहिती जोडू नये.
+6. जर माहिती वेगवेगळ्या परिच्छेदात असेल तर ती एकत्र मांडावी.
+7. मुद्देसूद / क्रमांकित यादी वापरावी.
+8. माहिती उपलब्ध नसेल तरच लिहावे:
+   "दिलेल्या दस्तऐवजांमध्ये याबाबत माहिती उपलब्ध नाही."
+
+CONTEXT:
+----------------
+{context}
+----------------
+
+प्रश्न:
+{question}
+
+उत्तर:
+"""
+    else:
+        prompt = f"""
+You are a legal document extraction assistant.
+
+STRICT RULES:
+1. Answer ONLY from the CONTEXT.
+2. Provide complete process.
+3. Provide full list of documents.
+4. Use exact wording from document.
+5. Do NOT add explanations.
+6. If information not available, reply:
+   "The information is not available in the provided documents."
+
+CONTEXT:
+----------------
+{context}
+----------------
+
+Question:
+{question}
+
+Answer:
+"""
+
+    print("✅ Strict legal extraction prompt built successfully")
+    print("=================================\n")
+    return prompt
+
+
+#----------------Build a general prompt ----------------
+def build_general_prompt(question: str, context: str, lang: str) -> str:
+    print("\n========== [BUILD GENERAL PROMPT] ==========")
+    print("📝 Question:", question)
+    print("🌐 Language:", lang)
+    print("📄 Context Length:", len(context))
+
+    if lang == "mr":
+        prompt = f"""
+तू एक सहाय्यक आहेस.
+
+खालील CONTEXT चा आधार घेऊन स्पष्ट आणि संक्षिप्त उत्तर द्या.
+
+CONTEXT:
+----------------
+{context}
+----------------
+
+प्रश्न:
+{question}
+
+उत्तर:
+"""
+    else:
+        prompt = f"""
+You are a helpful assistant.
+
+Answer clearly using the provided context.
+
+Context:
+----------------
+{context}
+----------------
+
+Question:
+{question}
+
+Answer:
+"""
+
+    print("✅ General prompt built successfully")
+    print("=================================\n")
+    return prompt
 
 
 # ---------------- Embeddings ----------------
@@ -301,118 +615,289 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
 
 
 # ------------------ Search PDFs (fast path) ------------------
-def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tuple[str, List[Dict[str, Any]]]:
-    """
-    Fast search that:
-     - uses precomputed chunk embeddings saved on PDFs
-     - loads or builds FAISS folder index (persistent)
-     - finds top chunks and returns combined context and references
-    Returns (answer_text, references_list)
-    Each reference has: title, url, folder, uploaded_at, score
-    """
-    # 1. quick guard
+def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2):
+    print("\n================ PDF RETRIEVAL START ================")
+    print("📂 Folder:", folder.name)
+    print("📝 Query:", user_query)
+
     pdfs = PDFFile.objects.filter(folder=folder)
+
     if not pdfs.exists():
+        print("❌ No PDFs found in this folder")
+        print("================ PDF RETRIEVAL END ================\n")
         return "", []
 
-    # 2. create query embedding
+    print("📄 Total PDFs in folder:", pdfs.count())
+
+    # ---------- Create Query Embedding ----------
     try:
-        if not client:
-            raise RuntimeError("OpenAI not configured")
-        emb_resp = client.embeddings.create(model=OPENAI_EMBED_MODEL, input=[user_query])
+        emb_resp = client.embeddings.create(
+            model=OPENAI_EMBED_MODEL,
+            input=[user_query]
+        )
         query_emb = np.array(emb_resp.data[0].embedding, dtype=np.float32)
+        print("✅ Query embedding created")
+    except Exception:
+        traceback.print_exc()
+        print("❌ Embedding failed")
+        return "", []
+
+    index, chunk_texts = build_or_load_faiss_index_for_folder(folder)
+
+    matches = search_chunks_with_faiss_or_numpy(
+        query_emb,
+        index,
+        chunk_texts,
+        top_k=TOP_K_CHUNKS * 5
+    )
+
+    if not matches:
+        print("❌ No chunk matches found")
+        print("================ PDF RETRIEVAL END ================\n")
+        return "", []
+
+    print("✅ Total matched chunks:", len(matches))
+
+    # ---------- Map chunk → PDF ----------
+    chunk_to_pdf = {}
+    for pdf in pdfs:
+        for c in (pdf.page_chunks or []):
+            chunk_to_pdf[c] = pdf
+
+    pdf_scores = {}
+    pdf_snippets = {}
+
+    for chunk_text, score in matches:
+        pdf_obj = chunk_to_pdf.get(chunk_text)
+        if not pdf_obj:
+            continue
+
+        title = pdf_obj.title
+        pdf_scores.setdefault(title, 0)
+        pdf_scores[title] += float(score)
+
+        pdf_snippets.setdefault(title, [])
+        pdf_snippets[title].append(chunk_text)
+
+    if not pdf_scores:
+        print("❌ No PDF score aggregation")
+        print("================ PDF RETRIEVAL END ================\n")
+        return "", []
+
+    ranked = sorted(pdf_scores.items(), key=lambda x: x[1], reverse=True)[:top_n_pdfs]
+
+    refs = []
+    combined_snippets = []
+
+    for title, score in ranked:
+        pdf_obj = pdfs.filter(title=title).first()
+
+        print(f"🏆 Selected PDF: {title} | Score: {score}")
+
+        refs.append({
+            "title": title,
+            "folder": folder.name,
+            "url": pdf_obj.file.url if pdf_obj.file else None,
+            "uploaded_at": pdf_obj.uploaded_at.strftime("%Y-%m-%d") if pdf_obj.uploaded_at else None,
+            "score": score,
+        })
+
+        combined_snippets.append(f"--- {title} ---")
+        # combined_snippets.extend(pdf_snippets.get(title, [])[:TOP_K_CHUNKS])
+        if pdf_obj.page_chunks:
+            combined_snippets.extend(pdf_obj.page_chunks[:10])
+
+    combined_context = "\n\n".join(combined_snippets)
+    combined_context = truncate_context(combined_context, MAX_CONTEXT_WORDS)
+
+    print("📦 Final combined context length:", len(combined_context))
+    print("================ PDF RETRIEVAL END ================\n")
+
+    return combined_context, refs
+
+def search_pdfs_fast12feb(folder: Folder, user_query: str, top_n_pdfs: int = 2):
+    print("\n================ PDF SEARCH START ================")
+    print("📂 Folder:", folder.name)
+    print("📝 Query:", user_query)
+
+    pdfs = PDFFile.objects.filter(folder=folder)
+
+    if not pdfs.exists():
+        print("❌ No PDFs in folder")
+        return "", []
+
+    print("📄 Total PDFs in folder:", pdfs.count())
+
+    # -------- Create Query Embedding --------
+    try:
+        emb_resp = client.embeddings.create(
+            model=OPENAI_EMBED_MODEL,
+            input=[user_query]
+        )
+        query_emb = np.array(emb_resp.data[0].embedding, dtype=np.float32)
+        print("✅ Query embedding created")
     except Exception:
         traceback.print_exc()
         query_emb = None
 
     index, chunk_texts = build_or_load_faiss_index_for_folder(folder)
 
-    # 3. get top matched chunks (text + scores)
-    matches = search_chunks_with_faiss_or_numpy(query_emb, index, chunk_texts, top_k=TOP_K_CHUNKS * 10)
+    matches = search_chunks_with_faiss_or_numpy(
+        query_emb,
+        index,
+        chunk_texts,
+        top_k=TOP_K_CHUNKS * 5
+    )
 
     if not matches:
-        # fallback to rule-based search
-        import re
-        rule_match = re.search(r"नियम\s*([०१२३४५६७८९0-9]+)", user_query)
-        matches = []
-        for pdf in pdfs:
-            chunks = getattr(pdf, "page_chunks", []) or []
-            for c in chunks:
-                score = 0
-                if rule_match and f"नियम {rule_match.group(1)}" in c:
-                    score += 5
-                if user_query in c:
-                    score += 1
-                if score > 0:
-                    matches.append((c, score))
-        matches = sorted(matches, key=lambda x: x[1], reverse=True)[:TOP_K_CHUNKS * 10]
-
-    # 4. collate matches by PDF
-    chunk_to_pdf = {}
-    for pdf in pdfs:
-        p_chunks = getattr(pdf, "page_chunks", []) or []
-        uploaded_at = getattr(pdf, "uploaded_at", None)
-        uploaded_at_str = uploaded_at.strftime("%Y-%m-%d") if uploaded_at else None
-        for c in p_chunks:
-            if c not in chunk_to_pdf:
-                chunk_to_pdf[c] = {
-                    "title": getattr(pdf, "title", None),
-                    "url": getattr(getattr(pdf, "file", None), "url", None),
-                    "folder": getattr(getattr(pdf, "folder", None), "name", None),
-                    "uploaded_at": uploaded_at_str,
-                }
-
-    # Aggregate by PDF: sum scores and collect top snippets
-    pdf_scores = {}
-    pdf_snippets = {}
-    for chunk_text, score in matches:
-        meta = chunk_to_pdf.get(chunk_text)
-        if not meta:
-            continue
-        title = meta["title"]
-        pdf_scores.setdefault(title, 0)
-        pdf_scores[title] += score
-        pdf_snippets.setdefault(title, []).append(chunk_text)
-
-    if not pdf_scores:
+        print("❌ No chunk matches found")
         return "", []
 
-    # Create references list
+    print("✅ Total matched chunks:", len(matches))
+
+    # -------- Aggregate by PDF --------
+    chunk_to_pdf = {}
+    for pdf in pdfs:
+        for c in (pdf.page_chunks or []):
+            chunk_to_pdf[c] = pdf
+
+    pdf_scores = {}
+    pdf_snippets = {}
+
+    for chunk_text, score in matches:
+        pdf_obj = chunk_to_pdf.get(chunk_text)
+        if not pdf_obj:
+            continue
+
+        title = pdf_obj.title
+        pdf_scores.setdefault(title, 0)
+        pdf_scores[title] += float(score)
+
+        pdf_snippets.setdefault(title, [])
+        pdf_snippets[title].append(chunk_text)
+
+    if not pdf_scores:
+        print("❌ No PDF score aggregation")
+        return "", []
+
+    # -------- Rank PDFs --------
+    ranked_titles = sorted(pdf_scores.items(), key=lambda x: x[1], reverse=True)[:top_n_pdfs]
+
     refs = []
-    for title, s in pdf_scores.items():
-        pdf_obj = pdfs.filter(title=title).first()
-        if pdf_obj:
-            uploaded_at = getattr(pdf_obj, "uploaded_at", None)
-            refs.append({
-                "title": title,
-                "folder": getattr(getattr(pdf_obj, "folder", None), "name", None),
-                "url": getattr(getattr(pdf_obj, "file", None), "url", None),
-                "uploaded_at": uploaded_at.strftime("%Y-%m-%d") if uploaded_at else None,
-                "score": s,
-            })
-        else:
-            refs.append({"title": title, "folder": None, "url": None, "uploaded_at": None, "score": s})
-
-    # pick top N PDFs by score
-    refs = sorted(refs, key=lambda x: x["score"], reverse=True)[:top_n_pdfs]
-
-    # build context: include only top K snippets across top refs
     combined_snippets = []
-    for r in refs:
-        title = r["title"]
-        snippets = pdf_snippets.get(title, [])[:TOP_K_CHUNKS]
-        label = f"--- {title} ---"
-        combined_snippets.append(label)
-        combined_snippets.extend(snippets)
-    combined_context = "\n\n".join(combined_snippets)
-    combined_context = truncate_context(combined_context, max_words=MAX_CONTEXT_WORDS)
 
-    # 5. generate answer
-    answer = generate_gpt_answer(user_question=user_query, context=combined_context, references=refs, max_words=400)
-    return answer, refs
+    for title, score in ranked_titles:
+        pdf_obj = pdfs.filter(title=title).first()
+
+        print(f"🏆 Selected PDF: {title} | Score: {score}")
+
+        refs.append({
+            "title": title,
+            "folder": folder.name,
+            "url": pdf_obj.file.url if pdf_obj.file else None,
+            "uploaded_at": pdf_obj.uploaded_at.strftime("%Y-%m-%d") if pdf_obj.uploaded_at else None,
+            "score": score,
+        })
+
+        combined_snippets.append(f"--- {title} ---")
+        combined_snippets.extend(pdf_snippets.get(title, [])[:TOP_K_CHUNKS])
+
+    combined_context = "\n\n".join(combined_snippets)
+    combined_context = truncate_context(combined_context, MAX_CONTEXT_WORDS)
+
+    print("📦 Final context length:", len(combined_context))
+    print("================ PDF SEARCH END ================\n")
+
+    # IMPORTANT: RETURN CONTEXT ONLY
+    return combined_context, refs
 
 # ------------------ GPT answer ------------------
-def generate_gpt_answer(user_question: str, context: str, references: List[Dict[str, Any]] = None, max_words: int = 200) -> str:
+def generate_gpt_answer(user_question, context, query_type="GENERAL", language="mr"):
+    print("\n================ GPT PIPELINE START ================")
+    print("📝 Question:", user_question)
+    print("📂 Query Type:", query_type)
+    print("📦 Context length:", len(context))
+
+    if not context.strip():
+        print("❌ Empty context sent to GPT")
+        return "दिलेल्या दस्तऐवजामध्ये सदर माहिती उपलब्ध नाही."
+
+    if query_type == "EXACT_LEGAL":
+        prompt = build_strict_extraction_prompt(user_question, context, language)
+    else:
+        prompt = build_general_prompt(user_question, context, language)
+
+    print("📤 Sending request to OpenAI...")
+    print("📤 Prompt length:", len(prompt))
+
+    response = client.chat.completions.create(
+        model=OPENAI_CHAT_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
+
+    answer = response.choices[0].message.content.strip()
+
+    print("🤖 GPT RESPONSE PREVIEW:\n", answer[:800])
+    print(answer)
+    print("================ GPT PIPELINE END ================\n")
+
+    return answer
+
+def generate_gpt_answer12feb(user_question, pdf_queryset, query_type="GENERAL", language="mr"):
+    print("\n\n================ GPT PIPELINE START ================")
+    print("📝 User Question:", user_question)
+    print("📂 Total PDFs received:", pdf_queryset.count())
+    print("📂 Query Type:", query_type)
+
+    if not pdf_queryset.exists():
+        print("❌ No PDFs found in queryset")
+        return "No documents found."
+
+    # For now use first PDF (you can enhance later)
+    pdf_obj = pdf_queryset.first()
+
+    print("📄 Selected PDF:", pdf_obj.title)
+    print("📄 Folder:", pdf_obj.folder.name if pdf_obj.folder else "No Folder")
+    print("📄 Text length:", len(pdf_obj.text_content))
+
+    # ---------------- CONTEXT BUILD ----------------
+    context = build_final_context(user_question, pdf_obj)
+
+    print("\n📦 FINAL CONTEXT LENGTH:", len(context))
+    print("📦 FINAL CONTEXT PREVIEW:\n", context[:500])
+    print("====================================================")
+
+    if not context.strip():
+        print("❌ Empty context after filtering")
+        return "दिलेल्या दस्तऐवजामध्ये सदर माहिती उपलब्ध नाही."
+
+    # ---------------- PROMPT BUILD ----------------
+    if query_type == "EXACT_LEGAL":
+        prompt = build_strict_extraction_prompt(user_question, context, language)
+    else:
+        prompt = build_general_prompt(user_question, context, language)
+
+    print("\n📤 Sending prompt to OpenAI...")
+    print("📤 Prompt length:", len(prompt))
+    print("====================================================")
+
+    # ---------------- GPT CALL ----------------
+    response = client.chat.completions.create(
+        model=settings.OPENAI_CHAT_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
+
+    answer = response.choices[0].message.content.strip()
+
+    print("\n🤖 GPT RAW RESPONSE PREVIEW:\n", answer[:800])
+    print("================ GPT PIPELINE END ================\n")
+
+    return answer
+
+
+def generate_gpt_answer11feb2026(user_question: str, context: str, references: List[Dict[str, Any]] = None, max_words: int = 200) -> str:
     """
     Query the LLM with a small, high-quality context. Use cached responses if available.
     """
@@ -443,7 +928,7 @@ def generate_gpt_answer(user_question: str, context: str, references: List[Dict[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=800,
+            max_tokens=400,
             temperature=0.0,
         )
         # Safe access depending on SDK shape
@@ -500,9 +985,9 @@ def detect_folder_by_Single_keywords(query):
     return top_folder   # IMPORTANT — return Folder instance, not string
 
 #---------------- Detect Folder by Key phrases matching by multiple word----------------
-def fuzzy_ratio(a, b):
-    return SequenceMatcher(None, a, b).ratio()
-from difflib import SequenceMatcher
+# def fuzzy_ratio(a, b):
+#     return SequenceMatcher(None, a, b).ratio()
+
 
 def fuzzy_ratio(a, b):
     return SequenceMatcher(None, a, b).ratio()
@@ -578,7 +1063,7 @@ def detect_folder_by_keywords(query):
             best_score = folder_score
 
     # 🎯 If NO meaningful match, return NONE
-    if best_score < 0.70:  # Minimum threshold for reliability
+    if best_score < 0.40:  # Minimum threshold for reliability
         print("🎯 Final Detected Folder: None (no strong match)")
         print("============================================\n")
         return None
@@ -638,7 +1123,7 @@ def detect_folder_by_keywords_multi(query, min_score_threshold=0.50):
                 continue
 
             # fuzzy
-            if sim > 0.60:
+            if sim > 0.0:
                 folder_score += sim
                 matched_phrases.append(f"{phrase} (fuzzy={sim:.2f})")
 
