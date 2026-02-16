@@ -30,5 +30,5 @@ exec gunicorn flowdocs.wsgi:application \
   --workers 3 \
   --timeout 300 \
   --access-logfile - \
-  --error-logfile -
+  --error-logfile - \
   --forwarded-allow-ips="*"
