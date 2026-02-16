@@ -34,7 +34,8 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-!y2+0!gjaq*)3f16^1xd5ufs85!^-^t%4)7p&!ng7z7m2x-m&t')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True').lower() == 'False'
+#DEBUG = os.getenv('DEBUG', 'True').lower() == 'False'
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,dev.ai-sahakar.net,one.ai-sahakar.net,www.ai-sahakar.net,ai-sahakar.net,testserver').split(',')
 if '*' in ALLOWED_HOSTS:
@@ -197,6 +198,8 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_HTTPONLY = True
+SECURE_SSL_REDIRECT = True
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
@@ -212,7 +215,7 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_COOKIE_AGE = 1209600
 
 
-SESSION_COOKIE_SECURE = False  # True in production with HTTPS
+#SESSION_COOKIE_SECURE = False  # True in production with HTTPS
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
