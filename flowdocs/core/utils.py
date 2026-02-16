@@ -509,8 +509,97 @@ def build_or_load_faiss_index_for_folder(folder: Folder) -> Tuple[Optional[faiss
         # FAISS unavailable — return None and raw chunk_texts; fallback search will do numpy similarity
         return None, chunk_texts
 
+def search_chunks_with_faiss_or_numpy(
+    query_embedding: np.ndarray,
+    index: Optional["faiss.Index"],
+    chunk_texts: List[str],
+    top_k: int = TOP_K_CHUNKS
+) -> List[Tuple[str, float]]:
+    """
+    Safe semantic search using FAISS if available, otherwise NumPy fallback.
+    Includes extensive debug logging and guards against index mismatch.
+    """
 
-def search_chunks_with_faiss_or_numpy(query_embedding: np.ndarray, index: Optional[faiss.Index],
+    print("\n========== 🔎 CHUNK SEARCH START ==========")
+
+    if query_embedding is None:
+        print("❌ Query embedding is None")
+        return []
+
+    if not chunk_texts:
+        print("❌ chunk_texts is empty")
+        return []
+
+    print(f"📦 Total chunk_texts: {len(chunk_texts)}")
+
+    # Normalize query embedding
+    q = query_embedding.astype(np.float32)
+    q_norm = q / (np.linalg.norm(q) + 1e-12)
+
+    results: List[Tuple[str, float]] = []
+
+    # ==================================================
+    # 🔹 FAISS SEARCH PATH
+    # ==================================================
+    if index is not None and _HAS_FAISS:
+        print("🚀 Using FAISS index")
+        print(f"📦 FAISS index.ntotal: {index.ntotal}")
+
+        if index.ntotal != len(chunk_texts):
+            print("⚠️ WARNING: FAISS index size != chunk_texts length")
+            print("⚠️ This indicates embedding/text mismatch")
+
+        k = min(top_k, index.ntotal)
+        print(f"🔢 Requested top_k: {top_k}, using k={k}")
+
+        try:
+            D, I = index.search(np.array([q_norm]), k=k)
+
+            for dist, idx in zip(D[0], I[0]):
+                print(f"➡️ FAISS returned idx={idx}, score={dist}")
+
+                # ---- HARD GUARDS ----
+                if idx == -1:
+                    print("⚠️ Skipping idx=-1 (no result)")
+                    continue
+
+                if idx >= len(chunk_texts):
+                    print(
+                        f"❌ IndexError prevented: idx={idx} "
+                        f"but chunk_texts size={len(chunk_texts)}"
+                    )
+                    continue
+
+                results.append((chunk_texts[idx], float(dist)))
+
+            print(f"✅ FAISS results collected: {len(results)}")
+            print("========== 🔎 CHUNK SEARCH END ==========\n")
+            return results
+
+        except Exception as e:
+            print("❌ FAISS search failed, falling back to NumPy")
+            traceback.print_exc()
+
+    # ==================================================
+    # 🔹 NUMPY FALLBACK (SAFE MODE)
+    # ==================================================
+    print("🧮 Using NumPy fallback search")
+
+    # NOTE:
+    # We do NOT have stored embeddings here,
+    # so this fallback is intentionally conservative.
+
+    for i, text in enumerate(chunk_texts[:top_k]):
+        print(f"➡️ Fallback chunk index={i}")
+        results.append((text, 0.0))
+
+    print(f"✅ NumPy fallback results: {len(results)}")
+    print("========== 🔎 CHUNK SEARCH END ==========\n")
+
+    return results
+
+
+def search_chunks_with_faiss_or_numpy16feb2026(query_embedding: np.ndarray, index: Optional[faiss.Index],
                                       chunk_texts: List[str], top_k: int = TOP_K_CHUNKS
                                       ) -> List[Tuple[str, float]]:
     """
