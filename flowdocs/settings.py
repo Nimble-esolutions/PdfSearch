@@ -178,7 +178,7 @@ CACHES = {
 # CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if os.getenv('CORS_ALLOWED_ORIGINS') else []
 
 # CSRF settings
-#CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', 'https://dev.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000').split(',')
+#CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS','https://dev.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000').split(',')
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
@@ -187,10 +187,16 @@ CSRF_TRUSTED_ORIGINS = [
     ).split(",")
 ]
 
-CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
-CSRF_COOKIE_HTTPONLY = False
+#CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_SECURE = True
+#CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_USE_SESSIONS = False
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = 'Lax'
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
