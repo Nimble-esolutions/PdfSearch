@@ -69,7 +69,16 @@ EXACT_LEGAL_PATTERNS = [
     r"\bकायदा\b",
     r"\blaw\b",
     r"\bअभिहस्तांतरण\b",
-    r"\bगृहनिर्माण\b"
+    r"\bगृहनिर्माण\b",
+    r"\bसहयोगी सदस्य\b",
+    r"\bवास्तुशास्त्रज्ञ\b",
+    r"\bमुख्य प्रवर्तक\b",
+    r"\bमूळ निधी\b",
+    r"\bवाटपग्राही\b",
+    r"\bबांधकाम व्यवसायी प्रवर्तक\b", 
+    r"\bकसूरदार\b", 
+    r"\bसह सदस्य\b", 
+    r"\bतात्पुरता सदस्य\b"    
 ]
 
 INFORMATIVE_KEYWORDS = [
@@ -288,6 +297,51 @@ def extract_text_from_pdf_path(path: str) -> str:
 
 # ---------------- Build a strict legal extraction prompt ----------------
 def build_strict_extraction_prompt(question, context, language="mr"):
+    print("\n========== [BUILD STRICT LEGAL PROMPT v3] ==========")
+    print("📝 Question:", question)
+    print("📄 Context length:", len(context))
+
+    prompt = f"""
+You are a legal document assistant working ONLY on the provided context.
+
+IMPORTANT RULES:
+1. Search the context for any section, paragraph, bullet point, or clause
+   that is RELEVANT to answering the question.
+2. Exact sentence match is NOT mandatory.
+3. If information is spread across multiple parts, you may COMBINE those parts,
+   but ONLY using the words present in the context.
+4. You MAY arrange the extracted content in step-wise or bullet format
+   IF the document implies a procedure or process.
+5. Do NOT add new information.
+6. Do NOT give personal opinion or external explanation.
+7. Do NOT invent content not present in the context.
+8. Preserve original wording as much as possible.
+9. Minor connective words (e.g., त्यामुळे, पुढीलप्रमाणे, खालीलप्रमाणे)
+   are allowed ONLY for logical flow.
+
+FAILURE CONDITION (VERY IMPORTANT):
+- Reply EXACTLY with the following sentence
+  ONLY IF the context is completely unrelated to the question:
+
+"दिलेल्या दस्तऐवजामध्ये सदर माहिती उपलब्ध नाही."
+
+Question:
+{question}
+
+Context:
+{context}
+
+Return format:
+- Title (if available in context)
+- Step-wise procedure OR relevant extracted points
+- List of required documents (if mentioned)
+- No additional commentary
+"""
+
+    print("✅ Strict legal extraction prompt v3 built")
+    return prompt
+
+def build_strict_extraction_promptV2(question, context, language="mr"):
     print("\n========== [BUILD STRICT LEGAL PROMPT v2] ==========")
     print("📝 Question:", question)
     print("📄 Context length:", len(context))
