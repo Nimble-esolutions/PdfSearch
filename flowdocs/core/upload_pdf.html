@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Upload PDF</h2>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <!-- Folder Selection -->
+        <div class="mb-3">
+            {% if selected_folder %}
+                <label class="form-label">Uploading to folder:</label>
+                <input type="text" class="form-control" value="{{ selected_folder.name }}" disabled>
+                <!-- Hidden input passes folder to form -->
+                <input type="hidden" name="folder" value="{{ selected_folder.id }}">
+            {% else %}
+                {{ form.folder }}  <!-- Use the form field directly -->
+            {% endif %}
+        </div>
+
+        <!-- File Input -->
+        <div class="mb-3">
+            {{ form.file.label_tag }}
+            {{ form.file }}
+            {% if form.file.errors %}
+                <div class="text-danger">{{ form.file.errors }}</div>
+            {% endif %}
+        </div>
+
+        <!-- Title Input -->
+        <div class="mb-3">
+            {{ form.title.label_tag }}
+            {{ form.title }}
+            {% if form.title.errors %}
+                <div class="text-danger">{{ form.title.errors }}</div>
+            {% endif %}
+        </div>
+
+        <button type="submit" class="btn btn-primary">Upload</button>
+    </form>
+</div>
+{% endblock %}

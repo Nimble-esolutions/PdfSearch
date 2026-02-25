@@ -1,0 +1,36 @@
+
+
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<h2>Question Asked:</h2>
+<p><em>{{ question }}</em></p>
+
+{% if messages %}
+  <ul class="messages">
+    {% for message in messages %}
+      <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+<hr>
+
+<h3>Answer from Gemini:</h3>
+<p>{{ answer|linebreaks }}</p>
+
+{% if file_references %}
+  <h4>Referenced Documents:</h4>
+  <ul>
+    {% for file in file_references %}
+      <li>
+        <a href="{{ file.url }}" target="_blank">{{ file.title }}</a> (Uploaded: {{ file.uploaded_at }})
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+<a href="{% url 'ask_question' %}">Ask Another Question</a>
+
+{% endblock %}

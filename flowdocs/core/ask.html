@@ -1,0 +1,28 @@
+<h2>Ask Question</h2>
+
+<textarea id="question" rows="4" cols="60"></textarea><br><br>
+
+<select id="subject">
+    <option value="housing">Housing</option>
+    <option value="generic">General</option>
+</select>
+
+<button onclick="ask()">Ask</button>
+
+<pre id="answer"></pre>
+
+<script>
+async function ask() {
+    const q = document.getElementById("question").value;
+    const subject = document.getElementById("subject").value;
+
+    const res = await fetch("/ask/", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({question: q, subject})
+    });
+
+    const data = await res.json();
+    document.getElementById("answer").innerText = data.answer;
+}
+</script>

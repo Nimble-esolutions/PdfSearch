@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h2>{{ folder.name }} ({{ files.count }} PDFs)</h2>
+
+    {% if role == 'admin' or role == 'superadmin' %}
+    <div class="mb-3">
+        <a href="{% url 'upload_pdf' %}?folder={{ folder.id }}" class="btn btn-success">Upload PDF</a>
+    </div>
+    {% endif %}
+
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Uploaded By</th>
+                <th>Upload Date</th>
+                <th>PDF Link</th>
+                {% if role == 'admin' or role == 'superadmin' %}
+                <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for file in files %}
+            <tr>
+                <td>{{ file.title }}</td>
+                <td>{{ file.uploaded_by.username }}</td>
+                <td>{{ file.uploaded_at|date:"d M Y" }}</td>
+                <td><a href="{{ file.file.url }}" target="_blank">View</a></td>
+                {% if role == 'admin' or role == 'superadmin' %}
+                <td>
+                    <a href="{% url 'delete_pdf' file.id %}" class="btn btn-danger btn-sm">Delete</a>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
