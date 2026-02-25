@@ -94,7 +94,7 @@
 
       <!-- ✅ Disclaimer -->
       <div class="text-center" style="font-size: 13px; color: #666;">
-          ⚠️ Sahkar AI can make mistakes. Information given here is not for legal piurpose. Check important info with Head Office.
+          ⚠️ Sahkar AI can make mistakes. Check important info with Head Office.
       </div>
 
       
@@ -242,12 +242,13 @@ function typeEffect(text, references = []) {
             if (references.length > 0) {
                 const refDiv = document.createElement('div');
                 refDiv.className = "references";
-                refDiv.innerHTML = "<strong>📚 Reference Docs:</strong>";
+                refDiv.innerHTML = "<strong>📚 References:</strong>";
                 references.forEach(ref => {
                     const card = document.createElement('div');
                     card.className = "ref-card";
                     card.innerHTML = `
-                        <a href="${ref.url}" target="_blank">${ref.title}</a>                       
+                        <a href="${ref.url}" target="_blank">${ref.title}</a>
+                        <small>${ref.folder} • ${ref.uploaded_at}</small>
                     `;
                     refDiv.appendChild(card);
                 });
