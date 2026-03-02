@@ -4,16 +4,14 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from core.ingestion.chunker import chunk_text
-from core.utils.language import normalize_marathi
+from core.ingestion.marathi_normalizer import normalize_marathi
 
 # ---------------- CONFIG ----------------
-FAISS_DIR = "data/faiss"
+FAISS_DIR = "media/faiss"
 os.makedirs(FAISS_DIR, exist_ok=True)
-
 MODEL = SentenceTransformer(
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 )
-
 # ---------------------------------------
 def embed_chunks(chunks):
     print(f"🔢 Embedding {len(chunks)} chunks")
@@ -55,6 +53,7 @@ def build_faiss_for_pdf(pdf):
             "pdf_id": pdf.id,
             "title": pdf.title,
             "folder": "housing",
+            "url": meta.get("pdf_url"),
             "chunks": chunks
         }, f, ensure_ascii=False, indent=2)
 
