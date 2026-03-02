@@ -3,8 +3,14 @@ import os
 import json
 import faiss
 import numpy as np
+
+from django.conf import settings
 from core.ingestion.embedder import embed_text
-FAISS_DIR = "media/faiss"
+from core.ingestion.marathi_normalizer import normalize_marathi
+FAISS_DIR = os.path.join(settings.MEDIA_ROOT, "faiss")
+
+# core/retrieval/faiss_manager.py
+
 def retrieve_documents(query: str, allowed_folders=None, limit=8):
     print("\n🔍 FAISS search started")
     print("Query:", query)
@@ -14,10 +20,8 @@ def retrieve_documents(query: str, allowed_folders=None, limit=8):
         print("❌ FAISS directory not found")
         return []
 
-    # 🔑 Embed + normalize query (CRITICAL)
     query_vec = embed_text(query)
-    query_vec = np.array([query_vec], dtype="float32")
-    faiss.normalize_L2(query_vec)
+    query_vec = np.array([query_vec]).astype("float32")
 
     results = []
 
@@ -29,35 +33,37 @@ def retrieve_documents(query: str, allowed_folders=None, limit=8):
         meta_path = index_path.replace(".index", ".meta.json")
 
         if not os.path.exists(meta_path):
-            print(f"⚠️ Meta missing for {file}")
             continue
 
         with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
 
         folder = meta.get("folder")
-
         if allowed_folders and folder not in allowed_folders:
             continue
 
         print(f"📂 Loading index: {file}")
-
         index = faiss.read_index(index_path)
-
-        if index.ntotal == 0:
-            print("⚠️ Empty FAISS index:", file)
-            continue
 
         D, I = index.search(query_vec, limit)
 
         for idx in I[0]:
             if idx == -1:
                 continue
-            if idx < len(meta["chunks"]):
-                results.append(meta["chunks"][idx])
 
-    # 🔹 Deduplicate + trim
-    results = list(dict.fromkeys(results))[:limit]
+            try:
+                # results.append({
+                #     "text": meta["chunks"][idx],
+                #     "pdf_id": meta.get("pdf_id"),
+                #     "pdf_title": meta.get("title"),
+                #     "pdf_url": meta.get("pdf_url"),
+                # })
+                results.append({
+                    "text": meta["chunks"][idx],
+                    "pdf_id": meta.get("pdf_id"),
+                })
+            except IndexError:
+                continue
 
     print(f"📄 Retrieved chunks: {len(results)}")
     return results
