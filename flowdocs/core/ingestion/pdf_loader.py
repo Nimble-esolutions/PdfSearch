@@ -1,7 +1,31 @@
 # core/ingestion/pdf_loader.py
 
 import fitz  # PyMuPDF
-from core.utils.language import normalize_marathi
+
+def normalize_marathi(text: str) -> str:
+    """
+    Deterministic Marathi Unicode normalization.
+    SAFE for legal text.
+    """
+    if not text:
+        return ""
+
+    # 1️⃣ Unicode NFC normalization
+    text = unicodedata.normalize("NFC", text)
+
+    # 2️⃣ Remove zero-width characters
+    for ch in ZERO_WIDTH_CHARS:
+        text = text.replace(ch, "")
+
+    # 3️⃣ Normalize whitespace
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    # 4️⃣ Apply known Marathi fixes
+    for wrong, correct in DEVANAGARI_FIXES.items():
+        text = text.replace(wrong, correct)
+
+    return text.strip()
 
 
 def extract_text_from_pdf_path(path: str) -> str:
