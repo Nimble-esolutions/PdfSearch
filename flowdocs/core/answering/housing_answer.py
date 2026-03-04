@@ -2,9 +2,11 @@
 
 from core.retrival.faiss_manager import retrieve_documents
 from core.prompting.strict_legal import STRICT_LEGAL_PROMPT
-from core.ingestion.marathi_normalizer import normalize_marathi
+from core.utils.language import normalize_marathi
 from openai import OpenAI
-from core.models import PDFFile
+from core.models import PDFFile,Folder
+
+
 client = OpenAI()
 def generate_housing_answer(user_query: str):
     """
@@ -13,13 +15,14 @@ def generate_housing_answer(user_query: str):
     - Refer strictly to retrieved legal text
     - Never hallucinate
     """
-
     print("\n🏛️ housing_answer.py | generate_housing_answer")
 
+    # Normalize Marathi input
     user_query = normalize_marathi(user_query)
+    print("❓ Question:", user_query)
 
-    # 🔑 HARD RULE: housing only
-    allowed_folders = ["housing"]
+    # 🔑 HARD RULE: housing only (folder-name based)
+    allowed_folders = ["Housing"]
 
     # 🔍 Retrieve legal chunks
     chunks = retrieve_documents(
@@ -60,41 +63,36 @@ def generate_housing_answer(user_query: str):
     )
 
     answer = response.choices[0].message.content.strip()
-
-    print("Answer generated:",answer)
+    print("Answer generated:", answer)
 
     # 📎 Collect unique reference PDFs
     used_pdfs = {}
 
     for c in chunks:
         pdf_id = c.get("pdf_id")
-        if not pdf_id:
-            continue
-
-        if pdf_id in used_pdfs:
+        if not pdf_id or pdf_id in used_pdfs:
             continue
 
         try:
-            pdf_obj = PDFFile.objects.select_related("folder").get(id=pdf_id)
+            pdf_obj = PDFFile.objects.get(id=pdf_id)
 
             if pdf_obj.file:
-                relative_path = pdf_obj.file.name  # pdfs/housing/acts/154B.pdf
-                parts = relative_path.split("/")
-                
-                # remove first part "pdfs"
-                folder_path = " / ".join(parts[1:-1]) if len(parts) > 2 else "Root"
-            else:
-                folder_path = "Unknown"
+                # Use folder name if available, otherwise "Root"
+                folder_path = pdf_obj.folder.name if pdf_obj.folder else "Root"
 
-            used_pdfs[pdf_id] = {
-                "title": pdf_obj.title,
-                "url": pdf_obj.file.url,
-                "folder": folder_path,
-                "uploaded_at": pdf_obj.uploaded_at.strftime("%d-%m-%Y"),
-            }
+                used_pdfs[pdf_id] = {
+                    "title": pdf_obj.title,
+                    "url": pdf_obj.file.url,
+                    "folder": folder_path,
+                    "uploaded_at": pdf_obj.uploaded_at.strftime("%d-%m-%Y"),
+                }
+
         except PDFFile.DoesNotExist:
+            print(f"⚠️ PDFFile with id {pdf_id} does not exist")
             continue
+
     references = list(used_pdfs.values())
+
     print("✅ Housing answer generated")
     print("📚 Reference PDFs:", references)
 
