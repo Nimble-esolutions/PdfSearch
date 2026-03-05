@@ -9,7 +9,7 @@ urlpatterns = [
     # =========================
     # Public Search
     # =========================
-    path('', views.search_query, name='home'),
+    path('', views.search_query, name='search_query'),
     path('search/', views.search_query, name='search'),
 
     # =========================
