@@ -83,8 +83,63 @@ def logout_view(request):
     return redirect("login")
 
 # ================= DASHBOARD =================
-@login_required(login_url="login")
+@login_required
 def dashboard(request, folder_id=None):
+
+    role = getattr(request.user, 'role', 'user')
+
+    # ---------------- View PDFs Inside Folder ----------------
+    if folder_id:
+        folder = get_object_or_404(Folder, id=folder_id)
+
+        # Admin Upload
+        if request.method == "POST" and role in ["admin", "superadmin"]:
+            form = UploadForm(request.POST, request.FILES)
+
+            if form.is_valid():
+                pdf = form.save(commit=False)
+                pdf.folder = folder
+                pdf.uploaded_by = request.user
+                pdf.save()
+
+                full_path = pdf.file.path
+
+                # Extract PDF text
+                extract_and_store_pdf_text(pdf, full_path)
+
+                # Build FAISS index
+                build_faiss_for_pdf(pdf)
+
+                return redirect("dashboard", folder_id=folder.id)
+
+        else:
+            form = UploadForm()
+
+        pdfs = PDFFile.objects.filter(folder=folder).order_by("-uploaded_at")
+
+        return render(
+            request,
+            "dashboard_pdfs.html",
+            {
+                "folder": folder,
+                "pdfs": pdfs,
+                "form": form,
+                "role": role,
+            },
+        )
+
+    # ---------------- Folder Dashboard ----------------
+    folders = Folder.objects.all().order_by("-created_at")
+
+    return render(
+        request,
+        "dashboard.html",
+        {
+            "folders": folders,
+            "role": role,
+        },
+    )
+def dashboard432026(request, folder_id=None):
     role = getattr(request.user, 'role', 'user')
 
     # ---------------- View PDFs Inside Folder ----------------
