@@ -91,21 +91,17 @@ def dashboard(request, folder_id=None):
         folder = get_object_or_404(Folder, id=folder_id)
 
         # Admin Upload
-        if request.method == "POST" and role in ["admin", "superadmin"]:
-            form = UploadForm(request.POST, request.FILES)
-            if form.is_valid():
-                pdf = form.save(commit=False)
-                pdf.folder = folder
-                pdf.uploaded_by = request.user
-                pdf.save()
-
-                # 🔥 Build FAISS After Upload
-                # full_path = os.path.join("data", pdf.file.name)
-                full_path = pdf.file.path
-                extract_and_store_pdf_text(pdf, full_path)
-                build_faiss_for_pdf(pdf)
-
-               return redirect("dashboard_folder", folder_id=folder.id)
+        if form.is_valid():
+            pdf = form.save(commit=False)
+            pdf.folder = folder
+            pdf.uploaded_by = request.user
+            pdf.save()
+            
+            full_path = pdf.file.path
+            extract_and_store_pdf_text(pdf, full_path)
+            build_faiss_for_pdf(pdf)  
+            
+            return redirect("dashboard_folder", folder_id=folder.id)
         else:
             form = UploadForm()
 
