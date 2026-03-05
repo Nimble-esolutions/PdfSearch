@@ -105,7 +105,7 @@ def dashboard(request, folder_id=None):
                 extract_and_store_pdf_text(pdf, full_path)
                 build_faiss_for_pdf(pdf)
 
-                return redirect("dashboard", folder_id=folder.id)
+               return redirect("dashboard_folder", folder_id=folder.id)
         else:
             form = UploadForm()
 
@@ -135,44 +135,44 @@ def dashboard(request, folder_id=None):
             "role": role,
         },
     )
-def dashboard4Mar26(request, folder_id=None):
+# def dashboard4Mar26(request, folder_id=None):
 
-    # Only admin or superadmin allowed
-    if not (request.user.is_superuser or request.user.role in ["admin", "superadmin"]):
-        return redirect("search")
+#     # Only admin or superadmin allowed
+#     if not (request.user.is_superuser or request.user.role in ["admin", "superadmin"]):
+#         return redirect("search")
 
-    role = request.user.role
-    # View specific folder
+#     role = request.user.role
+#     # View specific folder
 
 
-    if folder_id:
-        folder = get_object_or_404(Folder, id=folder_id)
+#     if folder_id:
+#         folder = get_object_or_404(Folder, id=folder_id)
 
-        if request.method == "POST":
-            form = UploadForm(request.POST, request.FILES)
-            if form.is_valid():
-                pdf = form.save(commit=False)
-                pdf.folder = folder
-                pdf.uploaded_by = request.user
-                pdf.save()
-                return redirect("dashboard", folder_id=folder.id)
-        else:
-            form = UploadForm()
+#         if request.method == "POST":
+#             form = UploadForm(request.POST, request.FILES)
+#             if form.is_valid():
+#                 pdf = form.save(commit=False)
+#                 pdf.folder = folder
+#                 pdf.uploaded_by = request.user
+#                 pdf.save()
+#                 return redirect("dashboard", folder_id=folder.id)
+#         else:
+#             form = UploadForm()
 
-        pdfs = PDFFile.objects.filter(folder=folder).order_by("-uploaded_at")
+#         pdfs = PDFFile.objects.filter(folder=folder).order_by("-uploaded_at")
 
-        return render(
-            request,
-            "dashboard_pdfs.html",
-            {"folder": folder, "pdfs": pdfs, "form": form, "role": role},
-        )
+#         return render(
+#             request,
+#             "dashboard_pdfs.html",
+#             {"folder": folder, "pdfs": pdfs, "form": form, "role": role},
+#         )
 
-    folders = Folder.objects.annotate(pdf_count=Count("files")).order_by("name")
-    return render(
-        request,
-        "dashboard.html",
-        {"folders": folders, "role": role},
-    )
+#     folders = Folder.objects.annotate(pdf_count=Count("files")).order_by("name")
+#     return render(
+#         request,
+#         "dashboard.html",
+#         {"folders": folders, "role": role},
+#     )
 # ================= FOLDER MANAGEMENT =================
 
 
@@ -383,45 +383,7 @@ def search_query(request):
                 "answer": "⚠️ काहीतरी चूक झाली.",
                 "references": []
             })
-# def search_query(request):
-#     if request.method == "GET":
-#         welcome_message = (
-#             "🙏 नमस्कार, मी तुमचा AI सहाय्यक आहे. "
-#             "मी आपल्या प्रश्नांची उत्तरे दस्तऐवजांच्या आधारे देऊ शकतो."
-#         )
-#         return render(request, "search.html", {"welcome_message": welcome_message})
-
-#     if request.method == "POST":
-#         try:
-#             query = request.POST.get("query", "").strip()
-
-#             if not query:
-#                 return JsonResponse({"answer": "कृपया प्रश्न विचारा 🙏", "references": []})
-
-#             detected_folder = detect_folder_by_keywords(query)
-
-#             if not detected_folder:
-#                 return JsonResponse({
-#                     "answer": "क्षमस्व, संबंधित category सापडली नाही.",
-#                     "references": []
-#                 })
-
-#             answer, refs = search_pdfs(detected_folder, query)
-
-#             if not refs:
-#                 return JsonResponse({
-#                     "answer": "⚠️ संबंधित माहिती उपलब्ध नाही.",
-#                     "references": []
-#                 })
-
-#             return JsonResponse({"answer": answer, "references": refs})
-
-#         except Exception:
-#             traceback.print_exc()
-#             return JsonResponse({
-#                 "answer": "⚠️ काहीतरी चूक झाली.",
-#                 "references": []
-#             })
+           })
 
 # ================= USER MANAGEMENT =================
 @login_required
@@ -476,7 +438,7 @@ def update_folder_keywords(request, folder_id):
         folder.keywords = new_keywords
         folder.save()
         messages.success(request, f"Keywords for '{folder.name}' updated successfully!")
-    return redirect('dashboard', folder_id=folder_id)
+    return redirect('dashboard_folder', folder_id=folder_id)
 
 def rename_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, id=pdf_id)
