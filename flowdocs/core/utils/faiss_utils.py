@@ -19,7 +19,6 @@ from difflib import SequenceMatcher
 from indic_transliteration import sanscript as sc
 from indic_transliteration.sanscript import transliterate
 from langdetect import detect, DetectorFactory, LangDetectException
-from celery import shared_task
 
 # IMPORTANT: Lazy model import (prevents circular errors)
 try:
@@ -1127,59 +1126,18 @@ def semantic_folder_search(query, top_n=3):
 
     return results[:top_n]
 
-# -----------------------------
-# Changes for housing strict legal prompt
-# -----------------------------
-# def process_pdf_pipeline(self, pdf_id):
-#     print(f"\n🧵 Celery task started for PDF ID={pdf_id}")
-
-#     try:
-#         pdf = PDFFile.objects.get(id=pdf_id)
-#     except PDFFile.DoesNotExist:
-#         print("❌ PDF not found")
-#         return
-
-#     pdf_path = pdf.file.path
-#     print(f"📄 Extracting text: {pdf_path}")
-#     extract_and_store_pdf_text(pdf, pdf_path)
-
-#     print("🔢 Building FAISS index")
-#     build_faiss_for_pdf(pdf)
-
-#     print("✅ PDF pipeline completed")
-
 def process_pdf_pipeline(pdf_id):
-    try:
-        pdf = PDFFile.objects.get(id=pdf_id)
 
-        # 1️⃣ Extract text from PDF
-        text_content = extract_and_store_pdf_text(pdf.file.path)
-        pdf.text_content = text_content
-
-        # 2️⃣ Create chunks & embeddings
-        build_faiss_for_pdf(pdf)
-
-        # 3️⃣ Save updated PDF
-        pdf.save()
-
-        return f"PDF {pdf.title} processed successfully."
-    except PDFFile.DoesNotExist:
-        return f"PDF with id {pdf_id} does not exist."
-    except Exception as e:
-        return f"Error processing PDF {pdf_id}: {str(e)}"
-
-@shared_task
-def process_pdf_pipeline(pdf_id):
     print("\n==============================")
-    print(f"📥 Async PDF Processing Started | ID={pdf_id}")
+    print(f"📥 PDF Processing Started | ID={pdf_id}")
     print("==============================")
 
     try:
         pdf = PDFFile.objects.get(id=pdf_id)
 
         print("📄 Extracting text from PDF...")
-        # Use your existing extraction function here
         from core.ingestion.extractor import extract_text_from_pdf
+
         text = extract_text_from_pdf(pdf.file.path)
 
         pdf.text_content = text
@@ -1188,8 +1146,7 @@ def process_pdf_pipeline(pdf_id):
         print("🧠 Calling FAISS builder...")
         build_faiss_for_pdf(pdf)
 
-        print("🎉 Async PDF processing complete.")
+        print("🎉 PDF processing complete.")
 
     except Exception as e:
-        print("❌ ERROR in async pipeline:", str(e))
-
+        print("❌ ERROR in pipeline:", str(e))
