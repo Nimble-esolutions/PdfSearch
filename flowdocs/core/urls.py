@@ -23,8 +23,11 @@ urlpatterns = [
     # =========================
     # Dashboard
     # =========================
+    # path('dashboard/', views.dashboard, name='dashboard'),
+    # path('dashboard/<int:folder_id>/', views.dashboard, name='dashboard_folder'),
     path('dashboard/', views.dashboard, name='dashboard'),
-    path('dashboard/<int:folder_id>/', views.dashboard, name='dashboard_folder'),
+    path('dashboard/folder/<int:folder_id>/', views.dashboard, name='dashboard_folder'),
+    path('dashboard/subfolder/<int:subfolder_id>/', views.dashboard, name='dashboard_subfolder'),
 
     # =========================
     # User Management
