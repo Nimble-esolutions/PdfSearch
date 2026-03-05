@@ -3,24 +3,32 @@
 import os
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from openai import OpenAI
+from django.conf import settings
 
 from core.ingestion.chunker import chunk_text
 from core.utils.language import normalize_marathi
 from core.utils.faiss_utils import save_faiss_index
 
 print("📦 embedder.py loaded")
-# ================= MODEL =================
 
-MODEL = SentenceTransformer(
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-)
+# ================= OPENAI CLIENT =================
 
-# ---------------------------------------
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+# ================= EMBED CHUNKS =================
+
 def embed_chunks(chunks):
-    print(f"🔢 Embedding {len(chunks)} chunks")
-    embeddings = MODEL.encode(chunks, show_progress_bar=False)
-    return embeddings.astype("float32")
+    print(f"🔢 Embedding {len(chunks)} chunks using OpenAI")
+
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=chunks
+    )
+
+    embeddings = [item.embedding for item in response.data]
+
+    return np.array(embeddings).astype("float32")
 
 
 # ---------------------------------------
@@ -43,36 +51,42 @@ def build_faiss_for_pdfOLD(pdf):
     embeddings = embed_chunks(chunks)
 
     dim = embeddings.shape[1]
+
     index = faiss.IndexFlatIP(dim)
+
     faiss.normalize_L2(embeddings)
+
     index.add(embeddings)
 
-    index_path = os.path.join(FAISS_DIR, f"{pdf.id}.index")
-    meta_path = os.path.join(FAISS_DIR, f"{pdf.id}.meta.json")
+    metadata = {
+        "pdf_id": pdf.id,
+        "title": pdf.title,
+        "folder": "housing",
+        "url": pdf.file.url if pdf.file else None,
+        "chunks": chunks
+    }
 
-    faiss.write_index(index, index_path)
+    print("💾 Saving FAISS index...")
+    save_faiss_index(index, pdf.id, metadata)
 
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "pdf_id": pdf.id,
-            "title": pdf.title,
-            "folder": "housing",
-            "url": meta.get("pdf_url"),
-            "chunks": chunks
-        }, f, ensure_ascii=False, indent=2)
+    print("✅ FAISS saved")
 
-    print(f"✅ FAISS saved:")
-    print(f"   📌 {index_path}")
-    print(f"   📌 {meta_path}")
 
 # ================= EMBED SINGLE TEXT =================
 
 def embed_text(text: str) -> np.ndarray:
-    print("🔍 Embedding query text")
-    embedding = MODEL.encode([text], show_progress_bar=False)
-    embedding = np.array(embedding, dtype="float32")
-    faiss.normalize_L2(embedding)
-    return embedding[0]
+    print("🔍 Embedding query text using OpenAI")
+
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=[text]
+    )
+
+    embedding = np.array(response.data[0].embedding).astype("float32")
+
+    faiss.normalize_L2(embedding.reshape(1, -1))
+
+    return embedding
 
 
 # ================= BUILD FAISS =================
@@ -99,6 +113,7 @@ def build_faiss_for_pdf(pdf):
     print(f"📄 Total chunks: {len(chunks)}")
 
     embeddings = embed_chunks(chunks)
+
     dim = embeddings.shape[1]
 
     print("🧮 Normalizing vectors...")
@@ -106,6 +121,7 @@ def build_faiss_for_pdf(pdf):
 
     print("🏗️ Creating FAISS index...")
     index = faiss.IndexFlatIP(dim)
+
     index.add(embeddings)
 
     metadata = {
@@ -121,6 +137,7 @@ def build_faiss_for_pdf(pdf):
 
     pdf.indexed = True
     pdf.page_chunks = chunks
+
     pdf.save(update_fields=["indexed", "page_chunks"])
 
     print("✅ FAISS BUILD COMPLETE")
