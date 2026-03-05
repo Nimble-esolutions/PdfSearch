@@ -38,6 +38,7 @@ from core.ingestion.pdf_loader import extract_and_store_pdf_text
 from core.ingestion.embedder import build_faiss_for_pdf
 from core.answering.housing_answer import generate_housing_answer
 from core.answering.generic_answer import generate_generic_answer
+from core.utils.faiss_utils import detect_folder_by_keywords,search_pdfs_fast
 
 print("📦 views.py loaded")
 CACHE_TTL = getattr(settings, "CACHE_TTL", 120)
@@ -285,8 +286,6 @@ def delete_pdf(request, file_id):
 
 # ================= SEARCH =================
 @csrf_exempt
-
-@csrf_exempt
 def search_query(request):
 
     print("🔵 search_query called")
@@ -353,7 +352,7 @@ def search_query(request):
 
             print("🔍 Searching PDFs in folder:", detected_folder.name)
 
-            answer, refs = search_pdfs(detected_folder, question)
+            answer, refs = search_pdfs_fast(detected_folder, question)
 
             print("📑 References found:", len(refs))
 
@@ -442,7 +441,7 @@ def rename_pdf(request, pdf_id):
     # Only admin/superadmin can rename
     if request.user.role not in ['admin', 'superadmin']:
         messages.error(request, "You do not have permission to rename this PDF.")
-        return redirect('dashboard_pdfs')
+        return redirect("dashboard", folder_id=pdf.folder.id)
 
     if request.method == 'POST':
         new_title = request.POST.get('title', '').strip()
@@ -452,5 +451,5 @@ def rename_pdf(request, pdf_id):
             messages.success(request, "PDF renamed successfully.")
         else:
             messages.error(request, "Title cannot be empty.")
-    return redirect('dashboard_pdfs')
+    return redirect("dashboard", folder_id=pdf.folder.id)
 
