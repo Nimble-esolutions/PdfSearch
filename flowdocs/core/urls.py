@@ -6,8 +6,8 @@ from . import views
 urlpatterns = [
 
     # ---------------- Public Pages ----------------
-    path("", views.search_query, name="search"),
-    path("search/", views.search_query, name="search_page"),
+    path('', views.search_query, name='home'),
+    path('search/', views.search_query, name='search_query'),
 
     # ---------------- Authentication ----------------
     path("register/", views.register_view, name="register"),
