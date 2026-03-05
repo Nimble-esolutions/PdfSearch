@@ -133,7 +133,7 @@ def rename_pdf(request, pdf_id):
     # Only admin/superadmin can rename
     if request.user.role not in ['admin', 'superadmin']:
         messages.error(request, "You do not have permission to rename this PDF.")
-        return redirect('dashboard_pdfs')
+        return redirect('dashboard')
 
     if request.method == 'POST':
         new_title = request.POST.get('title', '').strip()
@@ -143,7 +143,7 @@ def rename_pdf(request, pdf_id):
             messages.success(request, "PDF renamed successfully.")
         else:
             messages.error(request, "Title cannot be empty.")
-    return redirect('dashboard_pdfs')
+    return redirect('dashboard')
 
 
 #====================================Update and add keywords ==========================
@@ -155,7 +155,7 @@ def update_folder_keywords(request, folder_id):
         folder.keywords = new_keywords
         folder.save()
         messages.success(request, f"Keywords for '{folder.name}' updated successfully!")
-    return redirect('dashboard', folder_id=folder_id)
+    return redirect('dashboard_folder', folder_id=folder_id)
 
 # ---------------- Delete Folder / Category ----------------
 @login_required
@@ -263,7 +263,7 @@ def home_view(request):
 
 
 # -------------- Dashboard upload: call precompute on upload --------------
-@login_required(login_url='login')
+@login_required
 def dashboard(request, folder_id=None):
     role = getattr(request.user, "role", "user")
 
@@ -287,7 +287,7 @@ def dashboard(request, folder_id=None):
                 except Exception:
                     traceback.print_exc()
 
-                return redirect("dashboard", folder_id=folder.id)
+                return redirect('dashboard_folder', folder_id=folder_id)
         else:
             form = UploadForm()
 
