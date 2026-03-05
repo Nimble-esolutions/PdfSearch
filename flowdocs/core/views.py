@@ -110,7 +110,7 @@ def dashboard(request, folder_id=None):
                 # Build FAISS index
                 build_faiss_for_pdf(pdf)
 
-                return redirect("dashboard", folder_id=folder.id)
+                return redirect("dashboard_folder", folder_id=folder.id)
 
         else:
             form = UploadForm()
@@ -494,7 +494,7 @@ def rename_pdf(request, pdf_id):
     # Only admin/superadmin can rename
     if request.user.role not in ['admin', 'superadmin']:
         messages.error(request, "You do not have permission to rename this PDF.")
-        return redirect("dashboard", folder_id=pdf.folder.id)
+        return redirect("dashboard_folder", folder_id=pdf.folder.id)
 
     if request.method == 'POST':
         new_title = request.POST.get('title', '').strip()
@@ -504,5 +504,5 @@ def rename_pdf(request, pdf_id):
             messages.success(request, "PDF renamed successfully.")
         else:
             messages.error(request, "Title cannot be empty.")
-    return redirect("dashboard", folder_id=pdf.folder.id)
+    return redirect("dashboard_folder", folder_id=pdf.folder.id)
 
