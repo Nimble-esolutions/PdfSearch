@@ -378,8 +378,6 @@ def search_query(request):
                 "answer": "⚠️ काहीतरी चूक झाली.",
                 "references": []
             })
-           })
-
 # ================= USER MANAGEMENT =================
 @login_required
 def user_list_view(request):
