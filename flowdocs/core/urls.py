@@ -8,8 +8,9 @@ urlpatterns = [
     # =========================
     # Public Search
     # =========================
-    path('', views.search_query, name='home'),
-    path('search/', views.search_query, name='search'),
+
+    path('', views.search_query, name='search_query'),
+    path('search/', views.search_query, name='search_query'),
 
     # =========================
     # Authentication
