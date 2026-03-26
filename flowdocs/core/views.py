@@ -341,6 +341,7 @@ def delete_pdf(request, file_id):
 
 # ================= SEARCH =================
 @csrf_exempt
+@csrf_exempt
 def search_query(request):
 
     print("🔵 search_query called")
@@ -349,8 +350,7 @@ def search_query(request):
         print("🟢 GET request received")
 
         welcome_message = (
-            "🙏 नमस्कार, मी तुमचा AI सहाय्यक आहे. "
-            "मी आपल्या प्रश्नांची उत्तरे दस्तऐवजांच्या आधारे देऊ शकतो."
+            ""
         )
         return render(request, "search.html", {"welcome_message": welcome_message})
 
