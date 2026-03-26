@@ -20,20 +20,20 @@
 <!-- Top Utility Bar -->
 <div class="bg-dark text-white small px-3 py-1">
   <div class="container d-flex justify-content-end align-items-center">
-    <div class="text-end">
-      <a href="{% url 'login' %}" class="text-white text-decoration-none me-2">{% trans "Admin Login" %}</a> |
-      <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" class="text-white text-decoration-none me-2">{% trans "Home" %}</a> |
-      <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6" class="text-white text-decoration-none me-2">{% trans "Locate Us" %}</a> |
+    <div class="text-start">
+    
+      <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" class="text-white text-decoration-none me-2" style="display: none;">{% trans "Home" %}</a> 
+      <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6" class="text-white text-decoration-none me-2" style="display: none;">{% trans "Locate Us" %}</a> 
       
-      <form action="{% url 'set_language' %}" method="post" class="d-inline">
+      <form action="{% url 'set_language' %}" method="post" class="d-inline" >
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ request.path }}">
         {% if request.LANGUAGE_CODE == 'en' %}
           <input type="hidden" name="language" value="mr">
-          <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0">मराठी</button>
+          <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0" style="display: none;">मराठी</button>
         {% else %}
           <input type="hidden" name="language" value="en">
-          <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0">English</button>
+          <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0" style="display: none;">English</button>
         {% endif %}
       </form>
     </div>
@@ -41,13 +41,16 @@
 </div>
 
 <header class="banner-header">
+    <div class="text-start" style="margin-left: 3%;">
+        <a href="/login/" class="text-black text-decoration-none me-2">Admin Login</a>
+    </div>
   <picture>
-    <source media="(max-width: 768px)" srcset="{% static 'main/images/banner-mobile-1.jpg' %}">
+    <source media="(max-width: 768px)" srcset="{% static 'main/images/banner-opt-2-wotxt.png' %}">
     <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}" alt="Banner" class="banner-img">
   </picture>
   <div class="banner-text">
-    <h5>{% trans "AI Enabled Search" %}</h5>
-    <h6>{% trans "Registrar Co-operative Societies" %}</h6>
+    <!-- <h5>{% trans "AI Enabled Search" %}</h5> -->
+    <!-- <h6>{% trans "Registrar Co-operative Societies" %}</h6> -->
   </div>
 </header>
 
@@ -59,22 +62,22 @@
       <div class="chat-input">
          <img src="{% static 'main/images/Option-1 BOT.png' %}" alt="Ask Icon" style="height:50px;">
          <select id="subject">
-            <option value="housing">Housing</option>
+            <option value="housing">Act</option>
             <option value="generic">General</option>
         </select>
 
-          <input type="text" id="userQuery" placeholder="💬 {% trans 'Ask your question...' %}">
+          <input type="text" id="userQuery" placeholder="💬 {% trans 'How can I assist you today?' %}">
           <button id="sendBtn">{% trans "Search" %}</button>
 
           <!-- WhatsApp & Feedback -->
-          <a href="https://wa.me/919421200000" target="_blank" class="whatsapp-link">
+          <a href="https://wa.me/919421200000" target="_blank" class="whatsapp-link" style="display: none;">
             <picture>
               <source media="(max-width: 768px)" srcset="{% static 'main/images/wh-btn-mobile.jpg' %}">
               <img src="{% static 'main/images/wh-btn.jpg' %}" alt="WhatsApp" style="height:40px; cursor:pointer;">
             </picture>
           </a>
 
-          <a href="https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform" target="_blank" class="feedback-link">
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform" target="_blank" class="feedback-link" style="display: none;">
             <picture>
               <source media="(max-width: 768px)" srcset="{% static 'main/images/fd-btn-mobile.jpg' %}">
               <img src="{% static 'main/images/fd-btn.jpg' %}" alt="Feedback" style="height:40px; cursor:pointer;">
@@ -86,9 +89,7 @@
         0/30 words
       </small>
 
-      <div class="text-center" style="font-size: 13px; color: #666;">
-          AI can make mistakes. The answers can not be used for any legal purpose. For important info please contact Head Office.
-      </div>
+      
   </div>
 </div>
 
@@ -97,10 +98,13 @@
   <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center">
       <div>
-        <small>{% trans " All rights reserved© Registrar Co-operative Societies." %}</small>
+        <small>{% trans " All rights reserved© nimble-esolutions." %}</small>
+      </div>
+      <div class="text-center" style="font-size: 13px; color: #666;">
+         ** AI can make mistakes. 
       </div>
       <div class="d-flex gap-3">
-        <a href="https://nimble-esolutions.com/" target="_blank"><img src="{% static 'main/images/footer-logo-nimble.jpg' %}" alt="Logo 4" height="40"></a>
+        <a href="https://nimble-esolutions.com/" target="_blank"><img src="{% static 'main/images/Nimble_red-logo.png' %}" alt="Logo 4" height="40"></a>
       </div>
     </div>
   </div>
@@ -154,7 +158,7 @@ function sendMessage(){
 
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
-    fetch("{% url 'search_query' %}", {
+    fetch("{% url 'search' %}", {
         method: "POST",
         headers: {
             "X-CSRFToken": csrfToken,
@@ -228,7 +232,7 @@ function sendMessageOLD(){
     showStage();
 
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-    fetch("{% url 'search_query' %}", {
+    fetch("{% url 'search' %}", {
         method: "POST",
         headers: {
             'X-CSRFToken': csrfToken,
@@ -339,13 +343,16 @@ html {
     -webkit-font-smoothing: antialiased;
     text-rendering: geometricPrecision;
 }
+.bg-dark {
+    background-color: #ffffff !important;
+}
 .chat-container {
     width: 100%;
     display: flex;
     flex-direction: column;
     height: 80vh;
     padding: 15px;
-    background: #f0f0f0; 
+    background: #fff;
 }
 #chatMain {
     flex: 1;
@@ -401,25 +408,29 @@ html {
 }
 .chat-input input[type="text"] {
     flex: 1;
-    border-radius: 25px;
-    padding: 10px 10px;
+    border-radius: 10px;
+    padding: 8px 8px;
     border: 1px solid #ccc;
+    box-shadow: 2px 2px 2px 2px #ccc;
 }
 .chat-input select {
-    border-radius: 25px;
-    padding: 10px 10px;
+    border-radius: 10px;
+    padding: 8px 8px;
     border: 1px solid #ccc;
+    box-shadow: 2px 2px 2px 2px #ccc;
 }
 .chat-input button {
-    border-radius: 25px;
-    padding: 5px 5px;
-    background-color: #e97e15;
+    border-radius: 10px;
+    padding: 8px 8px;
+    /*background-color: #e97e15;*/
+    background-color: #3F51B5;
     color: #fff;
     border: none;
     cursor: pointer;
+    box-shadow: 2px 2px 2px 2px #ccc;
 }
 .chat-input button:hover {
-    background-color: #e97e15;
+    background-color: #3F51B5;
 }
 
 /* References */
@@ -503,10 +514,15 @@ html {
     }
 
     /* Make icons visible inline */
-    .chat-input a { display: inline-flex !important; align-items: center; }
+    /* .chat-input a { display: inline-flex !important; align-items: center; } */
 
     /* Optional small adjustment for last icon spacing */
     .chat-input a:last-child { margin-right: 0; }
+
+    .whatsapp-link,
+    .feedback-link {
+        display: none !important;
+    }
 }
 
 </style>
