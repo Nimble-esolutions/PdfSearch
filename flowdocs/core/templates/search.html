@@ -116,7 +116,7 @@ const subjectSelect = document.getElementById('subject');
 
 // Show welcome message
 window.addEventListener("DOMContentLoaded", function(){
-    const welcome = `{{ welcome_message|safe }}`;
+    const welcome = `{{ welcome_message|default:""|escapejs }}`;
     if(welcome) appendMessage(welcome, "gpt");
 });
 
@@ -152,8 +152,9 @@ function sendMessage(){
     }
     showStage();
 
-    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-
+   const csrfTokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
+   const csrfToken = csrfTokenElement ? csrfTokenElement.value : "";
+  
     fetch("{% url 'search_query' %}", {
         method: "POST",
         headers: {
@@ -227,7 +228,8 @@ function sendMessageOLD(){
     }
     showStage();
 
-    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  const csrfTokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
+  const csrfToken = csrfTokenElement ? csrfTokenElement.value : "";
     fetch("{% url 'search_query' %}", {
         method: "POST",
         headers: {
