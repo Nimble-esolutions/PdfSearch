@@ -416,6 +416,80 @@ def generate_gpt_answer(user_question: str, context: str, references: List[Dict[
     """
     Query the LLM with a small, high-quality context. Use cached responses if available.
     """
+
+    cache_key = f"gpt_ans:{hash(user_question + (context or ''))}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    if not client:
+        return "OpenAI API key not configured."
+
+    lang = detect_language(user_question)
+
+    if lang == "mr":
+        system_msg = "तुम्ही एक सहाय्यक आहात. मराठीतून उत्तर द्या. मर्यादा 200 शब्द."
+        prompt = f"प्रश्न: {user_question}\n\nसंदर्भ:\n{context}"
+    else:
+        system_msg = "You are a helpful assistant. Answer concisely in English, max 200 words."
+        prompt = f"Q: {user_question}\n\nContext:\n{context}"
+
+    if references:
+        refs_text = "\n".join(
+            [f"- {r.get('title')} ({r.get('url')})" for r in references if r.get('title')]
+        )
+        prompt = f"{prompt}\n\nSources:\n{refs_text}"
+
+    try:
+        resp = client.chat.completions.create(
+            model=OPENAI_CHAT_MODEL,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=800,
+            temperature=0.0,
+        )
+
+        # Safe response handling
+        ans = ""
+        if hasattr(resp, "choices"):
+            ans = getattr(resp.choices[0].message, "content", "") if resp.choices else ""
+        else:
+            try:
+                ans = resp["choices"][0]["message"]["content"]
+            except Exception:
+                ans = str(resp)
+
+        ans = ans.strip()
+
+        # truncate to word limit
+        words = ans.split()
+        if len(words) > max_words:
+            ans = " ".join(words[:max_words]) + "..."
+
+        # ✅ ADD YOUR CUSTOM MARATHI LINE HERE
+        extra_text = (
+            "वरील उत्तर विषय सहज समजण्यासाठी सोप्या भाषेत आणि संक्षिप्त रूपात दिले आहे. "
+            "खाली दिलेल्या लिंक वर क्लिक करून या संदर्भातील शासन निर्णय, परिपत्रके व संबंधित कागदपत्रे "
+            "बघू शकता आणि अधिक माहिती घेऊ शकता."
+        )
+
+        final_answer = ans + "\n\n" + extra_text
+
+        # cache final answer
+        cache.set(cache_key, final_answer, SEARCH_CACHE_TTL)
+
+        return final_answer
+
+    except Exception:
+        traceback.print_exc()
+        return "⚠️ Couldn't generate answer right now. Please try again later."
+        
+def generate_gpt_answerOLD17APR2026(user_question: str, context: str, references: List[Dict[str, Any]] = None, max_words: int = 200) -> str:
+    """
+    Query the LLM with a small, high-quality context. Use cached responses if available.
+    """
     cache_key = f"gpt_ans:{hash(user_question + (context or ''))}"
     cached = cache.get(cache_key)
     if cached:
