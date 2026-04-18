@@ -192,8 +192,26 @@ function sendMessage(){
         console.error(err);
     });
 }
+  function appendMessage(text, sender, isLoading=false){
 
-function appendMessage(text, sender, isLoading=false){
+    const div = document.createElement('div');
+    div.className = sender === 'user' ? 'user-msg' : 'gpt-msg';
+
+    if (isLoading) {
+        div.textContent = text;
+    } else {
+        // 🔥 IMPORTANT CHANGE
+        div.innerHTML = text;
+    }
+
+    chatMain.appendChild(div);
+    chatMain.scrollTop = chatMain.scrollHeight;
+
+    if(isLoading) return div;
+    return div;
+}
+
+function appendMessageOLD(text, sender, isLoading=false){
     const div = document.createElement('div');
     div.className = sender === 'user' ? 'user-msg' : 'gpt-msg';
 
