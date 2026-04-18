@@ -301,10 +301,15 @@ def dashboard(request, folder_id=None):
 @csrf_exempt
 def search_query(request):
     if request.method == "GET":
-        welcome_message = (
-            "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; "
-            "मी आधी अपलोड केलेल्या दस्तऐवजांचा उपयोग करून उत्तर देईन."
-        )
+         welcome_message = """
+        🙏 नमस्कार — मी सहकार AI. 
+        मला कशा पद्धतीने प्रश्न विचारले तर मी अधिक योग्य उत्तर देऊ शकतो हे जाणून घेण्यासाठी 
+        <a href="https://docs.google.com/document/d/1BuDP903_0BWv2NYXcNorUD3DYQvPUPA7/edit?usp=sharing&ouid=105068040738847757452&rtpof=true&sd=true"
+           target="_blank"
+           style="color: blue; text-decoration: underline;">
+           इथे क्लिक करा
+        </a>
+        """
         return render(request, "search.html", {"welcome_message": welcome_message})
 
     if request.method == "POST":
