@@ -3,6 +3,7 @@ version: "3.9"
 services:
   web:
     build: .
+    image: sahakar-final-b7v3vd:latest
     container_name: flowdocs_web
     ports:
       - "8000:8000"
