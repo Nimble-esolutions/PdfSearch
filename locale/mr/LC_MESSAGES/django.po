@@ -261,3 +261,7 @@ msgstr ""
 "   style=\"color: blue; text-decoration: underline;\">\n"
 "   Click here\n"
 "</a>"
+
+#: .\core\templates\search.html:96
+msgid "⚠️ AI ने दिलेल्या उत्तरांचा कायदेशीर बाबींसाठी वापर करू नये. AI उत्तरे तयार करतांना अपूर्ण उत्तर अथवा चुकीचे उत्तर देऊ शकतो.कृपया अधिक माहितीसाठी मुख्य कार्यालयाशी संपर्क करावा."
+msgstr "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information."
