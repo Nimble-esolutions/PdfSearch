@@ -404,3 +404,11 @@ msgstr "मराठी"
 
 #~ msgid "⚠️ Something went wrong. Please try again later."
 #~ msgstr "⚠️ काहीतरी चूक झाली. कृपया नंतर पुन्हा प्रयत्न करा."
+
+#: .\core\views.py:302
+msgid "Hello — I am Sahakar AI. Click here to learn how to ask better questions."
+msgstr "🙏 नमस्कार — मी सहकार AI. मला कशा पद्धतीने प्रश्न विचारले तर मी अधिक योग्य उत्तर देऊ शकतो हे जाणून घेण्यासाठी इथे क्लिक करा"
+
+#: .\core\templates\search.html:96
+msgid "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information."
+msgstr "⚠️ AI ने दिलेल्या उत्तरांचा कायदेशीर बाबींसाठी वापर करू नये. AI उत्तरे तयार करतांना अपूर्ण उत्तर अथवा चुकीचे उत्तर देऊ शकतो.कृपया अधिक माहितीसाठी मुख्य कार्यालयाशी संपर्क करावा."
