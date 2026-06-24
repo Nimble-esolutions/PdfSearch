@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     cmake \
     meson \
+    gettext \
     libcairo2 \
     libcairo2-dev \
     libgirepository1.0-dev \
