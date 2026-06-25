@@ -463,7 +463,7 @@ def search_query(request):
 
         welcome_message = mark_safe(
             f"""
-            {_('Hello — I am Sahakar AI. Click here to learn how to ask better questions.')}
+            {_(' I am Sahakar AI. Click here to learn how to questions to get correct answers.')}
             <a href="https://docs.google.com/document/d/1BuDP903_0BWv2NYXcNorUD3DYQvPUPA7/edit?usp=sharing&ouid=105068040738847757452&rtpof=true&sd=true"
                target="_blank"
                style="color: blue; text-decoration: underline;">
