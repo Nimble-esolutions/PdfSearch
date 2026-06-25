@@ -87,19 +87,15 @@
 </a>
 
       </div>
-
       <small id="wordCounter" style="color: gray; font-size: 12px; display: block; margin-left: 10px; margin-top: 2px;">
         0/30 words
       </small>
 
-      <!-- ✅ Disclaimer -->
-      <div class="text-center" style="font-size: 13px; color: #666;">
-          ⚠️ Sahkar AI can make mistakes. Check important info with Head Office.
-      </div>
-
-      
-
-  </div>
+        <!-- ✅ Disclaimer -->
+        <div class="text-center" style="font-size:13px;color:#666;">
+            {% trans "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}
+        </div>
+    </div>
 </div>
 
 <!-- Footer -->
@@ -107,7 +103,7 @@
   <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center">
       <div>
-        <small>{% trans " All rights reserved© Registrar Co-operative Societies." %}</small>
+        <small>{% trans "All rights reserved© Registrar Co-operative Societies." %}</small>
       </div>
       <div class="d-flex gap-3">
        <!-- <a href="http://india.gov.in/" target="_blank"><img src="{% static 'main/images/' %}" alt="Logo 1" height="20"></a>
@@ -192,27 +188,24 @@ function sendMessage(){
         console.error(err);
     });
 }
-
 function appendMessage(text, sender, isLoading=false){
+
     const div = document.createElement('div');
     div.className = sender === 'user' ? 'user-msg' : 'gpt-msg';
 
-    // safer for Safari: preserve ligatures
     if (isLoading) {
         div.textContent = text;
     } else {
-        text.split("\n").forEach((line, idx) => {
-            if (idx > 0) div.appendChild(document.createElement("br"));
-            div.appendChild(document.createTextNode(line));
-        });
+        // 🔥 IMPORTANT CHANGE
+        div.innerHTML = text;
     }
 
     chatMain.appendChild(div);
     chatMain.scrollTop = chatMain.scrollHeight;
+
     if(isLoading) return div;
     return div;
 }
-
 
 // Typing effect for GPT answers
 function typeEffect(text, references = []) {
@@ -242,12 +235,13 @@ function typeEffect(text, references = []) {
             if (references.length > 0) {
                 const refDiv = document.createElement('div');
                 refDiv.className = "references";
-                refDiv.innerHTML = "<strong>📚 Reference Docs:</strong>";
+                refDiv.innerHTML = "<strong>📚 References:</strong>";
                 references.forEach(ref => {
                     const card = document.createElement('div');
                     card.className = "ref-card";
                     card.innerHTML = `
-                        <a href="${ref.url}" target="_blank">${ref.title}</a>                       
+                        <a href="${ref.url}" target="_blank">${ref.title}</a>
+                        <small>${ref.folder} • ${ref.uploaded_at}</small>
                     `;
                     refDiv.appendChild(card);
                 });
@@ -467,12 +461,6 @@ html {
     /* Optional small adjustment for last icon spacing */
     .chat-input a:last-child { margin-right: 0; }
 }
-
-
 </style>
-
-
-
-
 </body>
 </html>
