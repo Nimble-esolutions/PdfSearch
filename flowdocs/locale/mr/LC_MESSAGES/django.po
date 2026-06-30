@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-10-03 13:44+0530\n"
+"POT-Creation-Date: 2026-06-26 14:56+0530\n"
 "PO-Revision-Date: 2025-09-03 12:10+0530\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: Marathi\n"
@@ -40,7 +40,7 @@ msgid "Right Logo"
 msgstr ""
 
 #: .\core\templates\base.html:68 .\core\templates\login.html:58
-#: .\core\templates\search.html:51 .\core\templates\user_list.html:78
+#: .\core\templates\search.html:56 .\core\templates\user_list.html:78
 msgid "Registrar Co-operative Societies"
 msgstr "निबंधक सहकारी संस्था"
 
@@ -77,7 +77,7 @@ msgstr "एआयसह शोधा - सीसी आणि आरसीएस
 msgid "येथे शोधा"
 msgstr ""
 
-#: .\core\templates\home.html:24 .\core\templates\search.html:23
+#: .\core\templates\home.html:24 .\core\templates\search.html:28
 msgid "Home"
 msgstr "मुखपृष्ठ"
 
@@ -245,7 +245,7 @@ msgstr "महाराष्ट्र शासन"
 msgid "Login - CC & RCS Maharashtra"
 msgstr "एआयसह शोधा - सीसी आणि आरसीएस महाराष्ट्र"
 
-#: .\core\templates\login.html:78 .\core\templates\search.html:65
+#: .\core\templates\login.html:78 .\core\templates\search.html:70
 msgid "Search"
 msgstr "शोधा "
 
@@ -309,26 +309,35 @@ msgid ""
 "Maharashtra State, Pune"
 msgstr "सहकार आयुक्त व निबंधक"
 
-#: .\core\templates\search.html:22
+#: .\core\templates\search.html:27
 msgid "Admin Login"
 msgstr "ऍडमिन लॉगिन"
 
-#: .\core\templates\search.html:24
+#: .\core\templates\search.html:29
 msgid "Locate Us"
 msgstr "आम्हाला शोधा"
 
-#: .\core\templates\search.html:50
+#: .\core\templates\search.html:55
 msgid "AI Enabled Search"
 msgstr "एआय सक्षम शोध "
 
-#: .\core\templates\search.html:64
+#: .\core\templates\search.html:69
 msgid "Ask your question..."
 msgstr "तुमचा प्रश्न विचारा..."
 
-#: .\core\templates\search.html:105
+#: .\core\templates\search.html:96
+msgid ""
+"⚠️ AI-generated answers should not be used for legal purposes. The AI may "
+"provide incomplete or incorrect responses. Please contact the main office "
+"for further information."
+msgstr ""
+"⚠️ AI ने दिलेल्या उत्तरांचा कायदेशीर बाबींसाठी वापर करू नये. AI उत्तरे तयार करतांना अपूर्ण "
+"उत्तर अथवा चुकीचे उत्तर देऊ शकतो.कृपया अधिक माहितीसाठी मुख्य कार्यालयाशी संपर्क करावा."
+
+#: .\core\templates\search.html:106
 #, fuzzy
 #| msgid "Registrar Co-operative Societies"
-msgid " All rights reserved© Registrar Co-operative Societies."
+msgid "All rights reserved© Registrar Co-operative Societies."
 msgstr "निबंधक सहकारी संस्था"
 
 #: .\core\templates\user_list.html:7
@@ -379,6 +388,40 @@ msgstr "डॅशबोर्ड"
 msgid "© 2025 Sahakarayukta Website. All rights reserved."
 msgstr "© २०२५ सहकारयुक्त संकेतस्थळ. सर्व हक्क राखीव."
 
+#: .\core\views.py:466
+msgid ""
+"I am Sahakar AI. Click here to learn how to questions to get correct answers."
+msgstr ""
+"🙏 नमस्कार — मी सहकार AI. मला कशा पद्धतीने प्रश्न विचारले तर मी अधिक योग्य उत्तर देऊ "
+"शकतो हे जाणून घेण्यासाठी"
+
+#: .\core\views.py:470
+msgid "Click Here"
+msgstr "इथे क्लिक करा"
+
+#: .\core\views.py:490
+#, fuzzy
+#| msgid "Ask your question..."
+msgid "Please ask your question 🙏"
+msgstr "तुमचा प्रश्न विचारा..."
+
+#: .\core\views.py:496
+msgid "Hello! How can I help you?"
+msgstr ""
+
+#: .\core\views.py:605
+msgid ""
+"Sorry — information related to this topic is not available in this section."
+msgstr ""
+
+#: .\core\views.py:630
+msgid "Sorry, no relevant information was found in the available documents."
+msgstr ""
+
+#: .\core\views.py:639
+msgid "⚠️ Something went wrong. Please try again later."
+msgstr "⚠️ काहीतरी चूक झाली. कृपया नंतर पुन्हा प्रयत्न करा."
+
 #: .\flowdocs\settings_simple.py:118 .\settings.py:158
 msgid "English"
 msgstr "इंग्रजी"
@@ -401,14 +444,3 @@ msgstr "मराठी"
 
 #~ msgid "Search here"
 #~ msgstr "येथे शोधा"
-
-#~ msgid "⚠️ Something went wrong. Please try again later."
-#~ msgstr "⚠️ काहीतरी चूक झाली. कृपया नंतर पुन्हा प्रयत्न करा."
-
-#: .\core\views.py:302
-msgid " I am Sahakar AI. Click here to learn how to questions to get correct answers."
-msgstr "🙏 नमस्कार — मी सहकार AI. मला कशा पद्धतीने प्रश्न विचारले तर मी अधिक योग्य उत्तर देऊ शकतो हे जाणून घेण्यासाठी इथे क्लिक करा"
-
-#: .\core\templates\search.html:96
-msgid "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information."
-msgstr "⚠️ AI ने दिलेल्या उत्तरांचा कायदेशीर बाबींसाठी वापर करू नये. AI उत्तरे तयार करतांना अपूर्ण उत्तर अथवा चुकीचे उत्तर देऊ शकतो.कृपया अधिक माहितीसाठी मुख्य कार्यालयाशी संपर्क करावा."
