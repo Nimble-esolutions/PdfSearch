@@ -20,19 +20,19 @@ from datetime import datetime
 from django.utils.translation import gettext as _
 from django.utils.safestring import mark_safe
 
-# from .utils import (
-#     detect_language,
-#     precompute_pdf_embeddings,
-#     search_pdfs_fast,
-#     is_general_query,
-#     detect_folder_by_keywords,
-#     semantic_folder_search,
-#     truncate_context,
-#     detect_folder_by_keywords_multi,
-#     TOP_K_CHUNKS,
-#     MAX_CONTEXT_WORDS,
-#     generate_gpt_answer
-# )
+from .utils import (
+    detect_language,
+    precompute_pdf_embeddings,
+    search_pdfs_fast,
+    is_general_query,
+    detect_folder_by_keywords,
+    semantic_folder_search,
+    truncate_context,
+    detect_folder_by_keywords_multi,
+    TOP_K_CHUNKS,
+    MAX_CONTEXT_WORDS,
+    generate_gpt_answer
+)
 
 CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)
 
