@@ -35,11 +35,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libpq-dev \
     curl
 
-COPY requirements-web.txt .
+COPY requirements-web.lock .
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip && \
-    pip wheel --wheel-dir /build/wheels -r requirements-web.txt
+    pip wheel --require-hashes --wheel-dir /build/wheels -r requirements-web.lock
 
 # =====================================================================
 # STAGE 2: Runtime - minimal image with only runtime libraries
@@ -69,11 +68,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl
 
 COPY --from=builder /build/wheels /wheels
-COPY --from=builder /build/requirements-web.txt .
-
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip && \
-    pip install --no-compile --no-index --find-links=/wheels -r requirements-web.txt && \
+    pip install --no-compile --no-index --no-deps /wheels/*.whl && \
     rm -rf /wheels
 
 COPY . .

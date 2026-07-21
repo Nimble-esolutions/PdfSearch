@@ -10,6 +10,7 @@ on:
       - docker-compose.dev.yml
       - requirements.txt
       - requirements-web.txt
+      - requirements-web.lock
       - requirements-indexing.txt
       - start.sh
       - .dockerignore
@@ -24,6 +25,7 @@ on:
       - docker-compose.dev.yml
       - requirements.txt
       - requirements-web.txt
+      - requirements-web.lock
       - requirements-indexing.txt
       - start.sh
       - .dockerignore
@@ -112,8 +114,6 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha,format=short
-            type=raw,value=dev
-            type=raw,value=latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -128,47 +128,121 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=buildkit
-          cache-to: type=gha,scope=buildkit,mode=max
           platforms: linux/amd64
           provenance: mode=max
           sbom: true
+          cache-from: type=gha,scope=buildkit-${{ hashFiles('Dockerfile', 'requirements-web.lock') }}
+          cache-to: type=gha,scope=buildkit-${{ hashFiles('Dockerfile', 'requirements-web.lock') }},mode=max
 
       - name: Smoke-test published image
         env:
-          IMAGE_REF: ${{ env.IMAGE_NAME }}:dev
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
+          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
           docker pull "$IMAGE_REF"
+          docker run --rm --entrypoint python \
+            -e SECRET_KEY=ci-only-secret-key-with-more-than-fifty-characters-for-checks \
+            -e ALLOW_INSECURE_DEFAULTS=1 \
+            -e DEBUG=False \
+            -e ALLOWED_HOSTS=localhost \
+            -e SECURE_SSL_REDIRECT=True \
+            -e SECURE_HSTS_SECONDS=31536000 \
+            -e SECURE_HSTS_INCLUDE_SUBDOMAINS=True \
+            -e SECURE_HSTS_PRELOAD=True \
+            -e CSRF_COOKIE_SECURE=True \
+            -e SESSION_COOKIE_SECURE=True \
+            -e DATA_ROOT=/tmp/flowdocs-data \
+            -e DJANGO_SETTINGS_MODULE=flowdocs.settings \
+            "$IMAGE_REF" /app/flowdocs/manage.py check --deploy --fail-level WARNING
           docker run --rm --entrypoint python \
             -e SECRET_KEY=ci-only-secret \
             -e ALLOW_INSECURE_DEFAULTS=1 \
             -e DEBUG=True \
             -e DATA_ROOT=/tmp/flowdocs-data \
             -e DJANGO_SETTINGS_MODULE=flowdocs.settings \
-            "$IMAGE_REF" -c 'import os, sys; os.chdir("/app/flowdocs"); sys.path.insert(0, "/app/flowdocs"); import django; django.setup(); print("Django image smoke test passed")'
+            "$IMAGE_REF" /app/flowdocs/manage.py test core.tests --noinput
+          docker run --rm --entrypoint python "$IMAGE_REF" -m pip check
 
-      - name: Enforce image size budget
-        env:
-          IMAGE_REF: ${{ env.IMAGE_NAME }}:dev
+      - name: Scan published image
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Guard against a newer dev commit
+        id: release_guard
         run: |
           set -euo pipefail
+          current_dev_sha="$(git ls-remote origin refs/heads/dev | cut -f1)"
+          if [ "$current_dev_sha" != "$GITHUB_SHA" ]; then
+            echo "A newer dev commit superseded $GITHUB_SHA; skipping tag promotion."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Enforce image size budget
+        if: steps.release_guard.outputs.eligible == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
           SIZE="$(docker image inspect "$IMAGE_REF" --format '{{.Size}}')"
           MAX=$((12 * 1024 * 1024 * 1024))
           echo "Image size: $SIZE bytes; budget: $MAX bytes"
           test "$SIZE" -le "$MAX"
 
-      - name: Publish release evidence
+      - name: Promote compatibility tags
+        if: steps.release_guard.outputs.eligible == 'true'
         env:
-          IMAGE_REF: ${{ env.IMAGE_NAME }}:dev
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
+          set -euo pipefail
+          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
+          docker buildx imagetools create \
+            --tag "${IMAGE_NAME}:dev" \
+            --tag "${IMAGE_NAME}:latest" \
+            "$IMAGE_REF"
+
+          tested_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$IMAGE_REF")"
+          for attempt in 1 2 3; do
+            dev_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${IMAGE_NAME}:dev")"
+            latest_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${IMAGE_NAME}:latest")"
+            if [ "$dev_digest" = "$latest_digest" ] && [ "$dev_digest" = "$tested_digest" ]; then
+              echo "Both compatibility tags resolve to tested digest $tested_digest"
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::Compatibility tags diverged from tested digest: tested=$tested_digest dev=$dev_digest latest=$latest_digest"
+              exit 1
+            fi
+            echo "Tag propagation is not converged yet; retrying promotion (attempt $((attempt + 1)))"
+            sleep 5
+            docker buildx imagetools create \
+              --tag "${IMAGE_NAME}:dev" \
+              --tag "${IMAGE_NAME}:latest" \
+              "$IMAGE_REF"
+          done
+
+      - name: Publish release evidence
+        if: steps.release_guard.outputs.eligible == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
           {
             echo "## FlowDocs dev release"
             echo
             echo "- Git SHA: \\`${GITHUB_SHA}\\`"
-            echo "- Image: \\`${IMAGE_REF}@${DIGEST}\\`"
+            echo "- Image: \\`${IMAGE_REF}\\`"
             echo "- Tags: \\`dev\\`, \\`latest\\`, and short SHA"
+            echo "- Promotion: aliases created only after exact-digest smoke, pip, and Trivy gates"
             echo "- SBOM: enabled"
             echo "- Provenance: max"
             echo "- Source: \\`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}\\`"
