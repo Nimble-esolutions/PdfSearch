@@ -18,7 +18,9 @@ Use the route that matches the work:
 - Local development: [`docker-compose.dev.yml`](docker-compose.dev.yml) and [`docs/INDEX.md`](docs/INDEX.md#local-development)
 - Dokploy deployment: [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
 - Release promotion: [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md)
-- Backup and data recovery: [`docs/PERSISTENT_DATA_RELEASE.md`](docs/PERSISTENT_DATA_RELEASE.md) and [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
+- Production baseline: [`docs/PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md)
+- Data custody and recovery: [`docs/DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md), [`docs/RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md), and [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
+- FAISS compatibility: [`docs/FAISS_COMPATIBILITY.md`](docs/FAISS_COMPATIBILITY.md)
 - Incident response: [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
 - Client usage: [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md)
 - Documentation map and historical context: [`docs/INDEX.md`](docs/INDEX.md)
@@ -61,27 +63,55 @@ redis container
   /data                cache/queue persistence in redis_data
 ```
 
-Production Compose mounts `flowdocs_data` at `/app/data` and the external
-`prod_flowdocs` volume at `/mnt/legacy:ro` for an explicitly enabled, controlled
-legacy data import only. It must never mount persistent data over
-`/app/flowdocs`.
+Production Compose mounts `flowdocs_data` at `/app/data`. The external
+`prod_flowdocs` volume at `/mnt/legacy:ro` is legacy evidence/quarantine only; it
+is not an automatic import source. Legacy and active data must not be copied
+directly or treated as one database. Promotion requires inventory, conflict
+classification, staged restore, FAISS fingerprint validation, and an explicit
+operator decision. It must never mount persistent data over `/app/flowdocs`.
 
 ## Production Contract
 
-Production is deployed through Dokploy as the Compose application defined by
-[`docker-compose.yml`](docker-compose.yml).
+Production at `https://2026.ai-sahakar.net` is healthy and is deployed through
+Dokploy as the Compose application defined by [`docker-compose.yml`](docker-compose.yml).
+The merged source baseline is `f05e110`. The current release is the Redis-enabled
+immutable image revision from PR #24; the exact image digest is the production
+release identity and must be recorded from Dokploy.
 
 - Container port: `8000`
 - Liveness: `/livez` proves process liveness
 - Readiness: `/readyz` checks database, configured cache, and migrations
 - Persistent state: Compose volume `flowdocs_data` at `/app/data`
-- Legacy import: external `prod_flowdocs` at `/mnt/legacy:ro`, one-time only
+- Legacy data: external `prod_flowdocs` at `/mnt/legacy:ro`, read-only quarantine only
 - Secrets: Dokploy protected environment values
 - Release identity: `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<digest>`
+- Pull policy: the effective Dokploy Compose configuration must use `pull_policy: always`
 
-The release workflow also maintains `:dev` and `:latest` as compatibility
-aliases for the same tested image digest. They are convenience references, not
-immutable release identity. Record the digest before promotion.
+The repository keeps tag defaults for compatibility, but production must set
+`PDFSEARCH_IMAGE` to the exact digest and verify the running container's digest.
+Tags such as `:latest` are never release identity and must not be reused from a
+stale local cache.
+
+## Current Data-Custody Boundary
+
+The legacy volume contains 242 PDFs and 45 FAISS files. The active data set has
+17 PDF database rows, 0 PDF files, and 11 FAISS files. Only 6 PDF paths overlap;
+the active and legacy SQLite databases diverge. These facts prohibit direct
+copying or silent merge.
+
+RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` contains timestamped active
+and legacy snapshots and checksums. RustFS is currently isolated from the
+application network, and application-level S3 integration is **not implemented**.
+The bucket is an operator recovery vault, not a runtime storage backend or an
+automatic cross-environment sync mechanism.
+
+## Verification Gates
+
+Every documentation or release change must pass the applicable link/path scan,
+Mermaid validation, `docker compose -f docker-compose.yml config`, `/livez`,
+`/readyz`, PDF count, FAISS count, and representative search gates. Record the
+source SHA, exact image digests, Compose evidence, data snapshot/checksum
+references, and explicit promotion decision.
 
 ## Security and Recovery Warnings
 

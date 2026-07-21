@@ -15,6 +15,11 @@ remains in `requirements.txt` for the future worker image. The earlier complete
 image was observed near 10 GB; that measurement is historical, not the current
 web-image size target.
 
+The verified production baseline is healthy at `https://2026.ai-sahakar.net`,
+with merged source `f05e110` and the Redis-enabled immutable image revision from
+PR #24. Dokploy production promotion requires exact web/Redis digests and
+`pull_policy: always`; compatibility tags are not release identity.
+
 ## Target Image Topology
 
 ```text
@@ -25,7 +30,7 @@ pdfsearch-worker
   Celery, PDF extraction, OCR, Torch, spaCy, Chroma/FAISS indexing
 
 artifacts
-  versioned models, OCR language packs, FAISS/Chroma releases, manifests
+  versioned models, OCR language packs, FAISS/Chroma releases, planned manifests
 ```
 
 ## Delivery Phases
@@ -72,7 +77,7 @@ The current workflow reports or verifies:
 - source Git SHA;
 - image digest;
 - image size;
-- short SHA, `dev`, and `latest` image tags;
+- short SHA, `dev`, and `latest` compatibility image tags;
 - SBOM and max provenance settings;
   - image smoke tests, `pip check`, non-blocking Trivy scan/report, and image-size budget.
 
@@ -109,3 +114,12 @@ operator-recorded evidence or future targets, not as generated release output.
   or `latest` tags.
 - `dev` and `latest` remain compatibility aliases for the current Dokploy
   Compose contract; they are not deployment identity.
+
+## Current Versus Planned
+
+Current: immutable application release, Redis-enabled runtime, operator-recorded
+data custody, and manual restore/promotion gates.
+
+Planned: separately published versioned data artifacts, generated manifests,
+automatic FAISS recovery, and automatic cross-environment synchronization. None
+of those capabilities is emitted or enforced by the current workflow.

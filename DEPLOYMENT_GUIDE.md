@@ -21,7 +21,7 @@ The repository Compose file owns service behavior and persistent volume names.
 | Container port | `8000` |
 | Application health | `/livez` and `/readyz` |
 | Persistent data mount | `/app/data` |
-| Legacy import mount | `/mnt/legacy` read-only |
+| Legacy custody mount | `/mnt/legacy` read-only quarantine |
 | Public TLS | Configured in Dokploy UI / Traefik |
 
 Do not configure undocumented host bind paths. They are not part of the
@@ -41,10 +41,16 @@ docker system df
 free -h
 ```
 
-The Git SHA, intended image digest, Compose file hash, current container image,
-and current data-volume identity belong in the release record. `config --images`
-may show the compatibility tag from the default, but production promotion must
-set `PDFSEARCH_IMAGE` to the exact `repo@sha256:<digest>` value in Dokploy.
+The Git SHA, intended web and Redis image digests, Compose file hash, current
+container images, and current data-volume identity belong in the release record.
+`config --images` may show repository tag defaults, but production promotion
+must set every production image to an exact `repo@sha256:<digest>` value in
+Dokploy and use `pull_policy: always`. Do not accept a stale local tag cache.
+
+Current production baseline: `https://2026.ai-sahakar.net` is healthy, merged
+source is `f05e110`, and the active release is the Redis-enabled immutable image
+revision from PR #24. See [`PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md)
+for the custody counts and release boundary.
 
 ## Dokploy UI Setup
 
@@ -60,11 +66,10 @@ set `PDFSEARCH_IMAGE` to the exact `repo@sha256:<digest>` value in Dokploy.
 10. Confirm the configured domain and TLS route point to this Compose application, not a static application.
 11. Deploy only after the pre-deployment checklist passes.
 
-Every successful `dev` release publishes both `:dev` and `:latest` as
-compatibility aliases of the same tested digest. Keep both aliases enabled:
-existing Dokploy Compose deployments may use either one without requiring a
-Compose-file change. The aliases are convenience references, not the release
-identity; record and prefer the immutable digest for production promotion.
+The workflow may publish compatibility aliases such as `:dev` and `:latest`, but
+they are not production release identity. Dokploy must pull the exact recorded
+digests with `pull_policy: always`; never rely on a local alias or cached
+`latest` image.
 
 ## Named Volume Discovery
 
@@ -81,9 +86,9 @@ docker volume inspect <discovered-flowdocs-data-volume>
 ```
 
 The entry whose destination is `/app/data` is the active application data
-volume. The entry whose destination is `/mnt/legacy` must be read-only and is
-only an import source. Stop immediately if `/app/data` is missing, points to an
-unexpected volume, or any volume is mounted over `/app/flowdocs`.
+volume. The entry whose destination is `/mnt/legacy` must be read-only and is a
+quarantine/evidence source only. Stop immediately if `/app/data` is missing,
+points to an unexpected volume, or any volume is mounted over `/app/flowdocs`.
 
 ## Persistent Data Layout
 
@@ -106,25 +111,28 @@ The named volume `flowdocs_data` is mounted at `/app/data`:
 Application code remains in the immutable image under `/app/flowdocs`. Never
 mount persistent data over `/app/flowdocs`; that would shadow new image code.
 
-`prod_flowdocs` is mounted read-only at `/mnt/legacy` only during controlled
-migration. It is not the ongoing application data store.
+`prod_flowdocs` is mounted read-only at `/mnt/legacy` only for controlled
+evidence and recovery work. It is not the ongoing application data store.
 
-## First Migration From `prod_flowdocs`
+## Legacy and Active Data Promotion
 
-This is a controlled one-time operation:
+Legacy data must not be copied directly into active data. The verified baseline
+is divergent: legacy has 242 PDFs and 45 FAISS files; active has 17 PDF rows, 0
+PDF files, and 11 FAISS files; only 6 PDF paths overlap. Use the procedure in
+[`DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md):
 
-1. Take a Dokploy/host backup of `prod_flowdocs`.
-2. Quiesce all writers to the legacy volume.
-3. Confirm the new application image and Compose file are the intended release.
-4. Set `IMPORT_LEGACY_DATA=1` in Dokploy for one deployment.
-5. Deploy and inspect logs for `[legacy] Import complete`.
-6. Verify database rows, media count, FAISS count, and a representative search.
-7. Set `IMPORT_LEGACY_DATA=0` after successful verification.
-8. Retain `prod_flowdocs` unchanged until the restore drill passes.
+1. Preserve both sources and take or verify timestamped snapshots/checksums.
+2. Restore each source into separate read-only quarantine targets.
+3. Inventory database rows, PDF paths, and FAISS files without copying content.
+4. Classify conflicts and missing references; do not infer that an overlap is
+   equivalent content.
+5. Build a staged restore from an explicit selection, then validate FAISS
+   fingerprints and representative search.
+6. Promote only after an operator records the exact scope and decision.
 
-The importer copies mutable data only. It never copies legacy Python code.
-It refuses to overwrite a non-empty active database without an explicit data
-migration decision.
+`IMPORT_LEGACY_DATA` is not a substitute for reconciliation or promotion.
+Retain `prod_flowdocs` unchanged until the staged restore and restore drill
+pass.
 
 ## Required Environment Values
 
@@ -199,7 +207,9 @@ At least monthly, restore into a disposable Dokploy application or volume:
 5. Load FAISS/Chroma indexes.
 6. Run a representative search.
 7. Verify `/readyz` and the public HTTPS route.
-8. Record the result, image digest, Git SHA, volume identity, and current release record. There is no generated artifact manifest in the current workflow.
+8. Record the result, image digests, Git SHA, volume identity, custody
+   snapshot/checksum references, and current release record. There is no
+   generated artifact manifest in the current workflow.
 
 A backup is not considered valid until this drill succeeds.
 
@@ -209,25 +219,29 @@ A backup is not considered valid until this drill succeeds.
 - [ ] Image is identified by immutable digest.
 - [ ] Previous image digest recorded for rollback.
 - [ ] Current `flowdocs_data` backup completed.
-- [ ] Legacy import flag is correct (`0` after first migration).
+- [ ] Legacy mount/import controls are disabled unless a reviewed quarantine
+      operation explicitly requires them.
 - [ ] Dokploy port is `8000`.
 - [ ] Traefik route points to the web service on port `8000`.
 - [ ] `DEBUG=False` and no insecure defaults are enabled.
 - [ ] Disk and memory headroom verified.
 - [ ] Actual `/app/data` volume discovered from the web container and matches the intended backup.
 - [ ] Restore target is isolated from the active application.
+- [ ] Link/path scan and Mermaid validation passed.
+- [ ] PDF count, FAISS count, and representative search passed in the staged
+      restore before promotion.
 
 ## Post-Deployment Verification
 
 ```bash
-curl -fsS https://<configured-domain>/livez
-curl -fsS https://<configured-domain>/readyz
+curl -fsS https://2026.ai-sahakar.net/livez
+curl -fsS https://2026.ai-sahakar.net/readyz
 curl -fsS https://<configured-domain>/
 ```
 
-Then verify one authenticated login, one PDF listing, one representative
-search, and one static asset. Do not treat a root HTTP 200 alone as proof of
-readiness.
+Then verify one authenticated login, one PDF listing with the recorded PDF
+count, one FAISS count, one representative search, and one static asset. Do not
+treat a root HTTP 200 alone as proof of readiness.
 
 ## Dokploy Checkpoints After Deployment
 
@@ -237,8 +251,9 @@ In the Dokploy application, verify the deployment has:
 - `PDFSEARCH_IMAGE` set to the immutable digest;
 - container port `8000` and the intended domain/TLS route;
 - a healthy Redis dependency and web container;
-- the intended `/app/data` volume and read-only `/mnt/legacy` import mount;
+- the intended `/app/data` volume and read-only `/mnt/legacy` quarantine mount;
 - the previous image digest and data backup retained for rollback.
+- effective `pull_policy: always` and exact web/Redis image digests;
 
 ## Rollback
 
@@ -248,6 +263,5 @@ Rollback is two-dimensional:
 2. Data rollback: restore the matching volume snapshot/release.
 
 Do not roll back code across an incompatible database migration without the
-matching data procedure. Record the rollback in the release/incident log. Keep
-the `:dev` and `:latest` aliases intact; changing an alias is not a substitute
-for recording the immutable rollback digest.
+matching data procedure. Record the rollback in the release/incident log. Tags
+and aliases are not a substitute for recording the immutable rollback digest.

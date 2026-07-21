@@ -19,6 +19,24 @@ application image. It includes:
 - static files;
 - backup metadata and checksums.
 
+This contract does not make RustFS a runtime backend. The current RustFS bucket
+`ai-sahakar-prod-flowdocs-data-volume` is an isolated operator recovery vault
+with timestamped active/legacy snapshots and checksums. Application-level S3
+integration is not implemented.
+
+## Current Baseline
+
+- Production domain: `https://2026.ai-sahakar.net` (healthy at last verification).
+- Merged source: `f05e110`.
+- Production release: Redis-enabled immutable image revision from PR #24.
+- Legacy custody: 242 PDFs and 45 FAISS files.
+- Active custody: 17 PDF rows, 0 PDF files, and 11 FAISS files.
+- Reconciliation: 6 PDF paths overlap; active and legacy SQLite databases diverge.
+
+Legacy and active data must never be copied directly. A valid promotion is
+quarantine, inventory, conflict classification, staged restore, FAISS
+fingerprint validation, and explicit operator promotion.
+
 ## Current Minimum Release Record
 
 The current implementation has no generated persistent-data manifest or active
@@ -37,7 +55,7 @@ record containing:
 The release workflow publishes image evidence, SBOM, and provenance, but it does
 not create this data record.
 
-## Future Artifact Manifest
+## Planned Artifact Manifest
 
 Future release tooling must record:
 
@@ -53,19 +71,20 @@ Future release tooling must record:
 }
 ```
 
-This JSON is a proposed future artifact contract. Do not claim that it is
-currently emitted, complete, or validated by CI.
+This JSON is a proposed future artifact contract. It is not currently emitted,
+complete, or validated by CI. Do not claim generated artifact manifests exist.
 
 ## Promotion Rules
 
-1. Build a release in a staging directory or disposable volume.
-2. Verify SQLite integrity and migration state.
-3. Verify media references.
-4. Load FAISS and Chroma indexes.
-5. Run representative search tests.
-6. Promote only after the operator release record is complete. An atomic active
+1. Preserve active and legacy sources in separate quarantine targets.
+2. Inventory rows, paths, index files, and checksums without direct copying.
+3. Classify conflicts and select an explicit staged restore scope.
+4. Verify SQLite integrity and migration state.
+5. Verify media references and load FAISS/Chroma indexes.
+6. Validate FAISS fingerprints and run representative search tests.
+7. Promote only after the operator release record is complete. An atomic active
    release pointer is a future capability, not a current runtime behavior.
-7. Retain the previous known-good release.
+8. Retain the previous known-good release and both custody sources.
 
 ## Rollback Rules
 

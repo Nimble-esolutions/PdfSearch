@@ -1,0 +1,8 @@
+flowchart LR
+    users["Users"] --> traefik["Traefik / Dokploy route"]
+    traefik --> web["FlowDocs web\nimmutable image"]
+    web --> data["flowdocs_data\n/app/data"]
+    web --> redis["Redis\ncache and queue"]
+    legacy["prod_flowdocs\nread-only quarantine"] -.->|operator-controlled evidence| web
+    web --> appnet["Application networks"]
+    rustfs["RustFS bucket\nrecovery vault"] -.->|isolated; no app S3 integration| appnet

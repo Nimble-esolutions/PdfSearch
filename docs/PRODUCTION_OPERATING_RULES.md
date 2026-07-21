@@ -14,7 +14,8 @@ These rules apply to every PdfSearch production change.
 - Branch from the latest `dev`.
 - Do not push fixes to merged branches.
 - Every deployment must identify Git SHA, image digest, Compose hash, and data release.
-- Do not deploy `latest` as the only release identifier.
+- Dokploy must pull exact web and Redis image digests with `pull_policy: always`.
+- Do not deploy a tag, cached `latest`, or alias as the release identifier.
 - Keep application code in the image and mutable data in `/app/data`.
 
 ## Secrets
@@ -30,7 +31,12 @@ These rules apply to every PdfSearch production change.
 - Never use a host bind path as an undocumented persistence contract.
 - Never mount a named volume to a file path.
 - Never mount persistent data over `/app/flowdocs`.
-- Treat SQLite, media, FAISS, Chroma, and manifests as one recovery set.
+- Treat SQLite, media, FAISS, Chroma, snapshots, and checksums as one recovery set.
+- Legacy and active data are divergent custody domains. Never copy them directly;
+  require quarantine, inventory, conflict classification, staged restore, FAISS
+  fingerprint validation, and explicit promotion.
+- RustFS is currently an isolated operator recovery vault. Application-level S3
+  integration and automatic cross-environment sync are not implemented.
 
 ## Startup and Health
 
@@ -44,6 +50,8 @@ These rules apply to every PdfSearch production change.
 - Back up before schema, volume, or image changes.
 - Verify the exact internal container port in Dokploy.
 - Run authenticated login, PDF listing, search, and static asset smoke tests.
+- Verify link/path scan, Mermaid validation, Compose config, `/livez`, `/readyz`,
+  PDF count, FAISS count, and representative search.
 - Record rollback image and data release before promotion.
 
 ## Incident Handling
