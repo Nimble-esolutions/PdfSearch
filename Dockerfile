@@ -234,7 +234,7 @@ PYCODE
 RUN chmod +x /usr/local/bin/apply_sqlite_json.py
 
 RUN bash -lc 'cd /app/flowdocs && \
-    STATIC_ROOT=/app/staticfiles python manage.py collectstatic --noinput --clear 2>/dev/null || \
+    STATIC_ROOT=/app/staticfiles python manage.py collectstatic --noinput 2>/dev/null || \
     echo "collectstatic skipped"'
 
 EXPOSE 8000

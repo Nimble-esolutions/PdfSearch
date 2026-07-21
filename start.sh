@@ -186,20 +186,30 @@ else
 fi
 
 # ===============================================================
-# Collect static
+# Collect static (skip if already populated on volume-backed deploys)
 # ===============================================================
-echo "[static] Collecting static files..."
-python manage.py collectstatic --noinput --clear || echo "[static] WARNING: collectstatic skipped."
+if [ -d /app/flowdocs/staticfiles ] && [ "$(ls -A /app/flowdocs/staticfiles 2>/dev/null)" ]; then
+    echo "[static] Static files already present, updating changed only..."
+    python manage.py collectstatic --noinput || echo "[static] WARNING: collectstatic skipped."
+else
+    echo "[static] Collecting static files (first run)..."
+    python manage.py collectstatic --noinput || echo "[static] WARNING: collectstatic skipped."
+fi
 
 # ===============================================================
-# JSON fixture backup
+# JSON fixture backup (only when FIXTURE_BACKUP=1 or first run)
 # ===============================================================
-JSON_BACKUP_DIR="$BACKUP_DIR/json_backups"
-JSON_FILE="$JSON_BACKUP_DIR/data_backup_$TIMESTAMP.json"
-echo "[fixture] Generating JSON backup..."
-python manage.py dumpdata --natural-foreign --natural-primary --indent 2 > "$JSON_FILE" 2>/dev/null && \
-    echo "[fixture] Saved to $JSON_FILE" || \
-    echo "[fixture] JSON backup skipped."
+if [ "${FIXTURE_BACKUP:-0}" = "1" ] || [ ! -d "$BACKUP_DIR/json_backups" ] || [ -z "$(ls -A "$BACKUP_DIR/json_backups" 2>/dev/null)" ]; then
+    JSON_BACKUP_DIR="$BACKUP_DIR/json_backups"
+    mkdir -p "$JSON_BACKUP_DIR"
+    JSON_FILE="$JSON_BACKUP_DIR/data_backup_$TIMESTAMP.json"
+    echo "[fixture] Generating JSON backup..."
+    python manage.py dumpdata --natural-foreign --natural-primary --indent 2 > "$JSON_FILE" 2>/dev/null && \
+        echo "[fixture] Saved to $JSON_FILE" || \
+        echo "[fixture] JSON backup skipped."
+else
+    echo "[fixture] Skipping (set FIXTURE_BACKUP=1 to enable)."
+fi
 
 # ===============================================================
 # ChromaDB backup
