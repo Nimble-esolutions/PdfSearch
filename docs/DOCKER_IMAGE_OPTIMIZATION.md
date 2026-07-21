@@ -2,10 +2,10 @@
 
 ## Current State
 
-The current Python image is multi-stage and uses BuildKit cache mounts, but it
-still contains the complete OCR/ML dependency graph. Production image size has
-been observed near 10 GB because CPU deployment paths still pull heavy Torch,
-EasyOCR, spaCy, Chroma, and related packages.
+The web image is multi-stage and uses BuildKit cache mounts. It now installs
+the dependency set imported by the live Django query path through
+`requirements-web.txt`. The complete OCR/indexing/demo set remains in
+`requirements.txt` for the future worker image.
 
 The current image is reliable, but image size and pull time remain open work.
 
@@ -21,7 +21,7 @@ The current image is reliable, but image size and pull time remain open work.
 ## Next Optimization Plan
 
 1. Inventory imports used by the web/query path versus indexing/OCR.
-2. Build a lean `pdfsearch-web` image for Gunicorn and query serving.
+2. Build and measure the lean `pdfsearch-web` image for Gunicorn and query serving.
 3. Build a separate `pdfsearch-worker` image for OCR, Torch, spaCy, and index generation.
 4. Publish model and index artifacts independently with checksums.
 5. Deploy the web and worker services separately in Dokploy.

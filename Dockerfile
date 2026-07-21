@@ -35,11 +35,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libpq-dev \
     curl
 
-COPY requirements.txt .
+COPY requirements-web.txt .
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip && \
-    pip wheel --wheel-dir /build/wheels -r requirements.txt
+    pip wheel --wheel-dir /build/wheels -r requirements-web.txt
 
 # =====================================================================
 # STAGE 2: Runtime - minimal image with only runtime libraries
@@ -62,31 +62,18 @@ WORKDIR /app
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    tesseract-ocr \
-    tesseract-ocr-mar \
-    poppler-utils \
-    libcairo2 \
-    libpango-1.0-0 \
-    libpangoft2-1.0-0 \
-    libgdk-pixbuf-2.0-0 \
-    libpq5 \
-    libopenjp2-7 \
-    libfreetype6 \
-    liblcms2-2 \
-    libharfbuzz0b \
-    libfribidi0 \
-    libxcb1 \
+    libgomp1 \
     sqlite3 \
     gosu \
     bash \
     curl
 
 COPY --from=builder /build/wheels /wheels
-COPY --from=builder /build/requirements.txt .
+COPY --from=builder /build/requirements-web.txt .
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip && \
-    pip install --no-compile --no-index --find-links=/wheels -r requirements.txt && \
+    pip install --no-compile --no-index --find-links=/wheels -r requirements-web.txt && \
     rm -rf /wheels
 
 COPY . .
