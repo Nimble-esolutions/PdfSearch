@@ -20,12 +20,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - flowdocs_db_dev:/app/flowdocs/db.sqlite3
-      - flowdocs_media_dev:/app/flowdocs/media
-      - flowdocs_faiss_dev:/app/flowdocs/faiss_indexes
-      - flowdocs_chroma_dev:/app/flowdocs/chroma_db
-      - flowdocs_static_dev:/app/staticfiles
-      - flowdocs_backups_dev:/app/backups
+      - flowdocs_data_dev:/app/flowdocs
     ports:
       - "${WEB_PORT:-8000}:8000"
     environment:
@@ -52,17 +47,7 @@ services:
 volumes:
   redis_data_dev:
     driver: local
-  flowdocs_db_dev:
-    driver: local
-  flowdocs_media_dev:
-    driver: local
-  flowdocs_faiss_dev:
-    driver: local
-  flowdocs_chroma_dev:
-    driver: local
-  flowdocs_static_dev:
-    driver: local
-  flowdocs_backups_dev:
+  flowdocs_data_dev:
     driver: local
 
 networks:
