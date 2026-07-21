@@ -2,25 +2,70 @@ name: Build Docker Image
 
 on:
   push:
-    branches:
-      - dev
+    branches: [dev]
     paths:
-      - 'Dockerfile'
-      - 'requirements.txt'
-      - 'start.sh'
-      - '.dockerignore'
-      - 'docker-compose.yml'
-      - 'docker-compose.dev.yml'
-      - 'flowdocs/**'
-      - '.github/workflows/docker-build.yml'
+      - Dockerfile
+      - docker-entrypoint.sh
+      - docker-compose.yml
+      - docker-compose.dev.yml
+      - requirements.txt
+      - start.sh
+      - .dockerignore
+      - flowdocs/**
+      - .github/workflows/docker-build.yml
+  pull_request:
+    branches: [dev]
+    paths:
+      - Dockerfile
+      - docker-entrypoint.sh
+      - docker-compose.yml
+      - docker-compose.dev.yml
+      - requirements.txt
+      - start.sh
+      - .dockerignore
+      - flowdocs/**
+      - .github/workflows/docker-build.yml
+  workflow_dispatch:
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Check repository whitespace
+        run: git diff --check
+
+      - name: Validate shell scripts
+        run: bash -n start.sh docker-entrypoint.sh
+
+      - name: Compile Python source
+        run: python3 -m compileall -q flowdocs
+
+      - name: Validate Dockerfile
+        run: docker build --check -f Dockerfile .
+
+      - name: Validate production Compose
+        env:
+          SECRET_KEY: ci-only-secret
+          OPENAI_API_KEY: ci-only-key
+          PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:ci
+        run: docker compose -f docker-compose.yml config --quiet
+
   build:
+    if: github.event_name != 'pull_request'
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -39,7 +84,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -47,8 +92,11 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,format=short
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Build and push Docker image
+      - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -60,3 +108,26 @@ jobs:
           cache-to: type=gha,scope=buildkit,mode=max
           platforms: linux/amd64
 
+      - name: Smoke-test published image
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
+          docker pull "$IMAGE"
+          docker run --rm --entrypoint python \
+            -e SECRET_KEY=ci-only-secret \
+            -e ALLOW_INSECURE_DEFAULTS=1 \
+            -e DEBUG=True \
+            -e DATA_ROOT=/tmp/flowdocs-data \
+            -e DJANGO_SETTINGS_MODULE=flowdocs.settings \
+            "$IMAGE" -c 'import os, sys; os.chdir("/app/flowdocs"); sys.path.insert(0, "/app/flowdocs"); import django; django.setup(); print("Django image smoke test passed")'
+
+      - name: Enforce image size budget
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
+          SIZE="$(docker image inspect "$IMAGE" --format '{{.Size}}')"
+          MAX=$((12 * 1024 * 1024 * 1024))
+          echo "Image size: $SIZE bytes; budget: $MAX bytes"
+          test "$SIZE" -le "$MAX"
