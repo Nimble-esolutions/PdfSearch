@@ -88,3 +88,13 @@ Every release should report:
 - Do not deploy a mutable `latest` tag as the only release identifier.
 - Do not promote an index generated with an incompatible embedding model.
 - Do not use Redis as the durable job ledger.
+
+## Dependency and Digest Policy
+
+- `requirements-web.txt` is the human-maintained input.
+- `requirements-web.lock` is the hashed build input used by Docker.
+- Lockfile refreshes are deliberate dependency changes, not release side effects.
+- Release smoke tests pull the exact published `repo@sha256:digest`, not `dev`
+  or `latest` tags.
+- `dev` and `latest` remain compatibility aliases for the current Dokploy
+  Compose contract; they are not deployment identity.
