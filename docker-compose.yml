@@ -30,12 +30,7 @@ services:
   web:
     image: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest
     volumes:
-      - flowdocs_db:/app/flowdocs/db.sqlite3
-      - flowdocs_media:/app/flowdocs/media
-      - flowdocs_faiss:/app/flowdocs/faiss_indexes
-      - flowdocs_chroma:/app/flowdocs/chroma_db
-      - flowdocs_static:/app/staticfiles
-      - flowdocs_backups:/app/backups
+      - flowdocs_data:/app/flowdocs
       - prod_flowdocs:/mnt/legacy:ro
     ports:
       - "${WEB_PORT:-8000}:8000"
@@ -100,25 +95,7 @@ volumes:
     driver: local
     labels:
       com.dokploy.backup: "true"
-  flowdocs_db:
-    driver: local
-    labels:
-      com.dokploy.backup: "true"
-  flowdocs_media:
-    driver: local
-    labels:
-      com.dokploy.backup: "true"
-  flowdocs_faiss:
-    driver: local
-    labels:
-      com.dokploy.backup: "true"
-  flowdocs_chroma:
-    driver: local
-    labels:
-      com.dokploy.backup: "true"
-  flowdocs_static:
-    driver: local
-  flowdocs_backups:
+  flowdocs_data:
     driver: local
     labels:
       com.dokploy.backup: "true"
