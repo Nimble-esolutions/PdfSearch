@@ -29,6 +29,7 @@ services:
 
   web:
     image: ${PDFSEARCH_IMAGE:-ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest}
+    pull_policy: always
     volumes:
       - flowdocs_data:/app/data
       - prod_flowdocs:/mnt/legacy:ro
