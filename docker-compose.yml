@@ -29,7 +29,6 @@ services:
 
   web:
     image: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest
-    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     volumes:
       - flowdocs_db:/app/flowdocs/db.sqlite3
       - flowdocs_media:/app/flowdocs/media

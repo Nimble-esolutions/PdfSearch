@@ -19,7 +19,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     volumes:
       - flowdocs_db_dev:/app/flowdocs/db.sqlite3
       - flowdocs_media_dev:/app/flowdocs/media
