@@ -4,12 +4,12 @@ import hashlib
 import os
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.conf import settings
 from django.contrib import messages
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
+from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count
@@ -33,6 +33,38 @@ from .utils import (
 )
 
 CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)
+
+
+def livez(request):
+    return JsonResponse({"status": "ok"})
+
+
+def readyz(request):
+    checks = {}
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        checks["database"] = "ok"
+    except Exception:
+        checks["database"] = "error"
+
+    try:
+        if getattr(settings, "REDIS_URL", ""):
+            cache.set("__flowdocs_readyz", "ok", timeout=10)
+            checks["cache"] = "ok" if cache.get("__flowdocs_readyz") == "ok" else "error"
+        else:
+            checks["cache"] = "not_configured"
+    except Exception:
+        checks["cache"] = "error"
+
+    try:
+        executor = MigrationExecutor(connection)
+        checks["migrations"] = "ok" if not executor.migration_plan(executor.loader.graph.leaf_nodes()) else "pending"
+    except Exception:
+        checks["migrations"] = "error"
+
+    ready = all(value in ("ok", "not_configured") for value in checks.values())
+    return JsonResponse({"status": "ready" if ready else "not_ready", "checks": checks}, status=200 if ready else 503)
 
 #===========================Registration view====================
 def register_view(request):
@@ -459,5 +491,4 @@ def search_query(request):
                 "answer": "⚠️ काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
                 "references": []
             })
-
 
