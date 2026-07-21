@@ -1,20 +1,6 @@
-name: Build Docker Image
+name: Docker CI and Release
 
 on:
-  push:
-    branches: [dev]
-    paths:
-      - Dockerfile
-      - docker-entrypoint.sh
-      - docker-compose.yml
-      - docker-compose.dev.yml
-      - requirements.txt
-      - requirements-web.txt
-      - requirements-indexing.txt
-      - start.sh
-      - .dockerignore
-      - flowdocs/**
-      - .github/workflows/docker-build.yml
   pull_request:
     branches: [dev]
     paths:
@@ -28,21 +14,46 @@ on:
       - start.sh
       - .dockerignore
       - flowdocs/**
-      - .github/workflows/docker-build.yml
+      - .github/workflows/**
+  push:
+    branches: [dev]
+    paths:
+      - Dockerfile
+      - docker-entrypoint.sh
+      - docker-compose.yml
+      - docker-compose.dev.yml
+      - requirements.txt
+      - requirements-web.txt
+      - requirements-indexing.txt
+      - start.sh
+      - .dockerignore
+      - flowdocs/**
+      - .github/workflows/**
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish an image from dev
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
-  group: docker-build-${{ github.ref }}
+  group: docker-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  IMAGE_NAME: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend
 
 jobs:
   validate:
+    name: Validate source and deployment contract
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 (Node 24)
 
       - name: Check repository whitespace
         run: git diff --check
@@ -63,45 +74,54 @@ jobs:
           PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:ci
         run: docker compose -f docker-compose.yml config --quiet
 
-  build:
-    if: github.event_name != 'pull_request'
+  release:
+    name: Build and publish dev release
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.publish == true)
     needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: production
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 (Node 24)
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0 (Node 24)
         with:
           driver-opts: |
             image=moby/buildkit:latest
             network=host
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0 (Node 24)
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Extract release metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0 (Node 24)
         with:
-          images: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend
+          images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
             type=sha,format=short
+            type=raw,value=dev
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.ref.name=dev
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - name: Build and publish release image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0 (Node 24)
         with:
           context: .
           file: ./Dockerfile
@@ -111,27 +131,45 @@ jobs:
           cache-from: type=gha,scope=buildkit
           cache-to: type=gha,scope=buildkit,mode=max
           platforms: linux/amd64
+          provenance: mode=max
+          sbom: true
 
       - name: Smoke-test published image
         env:
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE_REF: ${{ env.IMAGE_NAME }}:dev
         run: |
-          IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
-          docker pull "$IMAGE"
+          set -euo pipefail
+          docker pull "$IMAGE_REF"
           docker run --rm --entrypoint python \
             -e SECRET_KEY=ci-only-secret \
             -e ALLOW_INSECURE_DEFAULTS=1 \
             -e DEBUG=True \
             -e DATA_ROOT=/tmp/flowdocs-data \
             -e DJANGO_SETTINGS_MODULE=flowdocs.settings \
-            "$IMAGE" -c 'import os, sys; os.chdir("/app/flowdocs"); sys.path.insert(0, "/app/flowdocs"); import django; django.setup(); print("Django image smoke test passed")'
+            "$IMAGE_REF" -c 'import os, sys; os.chdir("/app/flowdocs"); sys.path.insert(0, "/app/flowdocs"); import django; django.setup(); print("Django image smoke test passed")'
 
       - name: Enforce image size budget
         env:
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE_REF: ${{ env.IMAGE_NAME }}:dev
         run: |
-          IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
-          SIZE="$(docker image inspect "$IMAGE" --format '{{.Size}}')"
+          set -euo pipefail
+          SIZE="$(docker image inspect "$IMAGE_REF" --format '{{.Size}}')"
           MAX=$((12 * 1024 * 1024 * 1024))
           echo "Image size: $SIZE bytes; budget: $MAX bytes"
           test "$SIZE" -le "$MAX"
+
+      - name: Publish release evidence
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}:dev
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "## FlowDocs dev release"
+            echo
+            echo "- Git SHA: \\`${GITHUB_SHA}\\`"
+            echo "- Image: \\`${IMAGE_REF}@${DIGEST}\\`"
+            echo "- Tags: \\`dev\\`, \\`latest\\`, and short SHA"
+            echo "- SBOM: enabled"
+            echo "- Provenance: max"
+            echo "- Source: \\`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}\\`"
+          } >> "$GITHUB_STEP_SUMMARY"
