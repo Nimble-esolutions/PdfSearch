@@ -151,8 +151,8 @@ logs/
 ehthumbs.db
 Thumbs.db
 
-# Docker
-.dockerignore
+# Docker (.dockerignore must be tracked for Docker builds)
+# .dockerignore is intentionally NOT ignored
 
 # Secrets and sensitive files
 secrets/

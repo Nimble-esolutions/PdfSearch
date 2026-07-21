@@ -1,21 +1,19 @@
-# Git files
+# Git
 .git
 .gitignore
 .gitattributes
 .gitmodules
 
-# IDE and editor files
+# IDE / Editor
 .vscode
 .idea
 *.swp
 *.swo
 *~
 .DS_Store
-*.sublime-project
-*.sublime-workspace
 
-# Python cache and virtual environments
-__pycache__
+# Python
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -24,93 +22,75 @@ venv/
 env/
 ENV/
 .venv
-pip-log.txt
-pip-delete-this-directory.txt
 
-# Django specific
+# Django
 *.log
 local_settings.py
-db.sqlite3
-db.sqlite3-journal
-*.pot
-*.pyc
-media/
+*.sqlite3
+*.sqlite3-journal
 staticfiles/
+media/
 flowdocs/media/
 flowdocs/pdf_cache/
 flowdocs/faiss_indexes/
 flowdocs/chroma_db/
+flowdocs/__pycache__/
+flowdocs/core/__pycache__/
+flowdocs/core/migrations/__pycache__/
 *.pkl
 *.pickle
 
-# Environment files (use env.template instead)
+# Environment (secrets)
 .env
-.env.local
-.env.*.local
+.env.*
 *.env
+!env.template
 
-# Documentation
+# Documentation (except README)
 *.md
 !README.md
 docs/
 
 # Testing
-.pytest_cache
+.pytest_cache/
 .coverage
 htmlcov/
 .tox/
-.hypothesis/
 
-# Build artifacts
+# Build
 dist/
 build/
 *.egg-info/
 *.egg
 
-# Docker files (don't include in build context)
+# Docker (don't include in build context)
 docker-compose*.yml
 Dockerfile*
-.dockerignore
+!.dockerignore
 
 # CI/CD
 .github/
-.gitlab-ci.yml
-.travis.yml
-.circleci/
 
-# Backup files
+# Backups & temp
 *.bak
 *.backup
-*.sqlite3.backup
 backups/
-flowdocs/data_backup.json
-flowdocs/backups/
-
-# Temporary files
 tmp/
 temp/
 *.tmp
 
-# Node modules (if any)
+# Node
 node_modules/
-npm-debug.log
-yarn-error.log
 
-# OS files
+# OS
 Thumbs.db
-.DS_Store
 
 # Logs
 logs/
 *.log
 
-# =====================================================
-# INIT DATA - Include baseline data for fresh deployments
-# =====================================================
-# The init/ folder contains pre-populated data:
-# - db.sqlite3: Baseline SQLite database 
-# - faiss_indexes/: Pre-built vector search indexes
-# This is explicitly INCLUDED (not ignored) in the build
-# to enable instant startup without manual data copying.
-# Note: Runtime volumes can override this baseline data.
-
+# Init data — included in build for fresh deployments
+!init/
+!init/db.sqlite3
+!init/faiss_indexes/
+!init/faiss_indexes/*

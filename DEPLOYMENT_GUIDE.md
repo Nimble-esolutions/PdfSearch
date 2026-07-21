@@ -1,73 +1,145 @@
-# Dokploy Deployment Guide
+# Dokploy Deployment Guide — FlowDocs (PdfSearch)
 
-## Environment Variables Configuration
+## Quick Setup
 
-To fix the OpenAI API key error in your deployed application, you need to set the following environment variables in your Dokploy panel:
+### 1. Create Application in Dokploy
+- **Type**: Compose
+- **Repository**: `https://github.com/Nimble-esolutions/PdfSearch.git`
+- **Branch**: `feature/docker-optimization-v2` (or default after merge)
+- **Compose Path**: `./docker-compose.yml`
 
-### Required Environment Variables
+### 2. Environment Variables (Dokploy UI → Environment)
+```
+DEBUG=False
+SECRET_KEY=<generate 50-char random string>
+ALLOWED_HOSTS=ai-sahakar.net,www.ai-sahakar.net,one.ai-sahakar.net
+OPENAI_API_KEY=<your OpenAI API key>
+CORS_ALLOWED_ORIGINS=https://ai-sahakar.net,https://www.ai-sahakar.net
+CSRF_TRUSTED_ORIGINS=https://ai-sahakar.net,https://www.ai-sahakar.net,https://one.ai-sahakar.net
+REDIS_URL=redis://redis:6379/1
+APP_UID=1000
+APP_GID=1000
+DATA_PATH=/home/prodsahakar/flowdocs
+WEB_PORT=8000
+```
 
-1. **Django Settings**
+### 3. Domain & TLS
+- **Host**: `ai-sahakar.net`
+- **Container Port**: `8000`
+- **TLS**: Enable Let's Encrypt
 
-   ```
-   SECRET_KEY=your-secret-key-here
-   DEBUG=True
-   ALLOWED_HOSTS=localhost,127.0.0.1,dev.ai-sahakar.net,www.ai-sahakar.net,ai-sahakar.net
-   ```
+### 4. Default Credentials
+- **Admin**: `admin` / `admin123` — **change after first login**
 
-2. **Database Configuration**
+---
 
-   ```
-   DB_ENGINE=django.db.backends.sqlite3
-   DB_NAME=db.sqlite3
-   ```
+## Data Directory Layout
 
-3. **API Keys** (CRITICAL - This fixes the 401 error)
+All persistent data at `${DATA_PATH}` (default `/home/prodsahakar/flowdocs/`):
 
-   ```
-   OPENAI_API_KEY=your-openai-api-key-here
-   ```
+```
+/home/prodsahakar/flowdocs/
+├── db.sqlite3          # SQLite database
+├── media/
+│   └── pdfs/           # Uploaded PDF documents
+├── faiss_indexes/      # FAISS vector search indexes
+├── chroma_db/          # ChromaDB vector embeddings
+├── staticfiles/        # Collected Django static files
+└── backups/
+    ├── db_backup_*.sqlite3     # Rotating DB snapshots
+    ├── chroma_backup/          # ChromaDB snapshots
+    └── json_backups/           # Django dumpdata fixtures
+```
 
-4. **CORS and CSRF Settings**
+All directories are bind-mounted — data survives `docker compose down`, container removal, and image rebuilds.
 
-   ```
-   CORS_ALLOWED_ORIGINS=https://dev.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000
-   CSRF_TRUSTED_ORIGINS=https://dev.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000
-   ```
+---
 
-5. **Optional Settings**
-   ```
-   REDIS_URL=redis://localhost:6379/1
-   SENTRY_DSN=
-   MAX_FILE_SIZE=10485760
-   ```
+## Migration (One-Time)
 
-## Steps to Fix the Deployment
+If migrating from an older setup where `pdfs/` was at the top level:
 
-1. **Go to your Dokploy panel**
-2. **Navigate to your application settings**
-3. **Find the "Environment Variables" section**
-4. **Add each variable above with its corresponding value**
-5. **Make sure to set the OPENAI_API_KEY with the correct value**
-6. **Save the configuration**
-7. **Redeploy the application**
+```bash
+ssh root@80.65.208.138
+mkdir -p /home/prodsahakar/flowdocs/{media,chroma_db,staticfiles}
+mv /home/prodsahakar/flowdocs/pdfs /home/prodsahakar/flowdocs/media/pdfs
+chown -R 1000:1000 /home/prodsahakar/flowdocs/
+```
 
-## Important Notes
+---
 
-- The `OPENAI_API_KEY` is the most critical variable to fix the 401 error
-- Make sure there are no extra spaces or quotes around the values
-- The `DEBUG=True` setting is for development - set to `False` in production
-- The `ALLOWED_HOSTS` should include your domain names
+## Backup Strategy
 
-## Verification
+### Host-Level Backup (Recommended)
 
-After setting the environment variables and redeploying:
+```bash
+ssh root@80.65.208.138
+DATE=$(date +%F_%H%M%S)
+mkdir -p /root/backups/flowdocs
+sqlite3 /home/prodsahakar/flowdocs/db.sqlite3 ".backup /tmp/db_snapshot.sqlite3"
+tar czf /root/backups/flowdocs/flowdocs-$DATE.tar.gz \
+    -C /home/prodsahakar/flowdocs \
+    db.sqlite3 media faiss_indexes chroma_db
+find /root/backups/flowdocs -name 'flowdocs-*.tar.gz' -mtime +7 -delete
+```
 
-1. Check the application logs for any errors
-2. Test the search functionality to ensure OpenAI API is working
-3. Verify that static files are loading correctly
-4. Test the login functionality
+### Automated Cron Job
 
-## Current Working Credentials
+```bash
+# crontab -e
+0 2 * * * /root/scripts/backup-flowdocs.sh
+```
 
-- **Admin**: admin / admin123
-- **User**: SnehalAbhivant / Snehal@123
+Script at `/root/scripts/backup-flowdocs.sh`:
+```bash
+#!/bin/bash
+set -e
+DATE=$(date +\%F)
+DATA_PATH="/home/prodsahakar/flowdocs"
+BACKUP_DIR="/root/backups/flowdocs"
+mkdir -p "$BACKUP_DIR"
+sqlite3 "$DATA_PATH/db.sqlite3" ".backup /tmp/db_snapshot.sqlite3" 2>/dev/null || true
+[ -f /tmp/db_snapshot.sqlite3 ] && cp /tmp/db_snapshot.sqlite3 "$DATA_PATH/db.sqlite3"
+tar czf "$BACKUP_DIR/flowdocs-$DATE.tar.gz" -C "$DATA_PATH" \
+    db.sqlite3 media faiss_indexes chroma_db 2>/dev/null
+find "$BACKUP_DIR" -name 'flowdocs-*.tar.gz' -mtime +7 -delete
+```
+
+### Restore
+
+```bash
+tar xzf /root/backups/flowdocs/flowdocs-<DATE>.tar.gz -C /home/prodsahakar/flowdocs/
+chown -R 1000:1000 /home/prodsahakar/flowdocs/
+# Redeploy via Dokploy UI
+```
+
+---
+
+## Pre-Deployment Checklist
+
+```bash
+ssh root@80.65.208.138 "df -h /"                                    # disk space
+ssh root@80.65.208.138 "ls -la /home/prodsahakar/flowdocs/"         # data exists
+# Run backup (see above)
+ssh root@80.65.208.138 "ls /etc/dokploy/traefik/dynamic/"           # check no route conflicts
+```
+
+---
+
+## Post-Deployment Verification
+
+```bash
+docker compose -f <path>/docker-compose.yml ps
+docker compose -f <path>/docker-compose.yml logs web --tail 50
+curl -sS http://localhost:8000/
+curl -sS -o /dev/null -w "%{http_code}" https://ai-sahakar.net/admin/
+```
+
+---
+
+## Disaster Recovery
+
+1. Restore backup (see Restore section)
+2. Redeploy from Dokploy UI
+3. Verify with post-deployment checks
+4. ChromaDB/FAISS indexes auto-rebuild on next upload if missing
