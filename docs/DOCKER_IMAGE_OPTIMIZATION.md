@@ -1,3 +1,14 @@
+Status: Historical
+Audience: Release
+Owner: FlowDocs maintainers
+Last verified: 2026-07-22
+Canonical source: docs/BUILD_AND_RELEASE_ROADMAP.md
+Supersedes: None
+
+> Historical design notes. Use [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md)
+> for the current release contract. The target web/worker split described here
+> is not deployed by the current Compose file.
+
 # Docker Image Optimization
 
 ## Current State

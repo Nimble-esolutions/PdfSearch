@@ -70,6 +70,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 COPY --from=builder /build/wheels /wheels
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-compile --no-index --no-deps /wheels/*.whl && \
+    pip uninstall -y setuptools wheel && \
     rm -rf /wheels
 
 COPY . .
