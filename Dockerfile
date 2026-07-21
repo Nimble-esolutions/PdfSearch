@@ -9,7 +9,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     g++ \
@@ -29,13 +31,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxcb1-dev \
     libffi-dev \
     libpq-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    curl
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip wheel --wheel-dir /build/wheels -r requirements.txt
 
 # =====================================================================
 # STAGE 2: Runtime - minimal image with only runtime libraries
@@ -54,7 +56,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-mar \
     poppler-utils \
@@ -72,19 +76,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sqlite3 \
     gosu \
     bash \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    curl
 
 COPY --from=builder /build/wheels /wheels
 COPY --from=builder /build/requirements.txt .
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install --no-compile --no-index --find-links=/wheels -r requirements.txt && \
     rm -rf /wheels
 
 COPY . .
 
-RUN chmod +x ./start.sh 2>/dev/null || true
+RUN chmod +x ./start.sh ./docker-entrypoint.sh 2>/dev/null || true
 
 RUN mkdir -p /app/staticfiles /app/media && \
     [ -d /app/init ] && chmod -R 755 /app/init || true
@@ -238,4 +242,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:8000/ || exit 1
 
-ENTRYPOINT ["./start.sh"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
