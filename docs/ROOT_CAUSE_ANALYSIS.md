@@ -9,7 +9,7 @@ Supersedes: None
 > for current migration-failure response and [`PRODUCTION_OPERATING_RULES.md`](PRODUCTION_OPERATING_RULES.md)
 > for current readiness boundaries.
 
-# Migration Compatibility Root Cause Analysis
+# Migration and Production Compatibility Root Cause Analysis
 
 ## Historical Incident
 
@@ -47,3 +47,27 @@ Database migrations and document/index migration are separate operations:
 
 Do not use a generic JSON fixture dump as a substitute for a consistent
 SQLite backup or a schema migration.
+
+## Verified Production Outage Causes
+
+The subsequent production outage had multiple independent causes:
+
+- stale local reuse of a mutable `latest` image;
+- stale Traefik labels routing to the wrong deployment shape;
+- `localhost` used for Redis from inside the web container;
+- the Redis client missing from the web image;
+- `DEBUG=True` in production.
+
+The current release boundary addresses these with immutable image identity,
+explicit Dokploy routing, service-name Redis configuration, the Redis-enabled
+PR #24 image revision, and `DEBUG=False`. Verify the effective deployment rather
+than treating any one fix as sufficient.
+
+## Verified Data Divergence
+
+Legacy and active data are not interchangeable: legacy contains 242 PDFs and 45
+FAISS files; active contains 17 PDF rows, 0 PDFs, and 11 FAISS files; only 6 PDF
+paths overlap; and the SQLite databases diverge. Never merge by direct copy.
+Use quarantine, inventory, conflict classification, staged restore, FAISS
+fingerprint validation, and explicit promotion. RustFS snapshots/checksums are
+recovery evidence only; application S3 integration is not implemented.

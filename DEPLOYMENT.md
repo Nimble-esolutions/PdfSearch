@@ -17,6 +17,12 @@ The container image provides immutable application code under `/app/flowdocs`.
 The Dokploy-managed `flowdocs_data` volume provides mutable data under
 `/app/data`.
 
+The current production domain is `2026.ai-sahakar.net` and is healthy. The
+merged source baseline is `f05e110`; the current production release is the
+Redis-enabled immutable image revision from PR #24. Dokploy must pull exact
+image digests with `pull_policy: always`; a tag or stale local `latest` image is
+not valid release evidence.
+
 ## Development
 
 Use:
@@ -35,8 +41,16 @@ Development uses its own named volumes and must not reference `prod_flowdocs`.
 - Never mount persistent data over application code.
 - Never run production with `DEBUG=True` or wildcard hosts.
 - Treat database, media, and vector indexes as one recovery set.
+- Treat legacy and active data as divergent custody domains; never copy them
+  directly. Use quarantine, inventory, conflict classification, staged restore,
+  FAISS fingerprint validation, and explicit promotion.
 - Verify restores, not only backup creation.
 
+RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` is an isolated operator
+recovery vault containing timestamped active/legacy snapshots and checksums.
+Application-level S3 integration is not implemented, and no automatic
+cross-environment synchronization exists.
+
 See [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) for the complete Dokploy,
-migration, backup, restore, and rollback procedures. See
+data-custody, backup, restore, and rollback procedures. See
 [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md) for incident response.

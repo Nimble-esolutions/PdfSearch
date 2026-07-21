@@ -1,0 +1,9 @@
+flowchart TD
+    source["Merged source f05e110"] --> ci["CI image build and smoke tests"]
+    ci --> digest["Immutable web and Redis digests"]
+    digest --> dokploy["Dokploy Compose"]
+    dokploy --> pull["pull_policy always"]
+    pull --> health["/livez and /readyz"]
+    health --> data["PDF count, FAISS count, representative search"]
+    data --> promote["Explicit production promotion"]
+    tag["latest or dev tag"] -. "not release identity" .-> dokploy

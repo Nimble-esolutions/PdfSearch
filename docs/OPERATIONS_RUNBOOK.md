@@ -14,6 +14,11 @@ Run evidence commands before recovery commands. Do not expose environment
 values, credentials, document contents, or copied production data in tickets or
 logs.
 
+Current baseline: `https://2026.ai-sahakar.net` is healthy; merged source is
+`f05e110`; and production runs the Redis-enabled immutable image revision from
+PR #24. Dokploy production evidence must show exact web/Redis digests and
+`pull_policy: always`.
+
 ## Safety Rules
 
 - Preserve logs, deployment metadata, image identity, and volume identity before cleanup.
@@ -22,6 +27,12 @@ logs.
 - Do not mount data over `/app/flowdocs`.
 - Do not restore over the active volume; use a disposable Dokploy application or uniquely named volume.
 - Treat application rollback and data rollback as separate decisions.
+- Treat legacy and active data as divergent custody domains. Never copy them
+  directly; use quarantine, inventory, conflict classification, staged restore,
+  FAISS fingerprint validation, and explicit promotion.
+- RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` is an isolated recovery
+  vault. Application-level S3 integration and automatic cross-environment sync
+  are not implemented.
 - Use Dokploy for production deployment changes; do not hand-run a replacement `docker run` container.
 
 ## Initial Evidence Bundle
@@ -43,11 +54,12 @@ docker inspect "$(docker compose -f docker-compose.yml ps -q redis)" \
   --format '{{.Created}} {{.Config.Image}}'
 ```
 
-Expected evidence is the intended Compose application, a web image identified
-by `repo@sha256:<digest>` for promotion, `/app/data` on the expected named
-volume, `/mnt/legacy` read-only when present, and no mount at
-`/app/flowdocs`. Retain the command output with the incident record after
-redacting hostnames or other sensitive operational details as required.
+Expected evidence is the intended Compose application, web and Redis images
+identified by `repo@sha256:<digest>` for promotion, effective
+`pull_policy: always`, `/app/data` on the expected named volume, `/mnt/legacy`
+read-only when present, and no mount at `/app/flowdocs`. Retain the command
+output with the incident record after redacting hostnames or other sensitive
+operational details as required.
 
 ## Incident Card: Unhealthy Containers
 
@@ -103,8 +115,9 @@ deployment ID, tested digest, previous digest, and backup reference.
 
 ### Symptoms
 
-The running web image does not match the digest recorded for the deployment, or
-the `dev` and `latest` aliases do not resolve to the tested digest.
+The running web or Redis image does not match the digest recorded for the
+deployment, or the effective Compose configuration does not pull exact digests
+with `pull_policy: always`.
 
 ### Read-only evidence
 
@@ -115,8 +128,8 @@ docker inspect "$WEB" --format '{{index .RepoDigests 0}}'
 docker compose -f docker-compose.yml config --images
 ```
 
-From a release workstation, resolve both compatibility aliases without using
-them as the release identity:
+From a release workstation, resolve any compatibility tags only for comparison;
+never use them as release identity:
 
 ```bash
 docker buildx imagetools inspect ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:dev
@@ -125,26 +138,26 @@ docker buildx imagetools inspect ghcr.io/nimble-esolutions/pdfsearch/shakar-fron
 
 ### Expected evidence
 
-The deployed web container and the release record identify the same immutable
-digest. `dev` and `latest` are compatibility aliases of that tested digest.
+The deployed web and Redis containers and the release record identify the same
+immutable digests. Compatibility tags may be aliases, but they are not evidence
+of the deployed release.
 
 ### Stop conditions
 
-Stop promotion if either alias diverges, if the deployed image is tag-only, or
-if the digest cannot be matched to CI smoke-test evidence. Do not repoint an
-alias to make a mismatched deployment appear valid.
+Stop promotion if either service is tag-only, if `pull_policy` is not always, or
+if a digest cannot be matched to CI smoke-test evidence. Do not repoint an alias
+or reuse a local cache to make a mismatched deployment appear valid.
 
 ### Recovery
 
-Record the mismatched image and use Dokploy to set `PDFSEARCH_IMAGE` to the
-tested `repo@sha256:<digest>`. Redeploy, then repeat `/livez`, `/readyz`, login,
-PDF listing, search, and static-asset checks.
+Record the mismatched images and use Dokploy to set the web and Redis images to
+the tested `repo@sha256:<digest>` values. Redeploy, then repeat `/livez`,
+`/readyz`, login, PDF count, FAISS count, search, and static-asset checks.
 
 ### Rollback
 
-Use the previous recorded immutable digest through Dokploy. Keep both aliases
-available for existing Compose consumers; aliases do not replace rollback
-identity.
+Use the previous recorded immutable web and Redis digests through Dokploy. Tags
+and aliases do not replace rollback identity.
 
 ### Retained evidence
 
@@ -171,7 +184,7 @@ docker compose -f docker-compose.yml config --volumes
 ### Expected evidence
 
 The active data volume is mounted at `/app/data`, the legacy volume is mounted
-at `/mnt/legacy` read-only only when required, and no volume shadows
+at `/mnt/legacy` read-only only for controlled quarantine evidence, and no volume shadows
 `/app/flowdocs`.
 
 ### Stop conditions
@@ -430,3 +443,31 @@ passes and a separately approved promotion is completed.
 
 Keep backup reference, isolated volume name, image digest, integrity output,
 restore logs, media/index/search checks, and the decision not to promote.
+
+## Incident Card: Legacy/Active Data Reconciliation
+
+### Verified baseline
+
+Legacy has 242 PDFs and 45 FAISS files. Active has 17 PDF rows, 0 PDFs, and 11
+FAISS files. Only 6 PDF paths overlap, and the SQLite databases diverge. RustFS
+bucket `ai-sahakar-prod-flowdocs-data-volume` holds timestamped active/legacy
+snapshots and checksums but is isolated from the application network.
+
+### Recovery
+
+1. Quarantine both sources in separate read-only targets.
+2. Inventory rows, paths, index files, and checksums without copying contents.
+3. Classify conflicts and missing references.
+4. Stage an explicit restore in a uniquely named disposable target.
+5. Validate SQLite, PDF count, FAISS fingerprints, index loading, and search.
+6. Promote only after an operator records the selected source and decision.
+
+Direct legacy-to-active copying and silent merging are prohibited. Application
+S3 integration, automatic cross-environment synchronization, generated artifact
+manifests, and FAISS recovery automation are not current capabilities.
+
+### Required gates
+
+Pass link/path scan, Mermaid validation, Compose config, `/livez`, `/readyz`,
+PDF count, FAISS count, and representative search before promotion. Retain
+failed isolated targets and all evidence until the incident is closed.

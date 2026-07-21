@@ -1,0 +1,12 @@
+flowchart TD
+    incident["Incident detected"] --> evidence["Preserve logs, digests, volumes, checksums"]
+    evidence --> isolate["Isolate disposable restore target"]
+    isolate --> integrity["SQLite integrity and migration checks"]
+    integrity --> counts["PDF count and FAISS count"]
+    counts --> indexes["FAISS fingerprint and load validation"]
+    indexes --> search["Representative search"]
+    search --> endpoints["/livez and /readyz"]
+    endpoints --> decision{"Restore passes?"}
+    decision -- "no" --> retain["Retain failed target; do not promote"]
+    decision -- "yes" --> approve["Explicit promotion decision"]
+    approve --> release["Record release and restore traffic"]

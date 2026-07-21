@@ -19,6 +19,11 @@ Before production promotion, every HIGH or CRITICAL finding must be fixed,
 explicitly accepted by the security owner, or documented as not applicable with
 evidence. Do not suppress a finding only to make CI green.
 
+The current production baseline is the Redis-enabled immutable image revision
+from PR #24 at merged source `f05e110`. Promotion still requires the exact
+published digest, not a tag or stale local image, plus the Compose, health, data
+count, FAISS count, and representative-search gates.
+
 ## Root Cause From Release `d25a5b4`
 
 The failed release built successfully and passed the application smoke tests.

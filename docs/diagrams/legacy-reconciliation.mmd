@@ -1,0 +1,11 @@
+flowchart LR
+    legacy["Legacy\n242 PDFs\n45 FAISS"] --> compare["Inventory and compare"]
+    active["Active\n17 PDF rows\n0 PDFs\n11 FAISS"] --> compare
+    compare --> overlap["6 overlapping PDF paths"]
+    compare --> divergence["Divergent SQLite databases"]
+    overlap --> classify["Conflict classification"]
+    divergence --> classify
+    classify --> stage["Staged selected restore"]
+    stage --> validate["FAISS fingerprints and search"]
+    validate --> promote["Explicit promotion only"]
+    direct["Direct copy"] -. "prohibited" .-> stage

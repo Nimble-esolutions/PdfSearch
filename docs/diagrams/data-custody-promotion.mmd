@@ -1,0 +1,12 @@
+flowchart TD
+    active["Active snapshot"] --> quarantine["Separate quarantine targets"]
+    legacy["Legacy snapshot"] --> quarantine
+    quarantine --> inventory["Inventory rows, paths, FAISS files, checksums"]
+    inventory --> classify["Classify conflicts and missing references"]
+    classify --> staged["Staged restore from explicit selection"]
+    staged --> faiss["FAISS fingerprint, load, and search validation"]
+    faiss --> decision{"Explicit operator promotion?"}
+    decision -- "no" --> retain["Retain quarantine evidence"]
+    decision -- "yes" --> release["Record compatible image and data release"]
+    release --> active2["Promote active data"]
+    direct["Direct copy or silent merge"] -. "prohibited" .-> active2
