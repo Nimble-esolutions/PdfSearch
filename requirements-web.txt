@@ -1,0 +1,15 @@
+# Dependencies imported by the live Django web/query path.
+# Heavy OCR/indexing/demo dependencies remain in requirements.txt for the
+# future worker image and are intentionally not installed in the web image.
+Django>=5.2,<6.0
+python-dotenv>=1.0.0
+django-cors-headers>=4.3.1
+django-environ>=0.12.0
+whitenoise>=6.6.0
+gunicorn>=21.2.0
+PyMuPDF==1.26.1
+openai>=1.0.0
+langdetect>=1.0.9
+numpy>=1.24.0
+faiss-cpu>=1.7.4
+indic-transliteration>=2.3.0

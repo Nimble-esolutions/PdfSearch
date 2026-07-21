@@ -1,0 +1,4 @@
+# Transitional dependency set for the future asynchronous indexing/OCR worker.
+# The current web image does not install this file. Keep requirements.txt as
+# the complete compatibility set until the worker service is introduced.
+-r requirements.txt
