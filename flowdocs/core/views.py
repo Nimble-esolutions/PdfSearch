@@ -115,6 +115,7 @@ def delete_user(request, user_id):
     return redirect('user_list')
 
 #==================rename category option====================
+@login_required
 def rename_folder(request, folder_id):
     if request.method == "POST":
         folder = get_object_or_404(Folder, id=folder_id)
@@ -127,6 +128,7 @@ def rename_folder(request, folder_id):
 
 
 #===================pdf title rename ==================
+@login_required
 def rename_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, id=pdf_id)
 
@@ -147,6 +149,7 @@ def rename_pdf(request, pdf_id):
 
 
 #====================================Update and add keywords ==========================
+@login_required
 def update_folder_keywords(request, folder_id):
     """Update folder keywords from modal."""
     if request.method == 'POST':
@@ -300,7 +303,6 @@ def dashboard(request, folder_id=None):
     return render(request, "dashboard.html", {"folders": folders, "role": role})
 
 # -------------- New logic for folder search --------------
-@csrf_exempt
 def search_query(request):
     if request.method == "GET":
         welcome_message = (
@@ -457,6 +459,5 @@ def search_query(request):
                 "answer": "⚠️ काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
                 "references": []
             })
-
 
 

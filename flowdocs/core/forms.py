@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
+from django.conf import settings
 from .models import PDFFile, CustomUser, Folder
 
 # ---------------- Upload Form ----------------
@@ -14,6 +15,22 @@ class UploadForm(forms.ModelForm):
             'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'PDF Title'}),
             'file': forms.FileInput(attrs={'class': 'form-control'}),
         }
+
+    def clean_file(self):
+        uploaded = self.cleaned_data['file']
+        max_size = int(getattr(settings, 'MAX_FILE_SIZE', 10 * 1024 * 1024))
+        if uploaded.size > max_size:
+            raise forms.ValidationError(f'Files must be smaller than {max_size} bytes.')
+        if not uploaded.name.lower().endswith('.pdf'):
+            raise forms.ValidationError('Only PDF files are accepted.')
+        if uploaded.content_type not in ('application/pdf', 'application/octet-stream'):
+            raise forms.ValidationError('The uploaded file must be a PDF.')
+        if uploaded.multiple_chunks():
+            uploaded.seek(0)
+        if uploaded.read(5) != b'%PDF-':
+            raise forms.ValidationError('The uploaded file is not a valid PDF.')
+        uploaded.seek(0)
+        return uploaded
 
 # ---------------- Folder Form ----------------
 from django import forms

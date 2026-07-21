@@ -4,7 +4,7 @@ from chromadb.utils import embedding_functions
 from django.conf import settings
 
 # Persistent DB
-client = chromadb.PersistentClient(path="chroma_db")
+client = chromadb.PersistentClient(path=str(settings.CHROMA_DIR))
 
 # Embedding models
 embedding_large = embedding_functions.OpenAIEmbeddingFunction(

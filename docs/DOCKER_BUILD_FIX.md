@@ -1,84 +1,31 @@
-# Docker Build Failure - Root Cause Analysis
+# Docker Build Root Causes and Prevention
 
-## Problem Summary
+## Historical Failure
 
-The Docker build was failing with exit code 100 when trying to install runtime packages in a multi-stage build optimization attempt.
+An earlier multi-stage build failed because runtime package names were copied
+from a different Debian release. The runtime image must use package names
+available in the exact base-image distribution.
 
-## Root Cause
+## Current Prevention
 
-The multi-stage build optimization attempted to separate build-time dependencies from runtime dependencies. However, the runtime stage tried to install packages with incorrect/versioned names that don't exist in Debian repositories:
+- Use the pinned base image family consistently across builder and runtime.
+- Validate the Dockerfile with `docker build --check`.
+- Run the real `linux/amd64` build in GitHub Actions.
+- Do not claim a build is valid from a local arm64 syntax check alone.
+- Keep runtime package discovery and smoke tests in CI.
 
-- `libjpeg62-turbo` - incorrect package name
-- `libpng16-16` - incorrect package name  
-- `libwebp6` - incorrect package name
-- `liblcms2-2` - incorrect package name
-- `libharfbuzz0b` - incorrect package name
-- `libffi8` - incorrect package name
+## Data Mount Rule
 
-## Working Solution (Reverted)
+A named Docker volume is a directory. It must never be mounted to a file path
+such as `/app/data/db.sqlite3`. Mount the data volume at `/app/data` and put
+SQLite, media, indexes, Chroma, static files, and backups below that root.
 
-The working Dockerfile uses a **single-stage build** that includes both build and runtime dependencies:
+Application code remains in the image under `/app/flowdocs`; persistent data
+must not shadow that directory.
 
-- Uses `-dev` packages (e.g., `libjpeg-dev`, `libpng-dev`) which are correct package names
-- Includes build tools (`build-essential`, `cargo`, `cmake`) in the final image
-- Image size is larger (~4GB+) but build is reliable and working
+## Current Known Risks
 
-## Why Multi-Stage Build Failed
-
-When implementing multi-stage builds, you need to:
-
-1. **Build stage**: Install `-dev` packages and build tools
-2. **Runtime stage**: Install runtime libraries (without `-dev` suffix)
-
-The problem was identifying the correct runtime package names. In Debian/Ubuntu:
-- `libjpeg-dev` (build) → needs runtime: `libjpeg62-turbo` OR just install `libjpeg-dev` which pulls runtime deps
-- `libpng-dev` (build) → needs runtime: `libpng16-16` OR just install `libpng-dev` which pulls runtime deps
-
-However, the exact runtime package names vary by Debian version and may not match the versioned names we tried.
-
-## Correct Approach for Future Optimization
-
-If optimizing image size in the future, use one of these approaches:
-
-### Option 1: Use apt to find runtime dependencies
-```dockerfile
-# Runtime stage
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        $(apt-cache depends libjpeg-dev libpng-dev libwebp-dev | \
-          grep "Depends:" | grep -v "dev" | awk '{print $2}' | sort -u) && \
-    apt-get clean
-```
-
-### Option 2: Install runtime packages that Python actually needs
-Let Python packages pull in their dependencies, then identify what's actually needed:
-```dockerfile
-# Install minimal runtime libraries
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        libpq5 \
-        libcairo2 \
-        libpango-1.0-0 \
-        # ... other definitely-needed packages
-```
-
-### Option 3: Keep working single-stage build
-The current single-stage build works reliably. The larger image size is acceptable for:
-- Reliable builds
-- No complex dependency resolution
-- Easier maintenance
-
-## Current Status
-
-✅ **Reverted to working single-stage Dockerfile**
-- Build succeeds reliably
-- All dependencies included
-- Image size: ~4GB+ (acceptable trade-off for reliability)
-
-## Recommendations
-
-1. **Keep current single-stage build** - It works reliably
-2. **If optimizing later**: Test multi-stage build thoroughly in a separate branch
-3. **Monitor image size**: If it becomes a real problem (storage costs, pull times), then optimize
-4. **Use .dockerignore**: Already in place to reduce build context size
-
+- CPU-only deployments still contain a large OCR/ML dependency graph.
+- Model/index artifacts are not yet independently versioned.
+- Production deployment should use an immutable image digest rather than
+  `latest`.

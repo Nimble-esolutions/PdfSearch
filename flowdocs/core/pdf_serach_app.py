@@ -4,10 +4,11 @@ from openai import OpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import chromadb
 from chromadb.utils import embedding_functions
+from django.conf import settings
 
 # --------------------------- CONFIG ---------------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-PERSIST_DIR = "chroma_store"  # folder to store vectors
+PERSIST_DIR = str(getattr(settings, "CHROMA_DIR", "chroma_store"))
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 chroma_client = chromadb.PersistentClient(path=PERSIST_DIR)
