@@ -201,7 +201,7 @@ jobs:
             echo "### Current remediation guidance"
             echo "The reported jaraco.context and wheel findings originate from vendored build tooling in the base Python image's setuptools, not from requirements-web.lock. The runtime Docker stage now removes setuptools and wheel after application wheels are installed. Rebuild and rerun Trivy; remaining findings require a base-image or dependency update."
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ -s trivy-report.txt ] && rg -q 'HIGH|CRITICAL' trivy-report.txt; then
+          if [ -s trivy-report.txt ] && grep -Eq 'HIGH|CRITICAL' trivy-report.txt; then
             echo "::warning::Trivy found HIGH/CRITICAL findings; release continued with a remediation summary."
           fi
 
