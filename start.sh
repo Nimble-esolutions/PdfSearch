@@ -6,7 +6,7 @@ echo "  FlowDocs - PDF Search Utility"
 echo "============================================================"
 
 export SECRET_KEY="${SECRET_KEY:-django-insecure-change-me-in-production}"
-export DEBUG="${DEBUG:-False}"
+export DEBUG="${DEBUG:-True}"
 export ALLOWED_HOSTS="${ALLOWED_HOSTS:-*}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-flowdocs.settings}"
 export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
@@ -47,6 +47,38 @@ MEDIA_DIR="/app/flowdocs/media"
 
 INIT_DB="/app/init/db.sqlite3"
 INIT_FAISS="/app/init/faiss_indexes"
+LEGACY_DATA="/mnt/legacy"
+
+# ===============================================================
+# Legacy data migration from prod_flowdocs volume
+# ===============================================================
+if [ -d "$LEGACY_DATA" ] && [ -f "$LEGACY_DATA/db.sqlite3" ]; then
+    echo "[legacy] Production data found at $LEGACY_DATA"
+
+    if [ ! -s "$DB_PATH" ] && [ -f "$LEGACY_DATA/db.sqlite3" ]; then
+        echo "[legacy] Seeding database from legacy volume..."
+        cp "$LEGACY_DATA/db.sqlite3" "$DB_PATH"
+        echo "[legacy] Database seeded ($(stat -c%s "$DB_PATH" 2>/dev/null || stat -f%z "$DB_PATH") bytes)"
+    fi
+
+    if [ -z "$(ls -A "$FAISS_DIR" 2>/dev/null)" ] && [ -d "$LEGACY_DATA/faiss_indexes" ] && [ "$(ls -A "$LEGACY_DATA/faiss_indexes" 2>/dev/null)" ]; then
+        echo "[legacy] Seeding FAISS indexes from legacy volume..."
+        cp -r "$LEGACY_DATA/faiss_indexes"/* "$FAISS_DIR"/
+        echo "[legacy] FAISS seeded ($(ls -1 "$FAISS_DIR" | wc -l | tr -d ' ') files)"
+    fi
+
+    if [ -z "$(ls -A "$MEDIA_DIR" 2>/dev/null)" ] && [ -d "$LEGACY_DATA/media" ] && [ "$(ls -A "$LEGACY_DATA/media" 2>/dev/null)" ]; then
+        echo "[legacy] Seeding media from legacy volume..."
+        cp -r "$LEGACY_DATA/media"/* "$MEDIA_DIR"/
+        echo "[legacy] Media seeded"
+    fi
+
+    if [ -z "$(ls -A /app/staticfiles 2>/dev/null)" ] && [ -d "$LEGACY_DATA/staticfiles" ] && [ "$(ls -A "$LEGACY_DATA/staticfiles" 2>/dev/null)" ]; then
+        echo "[legacy] Seeding staticfiles from legacy volume..."
+        cp -r "$LEGACY_DATA/staticfiles"/* /app/staticfiles/
+        echo "[legacy] Static files seeded"
+    fi
+fi
 
 # ===============================================================
 # Database init
@@ -122,13 +154,17 @@ python manage.py migrate --noinput || echo "[migrate] WARNING: Migration step ha
 # ===============================================================
 # Superuser
 # ===============================================================
-echo "[auth] Checking admin superuser..."
+SUPERUSER_NAME="${DJANGO_SUPERUSER_USERNAME:-admin}"
+SUPERUSER_EMAIL="${DJANGO_SUPERUSER_EMAIL:-admin@gmail.com}"
+SUPERUSER_PASS="${DJANGO_SUPERUSER_PASSWORD:-admin123}"
+
+echo "[auth] Ensuring superuser '$SUPERUSER_NAME'..."
 python manage.py shell -c "
 from django.contrib.auth import get_user_model
 User = get_user_model()
-if not User.objects.filter(username='admin').exists():
-    User.objects.create_superuser('admin', 'admin@gmail.com', 'admin123')
-    print('Created superuser: admin / admin123')
+if not User.objects.filter(username='$SUPERUSER_NAME').exists():
+    User.objects.create_superuser('$SUPERUSER_NAME', '$SUPERUSER_EMAIL', '$SUPERUSER_PASS')
+    print('Created superuser: $SUPERUSER_NAME')
 else:
     print('Superuser already exists.')
 "
