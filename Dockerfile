@@ -86,14 +86,8 @@ COPY . .
 
 RUN chmod +x ./start.sh 2>/dev/null || true
 
-RUN mkdir -p /app/staticfiles /app/media /app/init/faiss_indexes && \
-    if [ -f ./init/db.sqlite3 ]; then \
-        cp ./init/db.sqlite3 /app/init/db.sqlite3; \
-    fi && \
-    if [ -d ./init/faiss_indexes ] && [ "$(ls -A ./init/faiss_indexes 2>/dev/null)" ]; then \
-        cp -r ./init/faiss_indexes/* /app/init/faiss_indexes/; \
-    fi && \
-    chmod -R 755 /app/init
+RUN mkdir -p /app/staticfiles /app/media && \
+    [ -d /app/init ] && chmod -R 755 /app/init || true
 
 RUN groupadd -g ${APP_UID} ${APP_USER} 2>/dev/null || true && \
     useradd -u ${APP_UID} -g ${APP_UID} -m -s /bin/bash ${APP_USER} 2>/dev/null || true && \
