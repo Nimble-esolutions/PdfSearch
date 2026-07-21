@@ -1,77 +1,71 @@
-version: '3.8'
-
 services:
   redis:
-    # Using Redis image mirrored to GHCR (always latest, no rate limits)
-    image: ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine
-    container_name: flowdocs-redis-dev
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    image: redis:7-alpine
     volumes:
       - redis_data_dev:/data
     command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - internal
 
   web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: flowdocs-web-dev
-    user: "1000:1000"  # Match host user prodsahakar (uid:gid)
-    command: sh -c "./start.sh"
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     volumes:
-      # PDFs storage - configurable via VOLUME_BASE_PATH
-      - ${VOLUME_BASE_PATH:-/home/prodsahakar/flowdocs}/pdfs:/app/flowdocs/media/pdfs
-      # Database SQLite volume
-      - ${VOLUME_BASE_PATH:-/home/prodsahakar/flowdocs}/db.sqlite3:/app/flowdocs/db.sqlite3
-      # FAISS indexes for vector search
-      - ${VOLUME_BASE_PATH:-/home/prodsahakar/flowdocs}/faiss_indexes:/app/flowdocs/faiss_indexes
-      # Optional: Mount source code for live reloading (uncomment if needed)
-      # - ./flowdocs:/app/flowdocs
-      # - ./requirements.txt:/app/requirements.txt
+      - flowdocs_db_dev:/app/flowdocs/db.sqlite3
+      - flowdocs_media_dev:/app/flowdocs/media
+      - flowdocs_faiss_dev:/app/flowdocs/faiss_indexes
+      - flowdocs_chroma_dev:/app/flowdocs/chroma_db
+      - flowdocs_static_dev:/app/staticfiles
+      - flowdocs_backups_dev:/app/backups
     ports:
       - "${WEB_PORT:-8000}:8000"
     environment:
-      # Django Settings
       - DEBUG=True
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-me-in-development}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-only-change-me}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,dev.ai-sahakar.net}
       - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-flowdocs.settings}
-      
-      # API Keys
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      
-      # Redis Configuration
-      - REDIS_URL=redis://redis:6379/1
-      
-      # CORS and CSRF Settings
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
-      
-      # Database Path (for migrations script)
-      - SQLITE_DB_PATH=/app/flowdocs/db.sqlite3
-      - MIGRATIONS_JSON=/app/flowdocs/
-      - FORCE_MIGRATIONS=0
+      - REDIS_URL=redis://redis:6379/1
+      - DB_ENGINE=${DB_ENGINE:-django.db.backends.sqlite3}
+      - DB_NAME=${DB_NAME:-/app/flowdocs/db.sqlite3}
+      - SQLITE_DB_PATH=${SQLITE_DB_PATH:-/app/flowdocs/db.sqlite3}
+      - MIGRATIONS_JSON=${MIGRATIONS_JSON:-/app/flowdocs/}
+      - FORCE_MIGRATIONS=${FORCE_MIGRATIONS:-0}
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    networks:
+      - internal
 
 volumes:
   redis_data_dev:
     driver: local
+  flowdocs_db_dev:
+    driver: local
+  flowdocs_media_dev:
+    driver: local
+  flowdocs_faiss_dev:
+    driver: local
+  flowdocs_chroma_dev:
+    driver: local
+  flowdocs_static_dev:
+    driver: local
+  flowdocs_backups_dev:
+    driver: local
 
 networks:
-  default:
-    name: flowdocs-dev-network
+  internal:
+    driver: bridge
