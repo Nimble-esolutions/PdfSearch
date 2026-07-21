@@ -32,6 +32,12 @@ not part of the application contract.
 8. Set `PDFSEARCH_IMAGE` to the exact image digest for the release.
 9. Deploy only after the pre-deployment checklist passes.
 
+Every successful `dev` release publishes both `:dev` and `:latest` as
+compatibility aliases of the same tested digest. Keep both aliases enabled:
+existing Dokploy Compose deployments may use either one without requiring a
+Compose-file change. The aliases are convenience references, not the release
+identity; record and prefer the immutable digest for production promotion.
+
 ## Persistent Data Layout
 
 The named volume `flowdocs_data` is mounted at `/app/data`:

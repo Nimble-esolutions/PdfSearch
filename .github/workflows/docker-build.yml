@@ -128,11 +128,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=buildkit
-          cache-to: type=gha,scope=buildkit,mode=max
           platforms: linux/amd64
           provenance: mode=max
           sbom: true
+          cache-from: type=gha,scope=buildkit-${{ hashFiles('Dockerfile', 'requirements-web.lock') }}
+          cache-to: type=gha,scope=buildkit-${{ hashFiles('Dockerfile', 'requirements-web.lock') }},mode=max
 
       - name: Smoke-test published image
         env:
@@ -174,16 +174,20 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
 
-      - name: Promote compatibility tags
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+      - name: Guard against a newer dev commit
+        id: release_guard
         run: |
           set -euo pipefail
-          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
-          docker buildx imagetools create --tag "${IMAGE_NAME}:dev" "$IMAGE_REF"
-          docker buildx imagetools create --tag "${IMAGE_NAME}:latest" "$IMAGE_REF"
+          current_dev_sha="$(git ls-remote origin refs/heads/dev | cut -f1)"
+          if [ "$current_dev_sha" != "$GITHUB_SHA" ]; then
+            echo "A newer dev commit superseded $GITHUB_SHA; skipping tag promotion."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Enforce image size budget
+        if: steps.release_guard.outputs.eligible == 'true'
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
@@ -194,7 +198,40 @@ jobs:
           echo "Image size: $SIZE bytes; budget: $MAX bytes"
           test "$SIZE" -le "$MAX"
 
+      - name: Promote compatibility tags
+        if: steps.release_guard.outputs.eligible == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
+          docker buildx imagetools create \
+            --tag "${IMAGE_NAME}:dev" \
+            --tag "${IMAGE_NAME}:latest" \
+            "$IMAGE_REF"
+
+          tested_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$IMAGE_REF")"
+          for attempt in 1 2 3; do
+            dev_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${IMAGE_NAME}:dev")"
+            latest_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "${IMAGE_NAME}:latest")"
+            if [ "$dev_digest" = "$latest_digest" ] && [ "$dev_digest" = "$tested_digest" ]; then
+              echo "Both compatibility tags resolve to tested digest $tested_digest"
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::Compatibility tags diverged from tested digest: tested=$tested_digest dev=$dev_digest latest=$latest_digest"
+              exit 1
+            fi
+            echo "Tag propagation is not converged yet; retrying promotion (attempt $((attempt + 1)))"
+            sleep 5
+            docker buildx imagetools create \
+              --tag "${IMAGE_NAME}:dev" \
+              --tag "${IMAGE_NAME}:latest" \
+              "$IMAGE_REF"
+          done
+
       - name: Publish release evidence
+        if: steps.release_guard.outputs.eligible == 'true'
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |

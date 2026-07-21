@@ -38,7 +38,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 COPY requirements-web.lock .
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip && \
     pip wheel --require-hashes --wheel-dir /build/wheels -r requirements-web.lock
 
 # =====================================================================
@@ -69,10 +68,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl
 
 COPY --from=builder /build/wheels /wheels
-COPY --from=builder /build/requirements-web.lock .
-
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip && \
     pip install --no-compile --no-index --no-deps /wheels/*.whl && \
     rm -rf /wheels
 
