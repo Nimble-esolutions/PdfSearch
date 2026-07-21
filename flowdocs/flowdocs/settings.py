@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 
 
@@ -19,6 +20,7 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
+DATA_ROOT = Path(os.getenv('DATA_ROOT', str(BASE_DIR / 'data')))
 #--------------for gemini Model---------------------
 # GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
@@ -36,14 +38,20 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-!y2+0!gjaq*)3f16^1xd5ufs85!^-^t%4)7p&!ng7z7m2x-m&t')
+_allow_insecure_defaults = os.getenv('ALLOW_INSECURE_DEFAULTS', '0').lower() == '1'
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if _allow_insecure_defaults:
+        SECRET_KEY = 'django-insecure-local-only-change-me'
+    else:
+        raise ImproperlyConfigured('SECRET_KEY must be set')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,dev.ai-sahakar.net,one.ai-sahakar.net,www.ai-sahakar.net,ai-sahakar.net,testserver').split(',')
-if '*' in ALLOWED_HOSTS:
-    ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
+if '*' in ALLOWED_HOSTS and not (DEBUG and _allow_insecure_defaults):
+    raise ImproperlyConfigured('Wildcard ALLOWED_HOSTS is only allowed for local development')
 
 
 # Application definition
@@ -55,10 +63,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'core',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -96,7 +106,7 @@ WSGI_APPLICATION = 'flowdocs.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.getenv('SQLITE_DB_PATH', str(DATA_ROOT / 'db.sqlite3')),
     }
 }
 
@@ -137,7 +147,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = Path(os.getenv('STATIC_ROOT', str(DATA_ROOT / 'staticfiles')))
 
 # Additional static files directories
 STATICFILES_DIRS = [
@@ -150,7 +160,7 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', str(DATA_ROOT / 'media')))
 
 AUTH_USER_MODEL = 'core.CustomUser'
 # OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -174,48 +184,29 @@ LOCALE_PATHS = [
 
 LOGIN_URL = '/login/'
 
-# Cache configuration
+# Cache configuration. Redis is shared by Gunicorn workers in production;
+# local memory remains available for explicit local development.
+REDIS_URL = os.getenv('REDIS_URL', '').strip()
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache' if REDIS_URL else 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': REDIS_URL or 'unique-snowflake',
     }
 }
 
-# CORS settings (disabled for now)
-# CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if os.getenv('CORS_ALLOWED_ORIGINS') else []
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
 
-# CSRF settings
-#CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', 'https://dev.ai-sahakar.net,https://one.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000').split(',')
-CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CSRF_TRUSTED_ORIGINS",
-        "https://dev.ai-sahakar.net,https://one.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000"
-    ).split(",")
-]
-
-CSRF_COOKIE_SECURE = True  # Set to True in production with HTTPS
-CSRF_COOKIE_HTTPONLY = False
-CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_USE_SESSIONS = False
-
-# CSRF settings
-#CSRF_TRUSTED_ORIGINS = [
-   # origin.strip() for origin in os.getenv(
-      #  'CSRF_TRUSTED_ORIGINS',
-      #  'https://dev.ai-sahakar.net,https://one.ai-sahakar.net,https://mum-01.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000'
-  #  ).split(',')
-#]
-CSRF_COOKIE_SECURE = True  # Use True in production with HTTPS
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', str(not DEBUG)).lower() == 'true'
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_USE_SESSIONS = False
 
 
 # File upload settings
-FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
-DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', str(10 * 1024 * 1024)))
+FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_FILE_SIZE
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_FILE_SIZE
 
 # WhiteNoise configuration for static files
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
@@ -228,6 +219,22 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_COOKIE_AGE = 1209600
 
 
-SESSION_COOKIE_SECURE = False  # True in production with HTTPS
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', str(not DEBUG)).lower() == 'true'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False').lower() == 'true'
+SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'False').lower() == 'true'
+
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+
+FAISS_INDEX_DIR = Path(os.getenv('FAISS_INDEX_DIR', str(DATA_ROOT / 'faiss_indexes')))
+CHROMA_DIR = Path(os.getenv('CHROMA_DIR', str(DATA_ROOT / 'chroma_db')))
+BACKUP_DIR = Path(os.getenv('BACKUP_DIR', str(DATA_ROOT / 'backups')))

@@ -50,7 +50,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_USER=appuser \
     APP_UID=1000 \
     APP_HOME=/home/appuser \
-    SQLITE_DB_PATH=/app/flowdocs/db.sqlite3 \
+    DATA_ROOT=/app/data \
+    SQLITE_DB_PATH=/app/data/db.sqlite3 \
     MIGRATIONS_JSON=/app/flowdocs/ \
     FORCE_MIGRATIONS=0
 
@@ -90,7 +91,8 @@ COPY . .
 
 RUN chmod +x ./start.sh ./docker-entrypoint.sh 2>/dev/null || true
 
-RUN mkdir -p /app/staticfiles /app/media && \
+RUN mkdir -p /app/data/media/pdfs /app/data/chroma_db /app/data/faiss_indexes \
+    /app/data/backups/json_backups /app/data/backups/chroma_backup /app/data/staticfiles && \
     [ -d /app/init ] && chmod -R 755 /app/init || true
 
 RUN groupadd -g ${APP_UID} ${APP_USER} 2>/dev/null || true && \
@@ -234,8 +236,9 @@ PYCODE
 RUN chmod +x /usr/local/bin/apply_sqlite_json.py
 
 RUN bash -lc 'cd /app/flowdocs && \
-    STATIC_ROOT=/app/staticfiles python manage.py collectstatic --noinput --clear 2>/dev/null || \
-    echo "collectstatic skipped"'
+    DATA_ROOT=/app/data STATIC_ROOT=/app/data/staticfiles \
+    DEBUG=True ALLOW_INSECURE_DEFAULTS=1 SECRET_KEY=build-only-not-for-runtime \
+    python manage.py collectstatic --noinput'
 
 EXPOSE 8000
 

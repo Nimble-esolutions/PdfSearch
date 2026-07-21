@@ -20,28 +20,27 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - flowdocs_db_dev:/app/flowdocs/db.sqlite3
-      - flowdocs_media_dev:/app/flowdocs/media
-      - flowdocs_faiss_dev:/app/flowdocs/faiss_indexes
-      - flowdocs_chroma_dev:/app/flowdocs/chroma_db
-      - flowdocs_static_dev:/app/staticfiles
-      - flowdocs_backups_dev:/app/backups
+      - flowdocs_data_dev:/app/data
     ports:
       - "${WEB_PORT:-8000}:8000"
     environment:
+      - DATA_ROOT=/app/data
+      - SQLITE_DB_PATH=/app/data/db.sqlite3
+      - MEDIA_ROOT=/app/data/media
+      - STATIC_ROOT=/app/data/staticfiles
+      - FAISS_INDEX_DIR=/app/data/faiss_indexes
+      - CHROMA_DIR=/app/data/chroma_db
+      - BACKUP_DIR=/app/data/backups
       - DEBUG=True
+      - ALLOW_INSECURE_DEFAULTS=1
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-only-change-me}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,dev.ai-sahakar.net}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-flowdocs.settings}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       - REDIS_URL=redis://redis:6379/1
-      - DB_ENGINE=${DB_ENGINE:-django.db.backends.sqlite3}
-      - DB_NAME=${DB_NAME:-/app/flowdocs/db.sqlite3}
-      - SQLITE_DB_PATH=${SQLITE_DB_PATH:-/app/flowdocs/db.sqlite3}
-      - MIGRATIONS_JSON=${MIGRATIONS_JSON:-/app/flowdocs/}
-      - FORCE_MIGRATIONS=${FORCE_MIGRATIONS:-0}
+      - CREATE_SUPERUSER=${CREATE_SUPERUSER:-0}
     depends_on:
       redis:
         condition: service_healthy
@@ -52,17 +51,7 @@ services:
 volumes:
   redis_data_dev:
     driver: local
-  flowdocs_db_dev:
-    driver: local
-  flowdocs_media_dev:
-    driver: local
-  flowdocs_faiss_dev:
-    driver: local
-  flowdocs_chroma_dev:
-    driver: local
-  flowdocs_static_dev:
-    driver: local
-  flowdocs_backups_dev:
+  flowdocs_data_dev:
     driver: local
 
 networks:

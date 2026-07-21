@@ -1,91 +1,33 @@
-# Redis Image Mirror Setup (GHCR)
+# Redis Image Policy
 
-## Overview
+The application Compose file currently uses the official `redis:7-alpine`
+image. The repository also contains a mirroring workflow for GHCR. These are
+two different supply paths and must not be treated as interchangeable without
+verification.
 
-We mirror the official Redis image from Docker Hub to GitHub Container Registry (GHCR) to avoid rate limits and ensure always up-to-date images.
+## Production Policy
 
-## How It Works
+Choose one of the following and document it in the Dokploy environment:
 
-1. **GitHub Actions workflow** automatically pulls the latest Redis image from Docker Hub
-2. **Mirrors it to GHCR** as `ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine`
-3. **Runs automatically** daily at 2 AM UTC to keep images updated
-4. **Can be triggered manually** from GitHub Actions UI
+1. Official Docker Hub image with the approved digest; or
+2. GHCR mirror with a verified digest and pull credentials.
 
-## Initial Setup
+Do not use a moving `latest` Redis tag for a release record.
 
-1. **Trigger the mirror workflow manually:**
-   - Go to GitHub → Actions tab
-   - Select "Mirror Redis Image to GHCR" workflow
-   - Click "Run workflow" → "Run workflow"
-   - Wait for it to complete (takes ~2-3 minutes)
+Redis is a cache/queue dependency, not the source of truth. Application data
+must remain recoverable from the database and persistent data release.
 
-2. **Verify the image is available:**
-   ```bash
-   docker pull ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine
-   ```
+## Host Requirement
 
-## Automatic Updates
+Redis recommends `vm.overcommit_memory=1`. This is a host baseline setting,
+not an application Compose setting. Verify it on the server and persist it in
+the host configuration management process.
 
-The workflow runs automatically:
-- **Daily**: Every day at 2 AM UTC via cron schedule
-- **Manual**: Can be triggered anytime from GitHub Actions UI
-- **On workflow change**: When mirror-redis.yml file is updated
-
-## Usage
-
-Your docker-compose files automatically use:
-```yaml
-image: ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine
-```
-
-## Authentication
-
-### For Production Server
-
-If pulling from production server, authenticate with GHCR:
+## Verification
 
 ```bash
-echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+redis-cli ping
+docker inspect <redis-container> --format '{{.Config.Image}}'
 ```
 
-Or use a GitHub Personal Access Token with `read:packages` permission:
-
-```bash
-echo "YOUR_GITHUB_TOKEN" | docker login ghcr.io -u YOUR_USERNAME --password-stdin
-```
-
-### For GitHub Actions
-
-No authentication needed - uses `GITHUB_TOKEN` automatically.
-
-## Available Image Tags
-
-- `ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine` - Alpine-based Redis 7 (recommended)
-- `ghcr.io/nimble-esolutions/pdfsearch/redis:latest` - Same as 7-alpine
-- `ghcr.io/nimble-esolutions/pdfsearch/redis:latest-full` - Full Redis image
-
-## Troubleshooting
-
-**If workflow fails:**
-- Check GitHub Actions logs
-- Ensure repository has `packages: write` permission
-- Verify GITHUB_TOKEN has necessary permissions
-
-**If image pull fails:**
-- Ensure you're authenticated with GHCR
-- Check image exists: `docker pull ghcr.io/nimble-esolutions/pdfsearch/redis:7-alpine`
-- Verify image visibility settings in GitHub repository (should be public or accessible)
-
-**If rate limit error:**
-- The workflow runs in GitHub Actions which has authenticated access to Docker Hub
-- No rate limits when pulling from Docker Hub in GitHub Actions
-- GHCR has no rate limits for authenticated users
-
-## Benefits
-
-- ✅ No Docker Hub rate limits (workflow has authenticated access)
-- ✅ No GHCR rate limits (authenticated access)
-- ✅ Always latest Redis version (daily updates)
-- ✅ Reliable and fast (GHCR is fast and reliable)
-- ✅ Free (GitHub Actions free tier is sufficient)
-
+Record the image digest with each production release.

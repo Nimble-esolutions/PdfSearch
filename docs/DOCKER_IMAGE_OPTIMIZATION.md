@@ -1,105 +1,42 @@
-# Docker Image Size Optimization
+# Docker Image Optimization
 
-> **⚠️ NOTE**: This optimization was attempted but caused build failures. The project has been reverted to a working single-stage build. See `DOCKER_BUILD_FIX.md` for details.
+## Current State
 
-## Problem
+The current Python image is multi-stage and uses BuildKit cache mounts, but it
+still contains the complete OCR/ML dependency graph. Production image size has
+been observed near 10 GB because CPU deployment paths still pull heavy Torch,
+EasyOCR, spaCy, Chroma, and related packages.
 
-The Docker image was 4GB+ in size, causing:
-- Slow builds and pushes
-- High storage costs
-- Slow image pulls in production
-- GitHub Actions timeouts
+The current image is reliable, but image size and pull time remain open work.
 
-## Root Causes Identified (Theoretical)
+## Current Build Guarantees
 
-### 1. Build Tools Left in Final Image (~1-2GB)
-- `build-essential` (~500MB)
-- `cargo` (~800MB)
-- `cmake` (~200MB)
-- All `-dev` packages (headers and build tools)
+- Build dependencies are isolated in the builder stage.
+- Runtime dependencies are installed in the runtime stage.
+- apt and pip caches use BuildKit cache mounts.
+- runtime pip installation uses `--no-compile`.
+- image builds target `linux/amd64` for the production server.
+- CI publishes a SHA tag in addition to the mutable convenience tag.
 
-### 2. Large Python ML Packages (~1-2GB)
-- `sentence-transformers` (~500MB with models)
-- `spacy` + `en-core-web-sm` (~400MB)
-- `chromadb` (~300MB)
-- `opencv-python-headless` (~200MB)
-- `faiss-cpu` (~100MB)
-- Other ML dependencies
+## Next Optimization Plan
 
-### 3. No Multi-Stage Build
-- All build dependencies stayed in final image
-- No separation between build-time and runtime needs
+1. Inventory imports used by the web/query path versus indexing/OCR.
+2. Build a lean `pdfsearch-web` image for Gunicorn and query serving.
+3. Build a separate `pdfsearch-worker` image for OCR, Torch, spaCy, and index generation.
+4. Publish model and index artifacts independently with checksums.
+5. Deploy the web and worker services separately in Dokploy.
+6. Promote only compatible image/artifact pairs.
 
-### 4. Incomplete Cleanup
-- Apt cache cleaned but build tools remained
-- Python package caches not fully cleaned
+Do not remove ML dependencies without running PDF upload, OCR, indexing, and
+search smoke tests. A smaller image that fails on a rare document type is not
+an optimization.
 
-## Solution: Multi-Stage Build (⚠️ FAILED - Caused Build Errors)
+## Build Verification
 
-### Stage 1: Builder (Build Dependencies)
-- Installs: `gcc`, `g++`, `build-essential`, `cargo`, `cmake`, all `-dev` packages
-- Compiles Python packages with native extensions
-- **This stage is discarded** - not included in final image
-
-### Stage 2: Runtime (Final Image)
-- Only runtime libraries (no build tools)
-- Copies compiled Python packages from builder
-- Minimal system dependencies
-- **This is the final image** - much smaller
-
-### Why It Failed
-The multi-stage build failed because incorrect runtime package names were used (e.g., `libjpeg62-turbo`, `libpng16-16`). These exact package names don't exist in Debian repositories. See `DOCKER_BUILD_FIX.md` for full analysis.
-
-## Size Reduction (Not Implemented)
-
-**Current:** 4GB+ (single-stage, working)  
-**Target:** ~1-1.5GB (multi-stage, failed)  
-**Status:** Optimization reverted due to build failures
-
-**Current Approach:** Keep single-stage build for reliability. Image size is acceptable trade-off for working builds.
-
-## Key Changes
-
-1. **Multi-stage Dockerfile**
-   ```dockerfile
-   FROM python:3.10-slim as builder
-   # ... build stage ...
-   
-   FROM python:3.10-slim
-   # ... runtime stage ...
-   COPY --from=builder /root/.local /home/appuser/.local
-   ```
-
-2. **Build tools removed from runtime**
-   - ❌ `build-essential`, `cargo`, `cmake` (removed)
-   - ❌ All `-dev` packages (removed)
-   - ✅ Only runtime libraries (kept)
-
-3. **Enhanced .dockerignore**
-   - Excludes `flowdocs/pdf_cache/`
-   - Excludes `flowdocs/faiss_indexes/`
-   - Excludes `*.pkl` files
-   - Excludes backup files
-
-4. **Better cleanup**
-   - `apt-get clean` added
-   - Removes `/tmp/*` and `/var/tmp/*`
-   - More aggressive cache removal
-
-## Verification
-
-After rebuilding, check image size:
 ```bash
-docker images ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest
+docker build --check -f Dockerfile .
+docker compose -f docker-compose.yml config
 ```
 
-Expected: ~1-1.5GB instead of 4GB+
-
-## Benefits
-
-- ✅ Faster builds (smaller context, better caching)
-- ✅ Faster pushes/pulls (less data to transfer)
-- ✅ Lower storage costs
-- ✅ Faster container startup
-- ✅ Better GitHub Actions performance
-
+CI must also enforce image-size budgets, SBOM generation, dependency scanning,
+and a container smoke test before promotion.

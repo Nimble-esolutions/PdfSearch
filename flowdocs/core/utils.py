@@ -32,8 +32,10 @@ except Exception:
 DetectorFactory.seed = 0
 
 # Where to store FAISS indices and embeddings cache files
-BASE_DIR = getattr(settings, "BASE_DIR", os.getcwd())
-FAISS_DIR = os.path.join(BASE_DIR, "faiss_indexes")
+FAISS_DIR = str(getattr(settings, "FAISS_INDEX_DIR", os.path.join(
+    getattr(settings, "DATA_ROOT", getattr(settings, "BASE_DIR", os.getcwd())),
+    "faiss_indexes",
+)))
 os.makedirs(FAISS_DIR, exist_ok=True)
 
 # OpenAI client
@@ -748,5 +750,4 @@ def semantic_folder_search(query, top_n=3):
     print("==========================================================================\n")
 
     return results[:top_n]
-
 

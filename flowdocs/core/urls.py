@@ -4,6 +4,8 @@ from django.conf.urls.static import static
 from . import views
 
 urlpatterns = [
+    path('livez', views.livez, name='livez'),
+    path('readyz', views.readyz, name='readyz'),
 
     # ---------------- Public Pages ----------------
     path('', views.search_query, name='home'),
