@@ -1,3 +1,10 @@
+Status: Active
+Audience: Operator
+Owner: FlowDocs maintainers
+Last verified: 2026-07-22
+Canonical source: DEPLOYMENT_GUIDE.md
+Supersedes: None
+
 # FlowDocs Deployment
 
 ## Canonical Deployment
@@ -30,5 +37,6 @@ Development uses its own named volumes and must not reference `prod_flowdocs`.
 - Treat database, media, and vector indexes as one recovery set.
 - Verify restores, not only backup creation.
 
-See `DEPLOYMENT_GUIDE.md` for the complete Dokploy, migration, backup, restore,
-and rollback procedures.
+See [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) for the complete Dokploy,
+migration, backup, restore, and rollback procedures. See
+[`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md) for incident response.

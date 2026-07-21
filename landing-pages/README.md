@@ -1,3 +1,15 @@
+Status: Historical
+Audience: Client
+Owner: FlowDocs maintainers
+Last verified: 2026-07-22
+Canonical source: DOKPLOY_STATIC_DEPLOYMENT.md
+Supersedes: None
+
+> Historical landing-page design notes. This directory is not the FlowDocs
+> production application and is not deployed by the canonical Compose contract.
+> See [`DOKPLOY_STATIC_DEPLOYMENT.md`](../DOKPLOY_STATIC_DEPLOYMENT.md) for the
+> quarantine note and [`README.md`](../README.md) for FlowDocs documentation.
+
 # Futuristic Landing Pages - CC & RCS Maharashtra
 ## AI-Powered Document Search System
 

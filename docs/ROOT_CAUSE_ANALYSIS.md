@@ -1,3 +1,14 @@
+Status: Historical
+Audience: Recovery
+Owner: FlowDocs maintainers
+Last verified: 2026-07-22
+Canonical source: docs/OPERATIONS_RUNBOOK.md
+Supersedes: None
+
+> Historical migration incident context. Use [`OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md)
+> for current migration-failure response and [`PRODUCTION_OPERATING_RULES.md`](PRODUCTION_OPERATING_RULES.md)
+> for current readiness boundaries.
+
 # Migration Compatibility Root Cause Analysis
 
 ## Historical Incident

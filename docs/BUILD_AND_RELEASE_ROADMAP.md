@@ -1,10 +1,19 @@
+Status: Active
+Audience: Release
+Owner: FlowDocs maintainers
+Last verified: 2026-07-22
+Canonical source: docs/BUILD_AND_RELEASE_ROADMAP.md
+Supersedes: docs/DOCKER_IMAGE_OPTIMIZATION.md
+
 # Build and Release Roadmap
 
 ## Current Baseline
 
-The production image is multi-stage and cache-enabled, but it contains the
-complete OCR/ML dependency graph and has been observed near 10 GB. This is
-acceptable as a temporary reliability baseline, not the target architecture.
+The current production web image is multi-stage, cache-enabled, and built from
+the hashed `requirements-web.lock` dependency set. The complete OCR/ML graph
+remains in `requirements.txt` for the future worker image. The earlier complete
+image was observed near 10 GB; that measurement is historical, not the current
+web-image size target.
 
 ## Target Image Topology
 
@@ -56,18 +65,20 @@ artifacts
 - Promote image digest plus artifact release together.
 - Roll back both when compatibility is broken.
 
-## CI Gates
+## Current CI and Release Evidence
 
-Every release should report:
+The current workflow reports or verifies:
 
 - source Git SHA;
 - image digest;
 - image size;
-- build duration;
-- dependency lock digest;
-- SBOM and vulnerability result;
-- model/index artifact manifest;
-- smoke-test result.
+- short SHA, `dev`, and `latest` image tags;
+- SBOM and max provenance settings;
+  - image smoke tests, `pip check`, non-blocking Trivy scan/report, and image-size budget.
+
+The current workflow does not emit a dependency lock digest, model/index
+manifest, persistent-data manifest, or data-release artifact. Treat those as
+operator-recorded evidence or future targets, not as generated release output.
 
 ## GitHub Actions Release Policy
 

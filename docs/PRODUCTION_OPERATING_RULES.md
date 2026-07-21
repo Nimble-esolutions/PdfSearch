@@ -1,3 +1,10 @@
+Status: Active
+Audience: Operator
+Owner: FlowDocs maintainers
+Last verified: 2026-07-22
+Canonical source: docs/PRODUCTION_OPERATING_RULES.md
+Supersedes: None
+
 # Production Operating Rules
 
 These rules apply to every PdfSearch production change.
@@ -29,7 +36,7 @@ These rules apply to every PdfSearch production change.
 
 - Migrations must fail closed.
 - `/livez` proves process liveness only.
-- `/readyz` must prove database, cache, migrations, and required data state.
+- `/readyz` currently proves database connectivity, the configured cache (or reports `not_configured` when no cache URL is set), and that no migrations are pending. Required data, media, FAISS, and Chroma validation remains an operator checklist; it is not implemented in the endpoint.
 - Do not route Traefik traffic to a container that is only HTTP-200 on `/`.
 
 ## Deployment

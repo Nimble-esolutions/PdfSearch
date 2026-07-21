@@ -1,3 +1,10 @@
+Status: Client-facing
+Audience: Client
+Owner: Client support team
+Last verified: 2026-07-22
+Canonical source: docs/CLIENT_USER_MANUAL.md
+Supersedes: None
+
 # FlowDocs Client User Manual
 
 **Product:** FlowDocs PDF Search

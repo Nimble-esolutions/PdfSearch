@@ -1,3 +1,14 @@
+Status: Historical
+Audience: Developer
+Owner: FlowDocs maintainers
+Last verified: 2026-07-22
+Canonical source: DEPLOYMENT_GUIDE.md
+Supersedes: None
+
+> Historical build incident notes. Current deployment, image identity, and
+> recovery instructions are in [`DEPLOYMENT_GUIDE.md`](../DEPLOYMENT_GUIDE.md)
+> and [`OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md).
+
 # Docker Build Root Causes and Prevention
 
 ## Historical Failure

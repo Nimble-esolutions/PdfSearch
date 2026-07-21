@@ -1,25 +1,35 @@
+Status: Active
+Audience: Developer
+Owner: FlowDocs maintainers
+Last verified: 2026-07-22
+Canonical source: README.md
+Supersedes: None
+
 # FlowDocs PDF Search
 
 FlowDocs is a Django application for authorized users to upload PDF documents,
-organize them into folders, and search them with natural-language questions.
-It supports English and Marathi workflows and uses OpenAI-backed retrieval.
+organize them into folders, and search them with natural-language questions. It
+supports English and Marathi workflows and uses OpenAI-backed retrieval.
 
-## Canonical Architecture
+## Start Here
 
-```text
-/app/flowdocs       immutable Django application code from the image
-/app/data           Dokploy-managed persistent runtime data
-  db.sqlite3
-  media/
-  faiss_indexes/
-  chroma_db/
-  staticfiles/
-  backups/
-```
+Use the route that matches the work:
 
-The production Compose file must not mount persistent data over
-`/app/flowdocs`. The legacy `prod_flowdocs` volume is read-only and is used only
-for a controlled data import.
+- Local development: [`docker-compose.dev.yml`](docker-compose.dev.yml) and [`docs/INDEX.md`](docs/INDEX.md#local-development)
+- Dokploy deployment: [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
+- Release promotion: [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md)
+- Backup and data recovery: [`docs/PERSISTENT_DATA_RELEASE.md`](docs/PERSISTENT_DATA_RELEASE.md) and [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
+- Incident response: [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
+- Client usage: [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md)
+- Documentation map and historical context: [`docs/INDEX.md`](docs/INDEX.md)
+
+## Prerequisites
+
+- Docker Engine with the Compose plugin
+- A local `.env` created from [`.env.example`](.env.example)
+- Local-only credentials when search or external integrations are exercised
+
+Never copy production secrets or production data into a local environment.
 
 ## Local Development
 
@@ -29,39 +39,71 @@ cp .env.example .env
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-The local Compose file uses separate named volumes and never references the
-production legacy volume.
+The development Compose file uses `flowdocs_data_dev` and `redis_data_dev`.
+It does not mount the production legacy volume. Stop local services with
+`docker compose -f docker-compose.dev.yml stop`; do not use `down -v` when data
+needs to be retained.
 
-## Production Deployment
+## Architecture
 
-Production is deployed through Dokploy using `docker-compose.yml`.
+```text
+web container
+  /app/flowdocs       immutable Django application code from the image
+  /app/data           mutable application data
+    db.sqlite3
+    media/
+    faiss_indexes/
+    chroma_db/
+    staticfiles/
+    backups/
+
+redis container
+  /data                cache/queue persistence in redis_data
+```
+
+Production Compose mounts `flowdocs_data` at `/app/data` and the external
+`prod_flowdocs` volume at `/mnt/legacy:ro` for an explicitly enabled, controlled
+legacy data import only. It must never mount persistent data over
+`/app/flowdocs`.
+
+## Production Contract
+
+Production is deployed through Dokploy as the Compose application defined by
+[`docker-compose.yml`](docker-compose.yml).
 
 - Container port: `8000`
-- Liveness: `/livez`
-- Readiness: `/readyz`
-- Persistent state: `flowdocs_data` mounted at `/app/data`
+- Liveness: `/livez` proves process liveness
+- Readiness: `/readyz` checks database, configured cache, and migrations
+- Persistent state: Compose volume `flowdocs_data` at `/app/data`
+- Legacy import: external `prod_flowdocs` at `/mnt/legacy:ro`, one-time only
 - Secrets: Dokploy protected environment values
-- Release: immutable image digest plus matching data release
+- Release identity: `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<digest>`
 
-See:
+The release workflow also maintains `:dev` and `:latest` as compatibility
+aliases for the same tested image digest. They are convenience references, not
+immutable release identity. Record the digest before promotion.
 
-- [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) — Dokploy, migration, backup, restore, rollback
-- [`DEPLOYMENT.md`](DEPLOYMENT.md) — concise deployment contract
-- [`docs/PRODUCTION_OPERATING_RULES.md`](docs/PRODUCTION_OPERATING_RULES.md) — safety rules
-- [`docs/PERSISTENT_DATA_RELEASE.md`](docs/PERSISTENT_DATA_RELEASE.md) — data release contract
-- [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md) — client-facing usage guide
-- [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md) — image/runtime split roadmap
-
-## Security Requirements
+## Security and Recovery Warnings
 
 Production requires an explicit `SECRET_KEY`, `DEBUG=False`, explicit
 `ALLOWED_HOSTS`, secure cookies, and protected API credentials. Do not commit
 `.env` files, API keys, passwords, or copied production data.
 
-Treat generated answers as assistance. Review the source references before
-making an official decision.
+Do not run `docker compose down -v` against production. It can remove named
+volumes and destroy the recovery set. Back up and restore into an isolated
+volume or disposable Dokploy application instead.
 
-## User Documentation
+Treat generated answers as assistance. Review source references before making an
+official decision.
 
-The client manual is a living document. Update it in the same change as any
-user-visible behavior change and keep deployment/operator procedures out of it.
+## Contribution and Release Links
+
+- Deployment contract: [`DEPLOYMENT.md`](DEPLOYMENT.md)
+- Operating rules: [`docs/PRODUCTION_OPERATING_RULES.md`](docs/PRODUCTION_OPERATING_RULES.md)
+- Release evidence: [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md)
+- Persistent data contract: [`docs/PERSISTENT_DATA_RELEASE.md`](docs/PERSISTENT_DATA_RELEASE.md)
+- Client manual: [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md)
+- Historical documents and supersession map: [`docs/INDEX.md`](docs/INDEX.md#historical-context)
+
+Update the client manual in the same change as user-visible behavior changes;
+keep deployment and operator procedures out of it.
