@@ -69,6 +69,18 @@ Every release should report:
 - model/index artifact manifest;
 - smoke-test result.
 
+## GitHub Actions Release Policy
+
+- Pull requests run validation only and never publish an image.
+- A push to `dev` after merge is the release trigger.
+- Manual publishing is allowed only from `dev` with explicit approval/input.
+- Docker/Checkout Actions are pinned to verified Node 24 commit SHAs.
+- Release images publish a short SHA, `dev`, and compatibility `latest` tag.
+- Dokploy should consume the recorded image digest, not `latest` as the only
+  release identifier.
+- Release jobs use a protected `production` environment when configured.
+- SBOM and max provenance are enabled for published images.
+
 ## Traps
 
 - Do not delete Torch before proving OCR and indexing still work.
