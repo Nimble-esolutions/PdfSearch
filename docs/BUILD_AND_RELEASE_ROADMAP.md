@@ -15,9 +15,10 @@ remains in `requirements.txt` for the future worker image. The earlier complete
 image was observed near 10 GB; that measurement is historical, not the current
 web-image size target.
 
-The verified production baseline is healthy at `https://2026.ai-sahakar.net`,
-with merged source `f05e110` and the Redis-enabled immutable image revision from
-PR #24. Dokploy production promotion requires exact web/Redis digests and
+The canonical production domains are `https://ai-sahakar.net` and
+`https://www.ai-sahakar.net`. The verified preview baseline was
+`https://2026.ai-sahakar.net`; it is retained only as historical rollback
+evidence. Dokploy production promotion requires exact web/Redis digests and
 `pull_policy: always`; compatibility tags are not release identity.
 
 ## Target Image Topology

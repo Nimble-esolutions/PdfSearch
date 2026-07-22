@@ -27,12 +27,16 @@ participate in startup synchronization.
 
 ## Current Baseline
 
-- Production domain: `https://2026.ai-sahakar.net` (healthy at last verification).
+- Canonical production domains: `https://ai-sahakar.net` and
+  `https://www.ai-sahakar.net` (pending DNS/Traefik cutover).
+- Preview domain: `https://2026.ai-sahakar.net` was used for verified preview
+  and remains a historical rollback reference, not the canonical production URL.
 - Merged source: `f05e110`.
 - Production release: Redis-enabled immutable image revision from PR #24.
 - Legacy custody: 242 PDFs and 45 FAISS files.
-- Active custody: 17 PDF rows, 0 PDF files, and 11 FAISS files.
-- Reconciliation: 6 PDF paths overlap; active and legacy SQLite databases diverge.
+- Active custody after reconciliation: 253 PDF rows, 242 PDF files, 53 folders,
+  8 users, and 51 rebuilt FAISS indexes with 8,753 vectors.
+- Preserved unrecovered target-only rows: 11.
 
 Legacy and active data must never be copied directly. A valid promotion is
 quarantine, inventory, conflict classification, staged restore, FAISS
