@@ -86,6 +86,12 @@ The current workflow does not emit a dependency lock digest, model/index
 manifest, persistent-data manifest, or data-release artifact. Treat those as
 operator-recorded evidence or future targets, not as generated release output.
 
+Recent release records:
+
+- [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md)
+  records PR #37, merge commit `1962e127e1ebcff0b8b0ba08622656d8eeaacaae`,
+  and the published `dev` image digest for the Admin Operations Cockpit work.
+
 ## GitHub Actions Release Policy
 
 - Pull requests run validation only and never publish an image.

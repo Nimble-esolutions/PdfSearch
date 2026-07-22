@@ -14,6 +14,8 @@ source, and supersession relationship.
 ## Local Development
 
 - [`README.md`](../README.md) — prerequisites, architecture, and local start
+- [`../AGENTS.md`](../AGENTS.md) — repository-local agent instructions and validation gates
+- [`AGENT_RULE_AUTHORITY.md`](AGENT_RULE_AUTHORITY.md) — canonical order for Codex, Kilo, OpenCode, and operations-rule adapters
 - [`docker-compose.dev.yml`](../docker-compose.dev.yml) — local services and isolated named volumes
 - [`env.minimal`](../env.minimal) — non-secret environment reference
 - [`env.template`](../env.template) — broader environment reference; never copy production values
@@ -29,6 +31,7 @@ source, and supersession relationship.
 ## Release Promotion
 
 - [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) — current workflow guarantees and future targets
+- [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md) — Admin Operations Cockpit merge, image digest, and dev-release evidence
 - [`SECURITY_SCAN.md`](SECURITY_SCAN.md) — Trivy behavior, root cause, remediation, and verification
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — current release record and proposed artifact manifest
 - [`UI_DATA_INTEGRATION_PLAN.md`](UI_DATA_INTEGRATION_PLAN.md) — historical UI, init-data, FAISS, bootstrap, and blue-green integration plan
@@ -48,6 +51,7 @@ source, and supersession relationship.
 
 - [`OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md) — executable incident cards for container, digest, volume, migration, Dokploy, Redis, readiness, and restore failures
 - [`PRODUCTION_OPERATING_RULES.md`](PRODUCTION_OPERATING_RULES.md) — non-negotiable operating rules
+- [`CODEX_OPERATIONS_GUIDE.md`](CODEX_OPERATIONS_GUIDE.md) — Codex-friendly adapter for local PR, release, and operations workflows
 
 ## Client Usage
 

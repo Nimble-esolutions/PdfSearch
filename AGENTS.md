@@ -1,0 +1,48 @@
+# PdfSearch Agent Instructions
+
+This file is the tracked, repository-local adapter for agents working inside
+`PdfSearch`. The parent workspace `../AGENTS.md` remains the production-server
+authority when it is available locally. When this repository is checked out by
+itself, use this file plus `docs/AGENT_RULE_AUTHORITY.md`.
+
+## Authority Order
+
+1. User instructions in the current conversation.
+2. System and developer instructions from the active agent runtime.
+3. Parent workspace `../AGENTS.md`, when present.
+4. `docs/AGENT_RULE_AUTHORITY.md`.
+5. `docs/PRODUCTION_OPERATING_RULES.md`.
+6. `docs/CODEX_OPERATIONS_GUIDE.md`.
+7. Historical Kilo/OpenCode adapters, only when they do not conflict with the
+   sources above.
+
+## Repository Rules
+
+- Branch from `dev` for normal work.
+- Keep commits logical and reviewable: separate app, tests, docs, release
+  evidence, and operational-rule changes.
+- Open PRs into `dev`; PRs validate, while merges to `dev` publish release
+  images.
+- Do not claim production deployment from a successful image build. Production
+  promotion requires Dokploy, live route, image digest, Compose, data, and
+  rollback evidence.
+- Never commit secrets, bootstrap credentials, production databases, uploaded
+  PDFs, FAISS/Chroma indexes, or `.env` values.
+- Do not edit production through SSH or Dokploy server checkouts as a normal
+  deployment path. Use the GitHub-to-Dokploy release contract.
+- For local verification, prefer Docker commands from this repository when host
+  Python dependencies are not guaranteed.
+
+## Local Validation
+
+Use the narrowest checks that cover the change. Common gates:
+
+```bash
+docker compose -f docker-compose.dev.yml config --quiet
+docker compose -f docker-compose.dev.yml exec -T web sh -lc 'cd /app/flowdocs && python manage.py test core.tests'
+docker compose -f docker-compose.dev.yml exec -T web sh -lc 'cd /app/flowdocs && python /app/scripts/ci/admin_ui_smoke.py'
+msgfmt --check flowdocs/locale/mr/LC_MESSAGES/django.po -o /tmp/django-mr.mo
+```
+
+If Docker is not running, report that verification gap instead of inventing a
+green result.
