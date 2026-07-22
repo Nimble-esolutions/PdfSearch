@@ -602,6 +602,25 @@ msgstr "एआय सक्षम शोध "
 msgid "Ask your question..."
 msgstr "तुमचा प्रश्न विचारा..."
 
+msgid "I am Sahakar AI. Click here to learn how to questions to get correct answers."
+msgstr "🙏 नमस्कार — मी सहकार AI. योग्य उत्तरे मिळविण्यासाठी प्रश्न कसे विचारावेत हे जाणून घेण्यासाठी"
+
+msgid "Click Here"
+msgstr "इथे क्लिक करा"
+
+msgid "Please ask your question 🙏"
+msgstr "कृपया आपला प्रश्न विचारा 🙏"
+
+msgid "Hello! How can I help you?"
+msgstr "नमस्कार! मी तुम्हाला कशी मदत करू शकतो?"
+
+msgid "Sorry, information related to this topic is not available in this section."
+msgstr "क्षमस्व — या विषयाशी संबंधित माहिती या विभागात उपलब्ध नाही."
+
+msgid "Sorry, the requested information was not found in the available documents."
+msgstr "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही."
+
+#: .\core\templates\search.html:97
 msgid ""
 "⚠️ AI-generated answers should not be used for legal purposes. The AI may "
 "provide incomplete or incorrect responses. Please contact the main office "
@@ -654,26 +673,3 @@ msgstr "हा वापरकर्ता हटवायचा? ही क्�
 
 msgid "No users found."
 msgstr "वापरकर्ते आढळले नाहीत."
-
-msgid "Click Here"
-msgstr "इथे क्लिक करा"
-
-msgid ""
-"I am Sahakar AI. Click here to learn how to questions to get correct answers."
-msgstr ""
-"🙏 नमस्कार — मी सहकार AI. योग्य उत्तरे मिळविण्यासाठी प्रश्न कसे विचारावेत हे जाणून "
-"घेण्यासाठी"
-
-msgid "Please ask your question 🙏"
-msgstr "कृपया आपला प्रश्न विचारा 🙏"
-
-msgid "Hello! How can I help you?"
-msgstr "नमस्कार! मी तुम्हाला कशी मदत करू शकतो?"
-
-msgid ""
-"Sorry, information related to this topic is not available in this section."
-msgstr "क्षमस्व — या विषयाशी संबंधित माहिती या विभागात उपलब्ध नाही."
-
-msgid ""
-"Sorry, the requested information was not found in the available documents."
-msgstr "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही."
