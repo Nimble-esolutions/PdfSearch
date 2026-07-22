@@ -3,6 +3,7 @@ import sqlite3
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import skipUnless
 from unittest.mock import patch
 
 import numpy as np
@@ -16,6 +17,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from .forms import UploadForm
+from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile
@@ -493,6 +495,7 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertEqual(response.json()["error"], "search_unavailable")
         self.assertNotIn("stale index", response.content.decode())
 
+
     def test_search_folder_detection_is_scoped_to_visible_folders(self):
         folder = Folder.objects.create(name="Private rules", created_by=self.user)
         ordinary = get_user_model().objects.create_user(
@@ -554,6 +557,59 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertContains(response, "AI-generated answers should not be used for legal purposes")
         self.assertNotContains(response, "innerHTML")
         self.assertNotContains(response, "|safe")
+
+
+class SearchIndexLifecycleTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="index-owner",
+            password="test-password",
+            role="admin",
+        )
+        self.folder = Folder.objects.create(name="Index lifecycle", created_by=self.user)
+
+    def test_invalid_pdf_metadata_does_not_poison_valid_folder_search(self):
+        PDFFile.objects.create(
+            title="Valid searchable PDF",
+            file="pdfs/valid.pdf",
+            folder=self.folder,
+            uploaded_by=self.user,
+            page_chunks=["A valid searchable chunk"],
+            chunk_embeddings=[[1.0, 0.0]],
+        )
+        PDFFile.objects.create(
+            title="Incomplete legacy PDF",
+            file="pdfs/incomplete.pdf",
+            folder=self.folder,
+            uploaded_by=self.user,
+        )
+
+        chunks, matrix = core_utils._folder_embedding_matrix(self.folder)
+
+        self.assertEqual(chunks, ["A valid searchable chunk"])
+        self.assertEqual(matrix.shape, (1, 2))
+
+    @skipUnless(core_utils._HAS_FAISS, "FAISS is required for atomic index tests")
+    def test_failed_rebuild_preserves_existing_index(self):
+        with tempfile.TemporaryDirectory() as index_dir, override_settings(FAISS_INDEX_DIR=index_dir):
+            index_path = core_utils.faiss_index_path_for_folder(self.folder)
+            old_index = core_utils.faiss.IndexFlatIP(2)
+            old_index.add(np.array([[1.0, 0.0]], dtype=np.float32))
+            core_utils.faiss.write_index(old_index, index_path)
+
+            with patch.object(
+                core_utils,
+                "_folder_embedding_matrix",
+                side_effect=SearchDataIntegrityError("rebuild failed"),
+            ):
+                with self.assertRaises(SearchDataIntegrityError):
+                    core_utils.build_or_load_faiss_index_for_folder(
+                        self.folder,
+                        force_rebuild=True,
+                    )
+
+            preserved = core_utils.faiss.read_index(index_path)
+            self.assertEqual(preserved.ntotal, 1)
 
 
 class RestorePDFCommandTests(TestCase):

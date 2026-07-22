@@ -7,6 +7,8 @@ import json
 import math
 import pathlib
 import traceback
+import logging
+import tempfile
 from typing import List, Tuple, Optional, Dict, Any
 
 import fitz  # PyMuPDF
@@ -34,6 +36,9 @@ except Exception:
 
 class SearchDataIntegrityError(RuntimeError):
     """Raised when stored search artifacts cannot be trusted for retrieval."""
+
+
+logger = logging.getLogger(__name__)
 
 # ------------------- Configuration -------------------
 DetectorFactory.seed = 0
@@ -177,25 +182,34 @@ def _folder_embedding_matrix(
 
     pdf_queryset = pdfs if pdfs is not None else PDFFile.objects.filter(folder=folder)
     for pdf in pdf_queryset.order_by("pk"):
-        p_chunks = _json_list(getattr(pdf, "page_chunks", []), "page_chunks", pdf)
-        p_embs = _json_list(getattr(pdf, "chunk_embeddings", []), "chunk_embeddings", pdf)
-        if not p_chunks or not p_embs:
-            raise SearchDataIntegrityError(f"PDF {pdf.pk} is missing searchable chunks or embeddings")
-        if len(p_chunks) != len(p_embs):
-            raise SearchDataIntegrityError(f"PDF {pdf.pk} chunk and embedding counts differ")
+        try:
+            p_chunks = _json_list(getattr(pdf, "page_chunks", []), "page_chunks", pdf)
+            p_embs = _json_list(getattr(pdf, "chunk_embeddings", []), "chunk_embeddings", pdf)
+            if not p_chunks or not p_embs:
+                raise SearchDataIntegrityError("missing searchable chunks or embeddings")
+            if len(p_chunks) != len(p_embs):
+                raise SearchDataIntegrityError("chunk and embedding counts differ")
 
-        for chunk, embedding in zip(p_chunks, p_embs):
-            if not isinstance(chunk, str) or not chunk.strip():
-                raise SearchDataIntegrityError(f"PDF {pdf.pk} contains an invalid chunk")
-            if not isinstance(embedding, (list, tuple)) or not embedding:
-                raise SearchDataIntegrityError(f"PDF {pdf.pk} contains an invalid embedding")
-            vector = np.asarray(embedding, dtype=np.float32)
-            if vector.ndim != 1 or not np.isfinite(vector).all():
-                raise SearchDataIntegrityError(f"PDF {pdf.pk} contains an invalid embedding vector")
-            if not np.linalg.norm(vector):
-                raise SearchDataIntegrityError(f"PDF {pdf.pk} contains a zero embedding vector")
-            chunk_texts.append(chunk)
-            chunk_embeddings.append(vector)
+            pdf_chunks = []
+            pdf_embeddings = []
+            for chunk, embedding in zip(p_chunks, p_embs):
+                if not isinstance(chunk, str) or not chunk.strip():
+                    raise SearchDataIntegrityError("contains an invalid chunk")
+                if not isinstance(embedding, (list, tuple)) or not embedding:
+                    raise SearchDataIntegrityError("contains an invalid embedding")
+                vector = np.asarray(embedding, dtype=np.float32)
+                if vector.ndim != 1 or not np.isfinite(vector).all():
+                    raise SearchDataIntegrityError("contains an invalid embedding vector")
+                if not np.linalg.norm(vector):
+                    raise SearchDataIntegrityError("contains a zero embedding vector")
+                pdf_chunks.append(chunk)
+                pdf_embeddings.append(vector)
+        except (SearchDataIntegrityError, TypeError, ValueError) as exc:
+            logger.warning("Skipping PDF id=%s from folder id=%s: %s", pdf.pk, folder.pk, exc)
+            continue
+
+        chunk_texts.extend(pdf_chunks)
+        chunk_embeddings.extend(pdf_embeddings)
 
     if not chunk_embeddings:
         return [], np.empty((0, 0), dtype=np.float32)
@@ -224,6 +238,7 @@ def _validate_index(index: Any, chunk_count: int, dimensions: int) -> None:
 def build_or_load_faiss_index_for_folder(
     folder: Folder,
     pdfs=None,
+    force_rebuild: bool = False,
 ) -> Tuple[Optional[faiss.Index], List[str], np.ndarray]:
     """
     Build or load a FAISS index for a folder.
@@ -250,7 +265,7 @@ def build_or_load_faiss_index_for_folder(
             raise SearchDataIntegrityError("Unable to build scoped FAISS index") from exc
 
     idx_path = faiss_index_path_for_folder(folder)
-    if os.path.exists(idx_path):
+    if os.path.exists(idx_path) and not force_rebuild:
         try:
             index = faiss.read_index(idx_path)
         except Exception as exc:
@@ -262,8 +277,19 @@ def build_or_load_faiss_index_for_folder(
         pathlib.Path(idx_path).parent.mkdir(parents=True, exist_ok=True)
         index = faiss.IndexFlatIP(embeddings_matrix.shape[1])
         index.add(embeddings_matrix)
-        faiss.write_index(index, idx_path)
         _validate_index(index, len(chunk_texts), embeddings_matrix.shape[1])
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f"{pathlib.Path(idx_path).name}.",
+            suffix=".tmp",
+            dir=str(pathlib.Path(idx_path).parent),
+        )
+        os.close(fd)
+        try:
+            faiss.write_index(index, temp_path)
+            os.replace(temp_path, idx_path)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
         return index, chunk_texts, embeddings_matrix
     except SearchDataIntegrityError:
         raise
@@ -348,12 +374,14 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
     pdf.chunk_embeddings = embeddings
     pdf.save(update_fields=["extracted_text", "text_content", "page_chunks", "chunk_embeddings"])
 
-    idx_path = faiss_index_path_for_folder(pdf.folder)
-    if os.path.exists(idx_path):
-        os.remove(idx_path)
-    index, _, _ = build_or_load_faiss_index_for_folder(pdf.folder)
+    index, _, _ = build_or_load_faiss_index_for_folder(
+        pdf.folder,
+        force_rebuild=True,
+    )
     if index is None:
         raise SearchDataIntegrityError("PDF embeddings were stored but no FAISS index was created")
+    pdf.indexed = True
+    pdf.save(update_fields=["indexed"])
 
 
 # ------------------ Search PDFs (fast path) ------------------
