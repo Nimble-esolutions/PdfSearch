@@ -90,15 +90,20 @@
         </span>
 
         <!-- Search Menu -->
-        <a href="{% url 'register' %}" class="btn btn-outline-light btn-sm me-2">
-          {% trans "Add User" %}
-        </a>
-        <a href="{% url 'user_list' %}" class="btn btn-outline-light btn-sm me-2">
-          {% trans "User List" %}
-        </a>
+        {% if request.user.role == 'admin' or request.user.role == 'superadmin' %}
+          <a href="{% url 'register' %}" class="btn btn-outline-light btn-sm me-2">
+            {% trans "Add User" %}
+          </a>
+          <a href="{% url 'user_list' %}" class="btn btn-outline-light btn-sm me-2">
+            {% trans "User List" %}
+          </a>
+        {% endif %}
 
         <!-- Logout -->
-        <a href="{% url 'logout' %}" class="btn btn-outline-light btn-sm">{% trans "Logout" %}</a>
+        <form method="post" action="{% url 'logout' %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-light btn-sm">{% trans "Logout" %}</button>
+        </form>
       {% else %}
         <!-- Login -->
         <a href="{% url 'login' %}" class="btn btn-outline-light btn-sm">{% trans "Login" %}</a>

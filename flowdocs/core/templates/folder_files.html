@@ -30,7 +30,10 @@
                 <td><a href="{% url 'view_pdf' file.id %}" target="_blank">View</a></td>
                 {% if role == 'admin' or role == 'superadmin' %}
                 <td>
-                    <a href="{% url 'delete_pdf' file.id %}" class="btn btn-danger btn-sm">Delete</a>
+                    <form method="post" action="{% url 'delete_pdf' file.id %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
                 </td>
                 {% endif %}
             </tr>

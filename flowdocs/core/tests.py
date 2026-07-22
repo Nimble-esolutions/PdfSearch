@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from .forms import UploadForm
@@ -40,6 +40,179 @@ class UploadValidationTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
 
 
+class RegistrationSecurityTests(TestCase):
+    def test_anonymous_registration_cannot_assign_privileged_role(self):
+        response = self.client.get(reverse("register"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="role"')
+
+        response = self.client.post(
+            reverse("register"),
+            {
+                "username": "public-user",
+                "email": "public@example.com",
+                "password1": "A-strong-public-password-123!",
+                "password2": "A-strong-public-password-123!",
+                "department": "operations",
+                "role": "superadmin",
+            },
+        )
+
+        self.assertRedirects(response, reverse("login"))
+        user = get_user_model().objects.get(username="public-user")
+        self.assertEqual(user.role, "user")
+
+    def test_admin_registration_preserves_privileged_role_selection(self):
+        admin = get_user_model().objects.create_user(
+            username="admin-creator",
+            password="test-password",
+            role="admin",
+        )
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse("register"))
+        self.assertContains(response, 'name="role"')
+
+        self.client.post(
+            reverse("register"),
+            {
+                "username": "created-admin",
+                "email": "created@example.com",
+                "password1": "A-strong-created-password-123!",
+                "password2": "A-strong-created-password-123!",
+                "department": "admin",
+                "role": "superadmin",
+            },
+        )
+
+        self.assertEqual(
+            get_user_model().objects.get(username="created-admin").role,
+            "superadmin",
+        )
+
+
+class MutationAuthorizationTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin = user_model.objects.create_user(
+            username="security-admin",
+            password="test-password",
+            role="admin",
+        )
+        self.superadmin = user_model.objects.create_user(
+            username="security-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        self.ordinary = user_model.objects.create_user(
+            username="ordinary-user",
+            password="test-password",
+            role="user",
+        )
+        self.target = user_model.objects.create_user(
+            username="target-user",
+            password="test-password",
+            role="user",
+        )
+        self.folder = Folder.objects.create(name="Security folder", created_by=self.admin)
+
+    def test_ordinary_user_gets_403_for_user_and_folder_mutations(self):
+        self.client.force_login(self.ordinary)
+
+        self.assertEqual(self.client.get(reverse("user_list")).status_code, 403)
+        self.assertEqual(
+            self.client.post(reverse("toggle_user_status", args=[self.target.pk])).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(reverse("delete_user", args=[self.target.pk])).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(reverse("create_folder"), {"folder_name": "Nope"}).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("rename_folder", args=[self.folder.pk]),
+                {"folder_name": "Nope"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(reverse("delete_folder", args=[self.folder.pk])).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("update_folder_keywords", args=[self.folder.pk]),
+                {"keywords": "nope"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(Folder.objects.filter(name="Nope").count(), 0)
+
+    def test_get_requests_do_not_mutate_state_changing_endpoints(self):
+        self.client.force_login(self.admin)
+        original_active = self.target.is_active
+
+        self.assertEqual(
+            self.client.get(reverse("toggle_user_status", args=[self.target.pk])).status_code,
+            405,
+        )
+        self.assertEqual(
+            self.client.get(reverse("delete_user", args=[self.target.pk])).status_code,
+            405,
+        )
+        self.assertEqual(
+            self.client.get(reverse("delete_folder", args=[self.folder.pk])).status_code,
+            405,
+        )
+        self.assertEqual(
+            self.client.get(reverse("rename_folder", args=[self.folder.pk])).status_code,
+            405,
+        )
+        self.assertEqual(
+            self.client.get(reverse("create_folder")).status_code,
+            405,
+        )
+        self.assertEqual(
+            self.client.get(reverse("logout")).status_code,
+            405,
+        )
+        self.assertEqual(self.target.is_active, original_active)
+        self.assertTrue(Folder.objects.filter(pk=self.folder.pk).exists())
+        self.assertTrue(get_user_model().objects.filter(pk=self.target.pk).exists())
+
+    def test_csrf_is_required_for_destructive_post(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.admin)
+
+        response = csrf_client.post(reverse("delete_folder", args=[self.folder.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Folder.objects.filter(pk=self.folder.pk).exists())
+
+    def test_user_deletion_is_blocked_when_it_would_cascade_owned_content(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            folder = Folder.objects.create(name="Owned folder", created_by=self.target)
+            pdf = PDFFile.objects.create(
+                title="Owned document",
+                folder=folder,
+                uploaded_by=self.target,
+                file=SimpleUploadedFile("owned.pdf", b"%PDF-1.7\ncontent"),
+            )
+            self.client.force_login(self.superadmin)
+
+            response = self.client.post(reverse("delete_user", args=[self.target.pk]))
+
+            self.assertEqual(response.status_code, 409)
+            self.assertTrue(get_user_model().objects.filter(pk=self.target.pk).exists())
+            self.assertTrue(Folder.objects.filter(pk=folder.pk).exists())
+            self.assertTrue(PDFFile.objects.filter(pk=pdf.pk).exists())
+
+
 class PDFViewTests(TestCase):
     def test_pdf_view_requires_login(self):
         response = self.client.get(reverse("view_pdf", args=[1]))
@@ -63,6 +236,69 @@ class PDFViewTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response["Content-Type"], "application/pdf")
             self.assertEqual(b"".join(response.streaming_content), b"%PDF-1.7\ncontent")
+
+    def test_pdf_view_denies_an_ordinary_user_another_users_upload(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            owner = get_user_model().objects.create_user(
+                username="pdf-owner",
+                password="test-password",
+                role="admin",
+            )
+            viewer = get_user_model().objects.create_user(
+                username="pdf-viewer",
+                password="test-password",
+                role="user",
+            )
+            pdf = PDFFile.objects.create(
+                title="Private document",
+                uploaded_by=owner,
+                file=SimpleUploadedFile("private.pdf", b"%PDF-1.7\nprivate"),
+            )
+            self.client.force_login(viewer)
+
+            response = self.client.get(reverse("view_pdf", args=[pdf.pk]))
+
+            self.assertEqual(response.status_code, 403)
+
+    def test_pdf_view_allows_an_ordinary_user_their_own_upload(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            viewer = get_user_model().objects.create_user(
+                username="own-pdf-viewer",
+                password="test-password",
+                role="user",
+            )
+            pdf = PDFFile.objects.create(
+                title="Own document",
+                uploaded_by=viewer,
+                file=SimpleUploadedFile("own.pdf", b"%PDF-1.7\nown"),
+            )
+            self.client.force_login(viewer)
+
+            response = self.client.get(reverse("view_pdf", args=[pdf.pk]))
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(b"".join(response.streaming_content), b"%PDF-1.7\nown")
+
+    def test_delete_pdf_uses_dashboard_fallback_for_external_referer(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            admin = get_user_model().objects.create_user(
+                username="pdf-delete-admin",
+                password="test-password",
+                role="admin",
+            )
+            pdf = PDFFile.objects.create(
+                title="Delete document",
+                uploaded_by=admin,
+                file=SimpleUploadedFile("delete.pdf", b"%PDF-1.7\ndelete"),
+            )
+            self.client.force_login(admin)
+
+            response = self.client.post(
+                reverse("delete_pdf", args=[pdf.pk]),
+                HTTP_REFERER="https://evil.example/redirect",
+            )
+
+            self.assertRedirects(response, reverse("dashboard"))
 
 
 class DashboardTests(TestCase):

@@ -100,3 +100,18 @@ class UserRegisterForm(UserCreationForm):
                 'class': 'form-control', 'placeholder': 'Confirm password', 'id': 'id_password2'
             }),
         }
+
+    def __init__(self, *args, allow_privileged_roles=False, **kwargs):
+        self.allow_privileged_roles = allow_privileged_roles
+        super().__init__(*args, **kwargs)
+        if not allow_privileged_roles:
+            # Public registration must never be able to select an operational role.
+            self.fields.pop('role', None)
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if not self.allow_privileged_roles:
+            user.role = 'user'
+        if commit:
+            user.save()
+        return user
