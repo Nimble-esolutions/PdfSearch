@@ -2,6 +2,7 @@
 import traceback
 import hashlib
 import os
+import time
 from functools import wraps
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
@@ -114,6 +115,20 @@ def _safe_login_destination(request):
     ):
         return destination
     return reverse("dashboard")
+
+
+def _public_search_rate_limited(request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    client_address = forwarded_for.split(",", 1)[0].strip() or request.META.get("REMOTE_ADDR", "unknown")
+    client_hash = hashlib.sha256(client_address.encode("utf-8")).hexdigest()[:16]
+    bucket = int(time.time()) // settings.PUBLIC_SEARCH_RATE_WINDOW
+    key = f"public-search:{client_hash}:{bucket}"
+    try:
+        if cache.add(key, 1, timeout=settings.PUBLIC_SEARCH_RATE_WINDOW + 1):
+            return False
+        return cache.incr(key) > settings.PUBLIC_SEARCH_RATE_LIMIT
+    except Exception:
+        return True
 
 
 def _protected_references(references, *, public=False):
@@ -537,6 +552,26 @@ def search_query(request):
             )
         try:
             query = request.POST.get("query", "").strip()
+
+            if len(query.split()) > settings.PUBLIC_SEARCH_MAX_WORDS:
+                return JsonResponse(
+                    {
+                        "error": "query_too_long",
+                        "detail": f"Queries are limited to {settings.PUBLIC_SEARCH_MAX_WORDS} words.",
+                        "references": [],
+                    },
+                    status=400,
+                )
+
+            if public_search and _public_search_rate_limited(request):
+                return JsonResponse(
+                    {
+                        "error": "rate_limited",
+                        "detail": "Please wait before submitting another public search.",
+                        "references": [],
+                    },
+                    status=429,
+                )
 
             if not query:
                 return JsonResponse({

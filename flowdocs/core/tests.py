@@ -471,6 +471,17 @@ class SearchAndAuthenticationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_search_rejects_queries_over_server_word_limit(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("search_query"),
+            {"query": "word " * 31},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "query_too_long")
+
     def test_search_integrity_failure_returns_service_unavailable(self):
         folder = Folder.objects.create(name="Act", created_by=self.user)
         self.client.force_login(self.user)
