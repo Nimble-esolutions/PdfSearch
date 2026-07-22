@@ -114,8 +114,11 @@
                     data-bs-toggle="modal" data-bs-target="#renameModal{{ pdf.id }}">
                 ✎
             </button>
-                                <a href="{% url 'delete_pdf' pdf.id %}" class="btn btn-danger btn-sm"
-                                   onclick="return confirm('Are you sure you want to delete this PDF?');">Delete</a>
+                                <form method="post" action="{% url 'delete_pdf' pdf.id %}" class="d-inline">
+                                  {% csrf_token %}
+                                  <button type="submit" class="btn btn-danger btn-sm"
+                                          onclick="return confirm('Are you sure you want to delete this PDF?');">Delete</button>
+                                </form>
                             <!-- Rename Modal -->
     <div class="modal fade" id="renameModal{{ pdf.id }}" tabindex="-1" aria-labelledby="renameModalLabel{{ pdf.id }}" aria-hidden="true">
       <div class="modal-dialog">

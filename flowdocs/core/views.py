@@ -2,9 +2,11 @@
 import traceback
 import hashlib
 import os
+from functools import wraps
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import redirect_to_login
 from django.core.cache import cache
 from django.conf import settings
 from django.contrib import messages
@@ -12,8 +14,9 @@ from django.db import IntegrityError, connection
 from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate, login, logout
-from django.db.models import Count
-from django.utils.http import content_disposition_header
+from django.db.models import Count, Q
+from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 from .models import PDFFile, Folder, CustomUser
 from .forms import UploadForm
@@ -34,6 +37,52 @@ from .utils import (
 )
 
 CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)
+ADMIN_ROLES = frozenset(("admin", "superadmin"))
+
+
+def is_admin_user(user):
+    return user.is_authenticated and getattr(user, "role", None) in ADMIN_ROLES
+
+
+def admin_required(view_func):
+    """Allow only admin roles and return 403 for ordinary users."""
+    @wraps(view_func)
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path(), settings.LOGIN_URL)
+        if not is_admin_user(request.user):
+            return HttpResponseForbidden("Administrator permission required.")
+        return view_func(request, *args, **kwargs)
+
+    return wrapped
+
+
+def safe_referer_redirect(request, fallback="dashboard"):
+    referer = request.META.get("HTTP_REFERER", "")
+    if referer and url_has_allowed_host_and_scheme(
+        referer,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(referer)
+    return redirect(fallback)
+
+
+def can_access_pdf(user, pdf):
+    if is_admin_user(user):
+        return True
+    return pdf.uploaded_by_id == user.pk or (
+        pdf.folder_id is not None and pdf.folder.created_by_id == user.pk
+    )
+
+
+def visible_pdfs(user, queryset=None):
+    queryset = queryset if queryset is not None else PDFFile.objects.all()
+    if is_admin_user(user):
+        return queryset
+    return queryset.filter(
+        Q(uploaded_by=user) | Q(folder__created_by=user)
+    ).distinct()
 
 
 def livez(request):
@@ -71,6 +120,8 @@ def readyz(request):
 @login_required
 def view_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    if not can_access_pdf(request.user, pdf):
+        return HttpResponseForbidden("You do not have permission to view this PDF.")
     if not pdf.file:
         raise Http404("PDF file is unavailable")
     try:
@@ -86,8 +137,15 @@ def view_pdf(request, pdf_id):
 
 #===========================Registration view====================
 def register_view(request):
+    if request.user.is_authenticated and not is_admin_user(request.user):
+        return HttpResponseForbidden("Administrator permission required.")
+
+    allow_privileged_roles = is_admin_user(request.user)
     if request.method == 'POST':
-        form = UserRegisterForm(request.POST)
+        form = UserRegisterForm(
+            request.POST,
+            allow_privileged_roles=allow_privileged_roles,
+        )
         if form.is_valid():
             form.save()
             messages.success(request, "Registration successful! Please login.")
@@ -95,7 +153,7 @@ def register_view(request):
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        form = UserRegisterForm()
+        form = UserRegisterForm(allow_privileged_roles=allow_privileged_roles)
     return render(request, 'register.html', {'form': form})
 
 #===========================Login view==========================
@@ -123,19 +181,22 @@ def login_view(request):
 
     return render(request, "login.html", {"form": form})
 # ---------------- Authentication -------------------
+@login_required
+@require_POST
 def logout_view(request):
     logout(request)
     return redirect('login')
 
 #===========================user list=================
-@login_required
+@admin_required
 def user_list_view(request):
     # Fetch all users
     users = CustomUser.objects.all()
     return render(request, 'user_list.html', {'users': users})
 
 #============================================ activate deactivate users ====================================
-@login_required
+@admin_required
+@require_POST
 def toggle_user_status(request, user_id):
     user = get_object_or_404(CustomUser, id=user_id)
     user.is_active = not user.is_active  # toggle active/inactive
@@ -145,80 +206,80 @@ def toggle_user_status(request, user_id):
 
 
 #=============================delete user======================
-@login_required
+@admin_required
+@require_POST
 def delete_user(request, user_id):
     current_user = request.user
     user_to_delete = get_object_or_404(CustomUser, id=user_id)
 
-    # Only superadmins can delete other users
+    # Deletion remains a superadmin-only operation.
     if current_user.role != 'superadmin':
-        messages.error(request, "You do not have permission to delete users.")
-        return redirect('user_list')
+        return HttpResponseForbidden("Only superadmins can delete users.")
 
     # Prevent superadmin from deleting themselves
     if user_to_delete == current_user:
         messages.error(request, "You cannot delete your own account.")
         return redirect('user_list')
 
+    # Existing CASCADE foreign keys would otherwise remove the user's PDFs and
+    # folders. Keep the account until its owned content is explicitly handled.
+    if (PDFFile.objects.filter(uploaded_by=user_to_delete).exists() or
+            Folder.objects.filter(created_by=user_to_delete).exists()):
+        return HttpResponse(
+            "The user owns documents or folders and cannot be deleted.",
+            status=409,
+        )
+
+    username = user_to_delete.username
     user_to_delete.delete()
-    messages.success(request, f"User '{user_to_delete.username}' deleted successfully.")
+    messages.success(request, f"User '{username}' deleted successfully.")
     return redirect('user_list')
 
 #==================rename category option====================
-@login_required
+@admin_required
+@require_POST
 def rename_folder(request, folder_id):
-    if request.method == "POST":
-        folder = get_object_or_404(Folder, id=folder_id)
-        new_name = request.POST.get("folder_name")
-        if new_name:
-            folder.name = new_name
-            folder.save()
-            messages.success(request, "Category renamed successfully!")
+    folder = get_object_or_404(Folder, id=folder_id)
+    new_name = request.POST.get("folder_name", "").strip()
+    if new_name:
+        folder.name = new_name
+        folder.save()
+        messages.success(request, "Category renamed successfully!")
     return redirect("dashboard")  # change "categories" to your category list URL name
 
 
 #===================pdf title rename ==================
-@login_required
+@admin_required
+@require_POST
 def rename_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, id=pdf_id)
-
-    # Only admin/superadmin can rename
-    if request.user.role not in ['admin', 'superadmin']:
-        messages.error(request, "You do not have permission to rename this PDF.")
-        return redirect('dashboard')
-
-    if request.method == 'POST':
-        new_title = request.POST.get('title', '').strip()
-        if new_title:
-            pdf.title = new_title
-            pdf.save()
-            messages.success(request, "PDF renamed successfully.")
-        else:
-            messages.error(request, "Title cannot be empty.")
+    new_title = request.POST.get('title', '').strip()
+    if new_title:
+        pdf.title = new_title
+        pdf.save()
+        messages.success(request, "PDF renamed successfully.")
+    else:
+        messages.error(request, "Title cannot be empty.")
     return redirect('dashboard')
 
 
 #====================================Update and add keywords ==========================
-@login_required
+@admin_required
+@require_POST
 def update_folder_keywords(request, folder_id):
     """Update folder keywords from modal."""
-    if request.method == 'POST':
-        folder = get_object_or_404(Folder, id=folder_id)
-        new_keywords = request.POST.get('keywords', '').strip()
-        folder.keywords = new_keywords
-        folder.save()
-        messages.success(request, f"Keywords for '{folder.name}' updated successfully!")
+    folder = get_object_or_404(Folder, id=folder_id)
+    new_keywords = request.POST.get('keywords', '').strip()
+    folder.keywords = new_keywords
+    folder.save()
+    messages.success(request, f"Keywords for '{folder.name}' updated successfully!")
     return redirect('dashboard_folder', folder_id=folder_id)
 
 # ---------------- Delete Folder / Category ----------------
-@login_required
+@admin_required
+@require_POST
 def delete_folder(request, folder_id):
     folder = get_object_or_404(Folder, id=folder_id)
-
-    # Only admin or superadmin can delete
-    if request.user.role not in ["admin", "superadmin"]:
-        messages.error(request, "You don't have permission to delete categories.")
-        return redirect("dashboard")
 
     # Delete all files in folder first (DB + storage)
     pdfs = PDFFile.objects.filter(folder=folder)
@@ -234,69 +295,69 @@ def delete_folder(request, folder_id):
     return redirect("dashboard")
 
 # ---------------- Add Subcategory ----------------
-@login_required
+@admin_required
+@require_POST
 def add_subcategory(request):
     """
     Creates a new folder/category.
     Note: Parent folder feature was removed in migration 0009.
     Subcategories are now standalone folders.
     """
-    if request.method == "POST":
-        sub_name = request.POST.get("subcategory_name", "").strip()
+    sub_name = request.POST.get("subcategory_name", "").strip()
 
-        if sub_name:
-            _, created = Folder.objects.get_or_create(
-                name=sub_name,
-                defaults={'created_by': request.user}
-            )
-            if created:
-                messages.success(request, f"Category '{sub_name}' created successfully.")
-            else:
-                messages.info(request, f"Category '{sub_name}' already exists.")
+    if sub_name:
+        _, created = Folder.objects.get_or_create(
+            name=sub_name,
+            defaults={'created_by': request.user}
+        )
+        if created:
+            messages.success(request, f"Category '{sub_name}' created successfully.")
         else:
-            messages.error(request, "Category name is required.")
+            messages.info(request, f"Category '{sub_name}' already exists.")
+    else:
+        messages.error(request, "Category name is required.")
 
     return redirect('dashboard')
 
 # ---------------- Create Folder / Category ----------------
-@login_required
+@admin_required
+@require_POST
 def create_folder(request):
-    if request.method == "POST":
-        folder_name = request.POST.get("folder_name", "").strip()  # match input name
-        keywords_raw = request.POST.get("folder_keywords", "")  # new input from modal
-        keywords = [kw.strip() for kw in keywords_raw.split(",") if kw.strip()]  # clean list
+    folder_name = request.POST.get("folder_name", "").strip()  # match input name
+    keywords_raw = request.POST.get("folder_keywords", "")  # new input from modal
+    keywords = [kw.strip() for kw in keywords_raw.split(",") if kw.strip()]  # clean list
 
-        if not folder_name:
-            messages.error(request, "Category name is required.")
-            return redirect("dashboard")
+    if not folder_name:
+        messages.error(request, "Category name is required.")
+        return redirect("dashboard")
 
-        try:
-            folder, created = Folder.objects.get_or_create(
-                name=folder_name,
-                defaults={
-                    'created_by': request.user,
-                    'keywords': keywords  # save keywords here
-                }
-            )
-            if created:
-                messages.success(request, f"Category '{folder.name}' created successfully.")
-            else:
-                messages.warning(request, f"Category '{folder.name}' already exists.")
-        except IntegrityError:
-            messages.error(request, f"Category '{folder_name}' could not be created.")
+    try:
+        folder, created = Folder.objects.get_or_create(
+            name=folder_name,
+            defaults={
+                'created_by': request.user,
+                'keywords': keywords  # save keywords here
+            }
+        )
+        if created:
+            messages.success(request, f"Category '{folder.name}' created successfully.")
+        else:
+            messages.warning(request, f"Category '{folder.name}' already exists.")
+    except IntegrityError:
+        messages.error(request, f"Category '{folder_name}' could not be created.")
 
     return redirect("dashboard")
 
 
 # ---------------- Delete PDF ----------------
 @login_required
+@require_POST
 def delete_pdf(request, file_id):
     pdf = get_object_or_404(PDFFile, pk=file_id)
 
-    #  users can delete only their own uploads; Admin/Superadmin can delete any
-    if request.user.role not in ["admin", "superadmin"] and pdf.uploaded_by != request.user:
-        messages.error(request, "You don't have permission to delete this PDF.")
-        return redirect(request.META.get("HTTP_REFERER", "dashboard"))
+    # Users may remove only their own uploads; admins may remove any PDF.
+    if not is_admin_user(request.user) and pdf.uploaded_by_id != request.user.pk:
+        return HttpResponseForbidden("You do not have permission to delete this PDF.")
 
     try:
         if pdf.file:
@@ -306,7 +367,7 @@ def delete_pdf(request, file_id):
     except Exception as e:
         messages.error(request, f"Error deleting PDF: {e}")
 
-    return redirect(request.META.get("HTTP_REFERER", "dashboard"))
+    return safe_referer_redirect(request)
 
 # ---------------- Home View ----------------
 def home_view(request):
@@ -322,7 +383,11 @@ def dashboard(request, folder_id=None):
 
     if folder_id:
         folder = get_object_or_404(Folder, id=folder_id)
-        if request.method == "POST" and role in ["admin", "superadmin"]:
+        if not is_admin_user(request.user) and folder.created_by_id != request.user.pk:
+            return HttpResponseForbidden("You do not have permission to access this folder.")
+        if request.method == "POST":
+            if not is_admin_user(request.user):
+                return HttpResponseForbidden("Administrator permission required.")
             form = UploadForm(request.POST, request.FILES)
             if form.is_valid():
                 pdf = form.save(commit=False)
@@ -344,12 +409,14 @@ def dashboard(request, folder_id=None):
         else:
             form = UploadForm()
 
-        pdfs = PDFFile.objects.filter(folder=folder).order_by("-uploaded_at")
+        pdfs = visible_pdfs(request.user, PDFFile.objects.filter(folder=folder)).order_by("-uploaded_at")
         return render(request, "dashboard_pdfs.html", {"folder": folder, "pdfs": pdfs, "form": form, "role": role})
 
     # else: folders list
-    #folders = Folder.objects.all().order_by("name")
-    folders = Folder.objects.annotate(pdf_count=Count('files', distinct=True)).order_by("name")
+    folders = Folder.objects.all()
+    if not is_admin_user(request.user):
+        folders = folders.filter(created_by=request.user)
+    folders = folders.annotate(pdf_count=Count('files', distinct=True)).order_by("name")
     return render(request, "dashboard.html", {"folders": folders, "role": role})
 
 # -------------- New logic for folder search --------------
