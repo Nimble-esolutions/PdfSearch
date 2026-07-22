@@ -45,6 +45,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # =====================================================================
 FROM python:3.10-slim AS runtime
 
+ARG OCI_REVISION=unknown
+LABEL org.opencontainers.image.revision="${OCI_REVISION}"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \

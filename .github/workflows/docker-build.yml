@@ -14,6 +14,17 @@ on:
       - requirements-indexing.txt
       - start.sh
       - .dockerignore
+      - docker-compose.ci.yml
+      - scripts/ci/**
+      - init/**
+      - locale/**
+      - flowdocs/locale/**
+      - flowdocs/flowdocs/settings*.py
+      - env.template
+      - env.minimal
+      - .env.example
+      - '**/*.po'
+      - '**/*.mo'
       - flowdocs/**
       - .github/workflows/**
   push:
@@ -29,6 +40,17 @@ on:
       - requirements-indexing.txt
       - start.sh
       - .dockerignore
+      - docker-compose.ci.yml
+      - scripts/ci/**
+      - init/**
+      - locale/**
+      - flowdocs/locale/**
+      - flowdocs/flowdocs/settings*.py
+      - env.template
+      - env.minimal
+      - .env.example
+      - '**/*.po'
+      - '**/*.mo'
       - flowdocs/**
       - .github/workflows/**
   workflow_dispatch:
@@ -50,12 +72,20 @@ jobs:
   validate:
     name: Validate source and deployment contract
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 (Node 24)
+
+      - name: Validate workflow syntax
+        run: |
+          set -euo pipefail
+          install_dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$install_dir"
+          GOBIN="$install_dir" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          "$install_dir/actionlint" .github/workflows/*.yml
 
       - name: Check repository whitespace
         run: git diff --check
@@ -75,6 +105,47 @@ jobs:
           OPENAI_API_KEY: ci-only-key
           PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:ci
         run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate disposable CI Compose
+        env:
+          PDFSEARCH_IMAGE: pdfsearch-ci:source
+          REDIS_IMAGE: redis:7-alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          SECRET_KEY: ci-only-secret
+        run: docker compose -f docker-compose.ci.yml config --quiet
+
+      - name: Build CI image with tested OCI revision
+        env:
+          LOCAL_IMAGE: pdfsearch-ci:source
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg OCI_REVISION="$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$LOCAL_IMAGE" \
+            .
+          revision="$(docker image inspect "$LOCAL_IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          test "$revision" = "$GITHUB_SHA"
+
+      - name: Resolve immutable Redis smoke image
+        id: ci_redis
+        run: |
+          set -euo pipefail
+          docker pull redis:7-alpine >/dev/null
+          redis_ref="$(docker image inspect redis:7-alpine --format '{{ index .RepoDigests 0 }}')"
+          case "$redis_ref" in
+            redis@sha256:*) ;;
+            *) echo "Redis image did not resolve to a digest" >&2; exit 1 ;;
+          esac
+          echo "image=$redis_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Run disposable entrypoint and runtime gates
+        env:
+          PDFSEARCH_IMAGE: pdfsearch-ci:source
+          REDIS_IMAGE: ${{ steps.ci_redis.outputs.image }}
+          SECRET_KEY: ci-only-secret-key-with-more-than-fifty-characters-for-checks
+          WEB_PORT: 18080
+          COMPOSE_PROJECT_NAME: pdfsearch-ci-source
+        run: bash scripts/ci/run_compose_smoke.sh
 
   release:
     name: Build and publish dev release
@@ -125,6 +196,8 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          build-args: |
+            OCI_REVISION=${{ github.sha }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -134,35 +207,38 @@ jobs:
           cache-from: type=gha,scope=buildkit-${{ hashFiles('Dockerfile', 'requirements-web.lock') }}
           cache-to: type=gha,scope=buildkit-${{ hashFiles('Dockerfile', 'requirements-web.lock') }},mode=max
 
-      - name: Smoke-test published image
+      - name: Resolve immutable Redis smoke image
+        id: release_redis
+        run: |
+          set -euo pipefail
+          docker pull redis:7-alpine >/dev/null
+          redis_ref="$(docker image inspect redis:7-alpine --format '{{ index .RepoDigests 0 }}')"
+          case "$redis_ref" in
+            redis@sha256:*) ;;
+            *) echo "Redis image did not resolve to a digest" >&2; exit 1 ;;
+          esac
+          echo "image=$redis_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test published image through actual entrypoint
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
           docker pull "$IMAGE_REF"
-          docker run --rm --entrypoint python \
-            -e SECRET_KEY=ci-only-secret-key-with-more-than-fifty-characters-for-checks \
-            -e ALLOW_INSECURE_DEFAULTS=1 \
-            -e DEBUG=False \
-            -e ALLOWED_HOSTS=localhost \
-            -e SECURE_SSL_REDIRECT=True \
-            -e SECURE_HSTS_SECONDS=31536000 \
-            -e SECURE_HSTS_INCLUDE_SUBDOMAINS=True \
-            -e SECURE_HSTS_PRELOAD=True \
-            -e CSRF_COOKIE_SECURE=True \
-            -e SESSION_COOKIE_SECURE=True \
-            -e DATA_ROOT=/tmp/flowdocs-data \
-            -e DJANGO_SETTINGS_MODULE=flowdocs.settings \
-            "$IMAGE_REF" /app/flowdocs/manage.py check --deploy --fail-level WARNING
-          docker run --rm --entrypoint python \
-            -e SECRET_KEY=ci-only-secret \
-            -e ALLOW_INSECURE_DEFAULTS=1 \
-            -e DEBUG=True \
-            -e DATA_ROOT=/tmp/flowdocs-data \
-            -e DJANGO_SETTINGS_MODULE=flowdocs.settings \
-            "$IMAGE_REF" /app/flowdocs/manage.py test core.tests --noinput
-          docker run --rm --entrypoint python "$IMAGE_REF" -m pip check
+          revision="$(docker image inspect "$IMAGE_REF" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          test "$revision" = "$GITHUB_SHA"
+          case "$IMAGE_REF" in
+            *@sha256:*) ;;
+            *) echo "Published web image is not digest-pinned" >&2; exit 1 ;;
+          esac
+          echo "Verified web image digest and OCI revision for $GITHUB_SHA"
+          PDFSEARCH_IMAGE="$IMAGE_REF" \
+            REDIS_IMAGE="${{ steps.release_redis.outputs.image }}" \
+            SECRET_KEY=ci-only-secret-key-with-more-than-fifty-characters-for-checks \
+            WEB_PORT=18081 \
+            COMPOSE_PROJECT_NAME=pdfsearch-ci-published \
+            bash scripts/ci/run_compose_smoke.sh
 
       - name: Scan published image
         id: trivy
@@ -270,11 +346,11 @@ jobs:
           {
             echo "## FlowDocs dev release"
             echo
-            echo "- Git SHA: \\`${GITHUB_SHA}\\`"
-            echo "- Image: \\`${IMAGE_REF}\\`"
-            echo "- Tags: \\`dev\\`, \\`latest\\`, and short SHA"
+            printf '%s\n' "- Git SHA: "'`'"$GITHUB_SHA"'`'
+            printf '%s\n' "- Image: "'`'"$IMAGE_REF"'`'
+            printf '%s\n' "- Tags: \`dev\`, \`latest\`, and short SHA"
             echo "- Promotion: aliases created only after exact-digest smoke, pip, image-size, and Trivy report gates"
             echo "- SBOM: enabled"
             echo "- Provenance: max"
-            echo "- Source: \\`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}\\`"
+            printf '%s\n' "- Source: "'`'"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"'`'
           } >> "$GITHUB_STEP_SUMMARY"
