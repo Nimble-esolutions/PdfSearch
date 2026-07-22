@@ -6,9 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command, CommandError
+from django.contrib.staticfiles import finders
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -18,6 +20,18 @@ from .management.commands.inventory_artifacts import build_manifest, compare_man
 from .models import Folder, PDFFile
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
+
+
+class StaticFilesConfigurationTests(TestCase):
+    def test_core_static_asset_is_discovered_once(self):
+        asset = 'main/css/style.css'
+        matches = finders.find(asset, all=True)
+
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(
+            Path(matches[0]).resolve(),
+            (settings.BASE_DIR / 'core' / 'static' / asset).resolve(),
+        )
 
 
 class OperationalEndpointTests(TestCase):
