@@ -69,7 +69,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
      gosu \
      bash \
      curl \
-     gettext
+     gettext \
+     fontconfig \
+     fonts-noto-core
 
 COPY --from=builder /build/wheels /wheels
 RUN --mount=type=cache,target=/root/.cache/pip \
