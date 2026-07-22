@@ -301,6 +301,94 @@ class PDFViewTests(TestCase):
             self.assertRedirects(response, reverse("dashboard"))
 
 
+class SearchAndAuthenticationTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="search-admin",
+            password="test-password",
+            role="admin",
+        )
+
+    @patch("core.views.generate_gpt_answer", return_value="<b>unsafe</b>\nमराठी")
+    @patch("core.views.search_pdfs_fast")
+    @patch("core.views.detect_folder_by_keywords_multi")
+    @patch("core.views.is_general_query", return_value=False)
+    def test_search_references_use_protected_pdf_view_url(
+        self,
+        _is_general_query,
+        detect_folder,
+        search_pdfs,
+        _generate_answer,
+    ):
+        folder = Folder.objects.create(name="Rules", created_by=self.user)
+        pdf = PDFFile.objects.create(
+            title="Rule book",
+            file="pdfs/rule-book.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+        )
+        detect_folder.return_value = [(folder, 0.9)]
+        search_pdfs.return_value = (
+            "",
+            [{
+                "title": pdf.title,
+                "pdf_id": pdf.pk,
+                "url": "/media/pdfs/rule-book.pdf",
+                "folder": folder.name,
+                "uploaded_at": "2026-07-22",
+                "score": 1,
+            }],
+        )
+
+        response = self.client.post(reverse("search_query"), {"query": "rule book"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["references"][0]["pdf_id"], pdf.pk)
+        self.assertEqual(
+            payload["references"][0]["url"],
+            reverse("view_pdf", args=[pdf.pk]),
+        )
+        self.assertNotIn("/media/", payload["references"][0]["url"])
+        self.assertEqual(payload["answer"], "<b>unsafe</b>\nमराठी")
+
+    def test_login_preserves_safe_next_destination(self):
+        next_url = reverse("dashboard_folder", args=[42])
+
+        response = self.client.get(reverse("login"), {"next": next_url})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'value="{next_url}"')
+
+        response = self.client.post(
+            reverse("login"),
+            {"username": self.user.username, "password": "test-password", "next": next_url},
+        )
+
+        self.assertRedirects(response, next_url, fetch_redirect_response=False)
+
+    def test_login_rejects_external_next_destination(self):
+        response = self.client.post(
+            reverse("login"),
+            {
+                "username": self.user.username,
+                "password": "test-password",
+                "next": "https://evil.example/phishing",
+            },
+        )
+
+        self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
+
+    def test_search_template_uses_text_rendering_and_resets_request_state(self):
+        response = self.client.get(reverse("search_query"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "finally")
+        self.assertContains(response, "textContent = ref.title")
+        self.assertNotContains(response, "innerHTML")
+        self.assertNotContains(response, "|safe")
+
+
 class DashboardTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -353,6 +441,27 @@ class DashboardTests(TestCase):
         self.assertContains(response, "Unknown")
         self.assertContains(response, reverse("view_pdf", args=[pdf.pk]))
         self.assertContains(response, reverse("dashboard_folder", args=[folder.pk]))
+
+    def test_pdf_rename_redirects_back_to_its_folder(self):
+        self.client.force_login(self.user)
+        folder = Folder.objects.create(name="Documents", created_by=self.user)
+        pdf = PDFFile.objects.create(
+            title="Before rename",
+            file="pdfs/document.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+        )
+
+        response = self.client.post(
+            reverse("rename_pdf", args=[pdf.pk]),
+            {"title": "After rename"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("dashboard_folder", args=[folder.pk]),
+        )
+        self.assertEqual(PDFFile.objects.get(pk=pdf.pk).title, "After rename")
 
 
 class ArtifactInventoryTests(TestCase):

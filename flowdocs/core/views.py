@@ -17,6 +17,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count, Q
 from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
+from django.urls import reverse
 
 from .models import PDFFile, Folder, CustomUser
 from .forms import UploadForm
@@ -83,6 +84,30 @@ def visible_pdfs(user, queryset=None):
     return queryset.filter(
         Q(uploaded_by=user) | Q(folder__created_by=user)
     ).distinct()
+
+
+def _safe_login_destination(request):
+    destination = request.POST.get("next") or request.GET.get("next")
+    if destination and url_has_allowed_host_and_scheme(
+        destination,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return destination
+    return reverse("dashboard")
+
+
+def _protected_references(references):
+    """Expose only authenticated PDF view URLs to the search client."""
+    protected = []
+    for reference in references or []:
+        item = dict(reference)
+        pdf_id = item.get("pdf_id")
+        item.pop("url", None)
+        if pdf_id:
+            item["url"] = reverse("view_pdf", args=[pdf_id])
+        protected.append(item)
+    return protected
 
 
 def livez(request):
@@ -158,6 +183,7 @@ def register_view(request):
 
 #===========================Login view==========================
 def login_view(request):
+    next_url = _safe_login_destination(request)
     if request.method == "POST":
         form = AuthenticationForm(request, data=request.POST)
 
@@ -169,7 +195,7 @@ def login_view(request):
 
             if user is not None:
                 login(request, user)
-                return redirect("dashboard")
+                return redirect(next_url)
             else:
                 messages.error(request, "Invalid username or password.")
 
@@ -179,7 +205,7 @@ def login_view(request):
     else:
         form = AuthenticationForm()
 
-    return render(request, "login.html", {"form": form})
+    return render(request, "login.html", {"form": form, "next": next_url})
 # ---------------- Authentication -------------------
 @login_required
 @require_POST
@@ -253,6 +279,8 @@ def rename_folder(request, folder_id):
 @require_POST
 def rename_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, id=pdf_id)
+    redirect_name = "dashboard_folder" if pdf.folder_id else "dashboard"
+    redirect_kwargs = {"folder_id": pdf.folder_id} if pdf.folder_id else {}
     new_title = request.POST.get('title', '').strip()
     if new_title:
         pdf.title = new_title
@@ -260,7 +288,7 @@ def rename_pdf(request, pdf_id):
         messages.success(request, "PDF renamed successfully.")
     else:
         messages.error(request, "Title cannot be empty.")
-    return redirect('dashboard')
+    return redirect(redirect_name, **redirect_kwargs)
 
 
 #====================================Update and add keywords ==========================
@@ -481,7 +509,7 @@ def search_query(request):
                         _, refs = search_pdfs_fast(folder, query, top_n_pdfs=3)
 
                         for r in refs:
-                            key = r.get("url") or r.get("title")
+                            key = r.get("pdf_id") or r.get("title")
                             score = float(r.get("score", 0))
 
                             if key in aggregated_scores:
@@ -491,8 +519,8 @@ def search_query(request):
                                     "score": score,
                                     "meta": {
                                         "title": r.get("title"),
+                                        "pdf_id": r.get("pdf_id"),
                                         "folder": folder.name,
-                                        "url": r.get("url"),
                                         "uploaded_at": r.get("uploaded_at"),
                                     }
                                 }
@@ -513,13 +541,13 @@ def search_query(request):
                         meta = item["meta"]
                         final_refs.append({
                             "title": meta["title"],
+                            "pdf_id": meta["pdf_id"],
                             "folder": meta["folder"],
-                            "url": meta["url"],
                             "uploaded_at": meta["uploaded_at"],
                             "score": item["score"],
                         })
 
-                        pdf = PDFFile.objects.filter(title=meta["title"]).first()
+                        pdf = PDFFile.objects.filter(pk=meta["pdf_id"]).first()
                         if pdf:
                             combined_snippets.append(f"--- {pdf.title} ---")
                             combined_snippets.extend(
@@ -540,7 +568,7 @@ def search_query(request):
 
                     return JsonResponse({
                         "answer": answer,
-                        "references": final_refs
+                        "references": _protected_references(final_refs)
                     })
 
                 # Folder matched but no PDFs → DO NOT go to Act
@@ -559,7 +587,7 @@ def search_query(request):
                 if answer.strip():
                     return JsonResponse({
                         "answer": answer,
-                        "references": refs
+                        "references": _protected_references(refs)
                     })
 
             # --------------------------------------------------
