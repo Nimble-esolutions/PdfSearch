@@ -63,6 +63,9 @@
         <div class="card-body p-2">
             <form method="post" enctype="multipart/form-data" action="{% url 'dashboard_folder' folder_id=folder.id %}" class="row g-2 align-items-center">
                 {% csrf_token %}
+                {% if form.non_field_errors %}
+                    <div class="col-12 text-danger small">{{ form.non_field_errors }}</div>
+                {% endif %}
                 <div class="col-md-4">
                     {{ form.title }}
                     {% if form.title.errors %}

@@ -167,12 +167,16 @@ def _json_list(value: Any, field_name: str, pdf: PDFFile) -> list[Any]:
     return value
 
 
-def _folder_embedding_matrix(folder: Folder) -> tuple[list[str], np.ndarray]:
+def _folder_embedding_matrix(
+    folder: Folder,
+    pdfs=None,
+) -> tuple[list[str], np.ndarray]:
     """Return deterministic chunk order and validated, normalized embeddings."""
     chunk_texts: list[str] = []
     chunk_embeddings: list[np.ndarray] = []
 
-    for pdf in PDFFile.objects.filter(folder=folder).order_by("pk"):
+    pdf_queryset = pdfs if pdfs is not None else PDFFile.objects.filter(folder=folder)
+    for pdf in pdf_queryset.order_by("pk"):
         p_chunks = _json_list(getattr(pdf, "page_chunks", []), "page_chunks", pdf)
         p_embs = _json_list(getattr(pdf, "chunk_embeddings", []), "chunk_embeddings", pdf)
         if not p_chunks or not p_embs:
@@ -219,17 +223,31 @@ def _validate_index(index: Any, chunk_count: int, dimensions: int) -> None:
 
 def build_or_load_faiss_index_for_folder(
     folder: Folder,
+    pdfs=None,
 ) -> Tuple[Optional[faiss.Index], List[str], np.ndarray]:
     """
     Build or load a FAISS index for a folder.
     Returns (index, chunks_flat_list, normalized_embeddings). A stored index is
     usable only when its dimensions and vector count match the database metadata.
     """
-    chunk_texts, embeddings_matrix = _folder_embedding_matrix(folder)
+    chunk_texts, embeddings_matrix = _folder_embedding_matrix(folder, pdfs=pdfs)
     if not chunk_texts:
         return None, [], embeddings_matrix
     if not _HAS_FAISS:
         return None, chunk_texts, embeddings_matrix
+
+    # A restricted search scope cannot use the persistent folder index because
+    # that index may contain documents outside the caller's access policy.
+    if pdfs is not None:
+        try:
+            index = faiss.IndexFlatIP(embeddings_matrix.shape[1])
+            index.add(embeddings_matrix)
+            _validate_index(index, len(chunk_texts), embeddings_matrix.shape[1])
+            return index, chunk_texts, embeddings_matrix
+        except SearchDataIntegrityError:
+            raise
+        except Exception as exc:
+            raise SearchDataIntegrityError("Unable to build scoped FAISS index") from exc
 
     idx_path = faiss_index_path_for_folder(folder)
     if os.path.exists(idx_path):
@@ -339,7 +357,12 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
 
 
 # ------------------ Search PDFs (fast path) ------------------
-def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tuple[str, List[Dict[str, Any]]]:
+def search_pdfs_fast(
+    folder: Folder,
+    user_query: str,
+    top_n_pdfs: int = 2,
+    pdfs=None,
+) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Fast search that:
      - uses precomputed chunk embeddings saved on PDFs
@@ -350,7 +373,8 @@ def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tu
      The protected view URL is added by the HTTP view before serialization.
     """
     # 1. quick guard
-    pdfs = PDFFile.objects.filter(folder=folder)
+    restricted_scope = pdfs is not None
+    pdfs = pdfs if restricted_scope else PDFFile.objects.filter(folder=folder)
     if not pdfs.exists():
         return "", []
 
@@ -366,7 +390,10 @@ def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tu
     except Exception as exc:
         raise SearchDataIntegrityError("Unable to create the query embedding") from exc
 
-    index, chunk_texts, embeddings_matrix = build_or_load_faiss_index_for_folder(folder)
+    index, chunk_texts, embeddings_matrix = build_or_load_faiss_index_for_folder(
+        folder,
+        pdfs=pdfs if restricted_scope else None,
+    )
 
     # 3. get top matched chunks (text + scores)
     matches = search_chunks_with_faiss_or_numpy(
@@ -634,7 +661,7 @@ def detect_folder_by_keywords(query):
 
 
 #---------------- detect multiple folders for search query ----------------
-def detect_folder_by_keywords_multi(query, min_score_threshold=0.50):
+def detect_folder_by_keywords_multi(query, min_score_threshold=0.50, folders=None):
     """
     Modified version:
     - Returns ALL folders with score >= threshold
@@ -645,7 +672,7 @@ def detect_folder_by_keywords_multi(query, min_score_threshold=0.50):
     print("\n========== 🔍 KEYWORD DEBUG INFO (MULTI-FOLDER) ==========")
     print(f"📝 User Query: {query}\n")
 
-    folders = Folder.objects.all()
+    folders = folders if folders is not None else Folder.objects.all()
     query_lower = query.lower().strip()
 
     scored = []  # will store (folder, score)

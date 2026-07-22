@@ -56,4 +56,5 @@ grep -q "core.test_artifact_vault" "$test_log"
 rm -f "$test_log"
 
 "${compose[@]}" exec --no-TTY --user appuser web python /app/scripts/ci/data_release_gate.py
+"${compose[@]}" --profile seed run --rm --no-deps seed
 echo "[compose] actual image entrypoint, Redis dependency, core tests, runtime, data, and index gates passed"

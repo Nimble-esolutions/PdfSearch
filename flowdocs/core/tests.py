@@ -332,6 +332,7 @@ class SearchAndAuthenticationTests(TestCase):
             folder=folder,
             uploaded_by=self.user,
         )
+        self.client.force_login(self.user)
         detect_folder.return_value = [(folder, 0.9)]
         search_pdfs.return_value = (
             "",
@@ -356,6 +357,37 @@ class SearchAndAuthenticationTests(TestCase):
         )
         self.assertNotIn("/media/", payload["references"][0]["url"])
         self.assertEqual(payload["answer"], "<b>unsafe</b>\nमराठी")
+
+    def test_anonymous_search_post_returns_json_401_without_document_content(self):
+        response = self.client.post(
+            reverse("search_query"),
+            {"query": "private policy question"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "authentication_required")
+        self.assertNotIn("private", response.content.decode())
+
+    def test_search_folder_detection_is_scoped_to_visible_folders(self):
+        folder = Folder.objects.create(name="Private rules", created_by=self.user)
+        ordinary = get_user_model().objects.create_user(
+            username="search-ordinary",
+            password="test-password",
+            role="user",
+        )
+        with patch(
+            "core.views.detect_folder_by_keywords_multi",
+            return_value=[],
+        ) as detect_folder:
+            self.client.force_login(ordinary)
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "private policy question"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        folders = detect_folder.call_args.kwargs["folders"]
+        self.assertFalse(folders.filter(pk=folder.pk).exists())
 
     def test_login_preserves_safe_next_destination(self):
         next_url = reverse("dashboard_folder", args=[42])
@@ -452,6 +484,53 @@ class DashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Categories")
+
+    def test_upload_failure_rolls_back_row_and_stored_file(self):
+        folder = Folder.objects.create(name="Upload failures", created_by=self.user)
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            with patch(
+                "core.views.precompute_pdf_embeddings",
+                side_effect=RuntimeError("embedding service unavailable"),
+            ):
+                self.client.force_login(self.user)
+                response = self.client.post(
+                    reverse("dashboard_folder", args=[folder.pk]),
+                    {
+                        "title": "Unavailable embedding service",
+                        "file": SimpleUploadedFile(
+                            "unavailable.pdf",
+                            b"%PDF-1.7\nvalid upload fixture",
+                            content_type="application/pdf",
+                        ),
+                    },
+                )
+
+            self.assertEqual(response.status_code, 400)
+            self.assertContains(response, "No document was saved", status_code=400)
+            self.assertFalse(
+                PDFFile.objects.filter(title="Unavailable embedding service").exists()
+            )
+            self.assertFalse(any(path.is_file() for path in Path(media_root).rglob("*")))
+
+    def test_malformed_upload_is_rejected_before_persistence(self):
+        folder = Folder.objects.create(name="Malformed uploads", created_by=self.user)
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("dashboard_folder", args=[folder.pk]),
+            {
+                "title": "Malformed PDF",
+                "file": SimpleUploadedFile(
+                    "malformed.pdf",
+                    b"not a PDF",
+                    content_type="application/pdf",
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "valid PDF")
+        self.assertFalse(PDFFile.objects.filter(title="Malformed PDF").exists())
 
     def test_dashboard_renders_many_folders_with_current_navigation_route(self):
         self.client.force_login(self.user)

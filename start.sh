@@ -10,8 +10,10 @@ STATIC_DIR="${STATIC_ROOT:-$DATA_ROOT/staticfiles}"
 BACKUP_DIR="${BACKUP_DIR:-$DATA_ROOT/backups}"
 LEGACY_DATA="${LEGACY_DATA_ROOT:-/mnt/legacy}"
 INIT_DB="${DECLARED_SEED_DB:-/app/init/db.sqlite3}"
+INIT_MEDIA="${DECLARED_SEED_MEDIA:-/app/init/media}"
 INIT_FAISS="/app/init/faiss_indexes"
 MIGRATION_MARKER="$DATA_ROOT/.legacy_migration_complete"
+SEED_VALIDATION_MARKER="$DATA_ROOT/.declared_seed_validation.pending"
 DATA_BOOTSTRAP_MODE="${DATA_BOOTSTRAP_MODE:-strict}"
 SEED_DB_COPIED=0
 
@@ -72,10 +74,21 @@ if [ ! -s "$DB_PATH" ]; then
         echo "[db] Explicit $DATA_BOOTSTRAP_MODE mode; starting with an empty database"
     elif [ -f "$INIT_DB" ]; then
         echo "[db] Initializing from image baseline"
+        printf 'pending\nseed_db=%s\nseed_media=%s\n' "$INIT_DB" "$INIT_MEDIA" > "$SEED_VALIDATION_MARKER"
         cp "$INIT_DB" "$DB_PATH"
         SEED_DB_COPIED=1
     else
         echo "[db] No database found; Django will create it during migrations"
+    fi
+fi
+
+# A failed seed copy or validation leaves this marker behind. Retry the media
+# copy and validation on every restart; a non-empty database is not proof that
+# the declared seed was accepted.
+if [ "$SEED_DB_COPIED" = "1" ] || [ -f "$SEED_VALIDATION_MARKER" ]; then
+    if [ -d "$INIT_MEDIA" ]; then
+        echo "[media] Initializing declared seed media"
+        cp -a "$INIT_MEDIA/." "$MEDIA_DIR/"
     fi
 fi
 
@@ -103,12 +116,13 @@ fi
 echo "[migrate] Running Django migrations"
 python manage.py migrate --noinput
 
-if [ "$SEED_DB_COPIED" = "1" ]; then
+if [ "$SEED_DB_COPIED" = "1" ] || [ -f "$SEED_VALIDATION_MARKER" ]; then
     echo "[data] Validating declared seed media before Gunicorn"
     python manage.py validate_runtime_data \
         --declared-seed "$INIT_DB" \
         --media-root "$MEDIA_DIR" \
-        --mode "$DATA_BOOTSTRAP_MODE"
+        --mode strict
+    rm -f "$SEED_VALIDATION_MARKER"
 fi
 
 if [ "${CREATE_SUPERUSER:-0}" = "1" ]; then
