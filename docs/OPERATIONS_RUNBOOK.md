@@ -35,6 +35,13 @@ digests and `pull_policy: always`.
   vault. The application adapter is opt-in and explicit; automatic
   cross-environment sync is not implemented.
 - Use Dokploy for production deployment changes; do not hand-run a replacement `docker run` container.
+- Use the GitHub-connected Dokploy application as the deployment authority. Do
+  not edit `/etc/dokploy/compose/.../code`, its ignored `.env`, or Dokploy
+  Postgres directly as a normal fix.
+- Require Git SHA, OCI digest/revision, Compose hash, Dokploy deployment ID, and
+  data-generation identity to agree before accepting a release.
+- Stop on branch/tag trigger mismatch, stale checkout, mutable image identity,
+  generated-file drift, or stale network references.
 
 ## Initial Evidence Bundle
 

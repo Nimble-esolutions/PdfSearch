@@ -67,6 +67,29 @@ custody counts and release boundary.
 10. Confirm the configured domain and TLS route point to this Compose application, not a static application.
 11. Deploy only after the pre-deployment checklist passes.
 
+## GitHub/Dokploy Source Of Truth
+
+Production deployment is controlled by the GitHub-connected Dokploy application.
+The server checkout under `/etc/dokploy/compose/.../code` and its ignored `.env`
+are generated deployment state, not a place to make normal fixes.
+
+- Repository: `Nimble-esolutions/PdfSearch`
+- Branch: `dev`
+- Compose path: `docker-compose.yml`
+- Release identity: Git SHA, OCI image digest, Compose hash, Dokploy deployment ID, and data generation
+- Image identity: `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<digest>`
+
+The GitHub workflow publishes on branch pushes. Dokploy must use a compatible
+branch/webhook trigger; a tag-only Dokploy trigger with no polling does not
+deploy branch-push releases. Before deployment, compare the GitHub branch HEAD,
+Dokploy checkout HEAD, OCI revision, and release-manifest digest. Stop on any
+mismatch.
+
+Do not use `docker compose up` from the server as the normal deployment path.
+Do not edit the Dokploy checkout or `.env` directly. An explicitly authorized
+emergency test must have a backup, rollback command, expiry, and a follow-up
+repository/Dokploy fix.
+
 The workflow may publish compatibility aliases such as `:dev` and `:latest`, but
 they are not production release identity. Dokploy must pull the exact recorded
 digests with `pull_policy: always`; never rely on a local alias or cached
