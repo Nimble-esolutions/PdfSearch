@@ -213,6 +213,21 @@ or directory copy.
 10. Verify `ss -lntp` or equivalent after recreation and confirm `8000` is
     `127.0.0.1:8000`, not `0.0.0.0:8000` or `[::]:8000`.
 
+## Entrypoint And Bootstrap Boundary
+
+The two startup scripts have different privilege boundaries and are not
+duplicates:
+
+- `docker-entrypoint.sh` runs as root, creates the persistent directories,
+  repairs ownership/permissions, and drops to `appuser`.
+- `start.sh` runs as `appuser`, validates configuration, performs explicit data
+  bootstrap/migrations/static collection, and starts Gunicorn.
+
+Do not remove or merge the scripts casually. A future consolidation should move
+the application bootstrap phases into tested Python commands while preserving
+the root-to-unprivileged boundary. The current runtime smoke must remain the
+contract test for the actual image entrypoint.
+
 ## Rollback Rules
 
 Rollback must select a compatible application image and data release together.
