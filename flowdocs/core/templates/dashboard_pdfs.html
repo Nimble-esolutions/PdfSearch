@@ -1,173 +1,328 @@
 {% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{{ folder.name }} - {% trans "Document Workbench" %}{% endblock %}
 
 {% block content %}
-<div class="container mt-3">
-    <!-- Folder Header -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="fw-bold text-primary mb-0">{{ folder.name }} - PDFs</h4>
-
-        <div class="d-flex gap-2">
-            {% if role == 'admin' or role == 'superadmin' %}
-            <!-- View/Edit Keywords Button -->
-            <button type="button" class="btn btn-outline-primary btn-sm"
-                    data-bs-toggle="modal" data-bs-target="#keywordsModal{{ folder.id }}">
-                🏷 View/Edit Keywords
-            </button>
-            {% endif %}
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">
-                Back to Dashboard
-            </a>
-        </div>
+<section class="cockpit-hero">
+  <div class="admin-page-heading admin-page-heading--split">
+    <div>
+      <p class="admin-kicker">{% trans "Category workbench" %}</p>
+      <h2>{{ folder.name }}</h2>
+      <p>{% trans "Receive PDFs, inspect search readiness, and stage high-risk actions with context." %}</p>
     </div>
+    <div class="admin-row-actions">
+      {% if role == 'admin' or role == 'superadmin' %}
+        <button type="button" class="btn btn-outline-primary btn-sm"
+                data-bs-toggle="modal" data-bs-target="#keywordsModal{{ folder.id }}">
+          {% trans "Edit Keywords" %}
+        </button>
+      {% endif %}
+      <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-sm">
+        {% trans "Back to Dashboard" %}
+      </a>
+    </div>
+  </div>
 
-    <!-- Display Current Keywords -->
+  <div class="cockpit-metrics" aria-label="{% trans 'Category manifest' %}">
+    <div class="cockpit-metric">
+      <span class="cockpit-metric__label">{% trans "PDF rows" %}</span>
+      <strong>{{ folder_stats.total_pdfs }}</strong>
+      <span>{% trans "in this category" %}</span>
+    </div>
+    <div class="cockpit-metric {% if folder_stats.needs_index_pdfs %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
+      <span class="cockpit-metric__label">{% trans "Index readiness" %}</span>
+      <strong>{{ folder_stats.indexed_pdfs }}/{{ folder_stats.total_pdfs }}</strong>
+      <span>{% trans "indexed" %}</span>
+    </div>
+    <div class="cockpit-metric {% if folder_stats.unknown_uploaders %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
+      <span class="cockpit-metric__label">{% trans "Ownership" %}</span>
+      <strong>{{ folder_stats.unknown_uploaders }}</strong>
+      <span>{% trans "unknown uploaders" %}</span>
+    </div>
+    <div class="cockpit-metric">
+      <span class="cockpit-metric__label">{% trans "Latest intake" %}</span>
+      <strong>{% if folder_stats.latest_upload %}{{ folder_stats.latest_upload|date:"d M" }}{% else %}-{% endif %}</strong>
+      <span>{% trans "most recent upload" %}</span>
+    </div>
+  </div>
+</section>
+
+<section class="cockpit-layout">
+  <div class="cockpit-main">
     {% if folder.keywords %}
-    <div class="mb-3">
-        <span class="fw-semibold text-muted">Keywords For Folder:</span>
-        <span class="badge bg-light text-dark border border-secondary ms-2">
-            {{ folder.keywords }}
-        </span>
-    </div>
+      <div class="admin-meta-strip">
+        <span class="fw-semibold">{% trans "Routing keywords" %}</span>
+        <span>{{ folder.keywords }}</span>
+      </div>
     {% endif %}
 
-    <!-- Keywords Modal -->
-    <div class="modal fade" id="keywordsModal{{ folder.id }}" tabindex="-1" aria-labelledby="keywordsModalLabel{{ folder.id }}" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <form method="post" action="{% url 'update_folder_keywords' folder.id %}">
-            {% csrf_token %}
-            <div class="modal-header">
-              <h5 class="modal-title fw-bold" id="keywordsModalLabel{{ folder.id }}">Manage Category Keywords</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    {% if role == 'admin' or role == 'superadmin' %}
+      <div class="admin-panel">
+        <div class="admin-page-heading">
+          <h2>{% trans "Receiving Dock" %}</h2>
+          <p>{% trans "Uploads are accepted only after PDF validation and preprocessing complete." %}</p>
+        </div>
+        <form method="post" enctype="multipart/form-data" action="{% url 'dashboard_folder' folder_id=folder.id %}" class="row g-3 align-items-end">
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+            <div class="col-12">
+              <div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div>
             </div>
-            <div class="modal-body">
-              <p class="small text-muted mb-2">
-                Enter comma-separated keywords to help improve search redirection for this category.
-              </p>
-              <textarea name="keywords" class="form-control" rows="3" placeholder="e.g., agriculture, loan, act">{{ folder.keywords }}</textarea>
-            </div>
-            <div class="modal-footer">
-              <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-            </div>
-          </form>
+          {% endif %}
+          <div class="col-12 col-lg-5">
+            <label for="{{ form.title.id_for_label }}" class="form-label">{% trans "PDF Title" %}</label>
+            {{ form.title }}
+            {% if form.title.errors %}
+              <div class="invalid-feedback d-block">{{ form.title.errors }}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-lg-5">
+            <label for="{{ form.file.id_for_label }}" class="form-label">{% trans "PDF File" %}</label>
+            {{ form.file }}
+            {% if form.file.errors %}
+              <div class="invalid-feedback d-block">{{ form.file.errors }}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-lg-2">
+            <button type="submit" class="btn btn-success w-100">{% trans "Receive" %}</button>
+          </div>
+        </form>
+      </div>
+    {% endif %}
+
+    <div class="admin-panel">
+      <div class="admin-page-heading admin-page-heading--split">
+        <div>
+          <h2>{% trans "PDF Workbench" %}</h2>
+          <p>{% trans "Each row shows ownership, search readiness, and available actions." %}</p>
         </div>
       </div>
-    </div>
-</div>
-
-
-    <!-- Upload PDF Form (Admin/Superadmin Only) -->
-    {% if role == 'admin' or role == 'superadmin' %}
-    <div class="card mb-3 shadow-sm p-2">
-        <div class="card-body p-2">
-            <form method="post" enctype="multipart/form-data" action="{% url 'dashboard_folder' folder_id=folder.id %}" class="row g-2 align-items-center">
-                {% csrf_token %}
-                {% if form.non_field_errors %}
-                    <div class="col-12 text-danger small">{{ form.non_field_errors }}</div>
+      <div class="table-responsive admin-table-wrap">
+        <table class="table table-hover table-sm align-middle mb-0 admin-table">
+          <thead>
+            <tr>
+              <th scope="col">{% trans "Document" %}</th>
+              <th scope="col">{% trans "Owner" %}</th>
+              <th scope="col">{% trans "Received" %}</th>
+              <th scope="col">{% trans "Readiness" %}</th>
+              <th scope="col">{% trans "View" %}</th>
+              {% if role == 'admin' or role == 'superadmin' %}
+                <th scope="col" class="text-end">{% trans "Actions" %}</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for pdf in pdfs %}
+              <tr>
+                <td>
+                  <strong>{{ pdf.title }}</strong>
+                  <small class="d-block text-muted">{{ pdf.file.name|default:"No file path" }}</small>
+                </td>
+                <td>{% if pdf.uploaded_by %}{{ pdf.uploaded_by.username }}{% else %}{% trans "Unknown" %}{% endif %}</td>
+                <td>{{ pdf.uploaded_at|date:"d M Y H:i" }}</td>
+                <td>
+                  {% if pdf.indexed %}
+                    <span class="badge text-bg-success">{% trans "Indexed" %}</span>
+                  {% else %}
+                    <span class="badge text-bg-warning">{% trans "Needs index" %}</span>
+                  {% endif %}
+                  {% if not pdf.uploaded_by %}
+                    <span class="badge text-bg-light">{% trans "Owner review" %}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <a href="{% url 'view_pdf' pdf.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
+                    {% trans "View" %}
+                  </a>
+                </td>
+                {% if role == 'admin' or role == 'superadmin' %}
+                  <td>
+                    <div class="admin-row-actions justify-content-end">
+                      {% if not pdf.uploaded_by %}
+                        <button type="button"
+                                class="btn btn-outline-secondary btn-sm"
+                                data-bs-toggle="modal"
+                                data-bs-target="#ownerModal{{ pdf.id }}"
+                                aria-label="{% trans 'Assign owner' %}: {{ pdf.title }}">
+                          {% trans "Assign Owner" %}
+                        </button>
+                      {% endif %}
+                      <button type="button"
+                              class="btn btn-outline-primary btn-sm"
+                              data-bs-toggle="modal"
+                              data-bs-target="#renameModal{{ pdf.id }}"
+                              aria-label="{% trans 'Rename PDF' %}: {{ pdf.title }}">
+                        {% trans "Rename" %}
+                      </button>
+                      <form method="post" action="{% url 'delete_pdf' pdf.id %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="btn btn-outline-danger btn-sm"
+                                aria-label="{% trans 'Delete PDF' %}: {{ pdf.title }}"
+                                onclick="return confirm('{% trans 'Delete this PDF? Confirm backup and index impact before continuing.' %}')">
+                          {% trans "Delete" %}
+                        </button>
+                      </form>
+                    </div>
+                  </td>
                 {% endif %}
-                <div class="col-md-4">
-                    {{ form.title }}
-                    {% if form.title.errors %}
-                        <div class="text-danger small">{{ form.title.errors }}</div>
-                    {% endif %}
-                </div>
-                <div class="col-md-4">
-                    {{ form.file }}
-                    {% if form.file.errors %}
-                        <div class="text-danger small">{{ form.file.errors }}</div>
-                    {% endif %}
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-success btn-sm w-100">Upload</button>
-                </div>
-            </form>
-        </div>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="{% if role == 'admin' or role == 'superadmin' %}6{% else %}5{% endif %}" class="text-center text-muted py-4">
+                  {% trans "No PDFs available in this category." %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-    {% endif %}
+  </div>
 
-    <!-- PDF List Table -->
-    <div class="card shadow-sm p-1">
-        <div class="card-body p-1">
-            <div class="table-responsive">
-                <table class="table table-hover table-sm align-middle mb-0">
-                    <thead class="table-light small">
-                        <tr>
-                            <th>Title</th>
-                            <th>View</th>
-                            <th>Uploaded By</th>
-                            <th>Uploaded At</th>
-                            {% if role == 'admin' or role == 'superadmin' %}
-                            <th>Actions</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for pdf in pdfs %}
-                        <tr>
-                            <td>{{ pdf.title }}</td>
-                            <td><a href="{% url 'view_pdf' pdf.id %}" target="_blank" class="btn btn-primary btn-sm">View</a></td>
-                            <td>{% if pdf.uploaded_by %}{{ pdf.uploaded_by.username }}{% else %}Unknown{% endif %}</td>
-                            <td>{{ pdf.uploaded_at|date:"d M Y H:i" }}</td>
-                            {% if role == 'admin' or role == 'superadmin' %}
-                            <td>
-                                <!-- Rename Form -->
-    <button type="button" class="btn btn-sm text-white"
-                    style="background-color: #0d6efd;"
-                    data-bs-toggle="modal" data-bs-target="#renameModal{{ pdf.id }}">
-                ✎
+  <aside class="cockpit-rail">
+    <section class="admin-panel">
+      <div class="admin-page-heading">
+        <h2>{% trans "Blast Radius" %}</h2>
+        <p>{% trans "Use this before renaming, deleting, or moving documents." %}</p>
+      </div>
+      <div class="cockpit-queue">
+        <div class="cockpit-queue-item">
+          <strong>{{ folder_stats.total_pdfs }}</strong>
+          <span>{% trans "PDF rows affected by category-level changes" %}</span>
+        </div>
+        <div class="cockpit-queue-item {% if folder_stats.needs_index_pdfs %}cockpit-queue-item--warn{% endif %}">
+          <strong>{{ folder_stats.needs_index_pdfs }}</strong>
+          <span>{% trans "documents may need index repair" %}</span>
+        </div>
+        <div class="cockpit-queue-item {% if folder_stats.unknown_uploaders %}cockpit-queue-item--warn{% endif %}">
+          <strong>{{ folder_stats.unknown_uploaders }}</strong>
+          <span>{% trans "documents need owner review" %}</span>
+        </div>
+      </div>
+      <div class="ops-control-group" aria-label="{% trans 'Index operations' %}">
+        <div class="ops-control-group__heading">
+          <strong>{% trans "Index Operations" %}</strong>
+          <span>{% trans "Scoped to this category only." %}</span>
+        </div>
+        {% if role == 'superadmin' %}
+          <form method="post" action="{% url 'folder_operations' folder.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="operation" value="repair_stored_index">
+            <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if not folder_stats.total_pdfs %}disabled{% endif %}>
+              {% trans "Repair Stored Index" %}
             </button>
-                                <form method="post" action="{% url 'delete_pdf' pdf.id %}" class="d-inline">
-                                  {% csrf_token %}
-                                  <button type="submit" class="btn btn-danger btn-sm"
-                                          onclick="return confirm('Are you sure you want to delete this PDF?');">Delete</button>
-                                </form>
-                            <!-- Rename Modal -->
+          </form>
+          <form method="post" action="{% url 'folder_operations' folder.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="operation" value="reprocess_needed">
+            <button type="submit" class="btn btn-outline-warning btn-sm w-100" {% if not folder_stats.needs_index_pdfs %}disabled{% endif %}>
+              {% trans "Reprocess Needed" %}
+            </button>
+          </form>
+          <form method="post" action="{% url 'folder_operations' folder.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="operation" value="reprocess_all">
+            <button type="submit"
+                    class="btn btn-outline-danger btn-sm w-100"
+                    {% if not folder_stats.total_pdfs %}disabled{% endif %}
+                    onclick="return confirm('{% trans 'Reprocess every PDF in this category? This may call the embedding service and overwrite stored chunks.' %}')">
+              {% trans "Reprocess All" %}
+            </button>
+          </form>
+        {% else %}
+          <div class="ops-control-note">
+            {% trans "Superadmin access is required for reindexing and reprocessing controls." %}
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </aside>
+</section>
+
+{% if role == 'admin' or role == 'superadmin' %}
+  <div class="modal fade" id="keywordsModal{{ folder.id }}" tabindex="-1" aria-labelledby="keywordsModalLabel{{ folder.id }}" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form method="post" action="{% url 'update_folder_keywords' folder.id %}">
+          {% csrf_token %}
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold" id="keywordsModalLabel{{ folder.id }}">{% trans "Manage Category Keywords" %}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+          </div>
+          <div class="modal-body">
+            <label for="folder_keywords_{{ folder.id }}" class="form-label">{% trans "Keywords" %}</label>
+            <textarea id="folder_keywords_{{ folder.id }}" name="keywords" class="form-control" rows="3" placeholder="{% trans 'agriculture, loan, act' %}">{{ folder.keywords }}</textarea>
+            <div class="form-text">{% trans "Use comma-separated terms that help route searches to this category." %}</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+            <button type="submit" class="btn btn-primary">{% trans "Save Changes" %}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+{% for pdf in pdfs %}
+  {% if role == 'admin' or role == 'superadmin' %}
     <div class="modal fade" id="renameModal{{ pdf.id }}" tabindex="-1" aria-labelledby="renameModalLabel{{ pdf.id }}" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
           <form method="post" action="{% url 'rename_pdf' pdf.id %}">
             {% csrf_token %}
             <div class="modal-header">
-              <h5 class="modal-title" id="renameModalLabel{{ pdf.id }}">Rename PDF</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              <h5 class="modal-title" id="renameModalLabel{{ pdf.id }}">{% trans "Rename PDF" %}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
             </div>
             <div class="modal-body">
-              <div class="mb-3">
-                <label for="pdfTitle{{ pdf.id }}" class="form-label">New Title</label>
-                <input type="text" class="form-control" id="pdfTitle{{ pdf.id }}" name="title" value="{{ pdf.title }}" required>
-              </div>
+              <label for="pdfTitle{{ pdf.id }}" class="form-label">{% trans "New Title" %}</label>
+              <input type="text" class="form-control" id="pdfTitle{{ pdf.id }}" name="title" value="{{ pdf.title }}" required>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-              <button type="submit" class="btn btn-warning">Rename</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+              <button type="submit" class="btn btn-primary">{% trans "Rename" %}</button>
             </div>
           </form>
         </div>
       </div>
     </div>
-</td>
-{% endif %}
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="5" class="text-center small">No PDFs available in this category.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
+  {% endif %}
+{% endfor %}
 
-<!-- Optional Styling -->
-<style>
-.table-hover tbody tr:hover {
-    background-color: #f0f8ff;
-}
-.card-body h5 {
-    font-weight: 600;
-}
-</style>
+{% for pdf in pdfs %}
+  {% if role == 'admin' or role == 'superadmin' %}
+    {% if not pdf.uploaded_by %}
+      <div class="modal fade" id="ownerModal{{ pdf.id }}" tabindex="-1" aria-labelledby="ownerModalLabel{{ pdf.id }}" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <form method="post" action="{% url 'assign_pdf_owner' pdf.id %}">
+              {% csrf_token %}
+              <div class="modal-header">
+                <h5 class="modal-title" id="ownerModalLabel{{ pdf.id }}">{% trans "Assign Owner" %}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+              </div>
+              <div class="modal-body">
+                <p class="text-muted mb-3">{{ pdf.title }}</p>
+                <label for="ownerSelect{{ pdf.id }}" class="form-label">{% trans "Owner" %}</label>
+                <select class="form-select" id="ownerSelect{{ pdf.id }}" name="owner_id" required>
+                  <option value="">{% trans "Choose active user" %}</option>
+                  {% for owner in owner_options %}
+                    <option value="{{ owner.id }}">{{ owner.username }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="submit" class="btn btn-primary">{% trans "Save Owner" %}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endfor %}
 {% endblock %}

@@ -15,7 +15,7 @@ from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate, login, logout
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
 from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.urls import reverse
@@ -28,6 +28,7 @@ from datetime import datetime
 from .utils import (
     detect_language,
     precompute_pdf_embeddings,
+    build_or_load_faiss_index_for_folder,
     search_pdfs_fast,
     is_general_query,
     detect_folder_by_keywords,
@@ -48,6 +49,10 @@ def is_admin_user(user):
     return user.is_authenticated and getattr(user, "role", None) in ADMIN_ROLES
 
 
+def is_superadmin_user(user):
+    return user.is_authenticated and getattr(user, "role", None) == "superadmin"
+
+
 def admin_required(view_func):
     """Allow only admin roles and return 403 for ordinary users."""
     @wraps(view_func)
@@ -56,6 +61,19 @@ def admin_required(view_func):
             return redirect_to_login(request.get_full_path(), settings.LOGIN_URL)
         if not is_admin_user(request.user):
             return HttpResponseForbidden("Administrator permission required.")
+        return view_func(request, *args, **kwargs)
+
+    return wrapped
+
+
+def superadmin_required(view_func):
+    """Allow only superadmins to run high-impact maintenance actions."""
+    @wraps(view_func)
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path(), settings.LOGIN_URL)
+        if not is_superadmin_user(request.user):
+            return HttpResponseForbidden("Superadmin permission required.")
         return view_func(request, *args, **kwargs)
 
     return wrapped
@@ -105,6 +123,103 @@ def searchable_folders(user, *, public=False):
     return folders.filter(
         Q(created_by=user) | Q(files__uploaded_by=user)
     ).distinct()
+
+
+def admin_cockpit_context(user):
+    folders = searchable_folders(user).annotate(
+        pdf_count=Count("files", distinct=True),
+        indexed_count=Count("files", filter=Q(files__indexed=True), distinct=True),
+        unknown_uploader_count=Count(
+            "files",
+            filter=Q(files__uploaded_by__isnull=True),
+            distinct=True,
+        ),
+        latest_upload=Max("files__uploaded_at"),
+    ).order_by("name")
+    pdfs = visible_pdfs(user).select_related("folder", "uploaded_by")
+    total_pdfs = pdfs.count()
+    indexed_pdfs = pdfs.filter(indexed=True).count()
+    unknown_uploaders = pdfs.filter(uploaded_by__isnull=True).count()
+    folder_count = folders.count()
+    folders_with_pdfs = folders.filter(files__isnull=False).distinct().count()
+    recent_pdfs = list(pdfs.order_by("-uploaded_at")[:5])
+    index_debt_folders = [
+        folder for folder in folders
+        if folder.pdf_count and folder.indexed_count < folder.pdf_count
+    ][:4]
+    owner_review_folders = [
+        folder for folder in folders
+        if folder.unknown_uploader_count
+    ][:4]
+    empty_folder_lanes = [
+        folder for folder in folders
+        if folder.pdf_count == 0
+    ][:4]
+    cockpit = {
+        "folder_count": folder_count,
+        "folders_with_pdfs": folders_with_pdfs,
+        "empty_folders": max(folder_count - folders_with_pdfs, 0),
+        "total_pdfs": total_pdfs,
+        "indexed_pdfs": indexed_pdfs,
+        "needs_index_pdfs": max(total_pdfs - indexed_pdfs, 0),
+        "unknown_uploaders": unknown_uploaders,
+        "recent_pdfs": recent_pdfs,
+        "index_debt_folders": index_debt_folders,
+        "owner_review_folders": owner_review_folders,
+        "empty_folder_lanes": empty_folder_lanes,
+        "user_count": CustomUser.objects.count() if is_admin_user(user) else None,
+        "active_user_count": CustomUser.objects.filter(is_active=True).count()
+        if is_admin_user(user)
+        else None,
+    }
+    return folders, cockpit
+
+
+def folder_cockpit_context(user, folder):
+    pdfs = visible_pdfs(
+        user,
+        PDFFile.objects.filter(folder=folder),
+    ).select_related("uploaded_by", "folder").order_by("-uploaded_at")
+    total_pdfs = pdfs.count()
+    indexed_pdfs = pdfs.filter(indexed=True).count()
+    unknown_uploaders = pdfs.filter(uploaded_by__isnull=True).count()
+    stats = {
+        "total_pdfs": total_pdfs,
+        "indexed_pdfs": indexed_pdfs,
+        "needs_index_pdfs": max(total_pdfs - indexed_pdfs, 0),
+        "unknown_uploaders": unknown_uploaders,
+        "latest_upload": pdfs.aggregate(latest=Max("uploaded_at"))["latest"],
+    }
+    return pdfs, stats
+
+
+def _pdf_has_stored_search_artifacts(pdf):
+    chunks = pdf.page_chunks or []
+    embeddings = pdf.chunk_embeddings or []
+    return (
+        isinstance(chunks, list)
+        and isinstance(embeddings, list)
+        and bool(chunks)
+        and bool(embeddings)
+        and len(chunks) == len(embeddings)
+    )
+
+
+def _repair_folder_index_from_stored_artifacts(folder):
+    pdfs = list(PDFFile.objects.filter(folder=folder).order_by("pk"))
+    eligible_ids = [
+        pdf.pk for pdf in pdfs if _pdf_has_stored_search_artifacts(pdf)
+    ]
+    if not eligible_ids:
+        return 0, PDFFile.objects.filter(folder=folder, indexed=False).count()
+
+    index, _, _ = build_or_load_faiss_index_for_folder(folder, force_rebuild=True)
+    if index is None:
+        raise SearchDataIntegrityError("No searchable artifacts were available for this category")
+
+    repaired = PDFFile.objects.filter(pk__in=eligible_ids).update(indexed=True)
+    remaining = PDFFile.objects.filter(folder=folder, indexed=False).count()
+    return repaired, remaining
 
 
 def _safe_login_destination(request):
@@ -353,6 +468,25 @@ def rename_pdf(request, pdf_id):
     return redirect(redirect_name, **redirect_kwargs)
 
 
+@admin_required
+@require_POST
+def assign_pdf_owner(request, pdf_id):
+    pdf = get_object_or_404(PDFFile, id=pdf_id)
+    redirect_name = "dashboard_folder" if pdf.folder_id else "dashboard"
+    redirect_kwargs = {"folder_id": pdf.folder_id} if pdf.folder_id else {}
+    owner_id = request.POST.get("owner_id", "").strip()
+
+    if not owner_id:
+        messages.error(request, "Choose an owner before saving.")
+        return redirect(redirect_name, **redirect_kwargs)
+
+    owner = get_object_or_404(CustomUser, id=owner_id, is_active=True)
+    pdf.uploaded_by = owner
+    pdf.save(update_fields=["uploaded_by"])
+    messages.success(request, f"Owner for '{pdf.title}' assigned to {owner.username}.")
+    return redirect(redirect_name, **redirect_kwargs)
+
+
 #====================================Update and add keywords ==========================
 @admin_required
 @require_POST
@@ -459,6 +593,101 @@ def delete_pdf(request, file_id):
 
     return safe_referer_redirect(request)
 
+
+@superadmin_required
+@require_POST
+def folder_operations(request, folder_id):
+    folder = get_object_or_404(Folder, pk=folder_id)
+    operation = request.POST.get("operation", "").strip()
+
+    if operation == "repair_stored_index":
+        try:
+            repaired, remaining = _repair_folder_index_from_stored_artifacts(folder)
+        except SearchDataIntegrityError as exc:
+            messages.error(request, f"Search index repair failed: {exc}")
+        else:
+            if repaired:
+                messages.success(
+                    request,
+                    (
+                        f"Search index rebuilt from stored artifacts for {repaired} "
+                        f"document(s). {remaining} document(s) still need reprocessing."
+                    ),
+                )
+            else:
+                messages.warning(
+                    request,
+                    "No stored chunks or embeddings were available to repair this category.",
+                )
+        return redirect("dashboard_folder", folder_id=folder.pk)
+
+    if operation in {"reprocess_needed", "reprocess_all"}:
+        candidates = PDFFile.objects.filter(folder=folder).order_by("pk")
+        if operation == "reprocess_needed":
+            candidates = candidates.filter(indexed=False)
+
+        total = candidates.count()
+        processed = 0
+        stored_artifact_fallbacks = 0
+        failures = []
+        for pdf in candidates:
+            try:
+                precompute_pdf_embeddings(pdf)
+            except Exception as exc:
+                if _pdf_has_stored_search_artifacts(pdf):
+                    stored_artifact_fallbacks += 1
+                    continue
+                PDFFile.objects.filter(pk=pdf.pk).update(indexed=False)
+                failures.append(f"{pdf.title}: {exc}")
+            else:
+                processed += 1
+
+        repaired_from_stored = 0
+        remaining_after_repair = PDFFile.objects.filter(folder=folder, indexed=False).count()
+        if stored_artifact_fallbacks:
+            try:
+                repaired_from_stored, remaining_after_repair = _repair_folder_index_from_stored_artifacts(folder)
+            except SearchDataIntegrityError as exc:
+                failures.append(f"stored artifact repair: {exc}")
+
+        if processed:
+            messages.success(
+                request,
+                f"Reprocessed {processed} of {total} document(s) in '{folder.name}'.",
+            )
+        if stored_artifact_fallbacks:
+            if repaired_from_stored:
+                messages.success(
+                    request,
+                    (
+                        f"Preserved stored OCR/search artifacts for {stored_artifact_fallbacks} "
+                        f"image-only or transcript-backed document(s). "
+                        f"{remaining_after_repair} document(s) still need reprocessing."
+                    ),
+                )
+            else:
+                messages.warning(
+                    request,
+                    (
+                        f"{stored_artifact_fallbacks} document(s) had stored artifacts, "
+                        "but the category index could not be repaired from them."
+                    ),
+                )
+        if failures:
+            messages.warning(
+                request,
+                (
+                    f"{len(failures)} document(s) could not be reprocessed. "
+                    f"First failure: {failures[0]}"
+                ),
+            )
+        if total == 0:
+            messages.info(request, "No documents matched that maintenance action.")
+        return redirect("dashboard_folder", folder_id=folder.pk)
+
+    messages.error(request, "Unknown folder maintenance action.")
+    return redirect("dashboard_folder", folder_id=folder.pk)
+
 # ---------------- Home View ----------------
 def home_view(request):
     return render(request, 'home.html')
@@ -506,14 +735,19 @@ def dashboard(request, folder_id=None):
                         "PDF upload failed during preprocessing or indexing. "
                         "No document was saved; please try again.",
                     )
-                    pdfs = visible_pdfs(
-                        request.user,
-                        PDFFile.objects.filter(folder=folder),
-                    ).order_by("-uploaded_at")
+                    pdfs, folder_stats = folder_cockpit_context(request.user, folder)
+                    owner_options = CustomUser.objects.filter(is_active=True).order_by("username")
                     return render(
                         request,
                         "dashboard_pdfs.html",
-                        {"folder": folder, "pdfs": pdfs, "form": form, "role": role},
+                        {
+                            "folder": folder,
+                            "pdfs": pdfs,
+                            "folder_stats": folder_stats,
+                            "form": form,
+                            "role": role,
+                            "owner_options": owner_options,
+                        },
                         status=400,
                     )
 
@@ -521,15 +755,28 @@ def dashboard(request, folder_id=None):
         else:
             form = UploadForm()
 
-        pdfs = visible_pdfs(request.user, PDFFile.objects.filter(folder=folder)).order_by("-uploaded_at")
-        return render(request, "dashboard_pdfs.html", {"folder": folder, "pdfs": pdfs, "form": form, "role": role})
+        pdfs, folder_stats = folder_cockpit_context(request.user, folder)
+        owner_options = CustomUser.objects.filter(is_active=True).order_by("username")
+        return render(
+            request,
+            "dashboard_pdfs.html",
+            {
+                "folder": folder,
+                "pdfs": pdfs,
+                "folder_stats": folder_stats,
+                "form": form,
+                "role": role,
+                "owner_options": owner_options,
+            },
+        )
 
     # else: folders list
-    folders = Folder.objects.all()
-    if not is_admin_user(request.user):
-        folders = folders.filter(created_by=request.user)
-    folders = folders.annotate(pdf_count=Count('files', distinct=True)).order_by("name")
-    return render(request, "dashboard.html", {"folders": folders, "role": role})
+    folders, cockpit = admin_cockpit_context(request.user)
+    return render(
+        request,
+        "dashboard.html",
+        {"folders": folders, "cockpit": cockpit, "role": role},
+    )
 
 # -------------- New logic for folder search --------------
 def search_query(request):

@@ -104,6 +104,10 @@ class UserRegisterForm(UserCreationForm):
     def __init__(self, *args, allow_privileged_roles=False, **kwargs):
         self.allow_privileged_roles = allow_privileged_roles
         super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            css_class = 'form-select' if name in {'department', 'role'} else 'form-control'
+            existing = field.widget.attrs.get('class', '')
+            field.widget.attrs['class'] = f'{existing} {css_class}'.strip()
         if not allow_privileged_roles:
             # Public registration must never be able to select an operational role.
             self.fields.pop('role', None)
