@@ -18,6 +18,7 @@ from django.db.models import Count, Q
 from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.urls import reverse
+from django.utils.translation import gettext
 
 from .models import PDFFile, Folder, CustomUser
 from .forms import UploadForm
@@ -482,11 +483,21 @@ def dashboard(request, folder_id=None):
 # -------------- New logic for folder search --------------
 def search_query(request):
     if request.method == "GET":
-        welcome_message = (
-            "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; "
-            "मी आधी अपलोड केलेल्या दस्तऐवजांचा उपयोग करून उत्तर देईन."
+        return render(
+            request,
+            "search.html",
+            {
+                "welcome_message": gettext(
+                    "I am Sahakar AI. Click here to learn how to ask questions "
+                    "and get correct answers."
+                ),
+                "welcome_help_url": (
+                    "https://docs.google.com/document/d/1K4Z0RnRcQFXXDxxO10xFVjAbFRBXu7errbWbqtIK8qE/"
+                    "edit?usp=sharing"
+                ),
+                "welcome_help_label": gettext("Click Here"),
+            },
         )
-        return render(request, "search.html", {"welcome_message": welcome_message})
 
     if request.method == "POST":
         if not request.user.is_authenticated:
@@ -503,7 +514,7 @@ def search_query(request):
 
             if not query:
                 return JsonResponse({
-                    "answer": "कृपया आपला प्रश्न विचारा 🙏",
+                    "answer": gettext("Please ask your question 🙏"),
                     "references": []
                 })
 
@@ -512,7 +523,7 @@ def search_query(request):
             # --------------------------------------------------
             if is_general_query(query):
                 return JsonResponse({
-                    "answer": "नमस्कार! कशासाठी मदत करू शकतो?",
+                    "answer": gettext("Hello! How can I help you?"),
                     "references": []
                 })
 
@@ -638,7 +649,10 @@ def search_query(request):
 
                 # Folder matched but no PDFs → DO NOT go to Act
                 return JsonResponse({
-                    "answer": "क्षमस्व — या विषयाशी संबंधित माहिती या विभागात उपलब्ध नाही.",
+                    "answer": gettext(
+                        "Sorry, information related to this topic is not available "
+                        "in this section."
+                    ),
                     "references": []
                 })
 
@@ -671,7 +685,9 @@ def search_query(request):
             # 5️⃣ FINAL FALLBACK
             # --------------------------------------------------
             return JsonResponse({
-                "answer": "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही.",
+                "answer": gettext(
+                    "Sorry, the requested information was not found in the available documents."
+                ),
                 "references": []
             })
 
