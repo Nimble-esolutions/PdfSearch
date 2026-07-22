@@ -190,6 +190,12 @@ The production Compose stack owns Redis and pins the web service to
 to the Compose Redis service. The application rejects loopback Redis URLs when
 local insecure defaults are disabled.
 
+Anonymous search is opt-in and fail-closed. Set `PUBLIC_SEARCH_ENABLED=1`
+only when the approved shared corpus is ready, and set
+`PUBLIC_SEARCH_FOLDER_IDS` to a comma-separated allowlist or `all` when the
+current and future admin-created corpus is intentionally public. Private
+folders remain authentication-bound unless `all` is explicitly selected.
+
 Do not use these production fallbacks:
 
 ```text

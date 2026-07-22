@@ -405,6 +405,63 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertEqual(response.json()["error"], "authentication_required")
         self.assertNotIn("private", response.content.decode())
 
+    def test_anonymous_search_uses_only_allowlisted_public_folders(self):
+        folder = Folder.objects.create(name="Public rules", created_by=self.user)
+        pdf = PDFFile.objects.create(
+            title="Public rule book",
+            file=SimpleUploadedFile("public-rule.pdf", b"%PDF-1.7 public"),
+            folder=folder,
+            uploaded_by=self.user,
+            indexed=True,
+            page_chunks=["Public rule content"],
+        )
+
+        with override_settings(
+            PUBLIC_SEARCH_ENABLED=True,
+            PUBLIC_SEARCH_FOLDER_IDS=frozenset({folder.pk}),
+        ), patch(
+            "core.views.is_general_query",
+            return_value=False,
+        ), patch(
+            "core.views.detect_folder_by_keywords_multi",
+            return_value=[(folder, 0.9)],
+        ), patch(
+            "core.views.search_pdfs_fast",
+            return_value=(
+                "",
+                [{
+                    "title": pdf.title,
+                    "pdf_id": pdf.pk,
+                    "folder": folder.name,
+                    "uploaded_at": "2026-07-22",
+                    "score": 1,
+                }],
+            ),
+        ), patch(
+            "core.views.generate_gpt_answer",
+            return_value="Public answer",
+        ):
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "public rule"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["answer"], "Public answer")
+        self.assertEqual(
+            response.json()["references"][0]["url"],
+            reverse("public_view_pdf", args=[pdf.pk]),
+        )
+        self.assertNotIn("/media/", response.json()["references"][0]["url"])
+
+        with override_settings(
+            PUBLIC_SEARCH_ENABLED=True,
+            PUBLIC_SEARCH_FOLDER_IDS=frozenset({folder.pk}),
+        ):
+            public_pdf = self.client.get(reverse("public_view_pdf", args=[pdf.pk]))
+            self.assertEqual(public_pdf.status_code, 200)
+            self.assertEqual(public_pdf["Content-Type"], "application/pdf")
+
     def test_root_head_request_is_successful(self):
         response = self.client.head("/")
 
@@ -489,6 +546,7 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertContains(response, "finally")
         self.assertContains(response, "errorMessages")
         self.assertContains(response, "तात्पुरती अनुपलब्ध")
+        self.assertContains(response, "safeReferenceUrl(ref)")
         self.assertContains(response, "textContent = ref.title")
         self.assertContains(response, "meta.textContent = [ref.folder, ref.uploaded_at]")
         self.assertContains(response, "AI-generated answers should not be used for legal purposes")
