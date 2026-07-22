@@ -74,6 +74,19 @@ Future release tooling must record:
 This JSON is a proposed future artifact contract. It is not currently emitted,
 complete, or validated by CI. Do not claim generated artifact manifests exist.
 
+## Artifact Vault Status
+
+**Current, opt-in:** `flowdocs.core.artifact_vault` provides a disabled-by-default
+S3-compatible adapter for immutable PDF, generation-bound FAISS, and manifest
+objects. It does not replace Django file storage or participate in startup. Set
+all `ARTIFACT_VAULT_*` variables explicitly, then run the explicit
+`upload_artifact_vault` management command with an existing manifest and selected
+`MANIFEST_PATH=LOCAL_PATH` artifacts. Uploads fail closed on missing configuration,
+provider errors, missing checksum metadata, or checksum/size mismatches.
+
+**Planned:** automated manifest generation, release promotion, restore, and
+retention workflows are not implemented by this adapter.
+
 ## Promotion Rules
 
 1. Preserve active and legacy sources in separate quarantine targets.
