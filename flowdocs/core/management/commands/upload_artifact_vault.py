@@ -28,6 +28,10 @@ class Command(BaseCommand):
             metavar="MANIFEST_PATH=LOCAL_PATH",
             help="Select an artifact from the manifest and provide its local path; repeatable",
         )
+        parser.add_argument(
+            "--release-id",
+            help="Explicit immutable release/generation id required when the manifest has none",
+        )
 
     def handle(self, *args, **options):
         manifest_path: Path = options["manifest"]
@@ -37,7 +41,7 @@ class Command(BaseCommand):
         try:
             manifest_bytes = manifest_path.read_bytes()
             vault = ArtifactVault()
-            manifest = vault.validate_manifest(manifest_bytes)
+            manifest = vault.normalize_manifest(manifest_bytes, release_id=options.get("release_id"))
             entries = {entry["path"]: entry for entry in manifest["files"]}
             selected = [self._parse_artifact(spec) for spec in options["artifact"]]
 
@@ -55,7 +59,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"Uploaded {metadata.key} ({metadata.size} bytes)")
                 uploaded += 1
 
-            manifest_metadata = vault.put_manifest(manifest_bytes)
+            manifest_metadata = vault.put_manifest(manifest)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Uploaded manifest {manifest_metadata.key}; {uploaded} artifact(s) selected"

@@ -81,8 +81,13 @@ S3-compatible adapter for immutable PDF, generation-bound FAISS, and manifest
 objects. It does not replace Django file storage or participate in startup. Set
 all `ARTIFACT_VAULT_*` variables explicitly, then run the explicit
 `upload_artifact_vault` management command with an existing manifest and selected
-`MANIFEST_PATH=LOCAL_PATH` artifacts. Uploads fail closed on missing configuration,
-provider errors, missing checksum metadata, or checksum/size mismatches.
+`MANIFEST_PATH=LOCAL_PATH` artifacts. The `pdfsearch-artifact-inventory/v1`
+manifest shape is accepted directly: its nested PDF, FAISS, and embedding metadata
+lists are normalized to the vault's `files` contract. Because inventory manifests
+do not normally contain a release id, pass `--release-id <immutable-name>`; the
+command rejects missing, mutable-alias, or unsafe ids rather than inferring one.
+Uploads fail closed on missing configuration, provider errors, missing checksum
+metadata, or checksum/size mismatches.
 
 **Planned:** automated manifest generation, release promotion, restore, and
 retention workflows are not implemented by this adapter.
