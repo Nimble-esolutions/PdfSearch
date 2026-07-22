@@ -92,9 +92,9 @@
         0/30 words
       </small>
 
-      <!-- ✅ Disclaimer -->
+      <!-- Disclaimer -->
       <div class="text-center" style="font-size: 13px; color: #666;">
-          ⚠️ Sahkar AI can make mistakes. Check important info with Head Office.
+          {% trans "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}
       </div>
 
       
@@ -280,6 +280,11 @@ function typeEffect(text, references = []) {
                     link.rel = "noopener noreferrer";
                     link.textContent = ref.title || "Document";
                     card.appendChild(link);
+                    const meta = document.createElement("small");
+                    meta.textContent = [ref.folder, ref.uploaded_at]
+                        .filter(Boolean)
+                        .join(" • ");
+                    if (meta.textContent) card.appendChild(meta);
                     refDiv.appendChild(card);
                 });
                 div.appendChild(refDiv);
