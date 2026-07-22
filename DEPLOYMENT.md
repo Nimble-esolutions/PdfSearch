@@ -17,11 +17,12 @@ The container image provides immutable application code under `/app/flowdocs`.
 The Dokploy-managed `flowdocs_data` volume provides mutable data under
 `/app/data`.
 
-The current production domain is `2026.ai-sahakar.net` and is healthy. The
-merged source baseline is `f05e110`; the current production release is the
-Redis-enabled immutable image revision from PR #24. Dokploy must pull exact
-image digests with `pull_policy: always`; a tag or stale local `latest` image is
-not valid release evidence.
+The canonical production domains are `ai-sahakar.net` and `www.ai-sahakar.net`.
+`2026.ai-sahakar.net` was the preview/verification host and remains a historical
+rollback reference. The merged source baseline and current release must be
+recorded from Dokploy at cutover. Dokploy must pull exact image digests with
+`pull_policy: always`; a tag or stale local `latest` image is not valid release
+evidence.
 
 ## Development
 
@@ -48,7 +49,7 @@ Development uses its own named volumes and must not reference `prod_flowdocs`.
 
 RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` is an isolated operator
 recovery vault containing timestamped active/legacy snapshots and checksums.
-Application-level S3 integration is not implemented, and no automatic
+Application-level S3 integration is opt-in and explicit; no automatic
 cross-environment synchronization exists.
 
 See [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) for the complete Dokploy,

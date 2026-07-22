@@ -14,10 +14,11 @@ Run evidence commands before recovery commands. Do not expose environment
 values, credentials, document contents, or copied production data in tickets or
 logs.
 
-Current baseline: `https://2026.ai-sahakar.net` is healthy; merged source is
-`f05e110`; and production runs the Redis-enabled immutable image revision from
-PR #24. Dokploy production evidence must show exact web/Redis digests and
-`pull_policy: always`.
+Current canonical production domains are `https://ai-sahakar.net` and
+`https://www.ai-sahakar.net`; the verified preview was
+`https://2026.ai-sahakar.net` and must not be treated as the main production
+URL after cutover. Dokploy production evidence must show exact web/Redis
+digests and `pull_policy: always`.
 
 ## Safety Rules
 
@@ -31,8 +32,8 @@ PR #24. Dokploy production evidence must show exact web/Redis digests and
   directly; use quarantine, inventory, conflict classification, staged restore,
   FAISS fingerprint validation, and explicit promotion.
 - RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` is an isolated recovery
-  vault. Application-level S3 integration and automatic cross-environment sync
-  are not implemented.
+  vault. The application adapter is opt-in and explicit; automatic
+  cross-environment sync is not implemented.
 - Use Dokploy for production deployment changes; do not hand-run a replacement `docker run` container.
 
 ## Initial Evidence Bundle

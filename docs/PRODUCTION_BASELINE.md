@@ -12,7 +12,8 @@ not PDF contents or secrets.
 
 ## Runtime
 
-- Domain: `https://2026.ai-sahakar.net` (healthy at verification).
+- Canonical domains: `https://ai-sahakar.net` and `https://www.ai-sahakar.net`.
+- Preview domain: `https://2026.ai-sahakar.net` (historical verification host).
 - Merged source: `f05e110`.
 - Current release: Redis-enabled immutable image revision from PR #24.
 - Release identity: exact web and Redis image digests recorded in Dokploy.
@@ -23,9 +24,11 @@ not PDF contents or secrets.
 ## Data Baseline
 
 - Legacy custody: 242 PDFs and 45 FAISS files.
-- Active custody: 17 PDF database rows, 0 PDF files, and 11 FAISS files.
-- Path overlap: 6 PDF paths.
-- Database state: active and legacy SQLite databases diverge.
+- Active custody after reconciliation: 253 PDF rows, 242 PDF files, 53 folders,
+  8 users, and 51 rebuilt FAISS indexes with 8,753 vectors.
+- Preserved unrecovered target-only rows: 11.
+- Database state: source and target were reconciled through isolated staging;
+  the legacy source remains preserved separately.
 
 These facts mean legacy and active data are not interchangeable. Direct copying,
 silent merging, and assuming path overlap means content equivalence are
@@ -35,17 +38,18 @@ prohibited.
 
 RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` contains timestamped active
 and legacy snapshots plus checksums. RustFS is isolated from the application
-network. Application-level S3 integration is **not implemented**. The bucket is
-an operator recovery vault, not runtime storage and not automatic
-cross-environment synchronization.
+network. Application-level S3 integration is opt-in and explicit. The bucket is
+an operator recovery vault, not runtime storage or automatic cross-environment
+synchronization.
 
 ## Current Versus Planned
 
 Current: immutable application release, Redis runtime dependency, operator-held
-snapshots/checksums, and manual staged restore and promotion.
+snapshots/checksums, manual staged restore and promotion, and explicit artifact
+inventory/RustFS custody.
 
-Planned or absent: S3 application integration, automatic cross-environment sync,
-generated artifact manifests, and FAISS recovery automation.
+Planned or absent: automatic cross-environment sync, release pointers, restore,
+retention automation, and FAISS recovery orchestration.
 
 ## Verification Gates
 

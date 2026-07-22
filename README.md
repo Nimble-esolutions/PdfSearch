@@ -72,10 +72,11 @@ operator decision. It must never mount persistent data over `/app/flowdocs`.
 
 ## Production Contract
 
-Production at `https://2026.ai-sahakar.net` is healthy and is deployed through
+Canonical production is `https://ai-sahakar.net` with
+`https://www.ai-sahakar.net` as the canonical alias. It is deployed through
 Dokploy as the Compose application defined by [`docker-compose.yml`](docker-compose.yml).
-The merged source baseline is `f05e110`. The current release is the Redis-enabled
-immutable image revision from PR #24; the exact image digest is the production
+`https://2026.ai-sahakar.net` was the preview/verification host and is retained
+as historical rollback evidence. The exact image digest is the production
 release identity and must be recorded from Dokploy.
 
 - Container port: `8000`
