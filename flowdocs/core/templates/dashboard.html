@@ -1,135 +1,261 @@
 {% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Operations Cockpit - CC & RCS Maharashtra" %}{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-
-    <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="fw-bold text-primary">Categories</h2>
-
-        {% if role == 'admin' or role == 'superadmin' %}
-        <button type="button" class="btn btn-success shadow-sm"
-                data-bs-toggle="modal" data-bs-target="#addCategoryModal">
-            + Add Category
-        </button>
-        {% endif %}
+<section class="cockpit-hero">
+  <div class="admin-page-heading admin-page-heading--split">
+    <div>
+      <p class="admin-kicker">{% trans "Document operations" %}</p>
+      <h2>{% trans "Operations Cockpit" %}</h2>
+      <p>{% trans "Triage categories, document readiness, uploads, and access work from one screen." %}</p>
     </div>
 
-    <!-- Category Cards -->
-    <div class="row g-4">
+    {% if role == 'admin' or role == 'superadmin' %}
+      <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+        {% trans "Add Category" %}
+      </button>
+    {% endif %}
+  </div>
+
+  <div class="cockpit-metrics" aria-label="{% trans 'Operations summary' %}">
+    <div class="cockpit-metric">
+      <span class="cockpit-metric__label">{% trans "Categories" %}</span>
+      <strong>{{ cockpit.folder_count }}</strong>
+      <span>{% blocktrans count counter=cockpit.empty_folders %}{{ counter }} empty{% plural %}{{ counter }} empty{% endblocktrans %}</span>
+    </div>
+    <div class="cockpit-metric">
+      <span class="cockpit-metric__label">{% trans "PDF rows" %}</span>
+      <strong>{{ cockpit.total_pdfs }}</strong>
+      <span>{% trans "visible to this role" %}</span>
+    </div>
+    <div class="cockpit-metric {% if cockpit.needs_index_pdfs %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
+      <span class="cockpit-metric__label">{% trans "Search readiness" %}</span>
+      <strong>{{ cockpit.indexed_pdfs }}/{{ cockpit.total_pdfs }}</strong>
+      <span>{% trans "indexed PDFs" %}</span>
+    </div>
+    <div class="cockpit-metric {% if cockpit.unknown_uploaders %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
+      <span class="cockpit-metric__label">{% trans "Provenance" %}</span>
+      <strong>{{ cockpit.unknown_uploaders }}</strong>
+      <span>{% trans "unknown uploaders" %}</span>
+    </div>
+    {% if cockpit.user_count is not None %}
+      <div class="cockpit-metric">
+        <span class="cockpit-metric__label">{% trans "Users" %}</span>
+        <strong>{{ cockpit.active_user_count }}/{{ cockpit.user_count }}</strong>
+        <span>{% trans "active accounts" %}</span>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="cockpit-layout">
+  <div class="cockpit-main">
+    <div class="admin-panel">
+      <div class="admin-page-heading admin-page-heading--split">
+        <div>
+          <h2>{% trans "Category Yard" %}</h2>
+          <p>{% trans "Each category is a loading bay: open it to inspect PDFs, readiness, and upload state." %}</p>
+        </div>
+      </div>
+
+      <div class="cockpit-category-grid">
         {% for folder in folders %}
-<div class="col-6 col-md-4 col-lg-3">
-    <div class="card shadow-sm border-0 h-100 category-card position-relative text-center">
-        <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="text-decoration-none d-block h-100">
-            <div class="card-body d-flex flex-column justify-content-center align-items-center">
-                <h5 class="card-title fw-semibold">{{ folder.name }}</h5>
-                <p class="text-muted small mb-0">{{ folder.pdf_count }} PDFs</p>
+          <article class="admin-category-card">
+            <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="admin-category-card__link">
+              <span class="admin-category-card__title">{{ folder.name }}</span>
+              <span class="admin-category-card__meta">
+                {% blocktrans count counter=folder.pdf_count %}{{ counter }} PDF{% plural %}{{ counter }} PDFs{% endblocktrans %}
+              </span>
+            </a>
+            <div class="cockpit-badge-row">
+              {% if folder.pdf_count == 0 %}
+                <span class="badge text-bg-secondary">{% trans "Empty" %}</span>
+              {% elif folder.indexed_count < folder.pdf_count %}
+                <span class="badge text-bg-warning">{% trans "Index review" %}</span>
+              {% else %}
+                <span class="badge text-bg-success">{% trans "Indexed" %}</span>
+              {% endif %}
+              {% if folder.unknown_uploader_count %}
+                <span class="badge text-bg-light">{% trans "Unknown owner" %}</span>
+              {% endif %}
             </div>
-        </a>
 
-        {% if role == 'admin' or role == 'superadmin' %}
-        <!-- Action buttons: Delete above, Rename below -->
-        <div class="position-absolute top-0 end-0 m-2 d-flex flex-column gap-1">
-            <!-- Delete button -->
-            <form method="post" action="{% url 'delete_folder' folder.id %}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-danger"
-                        onclick="return confirm('Are you sure you want to delete this category?')">
-                    &times;
+            {% if role == 'admin' or role == 'superadmin' %}
+              <div class="admin-card-actions" aria-label="{% trans 'Category actions' %}: {{ folder.name }}">
+                <button type="button"
+                        class="btn btn-outline-primary btn-sm"
+                        data-bs-toggle="modal"
+                        data-bs-target="#renameCategoryModal{{ folder.id }}"
+                        aria-label="{% trans 'Rename category' %}: {{ folder.name }}">
+                  {% trans "Rename" %}
                 </button>
-            </form>
+                <form method="post" action="{% url 'delete_folder' folder.id %}">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="btn btn-outline-danger btn-sm"
+                          aria-label="{% trans 'Delete category' %}: {{ folder.name }} ({{ folder.pdf_count }} PDFs)"
+                          onclick="return confirm('{% trans 'Delete this category and all PDFs inside it? This cannot be undone. Confirm backup and rollback evidence first.' %}')">
+                    {% trans "Delete" %}
+                  </button>
+                </form>
+              </div>
+            {% endif %}
+          </article>
+        {% empty %}
+          <div class="admin-empty-state">
+            <h3>{% trans "No categories yet" %}</h3>
+            <p>{% trans "Create a category before uploading PDFs." %}</p>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
 
-            <!-- Rename button -->
-            <button type="button" class="btn btn-sm text-white"
-                    style="background-color: #0d6efd;"
-                    data-bs-toggle="modal" data-bs-target="#renameCategoryModal{{ folder.id }}">
-                ✎
-            </button>
+    <div class="admin-panel">
+      <div class="admin-page-heading">
+        <h2>{% trans "Recent Intake" %}</h2>
+        <p>{% trans "Newest PDF rows visible to this operator." %}</p>
+      </div>
+      <div class="cockpit-feed">
+        {% for pdf in cockpit.recent_pdfs %}
+          <a href="{% if pdf.folder_id %}{% url 'dashboard_folder' folder_id=pdf.folder_id %}{% else %}{% url 'dashboard' %}{% endif %}" class="cockpit-feed-item">
+            <span>
+              <strong>{{ pdf.title }}</strong>
+              <small>{% if pdf.folder %}{{ pdf.folder.name }}{% else %}{% trans "No category" %}{% endif %}</small>
+            </span>
+            <span class="cockpit-feed-item__status">
+              {% if pdf.indexed %}{% trans "Indexed" %}{% else %}{% trans "Needs index" %}{% endif %}
+            </span>
+          </a>
+        {% empty %}
+          <div class="admin-empty-state admin-empty-state--compact">
+            <h3>{% trans "No recent PDFs" %}</h3>
+            <p>{% trans "Uploads will appear here after documents are received." %}</p>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <aside class="cockpit-rail">
+    <section class="admin-panel">
+      <div class="admin-page-heading">
+        <h2>{% trans "Dispatch Board" %}</h2>
+        <p>{% trans "Manual work queues derived from current data." %}</p>
+      </div>
+      <div class="cockpit-queue">
+        <div class="cockpit-queue-item {% if cockpit.needs_index_pdfs %}cockpit-queue-item--warn{% endif %}">
+          <strong>{{ cockpit.needs_index_pdfs }}</strong>
+          <span>{% trans "PDFs need index review" %}</span>
         </div>
+        <div class="cockpit-queue-item {% if cockpit.unknown_uploaders %}cockpit-queue-item--warn{% endif %}">
+          <strong>{{ cockpit.unknown_uploaders }}</strong>
+          <span>{% trans "PDFs need owner review" %}</span>
+        </div>
+        <div class="cockpit-queue-item {% if cockpit.empty_folders %}cockpit-queue-item--muted{% endif %}">
+          <strong>{{ cockpit.empty_folders }}</strong>
+          <span>{% trans "empty category bays" %}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-page-heading">
+        <h2>{% trans "Index Debt Queue" %}</h2>
+        <p>{% trans "Open the category that needs the next operator action." %}</p>
+      </div>
+      <div class="ops-lane-list">
+        {% for folder in cockpit.index_debt_folders %}
+          <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="ops-lane-item ops-lane-item--warn">
+            <span>
+              <strong>{{ folder.name }}</strong>
+              <small>{% trans "Index review" %}</small>
+            </span>
+            <b>{{ folder.indexed_count }}/{{ folder.pdf_count }}</b>
+          </a>
+        {% endfor %}
+        {% for folder in cockpit.owner_review_folders %}
+          <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="ops-lane-item">
+            <span>
+              <strong>{{ folder.name }}</strong>
+              <small>{% trans "Owner review" %}</small>
+            </span>
+            <b>{{ folder.unknown_uploader_count }}</b>
+          </a>
+        {% endfor %}
+        {% for folder in cockpit.empty_folder_lanes %}
+          <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="ops-lane-item ops-lane-item--muted">
+            <span>
+              <strong>{{ folder.name }}</strong>
+              <small>{% trans "Empty bay" %}</small>
+            </span>
+            <b>0</b>
+          </a>
+        {% endfor %}
+        {% if not cockpit.index_debt_folders and not cockpit.owner_review_folders and not cockpit.empty_folder_lanes %}
+          <div class="ops-control-note">
+            {% trans "No category-level index, owner, or intake debt is visible right now." %}
+          </div>
         {% endif %}
-    </div>
-</div>
+      </div>
+    </section>
+  </aside>
+</section>
 
-<!-- Rename Modal -->
-<div class="modal fade" id="renameCategoryModal{{ folder.id }}" tabindex="-1" aria-hidden="true">
+{% for folder in folders %}
+  <div class="modal fade" id="renameCategoryModal{{ folder.id }}" tabindex="-1" aria-labelledby="renameCategoryModalLabel{{ folder.id }}" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content">
-            <form method="post" action="{% url 'rename_folder' folder.id %}">
-                {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold">Rename Category</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="folder_name_{{ folder.id }}" class="form-label">New Name</label>
-                        <input type="text" name="folder_name" id="folder_name_{{ folder.id }}"
-                               class="form-control" value="{{ folder.name }}" required>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">Rename</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                </div>
-            </form>
-        </div>
+      <div class="modal-content">
+        <form method="post" action="{% url 'rename_folder' folder.id %}">
+          {% csrf_token %}
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold" id="renameCategoryModalLabel{{ folder.id }}">{% trans "Rename Category" %}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+          </div>
+          <div class="modal-body">
+            <label for="folder_name_{{ folder.id }}" class="form-label">{% trans "New Name" %}</label>
+            <input type="text" name="folder_name" id="folder_name_{{ folder.id }}"
+                   class="form-control" value="{{ folder.name }}" required>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+            <button type="submit" class="btn btn-primary">{% trans "Rename" %}</button>
+          </div>
+        </form>
+      </div>
     </div>
-</div>
+  </div>
 {% endfor %}
 
-
-<!-- Add Category Modal -->
-<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-labelledby="addCategoryModalLabel" aria-hidden="true">
+{% if role == 'admin' or role == 'superadmin' %}
+  <div class="modal fade" id="addCategoryModal" tabindex="-1" aria-labelledby="addCategoryModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content">
-            <form method="post" action="{% url 'create_folder' %}">
-                {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold" id="addCategoryModalLabel">Add Category</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Folder Name -->
-                    <div class="mb-3">
-                        <label for="folder_name" class="form-label">Category Name</label>
-                        <input type="text" name="folder_name" id="folder_name" class="form-control" required>
-                    </div>
-
-                    <!-- Folder Keywords -->
-                    <div class="mb-3">
-                        <label for="folder_keywords" class="form-label">Keywords (comma-separated)</label>
-                        <input type="text" name="folder_keywords" id="folder_keywords" class="form-control" placeholder="e.g., act, law, rule">
-                        <small class="form-text text-muted">Enter keywords that help in folder-based search redirection</small>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-success">Add</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                </div>
-            </form>
-        </div>
+      <div class="modal-content">
+        <form method="post" action="{% url 'create_folder' %}">
+          {% csrf_token %}
+          <div class="modal-header">
+            <h5 class="modal-title fw-bold" id="addCategoryModalLabel">{% trans "Add Category" %}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="folder_name" class="form-label">{% trans "Category Name" %}</label>
+              <input type="text" name="folder_name" id="folder_name" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label for="folder_keywords" class="form-label">{% trans "Keywords" %}</label>
+              <input type="text" name="folder_keywords" id="folder_keywords" class="form-control" placeholder="{% trans 'act, law, rule' %}">
+              <div class="form-text">{% trans "Use comma-separated terms that help route searches to this category." %}</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+            <button type="submit" class="btn btn-success">{% trans "Add" %}</button>
+          </div>
+        </form>
+      </div>
     </div>
-</div>
-
-
-<!-- Custom Styles -->
-<style>
-.category-card {
-    border-radius: 16px;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
-    background: #ffffff;
-    position: relative;
-}
-.category-card:hover {
-    transform: translateY(-6px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-}
-.category-card .card-title {
-    color: #0d6efd;
-    font-size: 1rem;
-    overflow-wrap: anywhere;
-}
-.category-card .card-title:hover {
-    text-decoration: underline;
-}
-</style>
+  </div>
+{% endif %}
 {% endblock %}

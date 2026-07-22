@@ -155,6 +155,8 @@ class RegistrationSecurityTests(TestCase):
 
         response = self.client.get(reverse("register"))
         self.assertContains(response, 'name="role"')
+        self.assertContains(response, 'class="admin-shell"')
+        self.assertContains(response, "Dashboard")
 
         self.client.post(
             reverse("register"),
@@ -201,6 +203,12 @@ class MutationAuthorizationTests(TestCase):
 
     def test_ordinary_user_gets_403_for_user_and_folder_mutations(self):
         self.client.force_login(self.ordinary)
+        pdf = PDFFile.objects.create(
+            title="Unknown owner",
+            file="pdfs/unknown-owner.pdf",
+            folder=self.folder,
+            uploaded_by=None,
+        )
 
         self.assertEqual(self.client.get(reverse("user_list")).status_code, 403)
         self.assertEqual(
@@ -233,7 +241,16 @@ class MutationAuthorizationTests(TestCase):
             ).status_code,
             403,
         )
+        self.assertEqual(
+            self.client.post(
+                reverse("assign_pdf_owner", args=[pdf.pk]),
+                {"owner_id": self.target.pk},
+            ).status_code,
+            403,
+        )
         self.assertEqual(Folder.objects.filter(name="Nope").count(), 0)
+        pdf.refresh_from_db()
+        self.assertIsNone(pdf.uploaded_by)
 
     def test_get_requests_do_not_mutate_state_changing_endpoints(self):
         self.client.force_login(self.admin)
@@ -257,6 +274,16 @@ class MutationAuthorizationTests(TestCase):
         )
         self.assertEqual(
             self.client.get(reverse("create_folder")).status_code,
+            405,
+        )
+        pdf = PDFFile.objects.create(
+            title="Unknown owner",
+            file="pdfs/unknown-owner.pdf",
+            folder=self.folder,
+            uploaded_by=None,
+        )
+        self.assertEqual(
+            self.client.get(reverse("assign_pdf_owner", args=[pdf.pk])).status_code,
             405,
         )
         self.assertEqual(
@@ -293,6 +320,18 @@ class MutationAuthorizationTests(TestCase):
             self.assertTrue(get_user_model().objects.filter(pk=self.target.pk).exists())
             self.assertTrue(Folder.objects.filter(pk=folder.pk).exists())
             self.assertTrue(PDFFile.objects.filter(pk=pdf.pk).exists())
+
+    def test_user_list_renders_status_and_toggle_action(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.get(reverse("user_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Registered Users")
+        self.assertContains(response, "Active")
+        self.assertContains(response, "Current user")
+        self.assertContains(response, reverse("toggle_user_status", args=[self.target.pk]))
+        self.assertContains(response, "Deactivate")
 
 
 class PDFViewTests(TestCase):
@@ -573,6 +612,9 @@ class SearchAndAuthenticationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'value="{next_url}"')
+        self.assertContains(response, 'class="admin-shell"')
+        self.assertContains(response, 'id="togglePassword"')
+        self.assertContains(response, 'aria-pressed="false"')
 
         response = self.client.post(
             reverse("login"),
@@ -604,6 +646,7 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertContains(response, "textContent = ref.title")
         self.assertContains(response, "meta.textContent = [ref.folder, ref.uploaded_at]")
         self.assertContains(response, "AI-generated answers should not be used for legal purposes")
+        self.assertContains(response, 'rel="noopener noreferrer"')
         self.assertNotContains(response, "innerHTML")
         self.assertNotContains(response, "|safe")
 
@@ -719,6 +762,27 @@ class DashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Categories")
+        self.assertContains(response, "Operations Cockpit")
+        self.assertContains(response, "Dispatch Board")
+        self.assertContains(response, "Index Debt Queue")
+        self.assertNotContains(response, "Safety Gates")
+
+    def test_dashboard_renders_marathi_cockpit_labels(self):
+        self.client.force_login(self.user)
+        Folder.objects.create(name="Marathi lane", created_by=self.user)
+        self.client.post(
+            reverse("set_language"),
+            {"language": "mr", "next": reverse("dashboard")},
+        )
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "संचालन नियंत्रण कक्ष")
+        self.assertContains(response, "श्रेणी कार्यक्षेत्र")
+        self.assertContains(response, "प्रेषण फलक")
+        self.assertContains(response, "अनुक्रमण थकबाकी रांग")
+        self.assertContains(response, "रिकामा विभाग")
 
     def test_dashboard_renders_flash_messages_with_accessible_dismissal(self):
         self.client.force_login(self.user)
@@ -794,6 +858,45 @@ class DashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("dashboard_folder", args=[folders[0].pk]))
         self.assertContains(response, "Folder 24")
+        self.assertContains(response, "Category Yard")
+        self.assertContains(response, "Search readiness")
+        self.assertContains(response, 'aria-label="Close"', count=26)
+        self.assertContains(response, "Delete this category and all PDFs inside it")
+
+    def test_dashboard_index_debt_queue_links_actionable_categories(self):
+        self.client.force_login(self.user)
+        index_folder = Folder.objects.create(name="Needs index lane", created_by=self.user)
+        PDFFile.objects.create(
+            title="Needs index",
+            file="pdfs/needs-index.pdf",
+            folder=index_folder,
+            uploaded_by=self.user,
+            indexed=False,
+        )
+        owner_folder = Folder.objects.create(name="Owner review lane", created_by=self.user)
+        PDFFile.objects.create(
+            title="Unknown owner",
+            file="pdfs/unknown-owner.pdf",
+            folder=owner_folder,
+            uploaded_by=None,
+            indexed=True,
+        )
+        empty_folder = Folder.objects.create(name="Empty lane", created_by=self.user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Index Debt Queue")
+        self.assertContains(response, "Needs index lane")
+        self.assertContains(response, "Index review")
+        self.assertContains(response, "Owner review lane")
+        self.assertContains(response, "Owner review")
+        self.assertContains(response, "Empty lane")
+        self.assertContains(response, "Empty bay")
+        self.assertContains(response, reverse("dashboard_folder", args=[index_folder.pk]))
+        self.assertContains(response, reverse("dashboard_folder", args=[owner_folder.pk]))
+        self.assertContains(response, reverse("dashboard_folder", args=[empty_folder.pk]))
+        self.assertNotContains(response, "Prefer rename or quarantine over delete")
 
     def test_folder_navigation_renders_pdfs_and_nullable_uploader(self):
         self.client.force_login(self.user)
@@ -812,6 +915,180 @@ class DashboardTests(TestCase):
         self.assertContains(response, "Unknown")
         self.assertContains(response, reverse("view_pdf", args=[pdf.pk]))
         self.assertContains(response, reverse("dashboard_folder", args=[folder.pk]))
+        self.assertContains(response, "Edit Keywords")
+        self.assertContains(response, "Document Workbench")
+        self.assertContains(response, "Blast Radius")
+        self.assertContains(response, 'rel="noopener noreferrer"')
+        self.assertContains(response, "Assign Owner")
+        self.assertContains(response, reverse("assign_pdf_owner", args=[pdf.pk]))
+        self.assertContains(response, 'aria-label="Close"', count=3)
+        self.assertContains(response, "Superadmin access is required")
+        self.assertNotContains(response, "Repair Stored Index")
+
+    def test_admin_can_assign_owner_to_unknown_owner_pdf(self):
+        owner = get_user_model().objects.create_user(
+            username="new-owner",
+            password="test-password",
+            role="admin",
+        )
+        self.client.force_login(self.user)
+        folder = Folder.objects.create(name="Documents", created_by=self.user)
+        pdf = PDFFile.objects.create(
+            title="Unknown owner document",
+            file="pdfs/unknown-owner.pdf",
+            folder=folder,
+            uploaded_by=None,
+        )
+
+        response = self.client.post(
+            reverse("assign_pdf_owner", args=[pdf.pk]),
+            {"owner_id": owner.pk},
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
+        pdf.refresh_from_db()
+        self.assertEqual(pdf.uploaded_by, owner)
+        self.assertContains(response, "assigned to new-owner")
+        self.assertNotContains(response, "Owner review")
+
+    def test_folder_blast_radius_shows_superadmin_index_controls(self):
+        superadmin = get_user_model().objects.create_user(
+            username="ops-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        folder = Folder.objects.create(name="Documents", created_by=superadmin)
+        PDFFile.objects.create(
+            title="Needs repair",
+            file="pdfs/needs-repair.pdf",
+            folder=folder,
+            uploaded_by=superadmin,
+            indexed=False,
+        )
+        self.client.force_login(superadmin)
+
+        response = self.client.get(reverse("dashboard_folder", args=[folder.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Index Operations")
+        self.assertContains(response, "Repair Stored Index")
+        self.assertContains(response, "Reprocess Needed")
+        self.assertContains(response, "Reprocess All")
+
+    def test_folder_operations_requires_superadmin(self):
+        folder = Folder.objects.create(name="Documents", created_by=self.user)
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("folder_operations", args=[folder.pk]),
+            {"operation": "repair_stored_index"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_superadmin_can_repair_index_from_stored_artifacts(self):
+        superadmin = get_user_model().objects.create_user(
+            username="repair-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        folder = Folder.objects.create(name="Documents", created_by=superadmin)
+        pdf = PDFFile.objects.create(
+            title="Stored artifacts",
+            file="pdfs/stored-artifacts.pdf",
+            folder=folder,
+            uploaded_by=superadmin,
+            indexed=False,
+            page_chunks=["Searchable stored text"],
+            chunk_embeddings=[[1.0, 0.0]],
+        )
+        self.client.force_login(superadmin)
+
+        with patch("core.views.build_or_load_faiss_index_for_folder", return_value=(object(), [], [])):
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "repair_stored_index"},
+                follow=True,
+            )
+
+        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
+        pdf.refresh_from_db()
+        self.assertTrue(pdf.indexed)
+        self.assertContains(response, "Search index rebuilt from stored artifacts")
+
+    def test_superadmin_can_reprocess_needed_documents(self):
+        superadmin = get_user_model().objects.create_user(
+            username="reprocess-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        folder = Folder.objects.create(name="Documents", created_by=superadmin)
+        needed_pdf = PDFFile.objects.create(
+            title="Needs index",
+            file="pdfs/needs-index.pdf",
+            folder=folder,
+            uploaded_by=superadmin,
+            indexed=False,
+        )
+        indexed_pdf = PDFFile.objects.create(
+            title="Already indexed",
+            file="pdfs/already-indexed.pdf",
+            folder=folder,
+            uploaded_by=superadmin,
+            indexed=True,
+        )
+        self.client.force_login(superadmin)
+
+        with patch("core.views.precompute_pdf_embeddings") as precompute:
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "reprocess_needed"},
+                follow=True,
+            )
+
+        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
+        precompute.assert_called_once_with(needed_pdf)
+        self.assertNotEqual(precompute.call_args.args[0].pk, indexed_pdf.pk)
+        self.assertContains(response, "Reprocessed 1 of 1 document")
+
+    def test_reprocess_needed_preserves_ocr_artifacts_when_pdf_has_no_text(self):
+        superadmin = get_user_model().objects.create_user(
+            username="ocr-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        folder = Folder.objects.create(name="Scanned documents", created_by=superadmin)
+        pdf = PDFFile.objects.create(
+            title="Photo OCR scan",
+            file="pdfs/photo-ocr-scan.pdf",
+            folder=folder,
+            uploaded_by=superadmin,
+            indexed=False,
+            page_chunks=["OCR transcript already stored"],
+            chunk_embeddings=[[1.0, 0.0]],
+        )
+        self.client.force_login(superadmin)
+
+        with patch(
+            "core.views.precompute_pdf_embeddings",
+            side_effect=SearchDataIntegrityError("PDF has no extractable text"),
+        ), patch(
+            "core.views.build_or_load_faiss_index_for_folder",
+            return_value=(object(), [], []),
+        ) as rebuild:
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "reprocess_needed"},
+                follow=True,
+            )
+
+        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
+        rebuild.assert_called_once_with(folder, force_rebuild=True)
+        pdf.refresh_from_db()
+        self.assertTrue(pdf.indexed)
+        self.assertContains(response, "Preserved stored OCR/search artifacts")
+        self.assertNotContains(response, "could not be reprocessed")
 
     def test_pdf_rename_redirects_back_to_its_folder(self):
         self.client.force_login(self.user)

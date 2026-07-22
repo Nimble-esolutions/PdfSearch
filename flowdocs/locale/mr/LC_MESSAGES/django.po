@@ -1,10 +1,10 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: PdfSearch Admin UI\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-10-03 13:44+0530\n"
+"POT-Creation-Date: 2026-07-22 19:34+0000\n"
 "PO-Revision-Date: 2025-09-03 12:10+0530\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Last-Translator: Codex\n"
 "Language-Team: Marathi\n"
 "Language: mr\n"
 "MIME-Version: 1.0\n"
@@ -12,316 +12,593 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n!=1);\n"
 
-#: .\core\templates\base.html:8 .\core\templates\home.html:8
-#: .\core\templates\login.html:9 .\core\templates\user_list.html:9
-#, fuzzy
-#| msgid "Commissioner for Cooperation and Registrar"
 msgid ""
 "Commissioner for Cooperation and Registrar, Cooperative Societies, "
 "Maharashtra State, Pune"
-msgstr "सहकार आयुक्त व निबंधक"
+msgstr "सहकार आयुक्त व निबंधक, सहकारी संस्था, महाराष्ट्र राज्य, पुणे"
 
-#: .\core\templates\base.html:42 .\core\templates\home.html:48
-msgid "Left Logo"
-msgstr ""
+msgid "Registrar Co-operative Societies banner"
+msgstr "निबंधक सहकारी संस्था बॅनर"
 
-#: .\core\templates\base.html:45 .\core\templates\home.html:51
-#, fuzzy
-#| msgid "Commissioner for Cooperation and Registrar"
-msgid "Commissioner for Cooperation and Registrar,"
-msgstr "सहकार आयुक्त व निबंधक"
-
-#: .\core\templates\base.html:46 .\core\templates\home.html:52
-msgid "Cooperative Societies (CC and RCS), Maharashtra State, Pune"
-msgstr "सहकारी संस्था (सीसी आणि आरसीएस), महाराष्ट्र राज्य, पुणे"
-
-#: .\core\templates\base.html:49 .\core\templates\home.html:55
-msgid "Right Logo"
-msgstr ""
-
-#: .\core\templates\base.html:68 .\core\templates\login.html:58
-#: .\core\templates\search.html:51 .\core\templates\user_list.html:78
 msgid "Registrar Co-operative Societies"
 msgstr "निबंधक सहकारी संस्था"
 
-#: .\core\templates\base.html:94
-msgid "Add User"
-msgstr ""
+msgid "Admin"
+msgstr "प्रशासन"
 
-#: .\core\templates\base.html:97
-msgid "User List"
-msgstr ""
+msgid "Toggle navigation"
+msgstr "नेव्हिगेशन बदला"
 
-#: .\core\templates\base.html:101
-msgid "Logout"
-msgstr ""
+msgid "Dashboard"
+msgstr "डॅशबोर्ड"
 
-#: .\core\templates\base.html:104 .\core\templates\home.html:23
-#: .\core\templates\login.html:88 .\core\templates\login.html:110
-msgid "Login"
-msgstr "लॉगिन"
-
-#: .\core\templates\base.html:131
-#, fuzzy
-#| msgid "Registrar Co-operative Societies"
-msgid "All rights reserved© Registrar Co-operative Societies"
-msgstr "निबंधक सहकारी संस्था"
-
-#: .\core\templates\home.html:6
-#, fuzzy
-#| msgid "Search With AI - CC & RCS Maharashtra"
-msgid "Home - CC & RCS Maharashtra"
-msgstr "एआयसह शोधा - सीसी आणि आरसीएस महाराष्ट्र"
-
-#: .\core\templates\home.html:18
-msgid "येथे शोधा"
-msgstr ""
-
-#: .\core\templates\home.html:24 .\core\templates\search.html:23
-msgid "Home"
-msgstr "मुखपृष्ठ"
-
-#: .\core\templates\home.html:25
-msgid "Contact Us"
-msgstr ""
-
-#: .\core\templates\home.html:26
-msgid "Skip to Navigation"
-msgstr ""
-
-#: .\core\templates\home.html:27
-msgid "Skip to Main Content"
-msgstr ""
-
-#: .\core\templates\home.html:28
-msgid "A--"
-msgstr "अ--"
-
-#: .\core\templates\home.html:29
-#, fuzzy
-#| msgid "A--"
-msgid "A-"
-msgstr "अ--"
-
-#: .\core\templates\home.html:30
-msgid "A"
-msgstr "अ"
-
-#: .\core\templates\home.html:31
-msgid "A+"
-msgstr "अ+"
-
-#: .\core\templates\home.html:32
-msgid "A++"
-msgstr "अ++"
-
-#: .\core\templates\home.html:37
-msgid "मराठी"
-msgstr "मराठी"
-
-#: .\core\templates\home.html:64 .\core\templates\home.html:73
-msgid "Search With AI"
-msgstr "एआयसह शोधा"
-
-#: .\core\templates\home.html:67
-msgid "About CC and RCS"
-msgstr "सीसी आणि आरसीएस बद्दल"
-
-#: .\core\templates\home.html:68
-msgid "Downloads"
-msgstr "डाउनलोड्स"
-
-#: .\core\templates\home.html:69
-msgid "RTS Act"
-msgstr "आरटीएस कायदा"
-
-#: .\core\templates\home.html:70
-msgid "FAQs"
-msgstr "वारंवार विचारले जाणारे प्रश्न"
-
-#: .\core\templates\home.html:71
-msgid "Tender Notices"
-msgstr "टेंडर सूचना"
-
-#: .\core\templates\home.html:86
-msgid "Update"
-msgstr "अपडेट"
-
-#: .\core\templates\home.html:89
-msgid "National Cooperation Policy 2025"
-msgstr "राष्ट्रीय सहकार धोरण २०२५"
-
-#: .\core\templates\home.html:90
-msgid "E-Tender Notice"
-msgstr "ई-टेंडर सूचना"
-
-#: .\core\templates\home.html:91
-msgid "Urban Cooperative Scheme"
-msgstr "शहरी सहकारी योजना"
-
-#: .\core\templates\home.html:92
-msgid "Digital Registration Scheme"
-msgstr "डिजिटल नोंदणी योजना"
-
-#: .\core\templates\home.html:93
-msgid "State Cooperative Awards"
-msgstr "राज्य सहकारी पुरस्कार"
-
-#: .\core\templates\home.html:96
-msgid "More News"
-msgstr "अधिक बातम्या"
-
-#: .\core\templates\home.html:98
-msgid "Quick Links"
-msgstr "त्वरित दुवे"
-
-#: .\core\templates\home.html:100
-msgid "Deemed Conveyance - Pratyay MahaBhumi"
-msgstr "डिम्ड कंव्हेअन्स - प्रत्यय महाभूमी"
-
-#: .\core\templates\home.html:101
-msgid "Amended Acts & Rules"
-msgstr "सुधारित कायदे व नियम"
-
-#: .\core\templates\home.html:102
-msgid "District Wise Societies"
-msgstr "जिल्हानिहाय संस्था"
-
-#: .\core\templates\home.html:103
-msgid "Complaint Status"
-msgstr "तक्रारीची स्थिती"
-
-#: .\core\templates\home.html:104
-msgid "Digital Registration Dashboard"
-msgstr "डिजिटल नोंदणी डॅशबोर्ड"
-
-#: .\core\templates\home.html:105
-msgid "Online Services Portal"
-msgstr "ऑनलाईन सेवा पोर्टल"
-
-#: .\core\templates\home.html:106
-msgid "Audit Reports & Insights"
-msgstr "लेखापरीक्षण अहवाल व माहिती"
-
-#: .\core\templates\home.html:115
-msgid "Slide 1"
-msgstr "स्लाईड १"
-
-#: .\core\templates\home.html:118
-msgid "Slide 2"
-msgstr "स्लाईड २"
-
-#: .\core\templates\home.html:132
-msgid "Key Person"
-msgstr "महत्त्वाची व्यक्ती"
-
-#: .\core\templates\home.html:135
-msgid "Shri. Devendra Fadnavis"
-msgstr "श्री. देवेंद्र फडणवीस"
-
-#: .\core\templates\home.html:139
-msgid "Shri. Eknath Shinde"
-msgstr "श्री. एकनाथ शिंदे"
-
-#: .\core\templates\home.html:143
-msgid "Shri. Ajit Pawar"
-msgstr "श्री. अजित पवार"
-
-#: .\core\templates\home.html:151
-msgid "Important Links"
-msgstr "महत्त्वाचे दुवे"
-
-#: .\core\templates\home.html:158
-msgid "Related Links"
-msgstr "संबंधित दुवे"
-
-#: .\core\templates\home.html:168
-msgid "Government of Maharashtra"
-msgstr "महाराष्ट्र शासन"
-
-#: .\core\templates\login.html:7
-#, fuzzy
-#| msgid "Search With AI - CC & RCS Maharashtra"
-msgid "Login - CC & RCS Maharashtra"
-msgstr "एआयसह शोधा - सीसी आणि आरसीएस महाराष्ट्र"
-
-#: .\core\templates\login.html:78 .\core\templates\search.html:65
 msgid "Search"
 msgstr "शोधा "
 
-#: .\core\templates\login.html:99 .\core\templates\user_list.html:98
-msgid "Username"
-msgstr ""
+msgid "Add User"
+msgstr "वापरकर्ता जोडा"
 
-#: .\core\templates\login.html:101
-msgid "Enter username"
-msgstr ""
+msgid "Users"
+msgstr "वापरकर्ते"
 
-#: .\core\templates\login.html:104
-msgid "Password"
-msgstr ""
+msgid "English"
+msgstr "इंग्रजी"
 
-#: .\core\templates\login.html:106
-msgid "Enter password"
-msgstr ""
+msgid "Logout"
+msgstr "लॉगआउट"
 
-#: .\core\templates\login.html:120
-#, fuzzy
-#| msgid "Registrar Co-operative Societies"
-msgid "All rights reserved© Registrar Co-operative Societies "
-msgstr "निबंधक सहकारी संस्था"
-
-#: .\core\templates\register.html:7
-#, fuzzy
-#| msgid "Search With AI - CC & RCS Maharashtra"
-msgid "Register - CC & RCS Maharashtra"
-msgstr "एआयसह शोधा - सीसी आणि आरसीएस महाराष्ट्र"
-
-#: .\core\templates\register.html:21
-#, fuzzy
-#| msgid "Digital Registration Dashboard"
-msgid "Registration Form"
-msgstr "डिजिटल नोंदणी डॅशबोर्ड"
-
-#: .\core\templates\register.html:45
-msgid "Register"
-msgstr ""
-
-#: .\core\templates\register.html:49
-msgid "Already have an account?"
-msgstr ""
-
-#: .\core\templates\register.html:49
-#, fuzzy
-#| msgid "Login"
-msgid "Login here"
+msgid "Login"
 msgstr "लॉगिन"
 
-#: .\core\templates\search.html:6
+msgid "Close"
+msgstr "बंद करा"
+
+msgid "All rights reserved© Registrar Co-operative Societies."
+msgstr "सर्व हक्क राखीव © सहकारी संस्था निबंधक."
+
+msgid "Nimble eSolutions"
+msgstr "निंबल ई-सोल्यूशन्स"
+
+msgid "Operations Cockpit - CC & RCS Maharashtra"
+msgstr "संचालन नियंत्रण कक्ष - सीसी आणि आरसीएस महाराष्ट्र"
+
+msgid "Document operations"
+msgstr "दस्तऐवज संचालन"
+
+msgid "Operations Cockpit"
+msgstr "संचालन नियंत्रण कक्ष"
+
+msgid ""
+"Triage categories, document readiness, uploads, and access work from one "
+"screen."
+msgstr ""
+"श्रेणी, दस्तऐवज तयारी, अपलोड आणि प्रवेशाची कामे एका स्क्रीनवर तपासा."
+
+msgid "Add Category"
+msgstr "श्रेणी जोडा"
+
+msgid "Operations summary"
+msgstr "संचालन सारांश"
+
+msgid "Categories"
+msgstr "श्रेणी"
+
+#, python-format
+msgid "%(counter)s empty"
+msgid_plural "%(counter)s empty"
+msgstr[0] "%(counter)s रिकामी"
+msgstr[1] "%(counter)s रिकाम्या"
+
+msgid "PDF rows"
+msgstr "PDF नोंदी"
+
+msgid "visible to this role"
+msgstr "या भूमिकेसाठी दृश्यमान"
+
+msgid "Search readiness"
+msgstr "शोध तयारी"
+
+msgid "indexed PDFs"
+msgstr "अनुक्रमित PDF"
+
+msgid "Provenance"
+msgstr "मूळ माहिती"
+
+msgid "unknown uploaders"
+msgstr "अज्ञात अपलोडकर्ते"
+
+msgid "active accounts"
+msgstr "सक्रिय खाती"
+
+msgid "Category Yard"
+msgstr "श्रेणी कार्यक्षेत्र"
+
+msgid ""
+"Each category is a loading bay: open it to inspect PDFs, readiness, and "
+"upload state."
+msgstr ""
+"प्रत्येक श्रेणी एक कार्य विभाग आहे: PDF, तयारी आणि अपलोड स्थिती तपासण्यासाठी "
+"ती उघडा."
+
+#, python-format
+msgid "%(counter)s PDF"
+msgid_plural "%(counter)s PDFs"
+msgstr[0] "%(counter)s PDF"
+msgstr[1] "%(counter)s PDF"
+
+msgid "Empty"
+msgstr "रिकामी"
+
+msgid "Index review"
+msgstr "अनुक्रमण पुनरावलोकन"
+
+msgid "Indexed"
+msgstr "अनुक्रमित"
+
+msgid "Unknown owner"
+msgstr "अज्ञात जबाबदार अधिकारी"
+
+msgid "Category actions"
+msgstr "श्रेणी क्रिया"
+
+msgid "Rename category"
+msgstr "श्रेणीचे नाव बदला"
+
+msgid "Rename"
+msgstr "नाव बदला"
+
+msgid "Delete category"
+msgstr "श्रेणी हटवा"
+
+msgid ""
+"Delete this category and all PDFs inside it? This cannot be undone. Confirm "
+"backup and rollback evidence first."
+msgstr ""
+"ही श्रेणी आणि तिच्यातील सर्व PDF हटवायचे? ही क्रिया पूर्ववत करता येणार "
+"नाही. आधी बॅकअप आणि रोलबॅक पुरावा तपासा."
+
+msgid "Delete"
+msgstr "हटवा"
+
+msgid "No categories yet"
+msgstr "अद्याप श्रेणी नाहीत"
+
+msgid "Create a category before uploading PDFs."
+msgstr "PDF अपलोड करण्यापूर्वी श्रेणी तयार करा."
+
+msgid "Recent Intake"
+msgstr "अलीकडील प्राप्ती"
+
+msgid "Newest PDF rows visible to this operator."
+msgstr "या ऑपरेटरला दिसणाऱ्या नवीनतम PDF नोंदी."
+
+msgid "No category"
+msgstr "श्रेणी नाही"
+
+msgid "Needs index"
+msgstr "अनुक्रमण आवश्यक"
+
+msgid "No recent PDFs"
+msgstr "अलीकडील PDF नाहीत"
+
+msgid "Uploads will appear here after documents are received."
+msgstr "दस्तऐवज प्राप्त झाल्यानंतर अपलोड येथे दिसतील."
+
+msgid "Dispatch Board"
+msgstr "प्रेषण फलक"
+
+msgid "Manual work queues derived from current data."
+msgstr "सध्याच्या डेटावर आधारित मॅन्युअल कार्य रांगा."
+
+msgid "PDFs need index review"
+msgstr "PDF साठी अनुक्रमण पुनरावलोकन आवश्यक"
+
+msgid "PDFs need owner review"
+msgstr "PDF साठी जबाबदार अधिकारी पुनरावलोकन आवश्यक"
+
+msgid "empty category bays"
+msgstr "रिकामे श्रेणी विभाग"
+
+msgid "Index Debt Queue"
+msgstr "अनुक्रमण थकबाकी रांग"
+
+msgid "Open the category that needs the next operator action."
+msgstr "पुढील ऑपरेटर क्रिया आवश्यक असलेली श्रेणी उघडा."
+
+msgid "Owner review"
+msgstr "जबाबदार अधिकारी पुनरावलोकन"
+
+msgid "Empty bay"
+msgstr "रिकामा विभाग"
+
+msgid "No category-level index, owner, or intake debt is visible right now."
+msgstr "सध्या श्रेणी-स्तरीय अनुक्रमण, जबाबदार अधिकारी किंवा प्राप्ती थकबाकी दिसत नाही."
+
+msgid "Rename Category"
+msgstr "श्रेणीचे नाव बदला"
+
+msgid "New Name"
+msgstr "नवीन नाव"
+
+msgid "Cancel"
+msgstr "रद्द करा"
+
+msgid "Category Name"
+msgstr "श्रेणीचे नाव"
+
+msgid "Keywords"
+msgstr "कीवर्ड"
+
+msgid "act, law, rule"
+msgstr "कायदा, नियम, कर्ज"
+
+msgid "Use comma-separated terms that help route searches to this category."
+msgstr "शोध या श्रेणीकडे वळवण्यासाठी स्वल्पविरामाने वेगळे केलेले शब्द वापरा."
+
+msgid "Add"
+msgstr "जोडा"
+
+msgid "Document Workbench"
+msgstr "दस्तऐवज कार्यक्षेत्र"
+
+msgid "Category workbench"
+msgstr "श्रेणी कार्यक्षेत्र"
+
+msgid ""
+"Receive PDFs, inspect search readiness, and stage high-risk actions with "
+"context."
+msgstr ""
+"PDF प्राप्त करा, शोध तयारी तपासा आणि उच्च-जोखीम क्रिया संदर्भासह तयार करा."
+
+msgid "Edit Keywords"
+msgstr "कीवर्ड संपादित करा"
+
+msgid "Back to Dashboard"
+msgstr "डॅशबोर्डवर परत"
+
+msgid "Category manifest"
+msgstr "श्रेणी मॅनिफेस्ट"
+
+msgid "in this category"
+msgstr "या श्रेणीत"
+
+msgid "Index readiness"
+msgstr "अनुक्रमण तयारी"
+
+msgid "indexed"
+msgstr "अनुक्रमित"
+
+msgid "Ownership"
+msgstr "जबाबदारी"
+
+msgid "Latest intake"
+msgstr "नवीनतम प्राप्ती"
+
+msgid "most recent upload"
+msgstr "सर्वात अलीकडील अपलोड"
+
+msgid "Routing keywords"
+msgstr "मार्गदर्शक कीवर्ड"
+
+msgid "Receiving Dock"
+msgstr "प्राप्ती विभाग"
+
+msgid ""
+"Uploads are accepted only after PDF validation and preprocessing complete."
+msgstr "PDF पडताळणी आणि पूर्वप्रक्रिया पूर्ण झाल्यावरच अपलोड स्वीकारले जातात."
+
+msgid "PDF Title"
+msgstr "PDF शीर्षक"
+
+msgid "PDF File"
+msgstr "PDF फाइल"
+
+msgid "Receive"
+msgstr "प्राप्त करा"
+
+msgid "PDF Workbench"
+msgstr "PDF कार्यक्षेत्र"
+
+msgid "Each row shows ownership, search readiness, and available actions."
+msgstr "प्रत्येक ओळीत जबाबदार अधिकारी, शोध तयारी आणि उपलब्ध क्रिया दिसतात."
+
+msgid "Document"
+msgstr "दस्तऐवज"
+
+msgid "Owner"
+msgstr "जबाबदार अधिकारी"
+
+msgid "Received"
+msgstr "प्राप्त"
+
+msgid "Readiness"
+msgstr "तयारी"
+
+msgid "View"
+msgstr "पहा"
+
+msgid "Actions"
+msgstr "क्रिया"
+
+msgid "Unknown"
+msgstr "अज्ञात"
+
+msgid "Assign owner"
+msgstr "जबाबदार अधिकारी नेमा"
+
+msgid "Assign Owner"
+msgstr "जबाबदार अधिकारी नेमा"
+
+msgid "Rename PDF"
+msgstr "PDF चे नाव बदला"
+
+msgid "Delete PDF"
+msgstr "PDF हटवा"
+
+msgid "Delete this PDF? Confirm backup and index impact before continuing."
+msgstr "हा PDF हटवायचा? पुढे जाण्यापूर्वी बॅकअप आणि अनुक्रमण परिणाम तपासा."
+
+msgid "No PDFs available in this category."
+msgstr "या श्रेणीत PDF उपलब्ध नाहीत."
+
+msgid "Blast Radius"
+msgstr "परिणाम व्याप्ती"
+
+msgid "Use this before renaming, deleting, or moving documents."
+msgstr "दस्तऐवजांचे नाव बदलण्यापूर्वी, हटवण्यापूर्वी किंवा हलवण्यापूर्वी हे तपासा."
+
+msgid "PDF rows affected by category-level changes"
+msgstr "श्रेणी-स्तरीय बदलांमुळे प्रभावित PDF नोंदी"
+
+msgid "documents may need index repair"
+msgstr "दस्तऐवजांना अनुक्रमण दुरुस्ती लागू शकते"
+
+msgid "documents need owner review"
+msgstr "दस्तऐवजांना जबाबदार अधिकारी पुनरावलोकन आवश्यक"
+
+msgid "Index operations"
+msgstr "अनुक्रमण कार्ये"
+
+msgid "Index Operations"
+msgstr "अनुक्रमण कार्ये"
+
+msgid "Scoped to this category only."
+msgstr "फक्त या श्रेणीपुरते मर्यादित."
+
+msgid "Repair Stored Index"
+msgstr "संग्रहित अनुक्रमणिका दुरुस्त करा"
+
+msgid "Reprocess Needed"
+msgstr "आवश्यक पुनर्प्रक्रिया करा"
+
+msgid ""
+"Reprocess every PDF in this category? This may call the embedding service "
+"and overwrite stored chunks."
+msgstr ""
+"या श्रेणीतील प्रत्येक PDF ची पुनर्प्रक्रिया करायची? यामुळे एम्बेडिंग सेवा "
+"वापरली जाऊ शकते आणि संग्रहित भागांवर नवीन माहिती लिहिली जाऊ शकते."
+
+msgid "Reprocess All"
+msgstr "सर्वांची पुनर्प्रक्रिया करा"
+
+msgid "Superadmin access is required for reindexing and reprocessing controls."
+msgstr "पुन्हा अनुक्रमण आणि पुनर्प्रक्रिया नियंत्रणांसाठी सुपरअॅडमिन प्रवेश आवश्यक आहे."
+
+msgid "Manage Category Keywords"
+msgstr "श्रेणी कीवर्ड व्यवस्थापित करा"
+
+msgid "agriculture, loan, act"
+msgstr "कृषी, कर्ज, कायदा"
+
+msgid "Save Changes"
+msgstr "बदल जतन करा"
+
+msgid "New Title"
+msgstr "नवीन शीर्षक"
+
+msgid "Choose active user"
+msgstr "सक्रिय वापरकर्ता निवडा"
+
+msgid "Save Owner"
+msgstr "जबाबदार अधिकारी जतन करा"
+
+msgid "Home - CC & RCS Maharashtra"
+msgstr "मुखपृष्ठ - सीसी आणि आरसीएस महाराष्ट्र"
+
+msgid "येथे शोधा"
+msgstr "येथे शोधा"
+
+msgid "Home"
+msgstr "मुखपृष्ठ"
+
+msgid "Contact Us"
+msgstr "संपर्क करा"
+
+msgid "Skip to Navigation"
+msgstr "नेव्हिगेशनकडे जा"
+
+msgid "Skip to Main Content"
+msgstr "मुख्य मजकुराकडे जा"
+
+msgid "A--"
+msgstr "अ--"
+
+msgid "A-"
+msgstr "अ-"
+
+msgid "A"
+msgstr "अ"
+
+msgid "A+"
+msgstr "अ+"
+
+msgid "A++"
+msgstr "अ++"
+
+msgid "मराठी"
+msgstr "मराठी"
+
+msgid "Left Logo"
+msgstr "डावा लोगो"
+
+msgid "Commissioner for Cooperation and Registrar,"
+msgstr "सहकार आयुक्त व निबंधक"
+
+msgid "Cooperative Societies (CC and RCS), Maharashtra State, Pune"
+msgstr "सहकारी संस्था (सीसी आणि आरसीएस), महाराष्ट्र राज्य, पुणे"
+
+msgid "Right Logo"
+msgstr "उजवा लोगो"
+
+msgid "Search With AI"
+msgstr "एआयसह शोधा"
+
+msgid "About CC and RCS"
+msgstr "सीसी आणि आरसीएस बद्दल"
+
+msgid "Downloads"
+msgstr "डाउनलोड्स"
+
+msgid "RTS Act"
+msgstr "आरटीएस कायदा"
+
+msgid "FAQs"
+msgstr "वारंवार विचारले जाणारे प्रश्न"
+
+msgid "Tender Notices"
+msgstr "टेंडर सूचना"
+
+msgid "Update"
+msgstr "अपडेट"
+
+msgid "National Cooperation Policy 2025"
+msgstr "राष्ट्रीय सहकार धोरण २०२५"
+
+msgid "E-Tender Notice"
+msgstr "ई-टेंडर सूचना"
+
+msgid "Urban Cooperative Scheme"
+msgstr "शहरी सहकारी योजना"
+
+msgid "Digital Registration Scheme"
+msgstr "डिजिटल नोंदणी योजना"
+
+msgid "State Cooperative Awards"
+msgstr "राज्य सहकारी पुरस्कार"
+
+msgid "More News"
+msgstr "अधिक बातम्या"
+
+msgid "Quick Links"
+msgstr "त्वरित दुवे"
+
+msgid "Deemed Conveyance - Pratyay MahaBhumi"
+msgstr "डिम्ड कंव्हेअन्स - प्रत्यय महाभूमी"
+
+msgid "Amended Acts & Rules"
+msgstr "सुधारित कायदे व नियम"
+
+msgid "District Wise Societies"
+msgstr "जिल्हानिहाय संस्था"
+
+msgid "Complaint Status"
+msgstr "तक्रारीची स्थिती"
+
+msgid "Digital Registration Dashboard"
+msgstr "डिजिटल नोंदणी डॅशबोर्ड"
+
+msgid "Online Services Portal"
+msgstr "ऑनलाईन सेवा पोर्टल"
+
+msgid "Audit Reports & Insights"
+msgstr "लेखापरीक्षण अहवाल व माहिती"
+
+msgid "Slide 1"
+msgstr "स्लाईड १"
+
+msgid "Slide 2"
+msgstr "स्लाईड २"
+
+msgid "Key Person"
+msgstr "महत्त्वाची व्यक्ती"
+
+msgid "Shri. Devendra Fadnavis"
+msgstr "श्री. देवेंद्र फडणवीस"
+
+msgid "Shri. Eknath Shinde"
+msgstr "श्री. एकनाथ शिंदे"
+
+msgid "Shri. Ajit Pawar"
+msgstr "श्री. अजित पवार"
+
+msgid "Important Links"
+msgstr "महत्त्वाचे दुवे"
+
+msgid "Related Links"
+msgstr "संबंधित दुवे"
+
+msgid "Government of Maharashtra"
+msgstr "महाराष्ट्र शासन"
+
+msgid "Login - CC & RCS Maharashtra"
+msgstr "लॉगिन - सीसी आणि आरसीएस महाराष्ट्र"
+
+msgid "Sign in to manage documents, users, and categories."
+msgstr "दस्तऐवज, वापरकर्ते आणि श्रेणी व्यवस्थापित करण्यासाठी साइन इन करा."
+
+msgid "Username"
+msgstr "वापरकर्तानाव"
+
+msgid "Enter username"
+msgstr "वापरकर्तानाव प्रविष्ट करा"
+
+msgid "Password"
+msgstr "पासवर्ड"
+
+msgid "Enter password"
+msgstr "पासवर्ड प्रविष्ट करा"
+
+msgid "Show"
+msgstr "दाखवा"
+
+msgid "Hide"
+msgstr "लपवा"
+
+msgid "Register - CC & RCS Maharashtra"
+msgstr "नोंदणी - सीसी आणि आरसीएस महाराष्ट्र"
+
+msgid "Registration Form"
+msgstr "नोंदणी फॉर्म"
+
+msgid "Create a user account and assign access details."
+msgstr "वापरकर्ता खाते तयार करा आणि प्रवेश तपशील नियुक्त करा."
+
+msgid "Register"
+msgstr "नोंदणी करा"
+
+msgid "Already have an account?"
+msgstr "आधीच खाते आहे?"
+
+msgid "Login here"
+msgstr "येथे लॉगिन करा"
+
 msgid "Search With AI - CC & RCS Maharashtra"
 msgstr "एआयसह शोधा - सीसी आणि आरसीएस महाराष्ट्र"
 
-#: .\core\templates\search.html:8
-#, fuzzy
-#| msgid "Commissioner for Cooperation and Registrar"
 msgid ""
 "Commissioner for Co-operation and Registrar, Cooperative Societies, "
 "Maharashtra State, Pune"
-msgstr "सहकार आयुक्त व निबंधक"
+msgstr "सहकार आयुक्त व निबंधक, सहकारी संस्था, महाराष्ट्र राज्य, पुणे"
 
-#: .\core\templates\search.html:22
 msgid "Admin Login"
 msgstr "ऍडमिन लॉगिन"
 
-#: .\core\templates\search.html:24
 msgid "Locate Us"
 msgstr "आम्हाला शोधा"
 
-#: .\core\templates\search.html:50
 msgid "AI Enabled Search"
 msgstr "एआय सक्षम शोध "
 
-#: .\core\templates\search.html:64
 msgid "Ask your question..."
 msgstr "तुमचा प्रश्न विचारा..."
 
@@ -352,80 +629,47 @@ msgstr ""
 "⚠️ AI ने दिलेल्या उत्तरांचा कायदेशीर बाबींसाठी वापर करू नये. AI उत्तरे तयार करतांना अपूर्ण "
 "उत्तर अथवा चुकीचे उत्तर देऊ शकतो.कृपया अधिक माहितीसाठी मुख्य कार्यालयाशी संपर्क करावा."
 
-#: .\core\templates\search.html:110
-msgid "All rights reserved© Registrar Co-operative Societies."
-msgstr "सर्व हक्क राखीव © सहकारी संस्था निबंधक."
-
-#: .\core\templates\user_list.html:7
-#, fuzzy
-#| msgid "Search With AI - CC & RCS Maharashtra"
 msgid "User List - CC & RCS Maharashtra"
-msgstr "एआयसह शोधा - सीसी आणि आरसीएस महाराष्ट्र"
+msgstr "वापरकर्ता यादी - सीसी आणि आरसीएस महाराष्ट्र"
 
-#: .\core\templates\user_list.html:86
 msgid "Registered Users"
-msgstr ""
+msgstr "नोंदणीकृत वापरकर्ते"
 
-#: .\core\templates\user_list.html:99
+msgid "Review user access, account status, role, and department."
+msgstr "वापरकर्ता प्रवेश, खाते स्थिती, भूमिका आणि विभाग तपासा."
+
 msgid "Email"
-msgstr ""
+msgstr "ईमेल"
 
-#: .\core\templates\user_list.html:100
 msgid "Role"
-msgstr ""
+msgstr "भूमिका"
 
-#: .\core\templates\user_list.html:101
 msgid "Department"
-msgstr ""
+msgstr "विभाग"
 
-#: .\core\templates\user_list.html:102
-msgid "Actions"
-msgstr ""
+msgid "Status"
+msgstr "स्थिती"
 
-#: .\core\templates\user_list.html:114
-msgid "Are you sure you want to delete this user?"
-msgstr ""
+msgid "Active"
+msgstr "सक्रिय"
 
-#: .\core\templates\user_list.html:115
-msgid "Delete"
-msgstr ""
+msgid "Inactive"
+msgstr "निष्क्रिय"
 
-#: .\core\templates\user_list.html:121
+msgid "Current user"
+msgstr "सध्याचा वापरकर्ता"
+
+msgid "Deactivate"
+msgstr "निष्क्रिय करा"
+
+msgid "Activate"
+msgstr "सक्रिय करा"
+
+msgid "Delete user"
+msgstr "वापरकर्ता हटवा"
+
+msgid "Delete this user? This cannot be undone."
+msgstr "हा वापरकर्ता हटवायचा? ही क्रिया पूर्ववत करता येणार नाही."
+
 msgid "No users found."
-msgstr ""
-
-#: .\core\templates\user_list.html:129
-#, fuzzy
-#| msgid "Dashboard"
-msgid "Back to Dashboard"
-msgstr "डॅशबोर्ड"
-
-#: .\core\templates\user_list.html:137
-msgid "© 2025 Sahakarayukta Website. All rights reserved."
-msgstr "© २०२५ सहकारयुक्त संकेतस्थळ. सर्व हक्क राखीव."
-
-#: .\flowdocs\settings_simple.py:118 .\settings.py:158
-msgid "English"
-msgstr "इंग्रजी"
-
-#: .\flowdocs\settings_simple.py:119 .\settings.py:159
-msgid "Marathi"
-msgstr "मराठी"
-
-#~ msgid "Feedback"
-#~ msgstr "अभिप्राय"
-
-#~ msgid "Search Here"
-#~ msgstr "येथे शोधा"
-
-#~ msgid "Ask anything..."
-#~ msgstr "💬 काहीही विचारा..."
-
-#~ msgid "Send"
-#~ msgstr "पाठवा"
-
-#~ msgid "Search here"
-#~ msgstr "येथे शोधा"
-
-#~ msgid "⚠️ Something went wrong. Please try again later."
-#~ msgstr "⚠️ काहीतरी चूक झाली. कृपया नंतर पुन्हा प्रयत्न करा."
+msgstr "वापरकर्ते आढळले नाहीत."

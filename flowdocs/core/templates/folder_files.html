@@ -27,7 +27,7 @@
                 <td>{{ file.title }}</td>
                 <td>{% if file.uploaded_by %}{{ file.uploaded_by.username }}{% else %}Unknown{% endif %}</td>
                 <td>{{ file.uploaded_at|date:"d M Y" }}</td>
-                <td><a href="{% url 'view_pdf' file.id %}" target="_blank">View</a></td>
+                <td><a href="{% url 'view_pdf' file.id %}" target="_blank" rel="noopener noreferrer">View</a></td>
                 {% if role == 'admin' or role == 'superadmin' %}
                 <td>
                     <form method="post" action="{% url 'delete_pdf' file.id %}" class="d-inline">
