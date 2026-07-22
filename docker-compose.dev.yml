@@ -5,7 +5,7 @@ services:
       - redis_data_dev:/data
     command: redis-server --appendonly yes
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -22,7 +22,7 @@ services:
     volumes:
       - flowdocs_data_dev:/app/data
     ports:
-      - "${WEB_PORT:-8000}:8000"
+      - "127.0.0.1:${WEB_PORT:-8000}:8000"
     environment:
       - DATA_ROOT=/app/data
       - SQLITE_DB_PATH=/app/data/db.sqlite3
