@@ -10,7 +10,7 @@ from django.urls import reverse
 
 from .forms import UploadForm
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
-from .models import PDFFile
+from .models import Folder, PDFFile
 
 
 class OperationalEndpointTests(TestCase):
@@ -61,6 +61,60 @@ class PDFViewTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response["Content-Type"], "application/pdf")
             self.assertEqual(b"".join(response.streaming_content), b"%PDF-1.7\ncontent")
+
+
+class DashboardTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="dashboard-user",
+            password="test-password",
+            role="admin",
+        )
+
+    def test_dashboard_requires_login(self):
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertRedirects(response, f"{reverse('login')}?next={reverse('dashboard')}")
+
+    def test_authenticated_dashboard_renders_empty_folder_list(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Categories")
+
+    def test_dashboard_renders_many_folders_with_current_navigation_route(self):
+        self.client.force_login(self.user)
+        folders = [
+            Folder(name=f"Folder {index:02d}", created_by=self.user)
+            for index in range(25)
+        ]
+        Folder.objects.bulk_create(folders)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("dashboard_folder", args=[folders[0].pk]))
+        self.assertContains(response, "Folder 24")
+
+    def test_folder_navigation_renders_pdfs_and_nullable_uploader(self):
+        self.client.force_login(self.user)
+        folder = Folder.objects.create(name="Documents", created_by=self.user)
+        pdf = PDFFile.objects.create(
+            title="Legacy document",
+            file="pdfs/legacy-document.pdf",
+            folder=folder,
+            uploaded_by=None,
+        )
+
+        response = self.client.get(reverse("dashboard_folder", args=[folder.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, pdf.title)
+        self.assertContains(response, "Unknown")
+        self.assertContains(response, reverse("view_pdf", args=[pdf.pk]))
+        self.assertContains(response, reverse("dashboard_folder", args=[folder.pk]))
 
 
 class ArtifactInventoryTests(TestCase):
