@@ -5,7 +5,7 @@
 
     {% if role == 'admin' or role == 'superadmin' %}
     <div class="mb-3">
-        <a href="{% url 'upload_pdf' %}?folder={{ folder.id }}" class="btn btn-success">Upload PDF</a>
+        <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="btn btn-success">Upload PDF</a>
     </div>
     {% endif %}
 
@@ -25,7 +25,7 @@
             {% for file in files %}
             <tr>
                 <td>{{ file.title }}</td>
-                <td>{{ file.uploaded_by.username }}</td>
+                <td>{% if file.uploaded_by %}{{ file.uploaded_by.username }}{% else %}Unknown{% endif %}</td>
                 <td>{{ file.uploaded_at|date:"d M Y" }}</td>
                 <td><a href="{% url 'view_pdf' file.id %}" target="_blank">View</a></td>
                 {% if role == 'admin' or role == 'superadmin' %}
