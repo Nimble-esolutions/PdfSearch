@@ -184,6 +184,10 @@ CORS_ALLOWED_ORIGINS
 PDFSEARCH_IMAGE
 ```
 
+See [`docs/ENVIRONMENT_CONTRACT.md`](docs/ENVIRONMENT_CONTRACT.md) for the full
+runtime variable contract, defaults, stale-template removals, bootstrap caveats,
+and search/model tuning knobs.
+
 The production Compose stack owns Redis and pins the web service to
 `redis://redis:6379/1`. Do not set `REDIS_URL` to `localhost` or
 `127.0.0.1` in Dokploy: those addresses resolve inside the web container, not
@@ -204,6 +208,12 @@ ALLOW_INSECURE_DEFAULTS=1
 CREATE_SUPERUSER=1
 ALLOWED_HOSTS=*
 ```
+
+`DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, and
+`DJANGO_SUPERUSER_PASSWORD` are bootstrap inputs only when
+`CREATE_SUPERUSER=1`. Changing them in `.env` does not update an existing
+database user. Rotate existing admin credentials through Django admin or a
+reviewed management-command password change.
 
 ## Backup Policy
 

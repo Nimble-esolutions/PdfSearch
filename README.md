@@ -29,6 +29,7 @@ Use the route that matches the work:
 
 - Docker Engine with the Compose plugin
 - A local `.env` created from [`.env.example`](.env.example)
+- Environment details from [`docs/ENVIRONMENT_CONTRACT.md`](docs/ENVIRONMENT_CONTRACT.md)
 - Local-only credentials when search or external integrations are exercised
 
 Never copy production secrets or production data into a local environment.
