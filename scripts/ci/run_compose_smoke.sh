@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE is required}"
+: "${REDIS_IMAGE:?REDIS_IMAGE is required}"
+: "${SECRET_KEY:?SECRET_KEY is required}"
+
+compose_project="${COMPOSE_PROJECT_NAME:-pdfsearch-ci-smoke}"
+web_port="${WEB_PORT:-18000}"
+export COMPOSE_PROJECT_NAME="$compose_project" WEB_PORT="$web_port"
+compose=(docker compose -f docker-compose.ci.yml)
+
+cleanup() {
+    "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+"${compose[@]}" config --quiet
+"${compose[@]}" up --detach
+
+for service in redis web; do
+    container="$("${compose[@]}" ps --quiet "$service")"
+    test -n "$container"
+    for attempt in $(seq 1 90); do
+        state="$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container")"
+        if [[ "$state" == "running healthy" ]]; then
+            break
+        fi
+        if [[ "$state" == exited* || "$state" == dead* ]]; then
+            echo "${service} container stopped unexpectedly" >&2
+            exit 1
+        fi
+        if [[ "$attempt" == 90 ]]; then
+            echo "${service} did not become healthy: $state" >&2
+            exit 1
+        fi
+        sleep 2
+    done
+done
+
+curl --fail --silent --show-error "http://127.0.0.1:${web_port}/livez" >/dev/null
+curl --fail --silent --show-error "http://127.0.0.1:${web_port}/readyz" >/dev/null
+
+"${compose[@]}" exec --no-TTY --user appuser web python /app/scripts/ci/runtime_smoke.py
+"${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py check --deploy --fail-level ERROR
+"${compose[@]}" exec --no-TTY --user appuser web python -m pip check
+
+test_log="$(mktemp)"
+if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core --noinput --verbosity=2 >"$test_log" 2>&1; then
+    cat "$test_log"
+    rm -f "$test_log"
+    exit 1
+fi
+cat "$test_log"
+grep -q "core.test_artifact_vault" "$test_log"
+rm -f "$test_log"
+
+"${compose[@]}" exec --no-TTY --user appuser web python /app/scripts/ci/data_release_gate.py
+echo "[compose] actual image entrypoint, Redis dependency, core tests, runtime, data, and index gates passed"
