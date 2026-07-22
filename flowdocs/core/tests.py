@@ -8,10 +8,11 @@ from unittest.mock import patch
 import numpy as np
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command, CommandError
 from django.contrib.staticfiles import finders
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from .forms import UploadForm
@@ -19,6 +20,7 @@ from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
+from .runtime_config import validate_redis_url
 from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
 
 
@@ -44,6 +46,27 @@ class OperationalEndpointTests(TestCase):
         response = self.client.get('/readyz')
         self.assertIn(response.status_code, (200, 503))
         self.assertIn('checks', response.json())
+
+
+class RedisConfigurationTests(SimpleTestCase):
+    def test_accepts_compose_service_hostname(self):
+        self.assertEqual(
+            validate_redis_url("redis://redis:6379/1"),
+            "redis://redis:6379/1",
+        )
+
+    def test_rejects_loopback_outside_local_development(self):
+        with self.assertRaisesMessage(
+            ImproperlyConfigured,
+            "must not target loopback outside local development",
+        ):
+            validate_redis_url("redis://localhost:6379/1")
+
+    def test_allows_loopback_for_local_development(self):
+        self.assertEqual(
+            validate_redis_url("redis://127.0.0.1:6379/1", allow_loopback=True),
+            "redis://127.0.0.1:6379/1",
+        )
 
 
 class UploadValidationTests(TestCase):

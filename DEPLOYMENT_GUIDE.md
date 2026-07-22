@@ -181,9 +181,14 @@ OPENAI_API_KEY
 ALLOWED_HOSTS
 CSRF_TRUSTED_ORIGINS
 CORS_ALLOWED_ORIGINS
-REDIS_URL
 PDFSEARCH_IMAGE
 ```
+
+The production Compose stack owns Redis and pins the web service to
+`redis://redis:6379/1`. Do not set `REDIS_URL` to `localhost` or
+`127.0.0.1` in Dokploy: those addresses resolve inside the web container, not
+to the Compose Redis service. The application rejects loopback Redis URLs when
+local insecure defaults are disabled.
 
 Do not use these production fallbacks:
 
