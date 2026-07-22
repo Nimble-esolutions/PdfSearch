@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -16,6 +17,8 @@ from django.contrib.staticfiles import finders
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import translation
+
+from flowdocs import settings as project_settings
 
 from .forms import UploadForm
 from . import utils as core_utils
@@ -107,6 +110,23 @@ class RedisConfigurationTests(SimpleTestCase):
             validate_redis_url("redis://127.0.0.1:6379/1", allow_loopback=True),
             "redis://127.0.0.1:6379/1",
         )
+
+
+class EnvironmentContractTests(SimpleTestCase):
+    def test_positive_int_reader_accepts_env_override(self):
+        with patch.dict(os.environ, {"PDF_CHUNK_SIZE": "2048"}):
+            self.assertEqual(
+                project_settings._env_positive_int("PDF_CHUNK_SIZE", 1200),
+                2048,
+            )
+
+    def test_positive_int_reader_rejects_invalid_value(self):
+        with patch.dict(os.environ, {"PDF_CHUNK_SIZE": "0"}):
+            with self.assertRaisesMessage(
+                ImproperlyConfigured,
+                "PDF_CHUNK_SIZE must be a positive integer",
+            ):
+                project_settings._env_positive_int("PDF_CHUNK_SIZE", 1200)
 
 
 class UploadValidationTests(TestCase):
