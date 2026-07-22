@@ -16,6 +16,16 @@ from django.core.exceptions import ImproperlyConfigured
 from core.runtime_config import validate_redis_url
 
 
+def _env_positive_int(name, default):
+    raw_value = os.getenv(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f'{name} must be an integer') from exc
+    if value < 1:
+        raise ImproperlyConfigured(f'{name} must be a positive integer')
+    return value
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
@@ -33,6 +43,8 @@ import environ
 env = environ.Env()
 environ.Env.read_env()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-small")
+OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 #OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Quick-start development settings - unsuitable for production
@@ -205,11 +217,9 @@ if PUBLIC_SEARCH_ENABLED and not PUBLIC_SEARCH_ALL_FOLDERS and not PUBLIC_SEARCH
         'PUBLIC_SEARCH_FOLDER_IDS is required when PUBLIC_SEARCH_ENABLED is enabled'
     )
 
-PUBLIC_SEARCH_MAX_WORDS = int(os.getenv('PUBLIC_SEARCH_MAX_WORDS', '30'))
-PUBLIC_SEARCH_RATE_LIMIT = int(os.getenv('PUBLIC_SEARCH_RATE_LIMIT', '30'))
-PUBLIC_SEARCH_RATE_WINDOW = int(os.getenv('PUBLIC_SEARCH_RATE_WINDOW', '60'))
-if min(PUBLIC_SEARCH_MAX_WORDS, PUBLIC_SEARCH_RATE_LIMIT, PUBLIC_SEARCH_RATE_WINDOW) < 1:
-    raise ImproperlyConfigured('Public search limits must be positive integers')
+PUBLIC_SEARCH_MAX_WORDS = _env_positive_int('PUBLIC_SEARCH_MAX_WORDS', 30)
+PUBLIC_SEARCH_RATE_LIMIT = _env_positive_int('PUBLIC_SEARCH_RATE_LIMIT', 30)
+PUBLIC_SEARCH_RATE_WINDOW = _env_positive_int('PUBLIC_SEARCH_RATE_WINDOW', 60)
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache' if REDIS_URL else 'django.core.cache.backends.locmem.LocMemCache',
@@ -230,6 +240,15 @@ CSRF_USE_SESSIONS = False
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', str(10 * 1024 * 1024)))
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_FILE_SIZE
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_FILE_SIZE
+
+# Retrieval and cache tuning. Keep these conservative unless a release record
+# captures the model, vector index, and quality-impact checks together.
+PDF_CHUNK_SIZE = _env_positive_int('PDF_CHUNK_SIZE', 1200)
+PDF_CHUNK_OVERLAP = _env_positive_int('PDF_CHUNK_OVERLAP', 200)
+MAX_CONTEXT_WORDS = _env_positive_int('MAX_CONTEXT_WORDS', 2500)
+TOP_K_CHUNKS = _env_positive_int('TOP_K_CHUNKS', 5)
+EMBEDDING_TTL = _env_positive_int('EMBEDDING_TTL', 60 * 60 * 24 * 7)
+SEARCH_CACHE_TTL = _env_positive_int('SEARCH_CACHE_TTL', 60 * 10)
 
 # WhiteNoise configuration for static files
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'

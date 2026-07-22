@@ -17,13 +17,14 @@ source, and supersession relationship.
 - [`../AGENTS.md`](../AGENTS.md) — repository-local agent instructions and validation gates
 - [`AGENT_RULE_AUTHORITY.md`](AGENT_RULE_AUTHORITY.md) — canonical order for Codex, Kilo, OpenCode, and operations-rule adapters
 - [`docker-compose.dev.yml`](../docker-compose.dev.yml) — local services and isolated named volumes
-- [`env.minimal`](../env.minimal) — non-secret environment reference
-- [`env.template`](../env.template) — broader environment reference; never copy production values
+- [`.env.example`](../.env.example) — canonical non-secret environment example
+- [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md) — runtime env variable contract and stale-template supersession
 
 ## Dokploy Deployment
 
 - [`DEPLOYMENT_GUIDE.md`](../DEPLOYMENT_GUIDE.md) — Compose deployment, UI checkpoints, migration, backup, restore, and rollback
 - [`DEPLOYMENT.md`](../DEPLOYMENT.md) — concise deployment contract
+- [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md) — required production env values and bootstrap caveats
 - [`PRODUCTION_OPERATING_RULES.md`](PRODUCTION_OPERATING_RULES.md) — release, data, health, and incident rules
 - [`REDIS_GHCR_SETUP.md`](REDIS_GHCR_SETUP.md) — Redis image boundary, digest, and pull policy
 - [`PRODUCTION_BASELINE.md`](PRODUCTION_BASELINE.md) — verified production, source, image, and data baseline
