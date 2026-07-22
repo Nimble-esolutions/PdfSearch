@@ -18,6 +18,9 @@ not PDF contents or secrets.
 - Current release: Redis-enabled immutable image revision from PR #24.
 - Release identity: exact web and Redis image digests recorded in Dokploy.
 - Effective deployment gate: exact digests and `pull_policy: always`.
+- Deployment provenance gate: GitHub branch SHA, Dokploy checkout SHA, OCI
+  revision/digest, Compose hash, Dokploy deployment ID, and data generation must
+  be recorded together.
 - Health gates: `/livez` and `/readyz`; the endpoints do not validate PDF or
   FAISS contents.
 
