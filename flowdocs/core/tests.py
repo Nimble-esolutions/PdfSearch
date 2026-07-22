@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -9,6 +10,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .forms import UploadForm
+from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile
 
@@ -190,3 +192,104 @@ class ArtifactInventoryTests(TestCase):
             [difference['field'] for difference in differences],
             ['database.migrations.latest', 'schema.pdf_model'],
         )
+
+    @staticmethod
+    def _policy(manifest, **overrides):
+        policy = {
+            'pdf_rows': manifest['counts']['pdf_rows'],
+            'pdf_storage_files': manifest['counts']['pdf_storage_files'],
+            'faiss_files': manifest['counts']['faiss_files'],
+            'faiss_vectors': 0,
+            'preserved_target_only_rows': manifest['counts']['pdf_rows_missing_files'],
+        }
+        policy.update(overrides)
+        manifest['expected_counts'] = policy
+        return manifest
+
+    def test_release_validation_accepts_matching_read_only_fixture(self):
+        root = self._root_with_pdf()
+        manifest = self._policy(build_manifest(root))
+
+        before = (root / 'db.sqlite3').read_bytes()
+        report = validate_release(manifest, root)
+
+        self.assertTrue(report['ok'], report['issues'])
+        self.assertEqual(before, (root / 'db.sqlite3').read_bytes())
+
+    def test_release_validation_requires_explicit_count_policy(self):
+        root = self._root_with_pdf()
+        manifest = build_manifest(root)
+
+        report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn('expected-count-missing', {issue['kind'] for issue in report['issues']})
+
+    def test_release_validation_rejects_missing_pdf(self):
+        root = self._root_with_pdf()
+        manifest = self._policy(build_manifest(root), preserved_target_only_rows=0)
+        (root / 'media' / 'pdfs' / 'document.pdf').unlink()
+
+        report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn('pdf-file_status-mismatch', {issue['kind'] for issue in report['issues']})
+        self.assertIn('expected-count-mismatch', {issue['kind'] for issue in report['issues']})
+
+    def test_release_validation_rejects_migration_leaf_mismatch(self):
+        root = self._root_with_pdf()
+        manifest = self._policy(build_manifest(root))
+        manifest['database']['migrations']['latest'] = '0011_previous'
+
+        report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn('migration-leaf-mismatch', {issue['kind'] for issue in report['issues']})
+
+    def test_release_validation_rejects_faiss_metadata_mismatch(self):
+        root = self._root_with_pdf()
+        faiss_path = root / 'faiss_indexes' / 'folder_7.index'
+        faiss_path.parent.mkdir(parents=True)
+        faiss_path.write_bytes(b'fixture-index')
+        manifest = self._policy(build_manifest(root), faiss_files=1, faiss_vectors=2)
+        manifest['faiss']['files'][0]['faiss'] = {
+            'loadable': True,
+            'dimensions': 1536,
+            'vector_count': 2,
+        }
+
+        with patch(
+            'core.data_release_validation.inspect_faiss_file',
+            return_value={'loadable': True, 'dimensions': 768, 'vector_count': 2},
+        ):
+            report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn('faiss-dimensions-mismatch', {issue['kind'] for issue in report['issues']})
+
+    def test_release_validation_preserves_expected_target_only_rows(self):
+        root = Path(self.temp_dir.name) / 'preserved-target'
+        media = root / 'media' / 'pdfs'
+        media.mkdir(parents=True)
+        (media / 'present.pdf').write_bytes(b'%PDF-1.7\npresent')
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.executescript(
+            'CREATE TABLE django_migrations (app varchar(255), name varchar(255));'
+            'CREATE TABLE core_pdffile ('
+            'id integer primary key, title varchar(200), file varchar(100), '
+            'extracted_text text, page_chunks text, chunk_embeddings text, '
+            'text_content text, indexed bool);'
+            "INSERT INTO django_migrations VALUES ('core', '0012_latest');"
+            "INSERT INTO core_pdffile VALUES "
+            "(1, 'Preserved target row', 'pdfs/target-only.pdf', NULL, NULL, NULL, NULL, 0);"
+            "INSERT INTO core_pdffile VALUES "
+            "(2, 'Present row', 'pdfs/present.pdf', NULL, NULL, NULL, NULL, 1);"
+        )
+        connection.commit()
+        connection.close()
+        manifest = self._policy(build_manifest(root), preserved_target_only_rows=1)
+
+        report = validate_release(manifest, root)
+
+        self.assertTrue(report['ok'], report['issues'])
+        self.assertEqual(report['checks']['counts']['pdf_rows'], 2)

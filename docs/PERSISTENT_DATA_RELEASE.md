@@ -90,6 +90,42 @@ python flowdocs/manage.py inventory_artifacts \
   --output comparison.json
 ```
 
+For a release that will be validated on a fresh instance, include an explicit
+count policy in the manifest. `preserved_target_only_rows` is the intentional
+number of database PDF rows whose file is not present in the custody set; it is
+not a permission to ignore arbitrary missing files:
+
+```bash
+python flowdocs/manage.py inventory_artifacts \
+  --data-root /app/data \
+  --expected-count pdf_rows=253 \
+  --expected-count pdf_storage_files=242 \
+  --expected-count faiss_files=51 \
+  --expected-count faiss_vectors=8753 \
+  --expected-count preserved_target_only_rows=11 \
+  --output /app/data/backups/inventory.json
+```
+
+Validation is explicit and opt-in. It opens SQLite read-only, hashes declared
+files, checks the migration leaf and applied set, validates PDF row paths and
+checksums, and loads FAISS indexes when the dependency and file format permit
+it to compare dimensions and vector counts. A missing policy, mismatch,
+unexpected missing PDF, unsafe path, failed SQLite check, or inconsistent FAISS
+metadata returns a non-zero exit status. The command never runs during
+`start.sh`, never writes under `--data-root`, and must not be used to generate
+or package production data in Git, `init/`, or an image layer:
+
+```bash
+python flowdocs/manage.py validate_data_release \
+  --manifest /app/data/backups/inventory.json \
+  --data-root /app/data \
+  --output /app/data/backups/validation.json
+```
+
+For an existing manifest without embedded policy, pass the same values as
+repeatable `--expected-count NAME=VALUE` overrides. Treat a failed validation as
+a release stop; do not repair the data root from inside this command.
+
 The inventory includes SQLite schema/migrations, PDF database rows and file
 hashes, FAISS file hashes, and embedding dimensions. It does not include PDF
 contents. Treat titles and other row metadata as restricted operational data.

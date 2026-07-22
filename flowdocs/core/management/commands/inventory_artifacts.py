@@ -254,6 +254,39 @@ def _metadata_files(data_root: Path, excluded_roots: set[Path]) -> list[dict[str
     return sorted(records, key=lambda item: item["path"])
 
 
+def inspect_faiss_file(path: Path) -> dict[str, Any]:
+    """Read FAISS dimensions and vector count without changing the index."""
+    result: dict[str, Any] = {
+        "loadable": False,
+        "dimensions": None,
+        "vector_count": None,
+    }
+    try:
+        import faiss
+    except ImportError:
+        result["load_error"] = "faiss-unavailable"
+        return result
+
+    try:
+        index = faiss.read_index(str(path))
+        result.update(
+            {
+                "loadable": True,
+                "dimensions": int(index.d),
+                "vector_count": int(index.ntotal),
+            }
+        )
+    except Exception as exc:  # FAISS exposes several native exception types.
+        result["load_error"] = f"faiss-read-error: {exc.__class__.__name__}"
+    return result
+
+
+def _faiss_file_record(root: Path, path: Path) -> dict[str, Any]:
+    record = _file_record(root, path)
+    record["faiss"] = inspect_faiss_file(path)
+    return record
+
+
 def build_manifest(data_root: str | os.PathLike[str]) -> dict[str, Any]:
     """Build a deterministic, content-free inventory for one data root."""
     root = Path(data_root).expanduser().resolve()
@@ -268,7 +301,7 @@ def build_manifest(data_root: str | os.PathLike[str]) -> dict[str, Any]:
     ]
     pdf_files.sort(key=lambda item: item["path"])
     faiss_files = sorted(
-        (_file_record(root, path) for path in _iter_files(faiss_root)),
+        (_faiss_file_record(root, path) for path in _iter_files(faiss_root)),
         key=lambda item: item["path"],
     )
     metadata_files = _metadata_files(root, {media_root, database_path})
@@ -440,6 +473,13 @@ class Command(BaseCommand):
         )
         parser.add_argument("--output", help="Write JSON to this file instead of stdout")
         parser.add_argument(
+            "--expected-count",
+            action="append",
+            default=[],
+            metavar="NAME=VALUE",
+            help="Embed an explicit expected-count policy; repeatable",
+        )
+        parser.add_argument(
             "--compare",
             nargs=2,
             metavar=("SOURCE_MANIFEST", "TARGET_MANIFEST"),
@@ -458,4 +498,16 @@ class Command(BaseCommand):
             _write_json(compare_manifests(source, target), options["output"], self.stdout)
             return
 
-        _write_json(build_manifest(options["data_root"]), options["output"], self.stdout)
+        manifest = build_manifest(options["data_root"])
+        if options["expected_count"]:
+            expected_counts = {}
+            for item in options["expected_count"]:
+                name, separator, value = item.partition("=")
+                if not separator or not name or not value:
+                    raise CommandError("--expected-count must use NAME=VALUE")
+                try:
+                    expected_counts[name] = int(value)
+                except ValueError as exc:
+                    raise CommandError("--expected-count values must be integers") from exc
+            manifest["expected_counts"] = expected_counts
+        _write_json(manifest, options["output"], self.stdout)
