@@ -325,10 +325,19 @@ msgstr "एआय सक्षम शोध "
 msgid "Ask your question..."
 msgstr "तुमचा प्रश्न विचारा..."
 
-#: .\core\templates\search.html:105
+#: .\core\templates\search.html:97
+msgid ""
+"⚠️ AI-generated answers should not be used for legal purposes. The AI may "
+"provide incomplete or incorrect responses. Please contact the main office "
+"for further information."
+msgstr ""
+"⚠️ AI ने दिलेल्या उत्तरांचा कायदेशीर बाबींसाठी वापर करू नये. AI उत्तरे तयार करतांना अपूर्ण "
+"उत्तर अथवा चुकीचे उत्तर देऊ शकतो.कृपया अधिक माहितीसाठी मुख्य कार्यालयाशी संपर्क करावा."
+
+#: .\core\templates\search.html:110
 #, fuzzy
 #| msgid "Registrar Co-operative Societies"
-msgid " All rights reserved© Registrar Co-operative Societies."
+msgid "All rights reserved© Registrar Co-operative Societies."
 msgstr "निबंधक सहकारी संस्था"
 
 #: .\core\templates\user_list.html:7

@@ -459,6 +459,8 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "finally")
         self.assertContains(response, "textContent = ref.title")
+        self.assertContains(response, "meta.textContent = [ref.folder, ref.uploaded_at]")
+        self.assertContains(response, "AI-generated answers should not be used for legal purposes")
         self.assertNotContains(response, "innerHTML")
         self.assertNotContains(response, "|safe")
 
@@ -521,6 +523,20 @@ class DashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Categories")
+
+    def test_dashboard_renders_flash_messages_with_accessible_dismissal(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("create_folder"),
+            {"folder_name": "Visible feedback", "folder_keywords": "feedback"},
+            follow=True,
+        )
+
+        self.assertContains(response, "Visible feedback")
+        self.assertContains(response, 'id="flash-messages"')
+        self.assertContains(response, 'class="btn-close"')
+        self.assertContains(response, 'aria-label="Close"')
 
     def test_upload_failure_rolls_back_row_and_stored_file(self):
         folder = Folder.objects.create(name="Upload failures", created_by=self.user)
