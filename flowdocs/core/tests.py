@@ -56,7 +56,10 @@ class LanguageAndPublicUiTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("I am Sahakar AI.", response.context["welcome_message"])
+        self.assertEqual(
+            response.context["welcome_message"],
+            "I am Sahakar AI. Click here to learn how to questions to get correct answers.",
+        )
         self.assertEqual(response.context["welcome_help_label"], "Click Here")
         self.assertContains(response, "All rights reserved© Registrar Co-operative Societies.")
         self.assertContains(response, 'name="language" value="mr"')

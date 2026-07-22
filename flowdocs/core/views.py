@@ -539,8 +539,7 @@ def search_query(request):
             "search.html",
             {
                 "welcome_message": gettext(
-                    "I am Sahakar AI. Click here to learn how to ask questions "
-                    "and get correct answers."
+                    "I am Sahakar AI. Click here to learn how to questions to get correct answers."
                 ),
                 "welcome_help_url": (
                     "https://docs.google.com/document/d/1K4Z0RnRcQFXXDxxO10xFVjAbFRBXu7errbWbqtIK8qE/"
