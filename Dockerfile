@@ -66,9 +66,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     sqlite3 \
-    gosu \
-    bash \
-    curl
+     gosu \
+     bash \
+     curl \
+     gettext
 
 COPY --from=builder /build/wheels /wheels
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -79,6 +80,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY . .
 
 RUN chmod +x ./start.sh ./docker-entrypoint.sh 2>/dev/null || true
+
+RUN bash -lc 'cd /app/flowdocs && \
+    SECRET_KEY=build-only-not-for-runtime DEBUG=True ALLOW_INSECURE_DEFAULTS=1 \
+    python manage.py compilemessages'
 
 RUN mkdir -p /app/data/media/pdfs /app/data/chroma_db /app/data/faiss_indexes \
     /app/data/backups/json_backups /app/data/backups/chroma_backup /app/data/staticfiles && \

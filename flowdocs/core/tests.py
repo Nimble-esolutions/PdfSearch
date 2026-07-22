@@ -15,6 +15,7 @@ from django.core.management import call_command, CommandError
 from django.contrib.staticfiles import finders
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.utils import translation
 
 from .forms import UploadForm
 from . import utils as core_utils
@@ -48,6 +49,40 @@ class OperationalEndpointTests(TestCase):
         response = self.client.get('/readyz')
         self.assertIn(response.status_code, (200, 503))
         self.assertIn('checks', response.json())
+
+
+class LanguageAndPublicUiTests(TestCase):
+    def test_public_search_defaults_to_english_with_help_link_and_footer(self):
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("I am Sahakar AI.", response.context["welcome_message"])
+        self.assertEqual(response.context["welcome_help_label"], "Click Here")
+        self.assertContains(response, "All rights reserved© Registrar Co-operative Societies.")
+        self.assertContains(response, 'name="language" value="mr"')
+        self.assertContains(response, '<html lang="en">')
+
+    def test_language_switch_renders_marathi_greeting_and_english_return(self):
+        response = self.client.post(
+            reverse("set_language"),
+            {"language": "mr", "next": reverse("home")},
+        )
+
+        self.assertRedirects(response, reverse("home"), fetch_redirect_response=False)
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("मी सहकार AI", response.context["welcome_message"])
+        self.assertEqual(response.context["welcome_help_label"], "इथे क्लिक करा")
+        self.assertContains(response, 'name="language" value="en"')
+        self.assertContains(response, '<html lang="mr">')
+
+    def test_language_catalog_is_available_for_runtime_translation(self):
+        with translation.override("mr"):
+            self.assertEqual(
+                translation.gettext("Click Here"),
+                "इथे क्लिक करा",
+            )
 
 
 class RedisConfigurationTests(SimpleTestCase):
