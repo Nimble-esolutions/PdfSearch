@@ -310,7 +310,8 @@ def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tu
      - loads or builds FAISS folder index (persistent)
      - finds top chunks and returns combined context and references
     Returns (answer_text, references_list)
-    Each reference has: title, url, folder, uploaded_at, score
+     Each reference has: title, pdf_id, folder, uploaded_at, score.
+     The protected view URL is added by the HTTP view before serialization.
     """
     # 1. quick guard
     pdfs = PDFFile.objects.filter(folder=folder)
@@ -359,7 +360,7 @@ def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tu
             if c not in chunk_to_pdf:
                 chunk_to_pdf[c] = {
                     "title": getattr(pdf, "title", None),
-                    "url": getattr(getattr(pdf, "file", None), "url", None),
+                    "pdf_id": pdf.pk,
                     "folder": getattr(getattr(pdf, "folder", None), "name", None),
                     "uploaded_at": uploaded_at_str,
                 }
@@ -387,13 +388,13 @@ def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tu
             uploaded_at = getattr(pdf_obj, "uploaded_at", None)
             refs.append({
                 "title": title,
+                "pdf_id": pdf_obj.pk,
                 "folder": getattr(getattr(pdf_obj, "folder", None), "name", None),
-                "url": getattr(getattr(pdf_obj, "file", None), "url", None),
                 "uploaded_at": uploaded_at.strftime("%Y-%m-%d") if uploaded_at else None,
                 "score": s,
             })
         else:
-            refs.append({"title": title, "folder": None, "url": None, "uploaded_at": None, "score": s})
+            refs.append({"title": title, "pdf_id": None, "folder": None, "uploaded_at": None, "score": s})
 
     # pick top N PDFs by score
     refs = sorted(refs, key=lambda x: x["score"], reverse=True)[:top_n_pdfs]
@@ -435,7 +436,7 @@ def generate_gpt_answer(user_question: str, context: str, references: List[Dict[
         prompt = f"Q: {user_question}\n\nContext:\n{context}"
 
     if references:
-        refs_text = "\n".join([f"- {r.get('title')} ({r.get('url')})" for r in references if r.get('title')])
+        refs_text = "\n".join([f"- {r.get('title')}" for r in references if r.get('title')])
         prompt = f"{prompt}\n\nSources:\n{refs_text}"
 
     try:
@@ -750,4 +751,3 @@ def semantic_folder_search(query, top_n=3):
     print("==========================================================================\n")
 
     return results[:top_n]
-
