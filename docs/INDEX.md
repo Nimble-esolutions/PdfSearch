@@ -31,6 +31,7 @@ source, and supersession relationship.
 - [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) — current workflow guarantees and future targets
 - [`SECURITY_SCAN.md`](SECURITY_SCAN.md) — Trivy behavior, root cause, remediation, and verification
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — current release record and proposed artifact manifest
+- [`UI_DATA_INTEGRATION_PLAN.md`](UI_DATA_INTEGRATION_PLAN.md) — historical UI, init-data, FAISS, bootstrap, and blue-green integration plan
 - [`FAISS_COMPATIBILITY.md`](FAISS_COMPATIBILITY.md) — current index evidence and manual compatibility gates
 - [`DOCKER_IMAGE_OPTIMIZATION.md`](DOCKER_IMAGE_OPTIMIZATION.md) — historical optimization notes; use the roadmap for current targets
 
