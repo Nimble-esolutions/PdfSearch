@@ -1,4 +1,7 @@
-# utils.py
+"""PDF extraction, embedding, indexing, and search helpers."""
+
+from __future__ import annotations
+
 import os
 import json
 import math
@@ -28,15 +31,12 @@ except Exception:
     faiss = None
     _HAS_FAISS = False
 
+
+class SearchDataIntegrityError(RuntimeError):
+    """Raised when stored search artifacts cannot be trusted for retrieval."""
+
 # ------------------- Configuration -------------------
 DetectorFactory.seed = 0
-
-# Where to store FAISS indices and embeddings cache files
-FAISS_DIR = str(getattr(settings, "FAISS_INDEX_DIR", os.path.join(
-    getattr(settings, "DATA_ROOT", getattr(settings, "BASE_DIR", os.getcwd())),
-    "faiss_indexes",
-)))
-os.makedirs(FAISS_DIR, exist_ok=True)
 
 # OpenAI client
 OPENAI_API_KEY = getattr(settings, "OPENAI_API_KEY", None) or os.getenv("OPENAI_API_KEY")
@@ -132,118 +132,161 @@ def create_embeddings_for_texts(texts: List[str], batch_size: int = 16) -> List[
 
 
 # ----------------- FAISS helpers -----------------
+def _faiss_dir() -> pathlib.Path:
+    configured = getattr(settings, "FAISS_INDEX_DIR", None)
+    if configured:
+        return pathlib.Path(configured)
+    return pathlib.Path(getattr(settings, "DATA_ROOT", getattr(settings, "BASE_DIR", os.getcwd()))) / "faiss_indexes"
+
+
 def faiss_index_path_for_folder(folder: Folder) -> str:
-    return os.path.join(FAISS_DIR, f"folder_{folder.id}.index")
+    return str(_faiss_dir() / f"folder_{folder.id}.index")
 
 
-def build_or_load_faiss_index_for_folder(folder: Folder) -> Tuple[Optional[faiss.Index], List[str]]:
-    """
-    Build or load a FAISS index for a folder.
-    Returns (index, chunks_flat_list) where chunks_flat_list maps index positions -> chunk texts.
-    If FAISS not available, returns (None, chunks_flat_list) so fallback search can use numpy.
-    """
-    # gather all PDFs in folder that have chunk_embeddings and page_chunks saved in DB
-    pdfs = PDFFile.objects.filter(folder=folder)
-    chunk_texts = []
-    chunk_embeddings = []
+def _json_list(value: Any, field_name: str, pdf: PDFFile) -> list[Any]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError) as exc:
+            raise SearchDataIntegrityError(
+                f"PDF {pdf.pk} has invalid {field_name} JSON"
+            ) from exc
+    if not isinstance(value, list):
+        raise SearchDataIntegrityError(f"PDF {pdf.pk} has invalid {field_name} metadata")
+    return value
 
-    for pdf in pdfs:
-        # Expectation: PDFFile has page_chunks (list[str]) and chunk_embeddings (list[list[float]])
-        if getattr(pdf, "page_chunks", None) and getattr(pdf, "chunk_embeddings", None):
-            # ensure both lengths match
-            p_chunks = pdf.page_chunks or []
-            p_embs = pdf.chunk_embeddings or []
-            # sometimes embeddings stored as JSON strings -> normalize
-            if isinstance(p_embs, str):
-                try:
-                    p_embs = json.loads(p_embs)
-                except Exception:
-                    p_embs = []
-            if len(p_chunks) != len(p_embs):
-                # skip mismatched PDF (safer)
-                continue
-            for c, e in zip(p_chunks, p_embs):
-                chunk_texts.append(c)
-                chunk_embeddings.append(np.array(e, dtype=np.float32))
+
+def _folder_embedding_matrix(folder: Folder) -> tuple[list[str], np.ndarray]:
+    """Return deterministic chunk order and validated, normalized embeddings."""
+    chunk_texts: list[str] = []
+    chunk_embeddings: list[np.ndarray] = []
+
+    for pdf in PDFFile.objects.filter(folder=folder).order_by("pk"):
+        p_chunks = _json_list(getattr(pdf, "page_chunks", []), "page_chunks", pdf)
+        p_embs = _json_list(getattr(pdf, "chunk_embeddings", []), "chunk_embeddings", pdf)
+        if not p_chunks or not p_embs:
+            raise SearchDataIntegrityError(f"PDF {pdf.pk} is missing searchable chunks or embeddings")
+        if len(p_chunks) != len(p_embs):
+            raise SearchDataIntegrityError(f"PDF {pdf.pk} chunk and embedding counts differ")
+
+        for chunk, embedding in zip(p_chunks, p_embs):
+            if not isinstance(chunk, str) or not chunk.strip():
+                raise SearchDataIntegrityError(f"PDF {pdf.pk} contains an invalid chunk")
+            if not isinstance(embedding, (list, tuple)) or not embedding:
+                raise SearchDataIntegrityError(f"PDF {pdf.pk} contains an invalid embedding")
+            vector = np.asarray(embedding, dtype=np.float32)
+            if vector.ndim != 1 or not np.isfinite(vector).all():
+                raise SearchDataIntegrityError(f"PDF {pdf.pk} contains an invalid embedding vector")
+            if not np.linalg.norm(vector):
+                raise SearchDataIntegrityError(f"PDF {pdf.pk} contains a zero embedding vector")
+            chunk_texts.append(chunk)
+            chunk_embeddings.append(vector)
 
     if not chunk_embeddings:
-        return None, []
+        return [], np.empty((0, 0), dtype=np.float32)
 
-    embeddings_matrix = np.vstack(chunk_embeddings).astype(np.float32)
+    dimensions = {vector.shape[0] for vector in chunk_embeddings}
+    if len(dimensions) != 1:
+        raise SearchDataIntegrityError("Folder embeddings have inconsistent dimensions")
+    matrix = np.vstack(chunk_embeddings).astype(np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    return chunk_texts, matrix / norms
 
-    if _HAS_FAISS:
-        idx_path = faiss_index_path_for_folder(folder)
+
+def _validate_index(index: Any, chunk_count: int, dimensions: int) -> None:
+    if index is None:
+        raise SearchDataIntegrityError("FAISS index is unavailable")
+    if int(index.d) != dimensions:
+        raise SearchDataIntegrityError(
+            f"FAISS dimension mismatch: index={index.d}, database={dimensions}"
+        )
+    if int(index.ntotal) != chunk_count:
+        raise SearchDataIntegrityError(
+            f"FAISS vector count mismatch: index={index.ntotal}, database={chunk_count}"
+        )
+
+
+def build_or_load_faiss_index_for_folder(
+    folder: Folder,
+) -> Tuple[Optional[faiss.Index], List[str], np.ndarray]:
+    """
+    Build or load a FAISS index for a folder.
+    Returns (index, chunks_flat_list, normalized_embeddings). A stored index is
+    usable only when its dimensions and vector count match the database metadata.
+    """
+    chunk_texts, embeddings_matrix = _folder_embedding_matrix(folder)
+    if not chunk_texts:
+        return None, [], embeddings_matrix
+    if not _HAS_FAISS:
+        return None, chunk_texts, embeddings_matrix
+
+    idx_path = faiss_index_path_for_folder(folder)
+    if os.path.exists(idx_path):
         try:
-            if os.path.exists(idx_path):
-                index = faiss.read_index(idx_path)
-                return index, chunk_texts
-        except Exception:
-            # if reading fails, we'll rebuild
-            pass
+            index = faiss.read_index(idx_path)
+        except Exception as exc:
+            raise SearchDataIntegrityError(f"Unable to load FAISS index {idx_path}") from exc
+        _validate_index(index, len(chunk_texts), embeddings_matrix.shape[1])
+        return index, chunk_texts, embeddings_matrix
 
-        try:
-            index = faiss.IndexFlatIP(embeddings_matrix.shape[1])  # using inner product on normalized vectors
-            # normalize embeddings to unit length for IP as cosine
-            norms = np.linalg.norm(embeddings_matrix, axis=1, keepdims=True)
-            norms[norms == 0] = 1.0
-            embeddings_matrix = embeddings_matrix / norms
-            index.add(embeddings_matrix)
-            faiss.write_index(index, idx_path)
-            return index, chunk_texts
-        except Exception:
-            traceback.print_exc()
-            return None, chunk_texts
-    else:
-        # FAISS unavailable — return None and raw chunk_texts; fallback search will do numpy similarity
-        return None, chunk_texts
+    try:
+        pathlib.Path(idx_path).parent.mkdir(parents=True, exist_ok=True)
+        index = faiss.IndexFlatIP(embeddings_matrix.shape[1])
+        index.add(embeddings_matrix)
+        faiss.write_index(index, idx_path)
+        _validate_index(index, len(chunk_texts), embeddings_matrix.shape[1])
+        return index, chunk_texts, embeddings_matrix
+    except SearchDataIntegrityError:
+        raise
+    except Exception as exc:
+        raise SearchDataIntegrityError(f"Unable to build FAISS index {idx_path}") from exc
 
 
-def search_chunks_with_faiss_or_numpy(query_embedding: np.ndarray, index: Optional[faiss.Index],
-                                      chunk_texts: List[str], top_k: int = TOP_K_CHUNKS
-                                      ) -> List[Tuple[str, float]]:
+def search_chunks_with_faiss_or_numpy(
+    query_embedding: np.ndarray,
+    index: Optional[faiss.Index],
+    chunk_texts: List[str],
+    top_k: int = TOP_K_CHUNKS,
+    embeddings_matrix: Optional[np.ndarray] = None,
+) -> List[Tuple[str, float]]:
     """
     Returns list of (chunk_text, score) sorted desc by score.
     If FAISS index provided, use it. Otherwise run numpy dot product.
     """
     if query_embedding is None or len(chunk_texts) == 0:
         return []
+    if embeddings_matrix is None:
+        raise SearchDataIntegrityError("Database embeddings are required for search")
 
     q = query_embedding.astype(np.float32)
-    # normalize q
-    q_norm = q / (np.linalg.norm(q) + 1e-12)
+    if q.ndim != 1 or not np.isfinite(q).all() or not np.linalg.norm(q):
+        raise SearchDataIntegrityError("Query embedding is invalid")
+    if embeddings_matrix.ndim != 2 or len(chunk_texts) != len(embeddings_matrix):
+        raise SearchDataIntegrityError("Database chunk metadata is inconsistent")
+    if embeddings_matrix.shape[1] != q.shape[0]:
+        raise SearchDataIntegrityError(
+            f"Query dimension mismatch: query={q.shape[0]}, database={embeddings_matrix.shape[1]}"
+        )
+    q_norm = q / np.linalg.norm(q)
 
     if index is not None and _HAS_FAISS:
+        _validate_index(index, len(chunk_texts), embeddings_matrix.shape[1])
         try:
-            D, I = index.search(np.array([q_norm]), k=min(top_k, index.ntotal))
-            results = []
-            for dist, idx in zip(D[0], I[0]):
-                if idx < 0:
-                    continue
-                score = float(dist)
-                results.append((chunk_texts[idx], score))
-            return results
-        except Exception:
-            traceback.print_exc()
-            # fallback to numpy
-    # numpy fallback
-    # We need stored chunk embeddings for numpy fallback; but earlier we only have chunk_texts.
-    # Try to read chunk embeddings from DB (inefficient but rare if FAISS missing).
-    # Instead we compute embeddings for chunk_texts here (cached) — but that's heavy.
-    # Simpler fallback: perform rule-based substring matching with basic scoring.
-    results = []
-    # crude substring matching:
-    for t in chunk_texts:
-        score = 0
-        # prefer exact match of longer tokens
-        if query_embedding is None:
-            score = 0
-        else:
-            # fallback: give small base score if query string is present
-            score = 0
-        results.append((t, score))
-    # sort by score descending (though likely all zero)
-    results = sorted(results, key=lambda x: x[1], reverse=True)[:top_k]
-    return results
+            distances, indices = index.search(np.array([q_norm]), k=min(top_k, index.ntotal))
+        except Exception as exc:
+            raise SearchDataIntegrityError("FAISS search failed") from exc
+        return [
+            (chunk_texts[idx], float(distance))
+            for distance, idx in zip(distances[0], indices[0])
+            if idx >= 0
+        ]
+
+    if _HAS_FAISS:
+        raise SearchDataIntegrityError("FAISS index is unavailable")
+
+    scores = embeddings_matrix @ q_norm
+    order = np.argsort(scores)[::-1][:top_k]
+    return [(chunk_texts[int(idx)], float(scores[idx])) for idx in order]
 
 
 # ----------------- Public: Precompute embeddings on upload -----------------
@@ -254,52 +297,34 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
     Also triggers folder FAISS index rebuild.
     Requires PDFFile to have fields: extracted_text (TextField), page_chunks (JSONField), chunk_embeddings (JSONField).
     """
-    try:
-        # 1. Extract and store text
-        path = pdf.file.path
-        extracted = extract_text_from_pdf_path(path)
-        pdf.extracted_text = extracted
-        if not extracted:
-            pdf.page_chunks = []
-            pdf.chunk_embeddings = []
-            pdf.save(update_fields=["extracted_text", "page_chunks", "chunk_embeddings"])
-            return
+    path = pdf.file.path
+    extracted = extract_text_from_pdf_path(path)
+    if not extracted:
+        raise SearchDataIntegrityError(f"PDF {pdf.pk} has no extractable text")
 
-        # 2. chunk
-        chunks = chunk_text(extracted, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
-        # optional: dedup short chunks
-        chunks = [c for c in chunks if c and len(c.strip()) > 30]
+    chunks = [
+        chunk for chunk in chunk_text(extracted, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
+        if chunk and len(chunk.strip()) > 30
+    ]
+    if not chunks:
+        raise SearchDataIntegrityError(f"PDF {pdf.pk} produced no searchable chunks")
 
-        if not chunks:
-            pdf.page_chunks = []
-            pdf.chunk_embeddings = []
-            pdf.save(update_fields=["extracted_text", "page_chunks", "chunk_embeddings"])
-            return
+    embeddings = create_embeddings_for_texts(chunks, batch_size=16)
+    if len(embeddings) != len(chunks):
+        raise SearchDataIntegrityError(f"PDF {pdf.pk} embedding count does not match chunk count")
 
-        # 3. create embeddings in batches
-        embeddings = create_embeddings_for_texts(chunks, batch_size=16)
+    pdf.extracted_text = extracted
+    pdf.text_content = extracted
+    pdf.page_chunks = chunks
+    pdf.chunk_embeddings = embeddings
+    pdf.save(update_fields=["extracted_text", "text_content", "page_chunks", "chunk_embeddings"])
 
-        # 4. persist on model (JSON serializable)
-        pdf.page_chunks = chunks
-        pdf.chunk_embeddings = embeddings
-        pdf.save(update_fields=["extracted_text", "page_chunks", "chunk_embeddings"])
-
-        # 5. rebuild FAISS index for the folder (async recommended; here we do sync)
-        try:
-            # remove old index and rebuild (safe)
-            idx_path = faiss_index_path_for_folder(pdf.folder)
-            if os.path.exists(idx_path):
-                try:
-                    os.remove(idx_path)
-                except Exception:
-                    pass
-            # build new index by calling build_or_load_faiss_index_for_folder which writes index
-            build_or_load_faiss_index_for_folder(pdf.folder)
-        except Exception:
-            traceback.print_exc()
-
-    except Exception:
-        traceback.print_exc()
+    idx_path = faiss_index_path_for_folder(pdf.folder)
+    if os.path.exists(idx_path):
+        os.remove(idx_path)
+    index, _, _ = build_or_load_faiss_index_for_folder(pdf.folder)
+    if index is None:
+        raise SearchDataIntegrityError("PDF embeddings were stored but no FAISS index was created")
 
 
 # ------------------ Search PDFs (fast path) ------------------
@@ -324,14 +349,19 @@ def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tu
             raise RuntimeError("OpenAI not configured")
         emb_resp = client.embeddings.create(model=OPENAI_EMBED_MODEL, input=[user_query])
         query_emb = np.array(emb_resp.data[0].embedding, dtype=np.float32)
-    except Exception:
-        traceback.print_exc()
-        query_emb = None
+    except Exception as exc:
+        raise SearchDataIntegrityError("Unable to create the query embedding") from exc
 
-    index, chunk_texts = build_or_load_faiss_index_for_folder(folder)
+    index, chunk_texts, embeddings_matrix = build_or_load_faiss_index_for_folder(folder)
 
     # 3. get top matched chunks (text + scores)
-    matches = search_chunks_with_faiss_or_numpy(query_emb, index, chunk_texts, top_k=TOP_K_CHUNKS * 10)
+    matches = search_chunks_with_faiss_or_numpy(
+        query_emb,
+        index,
+        chunk_texts,
+        top_k=TOP_K_CHUNKS * 10,
+        embeddings_matrix=embeddings_matrix,
+    )
 
     if not matches:
         # fallback to rule-based search

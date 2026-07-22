@@ -2,10 +2,13 @@ import json
 import sqlite3
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command, CommandError
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -13,6 +16,8 @@ from .forms import UploadForm
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile
+from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
+from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
 
 
 class OperationalEndpointTests(TestCase):
@@ -389,6 +394,44 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertNotContains(response, "|safe")
 
 
+class RestorePDFCommandTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="restore-user",
+            password="test-password",
+            role="superadmin",
+        )
+        self.folder = Folder.objects.create(name="Restore", created_by=self.user)
+
+    def test_restore_uses_configured_media_root_and_runs_pipeline(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pdf_path = Path(media_root) / "pdfs" / "configured.pdf"
+            pdf_path.parent.mkdir()
+            pdf_path.write_bytes(b"%PDF-1.7 configured")
+
+            with patch("core.management.commands.restore_pdfs.precompute_pdf_embeddings") as pipeline:
+                call_command("restore_pdfs", folder_id=self.folder.pk)
+
+            restored = PDFFile.objects.get(file="pdfs/configured.pdf")
+            self.assertEqual(restored.folder, self.folder)
+            pipeline.assert_called_once_with(restored)
+
+    def test_restore_fails_without_leaving_unsearchable_row(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pdf_path = Path(media_root) / "pdfs" / "broken.pdf"
+            pdf_path.parent.mkdir()
+            pdf_path.write_bytes(b"%PDF-1.7 broken")
+
+            with patch(
+                "core.management.commands.restore_pdfs.precompute_pdf_embeddings",
+                side_effect=RuntimeError("embedding service unavailable"),
+            ):
+                with self.assertRaises(CommandError):
+                    call_command("restore_pdfs", folder_id=self.folder.pk)
+
+            self.assertFalse(PDFFile.objects.filter(file="pdfs/broken.pdf").exists())
+
+
 class DashboardTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -525,6 +568,19 @@ class ArtifactInventoryTests(TestCase):
         self.assertEqual(result['counts']['path_hash_conflicts'], 1)
         self.assertEqual(result['counts']['exact_matches'], 0)
 
+    def test_comparison_classifies_database_hash_difference(self):
+        source = build_manifest(self._root_with_pdf(root=Path(self.temp_dir.name) / 'database-source'))
+        target = build_manifest(self._root_with_pdf(root=Path(self.temp_dir.name) / 'database-target'))
+        target['database']['sha256'] = '0' * 64
+
+        result = compare_manifests(source, target)
+
+        self.assertEqual(result['counts']['database_hash_differences'], 1)
+        self.assertEqual(
+            result['classifications']['database_hash_differences'][0]['field'],
+            'database.sha256',
+        )
+
     def test_comparison_classifies_schema_and_migration_difference(self):
         source = build_manifest(self._root_with_pdf(root=Path(self.temp_dir.name) / 'schema-source'))
         target = build_manifest(self._root_with_pdf(root=Path(self.temp_dir.name) / 'schema-target'))
@@ -638,3 +694,75 @@ class ArtifactInventoryTests(TestCase):
 
         self.assertTrue(report['ok'], report['issues'])
         self.assertEqual(report['checks']['counts']['pdf_rows'], 2)
+
+    def test_inventory_covers_configured_chroma_and_static_trees(self):
+        root = self._root_with_pdf()
+        (root / 'chroma_db').mkdir()
+        (root / 'chroma_db' / 'index.sqlite3').write_bytes(b'chroma')
+        (root / 'staticfiles').mkdir()
+        (root / 'staticfiles' / 'app.css').write_bytes(b'css')
+
+        manifest = build_manifest(root)
+
+        self.assertEqual(manifest['chroma']['contract'], 'in-contract')
+        self.assertEqual(manifest['chroma']['file_count'], 1)
+        self.assertEqual(manifest['static']['file_count'], 1)
+        self.assertEqual(manifest['counts']['chroma_files'], 1)
+        self.assertEqual(manifest['counts']['static_files'], 1)
+
+    def test_release_validation_rejects_database_hash_drift(self):
+        root = self._root_with_pdf()
+        manifest = self._policy(build_manifest(root))
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.execute("UPDATE core_pdffile SET title = 'Changed'")
+        connection.commit()
+        connection.close()
+
+        report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn('database-sha256-mismatch', {issue['kind'] for issue in report['issues']})
+
+    def test_runtime_seed_gate_rejects_missing_media(self):
+        root = Path(self.temp_dir.name) / 'seed-gate'
+        root.mkdir()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.executescript(
+            'CREATE TABLE core_pdffile (id integer primary key, file varchar(100));'
+            "INSERT INTO core_pdffile VALUES (1, 'pdfs/missing.pdf');"
+        )
+        connection.commit()
+        connection.close()
+
+        report = seed_pdf_media_report(root / 'db.sqlite3', root / 'media')
+        self.assertEqual(report['pdf_rows'], 1)
+        self.assertEqual(len(report['missing_media']), 1)
+        with self.assertRaises(RuntimeDataGateError):
+            validate_seed_pdf_media(root / 'db.sqlite3', root / 'media')
+
+        media = root / 'media' / 'pdfs'
+        media.mkdir(parents=True)
+        (media / 'missing.pdf').write_bytes(b'%PDF-1.7')
+        self.assertEqual(validate_seed_pdf_media(root / 'db.sqlite3', root / 'media')['pdf_rows'], 1)
+
+    def test_search_rejects_faiss_vector_count_mismatch(self):
+        fake_index = SimpleNamespace(d=2, ntotal=2)
+        with patch('core.utils._HAS_FAISS', True):
+            with self.assertRaises(SearchDataIntegrityError):
+                search_chunks_with_faiss_or_numpy(
+                    np.array([1.0, 0.0], dtype=np.float32),
+                    fake_index,
+                    ['chunk'],
+                    embeddings_matrix=np.array([[1.0, 0.0]], dtype=np.float32),
+                )
+
+    def test_search_rejects_faiss_dimension_mismatch(self):
+        fake_index = SimpleNamespace(d=3, ntotal=1)
+        with patch('core.utils._HAS_FAISS', True):
+            with self.assertRaises(SearchDataIntegrityError):
+                search_chunks_with_faiss_or_numpy(
+                    np.array([1.0, 0.0], dtype=np.float32),
+                    fake_index,
+                    ['chunk'],
+                    embeddings_matrix=np.array([[1.0, 0.0]], dtype=np.float32),
+                )

@@ -3,20 +3,27 @@ set -e
 
 echo "[entrypoint] Running as root — fixing persistent data permissions..."
 
+DATA_ROOT="${DATA_ROOT:-/app/data}"
+MEDIA_ROOT="${MEDIA_ROOT:-$DATA_ROOT/media}"
+CHROMA_DIR="${CHROMA_DIR:-$DATA_ROOT/chroma_db}"
+FAISS_INDEX_DIR="${FAISS_INDEX_DIR:-$DATA_ROOT/faiss_indexes}"
+BACKUP_DIR="${BACKUP_DIR:-$DATA_ROOT/backups}"
+STATIC_ROOT="${STATIC_ROOT:-$DATA_ROOT/staticfiles}"
+
 mkdir -p \
-    /app/data \
-    /app/data/media/pdfs \
-    /app/data/chroma_db \
-    /app/data/faiss_indexes \
-    /app/data/backups/json_backups \
-    /app/data/backups/chroma_backup \
-    /app/data/staticfiles
+    "$DATA_ROOT" \
+    "$MEDIA_ROOT/pdfs" \
+    "$CHROMA_DIR" \
+    "$FAISS_INDEX_DIR" \
+    "$BACKUP_DIR/json_backups" \
+    "$BACKUP_DIR/chroma_backup" \
+    "$STATIC_ROOT"
 
-chown -R appuser:appuser /app/data 2>/dev/null || true
-chmod -R 770 /app/data 2>/dev/null || true
+chown -R appuser:appuser "$DATA_ROOT" 2>/dev/null || true
+chmod -R 770 "$DATA_ROOT" 2>/dev/null || true
 
-test -w /app/data || {
-    echo "[entrypoint] ERROR: DATA_ROOT=/app/data is not writable" >&2
+test -w "$DATA_ROOT" || {
+    echo "[entrypoint] ERROR: DATA_ROOT=$DATA_ROOT is not writable" >&2
     exit 1
 }
 

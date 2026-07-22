@@ -21,6 +21,7 @@ REQUIRED_COUNTS = (
     "faiss_files",
     "preserved_target_only_rows",
 )
+OPTIONAL_COUNT_FIELDS = ("chroma_files", "static_files")
 
 
 class DataReleaseValidationError(ValueError):
@@ -139,6 +140,13 @@ def _expected_counts(
         or values["faiss_vectors"] < 0
     ):
         issues.append(_issue("expected-count-invalid", name="faiss_vectors", value=values["faiss_vectors"]))
+    for name in OPTIONAL_COUNT_FIELDS:
+        if name in values and (
+            not isinstance(values[name], int)
+            or isinstance(values[name], bool)
+            or values[name] < 0
+        ):
+            issues.append(_issue("expected-count-invalid", name=name, value=values[name]))
     return values, issues
 
 
@@ -196,8 +204,27 @@ def validate_release(
     issues.extend(policy_issues)
 
     root = Path(data_root).expanduser().resolve()
-    actual = build_manifest(root)
-    sqlite_checks = _sqlite_checks(root / "db.sqlite3")
+
+    def in_contract_path(section: Mapping[str, Any] | None, default: Path) -> Path:
+        if not isinstance(section, Mapping) or section.get("contract") != "in-contract":
+            return default
+        path_value = section.get("root")
+        if not isinstance(path_value, str) or Path(path_value).is_absolute():
+            return default
+        return root / path_value
+
+    database_path = in_contract_path(database, root / "db.sqlite3")
+    expected_media = manifest.get("pdf_storage")
+    expected_faiss_tree = manifest.get("faiss")
+    actual = build_manifest(
+        root,
+        database_path=database_path,
+        media_root=in_contract_path(expected_media, root / "media"),
+        faiss_root=in_contract_path(expected_faiss_tree, root / "faiss_indexes"),
+        chroma_root=in_contract_path(manifest.get("chroma"), root / "chroma_db"),
+        static_root=in_contract_path(manifest.get("static"), root / "staticfiles"),
+    )
+    sqlite_checks = _sqlite_checks(database_path)
     if sqlite_checks["error"] or sqlite_checks["integrity"] != "ok" or sqlite_checks["foreign_keys"]:
         issues.append(_issue("sqlite-integrity-failed", checks=sqlite_checks))
 
@@ -217,6 +244,19 @@ def validate_release(
     if expected_migrations.get("applied") != actual_migrations.get("applied"):
         issues.append(_issue("migration-applied-set-mismatch"))
 
+    expected_database_hash = database.get("sha256")
+    actual_database_hash = actual.get("database", {}).get("sha256")
+    if database.get("contract") == "in-contract" and expected_database_hash != actual_database_hash:
+        issues.append(
+            _issue(
+                "database-sha256-mismatch",
+                expected=expected_database_hash,
+                actual=actual_database_hash,
+            )
+        )
+    elif database.get("contract") != "out-of-contract" and not expected_database_hash:
+        issues.append(_issue("database-sha256-missing"))
+
     issues.extend(_pdf_differences(expected_pdfs, actual.get("pdfs", [])))
     issues.extend(
         _record_differences(
@@ -225,6 +265,38 @@ def validate_release(
             "pdf-storage",
         )
     )
+    for tree_name in ("chroma", "static"):
+        expected_tree = manifest.get(tree_name)
+        actual_tree = actual.get(tree_name, {})
+        if not isinstance(expected_tree, Mapping):
+            issues.append(_issue("configured-tree-missing", tree=tree_name))
+            continue
+        if expected_tree.get("contract") != actual_tree.get("contract"):
+            issues.append(
+                _issue(
+                    "configured-tree-contract-mismatch",
+                    tree=tree_name,
+                    expected=expected_tree.get("contract"),
+                    actual=actual_tree.get("contract"),
+                )
+            )
+        if expected_tree.get("exists") != actual_tree.get("exists"):
+            issues.append(
+                _issue(
+                    "configured-tree-existence-mismatch",
+                    tree=tree_name,
+                    expected=expected_tree.get("exists"),
+                    actual=actual_tree.get("exists"),
+                )
+            )
+        if expected_tree.get("contract") == "in-contract":
+            issues.extend(
+                _record_differences(
+                    expected_tree.get("files", []),
+                    actual_tree.get("files", []),
+                    tree_name,
+                )
+            )
     issues.extend(
         _record_differences(
             expected_faiss_files,
@@ -246,6 +318,8 @@ def validate_release(
         "pdf_storage_files": actual_counts.get("pdf_storage_files"),
         "faiss_files": actual_counts.get("faiss_files"),
         "preserved_target_only_rows": actual_counts.get("pdf_rows_missing_files"),
+        "chroma_files": actual_counts.get("chroma_files"),
+        "static_files": actual_counts.get("static_files"),
     }
     for name, actual_value in expected_count_fields.items():
         if name in policy and policy[name] != actual_value:
@@ -302,6 +376,34 @@ def validate_release(
                 "faiss-dimension-mismatch",
                 expected=policy["faiss_dimension"],
                 actual=sorted(faiss_dimensions),
+            )
+        )
+
+    database_embedding_count = sum(
+        item.get("metadata", {}).get("embedding_count", 0)
+        for item in actual.get("pdfs", [])
+    )
+    database_embedding_dimensions = sorted(
+        {
+            dimension
+            for item in actual.get("pdfs", [])
+            for dimension in item.get("metadata", {}).get("embedding_dimensions", [])
+        }
+    )
+    if actual_counts.get("faiss_files", 0) > 0 and faiss_total_vectors != database_embedding_count:
+        issues.append(
+            _issue(
+                "faiss-database-vector-count-mismatch",
+                faiss_vectors=faiss_total_vectors,
+                database_chunks=database_embedding_count,
+            )
+        )
+    if faiss_dimensions and database_embedding_dimensions and faiss_dimensions != set(database_embedding_dimensions):
+        issues.append(
+            _issue(
+                "faiss-database-dimension-mismatch",
+                faiss=sorted(faiss_dimensions),
+                database=database_embedding_dimensions,
             )
         )
 
