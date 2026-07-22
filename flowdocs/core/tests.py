@@ -487,6 +487,8 @@ class SearchAndAuthenticationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "finally")
+        self.assertContains(response, "errorMessages")
+        self.assertContains(response, "तात्पुरती अनुपलब्ध")
         self.assertContains(response, "textContent = ref.title")
         self.assertContains(response, "meta.textContent = [ref.folder, ref.uploaded_at]")
         self.assertContains(response, "AI-generated answers should not be used for legal purposes")
