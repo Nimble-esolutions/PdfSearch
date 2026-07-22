@@ -82,7 +82,7 @@ def visible_pdfs(user, queryset=None, *, public=False):
     queryset = queryset if queryset is not None else PDFFile.objects.all()
     if public:
         return queryset.filter(
-            folder_id__in=settings.PUBLIC_SEARCH_FOLDER_IDS,
+            folder__in=searchable_folders(user, public=True),
             indexed=True,
         ).distinct()
     if is_admin_user(user):
@@ -96,6 +96,8 @@ def searchable_folders(user, *, public=False):
     """Return folders whose PDFs are visible under the current access policy."""
     folders = Folder.objects.all()
     if public:
+        if settings.PUBLIC_SEARCH_ALL_FOLDERS:
+            return folders
         return folders.filter(pk__in=settings.PUBLIC_SEARCH_FOLDER_IDS)
     if is_admin_user(user):
         return folders
@@ -189,7 +191,7 @@ def public_view_pdf(request, pdf_id):
     pdf = get_object_or_404(
         PDFFile.objects.filter(
             pk=pdf_id,
-            folder_id__in=settings.PUBLIC_SEARCH_FOLDER_IDS,
+            folder__in=searchable_folders(request.user, public=True),
             indexed=True,
         )
     )

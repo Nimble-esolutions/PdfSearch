@@ -405,7 +405,7 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertEqual(response.json()["error"], "authentication_required")
         self.assertNotIn("private", response.content.decode())
 
-    def test_anonymous_search_uses_only_allowlisted_public_folders(self):
+    def test_anonymous_search_uses_approved_public_scope(self):
         folder = Folder.objects.create(name="Public rules", created_by=self.user)
         pdf = PDFFile.objects.create(
             title="Public rule book",
@@ -418,7 +418,8 @@ class SearchAndAuthenticationTests(TestCase):
 
         with override_settings(
             PUBLIC_SEARCH_ENABLED=True,
-            PUBLIC_SEARCH_FOLDER_IDS=frozenset({folder.pk}),
+            PUBLIC_SEARCH_ALL_FOLDERS=True,
+            PUBLIC_SEARCH_FOLDER_IDS=frozenset(),
         ), patch(
             "core.views.is_general_query",
             return_value=False,
@@ -456,7 +457,8 @@ class SearchAndAuthenticationTests(TestCase):
 
         with override_settings(
             PUBLIC_SEARCH_ENABLED=True,
-            PUBLIC_SEARCH_FOLDER_IDS=frozenset({folder.pk}),
+            PUBLIC_SEARCH_ALL_FOLDERS=True,
+            PUBLIC_SEARCH_FOLDER_IDS=frozenset(),
         ):
             public_pdf = self.client.get(reverse("public_view_pdf", args=[pdf.pk]))
             self.assertEqual(public_pdf.status_code, 200)
