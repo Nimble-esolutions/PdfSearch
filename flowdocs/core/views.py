@@ -78,8 +78,13 @@ def can_access_pdf(user, pdf):
     )
 
 
-def visible_pdfs(user, queryset=None):
+def visible_pdfs(user, queryset=None, *, public=False):
     queryset = queryset if queryset is not None else PDFFile.objects.all()
+    if public:
+        return queryset.filter(
+            folder_id__in=settings.PUBLIC_SEARCH_FOLDER_IDS,
+            indexed=True,
+        ).distinct()
     if is_admin_user(user):
         return queryset
     return queryset.filter(
@@ -87,9 +92,11 @@ def visible_pdfs(user, queryset=None):
     ).distinct()
 
 
-def searchable_folders(user):
+def searchable_folders(user, *, public=False):
     """Return folders whose PDFs are visible under the current access policy."""
     folders = Folder.objects.all()
+    if public:
+        return folders.filter(pk__in=settings.PUBLIC_SEARCH_FOLDER_IDS)
     if is_admin_user(user):
         return folders
     return folders.filter(
@@ -108,7 +115,7 @@ def _safe_login_destination(request):
     return reverse("dashboard")
 
 
-def _protected_references(references):
+def _protected_references(references, *, public=False):
     """Expose only authenticated PDF view URLs to the search client."""
     protected = []
     for reference in references or []:
@@ -116,7 +123,10 @@ def _protected_references(references):
         pdf_id = item.get("pdf_id")
         item.pop("url", None)
         if pdf_id:
-            item["url"] = reverse("view_pdf", args=[pdf_id])
+            item["url"] = reverse(
+                "public_view_pdf" if public else "view_pdf",
+                args=[pdf_id],
+            )
         protected.append(item)
     return protected
 
@@ -158,6 +168,31 @@ def view_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
     if not can_access_pdf(request.user, pdf):
         return HttpResponseForbidden("You do not have permission to view this PDF.")
+    if not pdf.file:
+        raise Http404("PDF file is unavailable")
+    try:
+        handle = open(pdf.file.path, "rb")
+    except (FileNotFoundError, OSError) as exc:
+        raise Http404("PDF file is unavailable") from exc
+    response = FileResponse(handle, content_type="application/pdf")
+    response["Content-Disposition"] = content_disposition_header(
+        as_attachment=False,
+        filename=os.path.basename(pdf.file.name),
+    )
+    return response
+
+
+def public_view_pdf(request, pdf_id):
+    if not settings.PUBLIC_SEARCH_ENABLED:
+        raise Http404("PDF file is unavailable")
+
+    pdf = get_object_or_404(
+        PDFFile.objects.filter(
+            pk=pdf_id,
+            folder_id__in=settings.PUBLIC_SEARCH_FOLDER_IDS,
+            indexed=True,
+        )
+    )
     if not pdf.file:
         raise Http404("PDF file is unavailable")
     try:
@@ -490,7 +525,8 @@ def search_query(request):
         return render(request, "search.html", {"welcome_message": welcome_message})
 
     if request.method == "POST":
-        if not request.user.is_authenticated:
+        public_search = not request.user.is_authenticated
+        if public_search and not settings.PUBLIC_SEARCH_ENABLED:
             return JsonResponse(
                 {
                     "error": "authentication_required",
@@ -523,11 +559,11 @@ def search_query(request):
             detected = detect_folder_by_keywords_multi(
                 query,
                 min_score_threshold=0.40,
-                folders=searchable_folders(request.user),
+                folders=searchable_folders(request.user, public=public_search),
             )
 
             visible_folder_ids = set(
-                searchable_folders(request.user).values_list("pk", flat=True)
+                searchable_folders(request.user, public=public_search).values_list("pk", flat=True)
             )
 
             # --------------------------------------------------
@@ -562,6 +598,7 @@ def search_query(request):
                             else visible_pdfs(
                                 request.user,
                                 PDFFile.objects.filter(folder=folder),
+                                public=public_search,
                             )
                         )
                         _, refs = search_pdfs_fast(
@@ -615,6 +652,7 @@ def search_query(request):
                         pdf = visible_pdfs(
                             request.user,
                             PDFFile.objects.filter(pk=meta["pdf_id"]),
+                            public=public_search,
                         ).first()
                         if pdf:
                             combined_snippets.append(f"--- {pdf.title} ---")
@@ -636,7 +674,7 @@ def search_query(request):
 
                     return JsonResponse({
                         "answer": answer,
-                        "references": _protected_references(final_refs)
+                        "references": _protected_references(final_refs, public=public_search)
                     })
 
                 # Folder matched but no PDFs → DO NOT go to Act
@@ -650,7 +688,7 @@ def search_query(request):
             # --------------------------------------------------
             acts_folder = Folder.objects.filter(name__icontains="act").first()
 
-            if acts_folder and searchable_folders(request.user).filter(pk=acts_folder.pk).exists():
+            if acts_folder and searchable_folders(request.user, public=public_search).filter(pk=acts_folder.pk).exists():
                 answer, refs = search_pdfs_fast(
                     acts_folder,
                     query,
@@ -661,13 +699,14 @@ def search_query(request):
                         else visible_pdfs(
                             request.user,
                             PDFFile.objects.filter(folder=acts_folder),
+                            public=public_search,
                         )
                     ),
                 )
                 if answer.strip():
                     return JsonResponse({
                         "answer": answer,
-                        "references": _protected_references(refs)
+                        "references": _protected_references(refs, public=public_search)
                     })
 
             # --------------------------------------------------

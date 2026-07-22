@@ -186,6 +186,31 @@ REDIS_URL = validate_redis_url(
     os.getenv('REDIS_URL', ''),
     allow_loopback=_allow_insecure_defaults,
 )
+
+PUBLIC_SEARCH_ENABLED = os.getenv('PUBLIC_SEARCH_ENABLED', '0').lower() in {'1', 'true', 'yes'}
+_public_search_folder_ids = os.getenv('PUBLIC_SEARCH_FOLDER_IDS', '').strip().lower()
+PUBLIC_SEARCH_ALL_FOLDERS = _public_search_folder_ids == 'all'
+try:
+    PUBLIC_SEARCH_FOLDER_IDS = frozenset(
+        int(value.strip())
+        for value in _public_search_folder_ids.split(',')
+        if value.strip()
+    ) if not PUBLIC_SEARCH_ALL_FOLDERS else frozenset()
+except ValueError as exc:
+    raise ImproperlyConfigured(
+        'PUBLIC_SEARCH_FOLDER_IDS must be all or a comma-separated list of integers'
+    ) from exc
+
+if PUBLIC_SEARCH_ENABLED and not PUBLIC_SEARCH_ALL_FOLDERS and not PUBLIC_SEARCH_FOLDER_IDS:
+    raise ImproperlyConfigured(
+        'PUBLIC_SEARCH_FOLDER_IDS is required when PUBLIC_SEARCH_ENABLED is enabled'
+    )
+
+PUBLIC_SEARCH_MAX_WORDS = int(os.getenv('PUBLIC_SEARCH_MAX_WORDS', '30'))
+PUBLIC_SEARCH_RATE_LIMIT = int(os.getenv('PUBLIC_SEARCH_RATE_LIMIT', '30'))
+PUBLIC_SEARCH_RATE_WINDOW = int(os.getenv('PUBLIC_SEARCH_RATE_WINDOW', '60'))
+if min(PUBLIC_SEARCH_MAX_WORDS, PUBLIC_SEARCH_RATE_LIMIT, PUBLIC_SEARCH_RATE_WINDOW) < 1:
+    raise ImproperlyConfigured('Public search limits must be positive integers')
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache' if REDIS_URL else 'django.core.cache.backends.locmem.LocMemCache',

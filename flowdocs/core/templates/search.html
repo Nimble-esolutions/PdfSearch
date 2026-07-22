@@ -288,7 +288,7 @@ function typeEffect(text, references = []) {
                     const card = document.createElement('div');
                     card.className = "ref-card";
                     const link = document.createElement("a");
-                    link.href = protectedPdfUrl(ref.pdf_id);
+                    link.href = safeReferenceUrl(ref);
                     link.target = "_blank";
                     link.rel = "noopener noreferrer";
                     link.textContent = ref.title || "Document";
@@ -312,6 +312,20 @@ function typeEffect(text, references = []) {
 function protectedPdfUrl(pdfId) {
     if (!pdfId) return "#";
     return viewPdfUrlTemplate.replace("/0/", `/${encodeURIComponent(pdfId)}/`);
+}
+
+function safeReferenceUrl(ref) {
+    if (typeof ref.url === "string") {
+        try {
+            const url = new URL(ref.url, window.location.origin);
+            if (url.origin === window.location.origin && url.pathname.startsWith("/pdf/")) {
+                return `${url.pathname}${url.search}`;
+            }
+        } catch (_) {
+            // Fall back to the server-derived protected route below.
+        }
+    }
+    return protectedPdfUrl(ref.pdf_id);
 }
 
 function updateSendButton() {
