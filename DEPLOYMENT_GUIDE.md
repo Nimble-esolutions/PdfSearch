@@ -47,10 +47,11 @@ container images, and current data-volume identity belong in the release record.
 must set every production image to an exact `repo@sha256:<digest>` value in
 Dokploy and use `pull_policy: always`. Do not accept a stale local tag cache.
 
-Current production baseline: `https://2026.ai-sahakar.net` is healthy, merged
-source is `f05e110`, and the active release is the Redis-enabled immutable image
-revision from PR #24. See [`PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md)
-for the custody counts and release boundary.
+Current canonical production domains are `https://ai-sahakar.net` and
+`https://www.ai-sahakar.net`. The verified preview baseline was
+`https://2026.ai-sahakar.net`; retain it only as historical rollback evidence.
+See [`PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md) for the current
+custody counts and release boundary.
 
 ## Dokploy UI Setup
 
@@ -70,6 +71,19 @@ The workflow may publish compatibility aliases such as `:dev` and `:latest`, but
 they are not production release identity. Dokploy must pull the exact recorded
 digests with `pull_policy: always`; never rely on a local alias or cached
 `latest` image.
+
+## Production Domain Cutover
+
+The canonical production host is `ai-sahakar.net`; `www.ai-sahakar.net` is its
+canonical alias. `2026.ai-sahakar.net` was the preview/verification host and
+must be retained only for rollback validation until the cutover is accepted.
+
+1. Point DNS for both `ai-sahakar.net` and `www.ai-sahakar.net` to the Traefik ingress address.
+2. Configure both hostnames in the Dokploy application domain settings.
+3. Confirm Traefik has one intended router/backend per hostname and valid TLS certificates.
+4. Verify `/livez`, `/readyz`, root, static assets, authenticated PDF view, and representative search on both canonical hosts.
+5. Keep the preview route unchanged during the observation window; remove or restrict it only after rollback evidence is no longer required.
+6. Record the DNS/TLS cutover time, live image digest, data-volume identity, and smoke results in the release record.
 
 ## Named Volume Discovery
 
@@ -234,8 +248,10 @@ A backup is not considered valid until this drill succeeds.
 ## Post-Deployment Verification
 
 ```bash
-curl -fsS https://2026.ai-sahakar.net/livez
-curl -fsS https://2026.ai-sahakar.net/readyz
+curl -fsS https://ai-sahakar.net/livez
+curl -fsS https://ai-sahakar.net/readyz
+curl -fsS https://www.ai-sahakar.net/livez
+curl -fsS https://www.ai-sahakar.net/readyz
 curl -fsS https://<configured-domain>/
 ```
 
