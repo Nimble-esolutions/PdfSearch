@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
+from core.runtime_config import validate_redis_url
 
 
 
@@ -181,7 +182,10 @@ LOGIN_URL = '/login/'
 
 # Cache configuration. Redis is shared by Gunicorn workers in production;
 # local memory remains available for explicit local development.
-REDIS_URL = os.getenv('REDIS_URL', '').strip()
+REDIS_URL = validate_redis_url(
+    os.getenv('REDIS_URL', ''),
+    allow_loopback=_allow_insecure_defaults,
+)
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache' if REDIS_URL else 'django.core.cache.backends.locmem.LocMemCache',

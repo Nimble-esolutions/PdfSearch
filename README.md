@@ -82,6 +82,8 @@ release identity and must be recorded from Dokploy.
 - Container port: `8000`
 - Liveness: `/livez` proves process liveness
 - Readiness: `/readyz` checks database, configured cache, and migrations
+- Redis: production Compose pins the web service to `redis://redis:6379/1`;
+  do not override it with `localhost`, which points back to the web container
 - Persistent state: Compose volume `flowdocs_data` at `/app/data`
 - Legacy data: external `prod_flowdocs` at `/mnt/legacy:ro`, read-only quarantine only
 - Secrets: Dokploy protected environment values
