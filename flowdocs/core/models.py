@@ -39,7 +39,11 @@ class PDFFile(models.Model):
     chunk_embeddings = models.JSONField(default=list, blank=True)    # list[list[float]] Newly added
 
     uploaded_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="uploaded_pdfs"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="uploaded_pdfs",
+        blank=True,
+        null=True,
     )
     uploaded_at = models.DateTimeField(auto_now_add=True)
     folder = models.ForeignKey(
@@ -49,6 +53,26 @@ class PDFFile(models.Model):
     # --- New fields for search optimization ---
     keywords = models.JSONField(default=list, blank=True)  # store keywords safely
     text_content = models.TextField(blank=True, default="")  # store extracted PDF text
+
+    category = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="acts / rules / bylaws",
+    )
+    file_path = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Relative path like housing/acts/154B.pdf",
+    )
+    indexed = models.BooleanField(default=False, help_text="FAISS index built or not")
+    subject = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="housing / audit / agriculture",
+    )
 
     def delete(self, *args, **kwargs):
         """
@@ -60,5 +84,3 @@ class PDFFile(models.Model):
 
     def __str__(self):
         return f"{self.title} (Folder: {self.folder.name if self.folder else 'No Folder'})"
-
-

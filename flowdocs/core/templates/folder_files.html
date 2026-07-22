@@ -27,7 +27,7 @@
                 <td>{{ file.title }}</td>
                 <td>{{ file.uploaded_by.username }}</td>
                 <td>{{ file.uploaded_at|date:"d M Y" }}</td>
-                <td><a href="{{ file.file.url }}" target="_blank">View</a></td>
+                <td><a href="{% url 'view_pdf' file.id %}" target="_blank">View</a></td>
                 {% if role == 'admin' or role == 'superadmin' %}
                 <td>
                     <a href="{% url 'delete_pdf' file.id %}" class="btn btn-danger btn-sm">Delete</a>

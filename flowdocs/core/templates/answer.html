@@ -25,7 +25,7 @@
   <ul>
     {% for file in file_references %}
       <li>
-        <a href="{{ file.url }}" target="_blank">{{ file.title }}</a> (Uploaded: {{ file.uploaded_at }})
+        <a href="{% url 'view_pdf' file.id %}" target="_blank">{{ file.title }}</a> (Uploaded: {{ file.uploaded_at }})
       </li>
     {% endfor %}
   </ul>

@@ -3,11 +3,14 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from .forms import UploadForm
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
+from .models import PDFFile
 
 
 class OperationalEndpointTests(TestCase):
@@ -33,6 +36,31 @@ class UploadValidationTests(TestCase):
         uploaded = SimpleUploadedFile('document.pdf', b'%PDF-1.7\ncontent', content_type='application/pdf')
         form = UploadForm(data={'title': 'Document'}, files={'file': uploaded})
         self.assertTrue(form.is_valid(), form.errors)
+
+
+class PDFViewTests(TestCase):
+    def test_pdf_view_requires_login(self):
+        response = self.client.get(reverse("view_pdf", args=[1]))
+        self.assertEqual(response.status_code, 302)
+
+    def test_pdf_view_serves_file_to_authenticated_user(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            user = get_user_model().objects.create_user(
+                username="viewer",
+                password="test-password",
+                role="admin",
+            )
+            pdf = PDFFile.objects.create(
+                title="Document",
+                uploaded_by=user,
+                file=SimpleUploadedFile("document.pdf", b"%PDF-1.7\ncontent"),
+            )
+            self.client.force_login(user)
+            response = self.client.get(reverse("view_pdf", args=[pdf.pk]))
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Content-Type"], "application/pdf")
+            self.assertEqual(b"".join(response.streaming_content), b"%PDF-1.7\ncontent")
 
 
 class ArtifactInventoryTests(TestCase):
