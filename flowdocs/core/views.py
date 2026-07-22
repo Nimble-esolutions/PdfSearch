@@ -83,7 +83,6 @@ def visible_pdfs(user, queryset=None, *, public=False):
     if public:
         return queryset.filter(
             folder__in=searchable_folders(user, public=True),
-            indexed=True,
         ).distinct()
     if is_admin_user(user):
         return queryset
@@ -192,7 +191,6 @@ def public_view_pdf(request, pdf_id):
         PDFFile.objects.filter(
             pk=pdf_id,
             folder__in=searchable_folders(request.user, public=True),
-            indexed=True,
         )
     )
     if not pdf.file:
