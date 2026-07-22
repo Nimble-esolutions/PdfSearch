@@ -61,6 +61,19 @@ services:
     networks:
       - ci
 
+  # This service deliberately does not mount empty-init. It reads the image's
+  # real declared /app/init seed using only disposable media placeholders.
+  seed:
+    profiles: ["seed"]
+    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be provided}
+    pull_policy: never
+    entrypoint: ["python", "/app/scripts/ci/seed_smoke.py"]
+    environment:
+      DATA_BOOTSTRAP_MODE: strict
+      DECLARED_SEED_DB: /app/init/db.sqlite3
+    networks:
+      - ci
+
 volumes:
   ci_data:
 

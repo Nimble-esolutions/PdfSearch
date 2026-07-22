@@ -10,7 +10,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.cache import cache
 from django.conf import settings
 from django.contrib import messages
-from django.db import IntegrityError, connection
+from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate, login, logout
@@ -83,6 +83,16 @@ def visible_pdfs(user, queryset=None):
         return queryset
     return queryset.filter(
         Q(uploaded_by=user) | Q(folder__created_by=user)
+    ).distinct()
+
+
+def searchable_folders(user):
+    """Return folders whose PDFs are visible under the current access policy."""
+    folders = Folder.objects.all()
+    if is_admin_user(user):
+        return folders
+    return folders.filter(
+        Q(created_by=user) | Q(files__uploaded_by=user)
     ).distinct()
 
 
@@ -424,14 +434,36 @@ def dashboard(request, folder_id=None):
                 # Keywords handling as before
                 raw_keywords = form.cleaned_data.get("keywords_input", "")
                 pdf.keywords = [k.strip().lower() for k in raw_keywords.split(",") if k.strip()] if raw_keywords else []
-                pdf.save()
-
-                # Precompute extraction + embeddings — do this synchronously here for simplicity,
-                # but in production you should enqueue this as a background job (Celery/RQ).
                 try:
-                    precompute_pdf_embeddings(pdf)
+                    with transaction.atomic():
+                        pdf.save()
+                        # Keep extraction, embeddings, and index construction in
+                        # the same transaction as the PDF row.
+                        precompute_pdf_embeddings(pdf)
                 except Exception:
                     traceback.print_exc()
+                    try:
+                        if pdf.pk:
+                            pdf.delete()
+                        elif pdf.file:
+                            pdf.file.delete(save=False)
+                    except Exception:
+                        traceback.print_exc()
+                    form.add_error(
+                        None,
+                        "PDF upload failed during preprocessing or indexing. "
+                        "No document was saved; please try again.",
+                    )
+                    pdfs = visible_pdfs(
+                        request.user,
+                        PDFFile.objects.filter(folder=folder),
+                    ).order_by("-uploaded_at")
+                    return render(
+                        request,
+                        "dashboard_pdfs.html",
+                        {"folder": folder, "pdfs": pdfs, "form": form, "role": role},
+                        status=400,
+                    )
 
                 return redirect('dashboard_folder', folder_id=folder_id)
         else:
@@ -457,6 +489,15 @@ def search_query(request):
         return render(request, "search.html", {"welcome_message": welcome_message})
 
     if request.method == "POST":
+        if not request.user.is_authenticated:
+            return JsonResponse(
+                {
+                    "error": "authentication_required",
+                    "detail": "Authentication is required to execute document search.",
+                    "references": [],
+                },
+                status=401,
+            )
         try:
             query = request.POST.get("query", "").strip()
 
@@ -480,7 +521,12 @@ def search_query(request):
             # --------------------------------------------------
             detected = detect_folder_by_keywords_multi(
                 query,
-                min_score_threshold=0.40
+                min_score_threshold=0.40,
+                folders=searchable_folders(request.user),
+            )
+
+            visible_folder_ids = set(
+                searchable_folders(request.user).values_list("pk", flat=True)
             )
 
             # --------------------------------------------------
@@ -497,6 +543,9 @@ def search_query(request):
                     locked_folders = [top_folder]
                 else:
                     locked_folders = [folder for folder, _ in detected]
+                locked_folders = [
+                    folder for folder in locked_folders if folder.pk in visible_folder_ids
+                ]
 
             # --------------------------------------------------
             # 3️⃣ SEARCH ONLY INSIDE LOCKED FOLDERS
@@ -506,7 +555,20 @@ def search_query(request):
 
                 for folder in locked_folders:
                     try:
-                        _, refs = search_pdfs_fast(folder, query, top_n_pdfs=3)
+                        scoped_pdfs = (
+                            None
+                            if is_admin_user(request.user)
+                            else visible_pdfs(
+                                request.user,
+                                PDFFile.objects.filter(folder=folder),
+                            )
+                        )
+                        _, refs = search_pdfs_fast(
+                            folder,
+                            query,
+                            top_n_pdfs=3,
+                            pdfs=scoped_pdfs,
+                        )
 
                         for r in refs:
                             key = r.get("pdf_id") or r.get("title")
@@ -547,7 +609,10 @@ def search_query(request):
                             "score": item["score"],
                         })
 
-                        pdf = PDFFile.objects.filter(pk=meta["pdf_id"]).first()
+                        pdf = visible_pdfs(
+                            request.user,
+                            PDFFile.objects.filter(pk=meta["pdf_id"]),
+                        ).first()
                         if pdf:
                             combined_snippets.append(f"--- {pdf.title} ---")
                             combined_snippets.extend(
@@ -582,8 +647,20 @@ def search_query(request):
             # --------------------------------------------------
             acts_folder = Folder.objects.filter(name__icontains="act").first()
 
-            if acts_folder:
-                answer, refs = search_pdfs_fast(acts_folder, query, top_n_pdfs=3)
+            if acts_folder and searchable_folders(request.user).filter(pk=acts_folder.pk).exists():
+                answer, refs = search_pdfs_fast(
+                    acts_folder,
+                    query,
+                    top_n_pdfs=3,
+                    pdfs=(
+                        None
+                        if is_admin_user(request.user)
+                        else visible_pdfs(
+                            request.user,
+                            PDFFile.objects.filter(folder=acts_folder),
+                        )
+                    ),
+                )
                 if answer.strip():
                     return JsonResponse({
                         "answer": answer,
