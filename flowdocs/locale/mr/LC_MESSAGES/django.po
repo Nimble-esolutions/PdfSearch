@@ -325,7 +325,7 @@ msgstr "एआय सक्षम शोध "
 msgid "Ask your question..."
 msgstr "तुमचा प्रश्न विचारा..."
 
-msgid "I am Sahakar AI. Click here to learn how to ask questions and get correct answers."
+msgid "I am Sahakar AI. Click here to learn how to questions to get correct answers."
 msgstr "🙏 नमस्कार — मी सहकार AI. योग्य उत्तरे मिळविण्यासाठी प्रश्न कसे विचारावेत हे जाणून घेण्यासाठी"
 
 msgid "Click Here"
