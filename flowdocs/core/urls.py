@@ -38,6 +38,7 @@ urlpatterns = [
     # ---------------- PDF Management ----------------
     path("pdf/<int:pdf_id>/rename/", views.rename_pdf, name="rename_pdf"),
     path("pdf/<int:file_id>/delete/", views.delete_pdf, name="delete_pdf"),
+    path("pdf/<int:pdf_id>/view/", views.view_pdf, name="view_pdf"),
 ]
 
 if settings.DEBUG:

@@ -103,7 +103,7 @@
                         {% for pdf in pdfs %}
                         <tr>
                             <td>{{ pdf.title }}</td>
-                            <td><a href="{{ pdf.file.url }}" target="_blank" class="btn btn-primary btn-sm">View</a></td>
+                            <td><a href="{% url 'view_pdf' pdf.id %}" target="_blank" class="btn btn-primary btn-sm">View</a></td>
                             <td>{{ pdf.uploaded_by.username }}</td>
                             <td>{{ pdf.uploaded_at|date:"d M Y H:i" }}</td>
                             {% if role == 'admin' or role == 'superadmin' %}

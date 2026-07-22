@@ -3,7 +3,7 @@ import traceback
 import hashlib
 import os
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.conf import settings
@@ -13,6 +13,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count
+from django.utils.http import content_disposition_header
 
 from .models import PDFFile, Folder, CustomUser
 from .forms import UploadForm
@@ -65,6 +66,23 @@ def readyz(request):
 
     ready = all(value in ("ok", "not_configured") for value in checks.values())
     return JsonResponse({"status": "ready" if ready else "not_ready", "checks": checks}, status=200 if ready else 503)
+
+
+@login_required
+def view_pdf(request, pdf_id):
+    pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    if not pdf.file:
+        raise Http404("PDF file is unavailable")
+    try:
+        handle = open(pdf.file.path, "rb")
+    except (FileNotFoundError, OSError) as exc:
+        raise Http404("PDF file is unavailable") from exc
+    response = FileResponse(handle, content_type="application/pdf")
+    response["Content-Disposition"] = content_disposition_header(
+        as_attachment=False,
+        filename=os.path.basename(pdf.file.name),
+    )
+    return response
 
 #===========================Registration view====================
 def register_view(request):
@@ -491,4 +509,3 @@ def search_query(request):
                 "answer": "⚠️ काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
                 "references": []
             })
-
