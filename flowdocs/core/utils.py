@@ -16,6 +16,7 @@ import numpy as np
 from openai import OpenAI
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from .models import Folder
 from difflib import SequenceMatcher
 
@@ -179,6 +180,7 @@ def _folder_embedding_matrix(
     """Return deterministic chunk order and validated, normalized embeddings."""
     chunk_texts: list[str] = []
     chunk_embeddings: list[np.ndarray] = []
+    expected_dimensions = None
 
     pdf_queryset = pdfs if pdfs is not None else PDFFile.objects.filter(folder=folder)
     for pdf in pdf_queryset.order_by("pk"):
@@ -204,6 +206,13 @@ def _folder_embedding_matrix(
                     raise SearchDataIntegrityError("contains a zero embedding vector")
                 pdf_chunks.append(chunk)
                 pdf_embeddings.append(vector)
+            pdf_dimensions = {vector.shape[0] for vector in pdf_embeddings}
+            if len(pdf_dimensions) != 1:
+                raise SearchDataIntegrityError("contains inconsistent embedding dimensions")
+            pdf_dimension = next(iter(pdf_dimensions))
+            if expected_dimensions is not None and pdf_dimension != expected_dimensions:
+                raise SearchDataIntegrityError("embedding dimension differs from the folder")
+            expected_dimensions = pdf_dimension
         except (SearchDataIntegrityError, TypeError, ValueError) as exc:
             logger.warning("Skipping PDF id=%s from folder id=%s: %s", pdf.pk, folder.pk, exc)
             continue
@@ -239,6 +248,7 @@ def build_or_load_faiss_index_for_folder(
     folder: Folder,
     pdfs=None,
     force_rebuild: bool = False,
+    promote_index=None,
 ) -> Tuple[Optional[faiss.Index], List[str], np.ndarray]:
     """
     Build or load a FAISS index for a folder.
@@ -269,9 +279,14 @@ def build_or_load_faiss_index_for_folder(
         try:
             index = faiss.read_index(idx_path)
         except Exception as exc:
-            raise SearchDataIntegrityError(f"Unable to load FAISS index {idx_path}") from exc
-        _validate_index(index, len(chunk_texts), embeddings_matrix.shape[1])
-        return index, chunk_texts, embeddings_matrix
+            logger.warning("Rebuilding unreadable FAISS index %s: %s", idx_path, exc)
+        else:
+            try:
+                _validate_index(index, len(chunk_texts), embeddings_matrix.shape[1])
+            except SearchDataIntegrityError as exc:
+                logger.warning("Rebuilding stale FAISS index %s: %s", idx_path, exc)
+            else:
+                return index, chunk_texts, embeddings_matrix
 
     try:
         pathlib.Path(idx_path).parent.mkdir(parents=True, exist_ok=True)
@@ -286,9 +301,13 @@ def build_or_load_faiss_index_for_folder(
         os.close(fd)
         try:
             faiss.write_index(index, temp_path)
-            os.replace(temp_path, idx_path)
+            if promote_index is None:
+                os.replace(temp_path, idx_path)
+            else:
+                promote_index(temp_path, idx_path)
+                temp_path = None
         finally:
-            if os.path.exists(temp_path):
+            if temp_path and os.path.exists(temp_path):
                 os.unlink(temp_path)
         return index, chunk_texts, embeddings_matrix
     except SearchDataIntegrityError:
@@ -374,14 +393,32 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
     pdf.chunk_embeddings = embeddings
     pdf.save(update_fields=["extracted_text", "text_content", "page_chunks", "chunk_embeddings"])
 
+    promote_index = None
+    if transaction.get_connection().in_atomic_block:
+        def defer_index_promotion(temp_path, idx_path):
+            def promote():
+                try:
+                    os.replace(temp_path, idx_path)
+                    PDFFile.objects.filter(pk=pdf.pk).update(indexed=True)
+                except Exception:
+                    logger.exception("Deferred FAISS promotion failed for folder id=%s", pdf.folder_id)
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+
+            transaction.on_commit(promote)
+
+        promote_index = defer_index_promotion
+
     index, _, _ = build_or_load_faiss_index_for_folder(
         pdf.folder,
         force_rebuild=True,
+        promote_index=promote_index,
     )
     if index is None:
         raise SearchDataIntegrityError("PDF embeddings were stored but no FAISS index was created")
-    pdf.indexed = True
-    pdf.save(update_fields=["indexed"])
+    if promote_index is None:
+        pdf.indexed = True
+        pdf.save(update_fields=["indexed"])
 
 
 # ------------------ Search PDFs (fast path) ------------------
