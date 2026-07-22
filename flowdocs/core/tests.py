@@ -405,6 +405,35 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertEqual(response.json()["error"], "authentication_required")
         self.assertNotIn("private", response.content.decode())
 
+    def test_root_head_request_is_successful(self):
+        response = self.client.head("/")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_search_integrity_failure_returns_service_unavailable(self):
+        folder = Folder.objects.create(name="Act", created_by=self.user)
+        self.client.force_login(self.user)
+
+        with patch(
+            "core.views.is_general_query",
+            return_value=False,
+        ), patch(
+            "core.views.detect_folder_by_keywords_multi",
+            return_value=[(folder, 0.9)],
+        ), patch(
+            "core.views.search_pdfs_fast",
+            side_effect=SearchDataIntegrityError("stale index"),
+        ) as search_pdfs:
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "act search"},
+            )
+
+        search_pdfs.assert_called_once()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"], "search_unavailable")
+        self.assertNotIn("stale index", response.content.decode())
+
     def test_search_folder_detection_is_scoped_to_visible_folders(self):
         folder = Folder.objects.create(name="Private rules", created_by=self.user)
         ordinary = get_user_model().objects.create_user(

@@ -34,7 +34,8 @@ from .utils import (
     detect_folder_by_keywords_multi,
     TOP_K_CHUNKS,
     MAX_CONTEXT_WORDS,
-    generate_gpt_answer
+    generate_gpt_answer,
+    SearchDataIntegrityError,
 )
 
 CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)
@@ -481,7 +482,7 @@ def dashboard(request, folder_id=None):
 
 # -------------- New logic for folder search --------------
 def search_query(request):
-    if request.method == "GET":
+    if request.method in {"GET", "HEAD"}:
         welcome_message = (
             "🙏 नमस्कार — मी तुमचा AI सहाय्यक आहे. प्रश्न विचारा; "
             "मी आधी अपलोड केलेल्या दस्तऐवजांचा उपयोग करून उत्तर देईन."
@@ -586,6 +587,8 @@ def search_query(request):
                                         "uploaded_at": r.get("uploaded_at"),
                                     }
                                 }
+                    except SearchDataIntegrityError:
+                        raise
                     except Exception:
                         continue
 
@@ -675,9 +678,20 @@ def search_query(request):
                 "references": []
             })
 
+        except SearchDataIntegrityError:
+            traceback.print_exc()
+            return JsonResponse(
+                {
+                    "error": "search_unavailable",
+                    "detail": "Document search is temporarily unavailable. Please try again later.",
+                    "references": [],
+                },
+                status=503,
+            )
         except Exception:
             traceback.print_exc()
             return JsonResponse({
-                "answer": "⚠️ काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
+                "error": "search_failed",
+                "detail": "The search request could not be completed. Please try again later.",
                 "references": []
-            })
+            }, status=500)
