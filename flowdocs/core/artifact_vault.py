@@ -11,8 +11,8 @@ import hashlib
 import json
 import os
 import re
+from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, BinaryIO, Mapping
 
 
@@ -20,6 +20,9 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SAFE_COMPONENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 PDF_KEY_RE = re.compile(r"^pdfs/sha256/([0-9a-f]{64})\.pdf$")
 FAISS_KEY_RE = re.compile(r"^faiss/([A-Za-z0-9][A-Za-z0-9._-]*)/(folder_[0-9]+\.index)$")
+INVENTORY_SCHEMA = "pdfsearch-artifact-inventory/v1"
+METADATA_SUFFIXES = {".json", ".jsonl", ".yaml", ".yml", ".npy", ".npz", ".pkl", ".pickle"}
+MUTABLE_RELEASE_IDS = {"active", "current", "latest", "dev", "stage", "staging", "prod", "production"}
 
 
 class ArtifactVaultError(RuntimeError):
@@ -204,11 +207,15 @@ class ArtifactVault:
             etag=response.get("ETag"),
         )
 
-    def put_manifest(self, manifest: Mapping[str, Any] | bytes | bytearray) -> ArtifactMetadata:
+    def put_manifest(
+        self,
+        manifest: Mapping[str, Any] | bytes | bytearray,
+        release_id: str | None = None,
+    ) -> ArtifactMetadata:
         """Validate and upload an already-generated inventory manifest."""
         self._require_enabled()
-        data, payload = _manifest_bytes(manifest)
-        self.validate_manifest(payload)
+        payload = self.normalize_manifest(manifest, release_id=release_id)
+        data, _ = _manifest_bytes(payload)
         release_id = payload["release_id"]
         key = self.manifest_object_key(release_id)
         return self.put(key, data, content_type="application/json")
@@ -216,12 +223,16 @@ class ArtifactVault:
     def validate_manifest(self, manifest: Mapping[str, Any] | bytes | bytearray) -> dict[str, Any]:
         """Validate a manifest without making a provider call."""
         self._require_enabled()
-        _, payload = _manifest_bytes(manifest)
-        release_id = payload.get("release_id")
-        if not isinstance(release_id, str) or not SAFE_COMPONENT_RE.fullmatch(release_id):
-            raise ArtifactVaultIntegrityError("Manifest release_id is missing or invalid")
-        _validate_manifest(payload)
-        return payload
+        return self.normalize_manifest(manifest)
+
+    def normalize_manifest(
+        self,
+        manifest: Mapping[str, Any] | bytes | bytearray,
+        release_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Normalize legacy or inventory manifests to the vault file contract."""
+        self._require_enabled()
+        return normalize_manifest(manifest, release_id=release_id)
 
     def list_manifests(self, prefix: str = "manifests/") -> list[ArtifactMetadata]:
         """List manifest objects and validate their stored checksum metadata."""
@@ -259,16 +270,14 @@ class ArtifactVault:
 
     @staticmethod
     def faiss_object_key(generation_id: str, folder_id: int) -> str:
-        if not SAFE_COMPONENT_RE.fullmatch(generation_id):
-            raise ArtifactVaultConfigurationError("FAISS generation id contains invalid characters")
+        _validate_release_id(generation_id)
         if not isinstance(folder_id, int) or folder_id < 1:
             raise ArtifactVaultConfigurationError("FAISS folder id must be a positive integer")
         return f"faiss/{generation_id}/folder_{folder_id}.index"
 
     @staticmethod
     def manifest_object_key(release_id: str) -> str:
-        if not SAFE_COMPONENT_RE.fullmatch(release_id):
-            raise ArtifactVaultConfigurationError("Manifest release id contains invalid characters")
+        _validate_release_id(release_id)
         return f"manifests/{release_id}.json"
 
     def _require_enabled(self) -> None:
@@ -291,15 +300,23 @@ class ArtifactVault:
     def _validate_immutable_key(key: str) -> None:
         if PDF_KEY_RE.fullmatch(key):
             return
-        if FAISS_KEY_RE.fullmatch(key):
+        faiss_match = FAISS_KEY_RE.fullmatch(key)
+        if faiss_match:
+            _validate_release_id(faiss_match.group(1))
             return
-        if re.fullmatch(r"manifests/[A-Za-z0-9][A-Za-z0-9._-]*\.json", key):
+        metadata_parts = key.split("/")
+        if _is_safe_scoped_key(key, "metadata"):
+            _validate_release_id(metadata_parts[1])
+            return
+        manifest_match = re.fullmatch(r"manifests/([A-Za-z0-9][A-Za-z0-9._-]*)\.json", key)
+        if manifest_match:
+            _validate_release_id(manifest_match.group(1))
             return
         raise ArtifactVaultConfigurationError("Unsupported immutable artifact key")
 
 
 def object_key_for_manifest_entry(entry: Mapping[str, Any]) -> str:
-    """Resolve a manifest entry to its immutable vault key without guessing."""
+    """Resolve a legacy manifest entry to its immutable vault key."""
     object_key = entry.get("object_key")
     if isinstance(object_key, str):
         ArtifactVault._validate_immutable_key(object_key)
@@ -308,20 +325,199 @@ def object_key_for_manifest_entry(entry: Mapping[str, Any]) -> str:
     path = entry.get("path")
     digest = entry.get("sha256")
     if not isinstance(path, str) or not isinstance(digest, str):
-        raise ArtifactVaultIntegrityError("Manifest entry needs path, sha256, and bytes")
+        raise ArtifactVaultIntegrityError("Manifest entry needs path and sha256")
     _validate_sha256(digest)
+    parts = _safe_relative_parts(path)
     if path.lower().endswith(".pdf"):
         return ArtifactVault.pdf_object_key(digest)
 
-    path_parts = Path(path).parts
-    if len(path_parts) >= 3 and path_parts[-3] in {"faiss", "faiss_indexes"}:
-        generation_id = path_parts[-2]
-        filename = path_parts[-1]
+    if len(parts) >= 3 and parts[-3] in {"faiss", "faiss_indexes"}:
+        generation_id = parts[-2]
+        filename = parts[-1]
         match = re.fullmatch(r"folder_([0-9]+)\.index", filename)
         if match:
             return ArtifactVault.faiss_object_key(generation_id, int(match.group(1)))
     raise ArtifactVaultIntegrityError(
-        "FAISS manifest entries need object_key or a generation-bound path"
+        "Manifest entry needs an immutable object_key or a generation-bound FAISS path"
+    )
+
+
+def normalize_manifest(
+    manifest: Mapping[str, Any] | bytes | bytearray,
+    release_id: str | None = None,
+) -> dict[str, Any]:
+    """Normalize the inventory producer's nested schema without changing its file."""
+    _, payload = _manifest_bytes(manifest)
+    manifest_release_id = payload.get("release_id")
+    if manifest_release_id is not None:
+        _validate_release_id(manifest_release_id)
+    if release_id is not None:
+        _validate_release_id(release_id)
+    if manifest_release_id is not None and release_id is not None and manifest_release_id != release_id:
+        raise ArtifactVaultIntegrityError("Supplied release id does not match the manifest")
+    effective_release_id = manifest_release_id or release_id
+    if effective_release_id is None:
+        raise ArtifactVaultIntegrityError(
+            "Manifest has no release_id; supply an explicit immutable --release-id"
+        )
+
+    normalized = deepcopy(payload)
+    normalized["release_id"] = effective_release_id
+    if _is_inventory_manifest(payload):
+        normalized["files"] = _normalize_inventory_files(payload, effective_release_id)
+    else:
+        normalized["files"] = _normalize_legacy_files(payload, effective_release_id)
+    return normalized
+
+
+def _is_inventory_manifest(payload: Mapping[str, Any]) -> bool:
+    schema = payload.get("schema")
+    if schema == INVENTORY_SCHEMA:
+        return True
+    return isinstance(schema, Mapping) and schema.get("inventory_schema") == INVENTORY_SCHEMA
+
+
+def _normalize_inventory_files(payload: Mapping[str, Any], release_id: str) -> list[dict[str, Any]]:
+    if payload.get("read_only") is not True:
+        raise ArtifactVaultIntegrityError("Inventory manifest must declare read_only=true")
+    sections = (
+        ("pdf_storage", "files", "pdf"),
+        ("faiss", "files", "faiss"),
+        ("embedding_index", "metadata_files", "metadata"),
+    )
+    normalized: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    seen_keys: set[str] = set()
+    for section_name, field_name, artifact_type in sections:
+        section = payload.get(section_name)
+        if not isinstance(section, Mapping) or not isinstance(section.get(field_name), list):
+            raise ArtifactVaultIntegrityError(
+                f"Inventory manifest requires {section_name}.{field_name}"
+            )
+        for entry in section[field_name]:
+            if not isinstance(entry, Mapping):
+                raise ArtifactVaultIntegrityError("Inventory file entries must be objects")
+            path = entry.get("path")
+            size = entry.get("size_bytes")
+            digest = entry.get("sha256")
+            if not isinstance(path, str) or path in seen_paths:
+                raise ArtifactVaultIntegrityError("Inventory contains a missing or duplicate path")
+            if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+                raise ArtifactVaultIntegrityError(f"Invalid size_bytes for inventory path {path}")
+            _validate_sha256(digest)
+            key = _inventory_object_key(artifact_type, path, digest, release_id)
+            if key in seen_keys:
+                raise ArtifactVaultIntegrityError("Inventory contains ambiguous object keys")
+            seen_paths.add(path)
+            seen_keys.add(key)
+            normalized.append(
+                {
+                    "path": path,
+                    "bytes": size,
+                    "sha256": digest,
+                    "object_key": key,
+                    "artifact_type": artifact_type,
+                }
+            )
+    return normalized
+
+
+def _normalize_legacy_files(payload: Mapping[str, Any], release_id: str) -> list[dict[str, Any]]:
+    files = payload.get("files")
+    if not isinstance(files, list):
+        raise ArtifactVaultIntegrityError("Manifest files must be a list")
+    normalized: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    seen_keys: set[str] = set()
+    for entry in files:
+        if not isinstance(entry, Mapping):
+            raise ArtifactVaultIntegrityError("Manifest file entries must be objects")
+        path = entry.get("path")
+        size = entry.get("bytes", entry.get("size_bytes"))
+        digest = entry.get("sha256")
+        if not isinstance(path, str) or path in seen_paths:
+            raise ArtifactVaultIntegrityError("Manifest contains a missing or duplicate path")
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise ArtifactVaultIntegrityError(f"Invalid bytes for manifest path {path}")
+        _validate_sha256(digest)
+        key = entry.get("object_key")
+        if not isinstance(key, str):
+            key = _legacy_object_key(path, digest, release_id)
+        ArtifactVault._validate_immutable_key(key)
+        if key in seen_keys:
+            raise ArtifactVaultIntegrityError("Manifest contains ambiguous object keys")
+        seen_paths.add(path)
+        seen_keys.add(key)
+        normalized.append(
+            {
+                "path": path,
+                "bytes": size,
+                "sha256": digest,
+                "object_key": key,
+                "artifact_type": _artifact_type_for_key(key),
+            }
+        )
+    return normalized
+
+
+def _inventory_object_key(artifact_type: str, path: str, digest: str, release_id: str) -> str:
+    parts = _safe_relative_parts(path)
+    if artifact_type == "pdf":
+        if len(parts) < 3 or parts[:2] != ("media", "pdfs") or not path.lower().endswith(".pdf"):
+            raise ArtifactVaultIntegrityError(f"Unsupported PDF inventory path: {path}")
+        return ArtifactVault.pdf_object_key(digest)
+    if artifact_type == "faiss":
+        if len(parts) != 2 or parts[0] != "faiss_indexes":
+            raise ArtifactVaultIntegrityError(f"Unsupported FAISS inventory path: {path}")
+        match = re.fullmatch(r"folder_([0-9]+)\.index", parts[1])
+        if not match:
+            raise ArtifactVaultIntegrityError(f"Ambiguous FAISS inventory path: {path}")
+        return ArtifactVault.faiss_object_key(release_id, int(match.group(1)))
+    if artifact_type == "metadata":
+        if path.lower().endswith(".pdf") or path.lower().endswith(".index"):
+            raise ArtifactVaultIntegrityError(f"Unsupported metadata inventory path: {path}")
+        if not any(path.lower().endswith(suffix) for suffix in METADATA_SUFFIXES):
+            raise ArtifactVaultIntegrityError(f"Unsupported metadata inventory path: {path}")
+        return "metadata/" + release_id + "/" + "/".join(parts)
+    raise ArtifactVaultIntegrityError("Unsupported inventory artifact type")
+
+
+def _legacy_object_key(path: str, digest: str, release_id: str) -> str:
+    if path.lower().endswith(".pdf"):
+        return ArtifactVault.pdf_object_key(digest)
+    parts = _safe_relative_parts(path)
+    if len(parts) >= 3 and parts[-3] in {"faiss", "faiss_indexes"}:
+        match = re.fullmatch(r"folder_([0-9]+)\.index", parts[-1])
+        if match:
+            return ArtifactVault.faiss_object_key(parts[-2], int(match.group(1)))
+    if any(path.lower().endswith(suffix) for suffix in METADATA_SUFFIXES):
+        return "metadata/" + release_id + "/" + "/".join(parts)
+    raise ArtifactVaultIntegrityError(f"Unsupported manifest path: {path}")
+
+
+def _artifact_type_for_key(key: str) -> str:
+    if PDF_KEY_RE.fullmatch(key):
+        return "pdf"
+    if FAISS_KEY_RE.fullmatch(key):
+        return "faiss"
+    if _is_safe_scoped_key(key, "metadata"):
+        return "metadata"
+    return "manifest"
+
+
+def _safe_relative_parts(path: str) -> tuple[str, ...]:
+    if not path or path.startswith("/") or "\\" in path:
+        raise ArtifactVaultIntegrityError(f"Unsupported unsafe relative path: {path}")
+    parts = tuple(path.split("/"))
+    if not parts or any(not SAFE_COMPONENT_RE.fullmatch(part) for part in parts):
+        raise ArtifactVaultIntegrityError(f"Unsupported unsafe relative path: {path}")
+    return parts
+
+
+def _is_safe_scoped_key(key: str, prefix: str) -> bool:
+    parts = key.split("/")
+    return len(parts) >= 3 and parts[0] == prefix and all(
+        SAFE_COMPONENT_RE.fullmatch(part) for part in parts[1:]
     )
 
 
@@ -346,6 +542,13 @@ def _sha256(data: bytes) -> str:
 def _validate_sha256(value: str) -> None:
     if not isinstance(value, str) or not SHA256_RE.fullmatch(value):
         raise ArtifactVaultIntegrityError("Expected a lowercase SHA-256 checksum")
+
+
+def _validate_release_id(value: str) -> None:
+    if not isinstance(value, str) or not SAFE_COMPONENT_RE.fullmatch(value):
+        raise ArtifactVaultIntegrityError("Release id must be a safe immutable name")
+    if value.lower() in MUTABLE_RELEASE_IDS:
+        raise ArtifactVaultIntegrityError("Mutable release aliases are not allowed")
 
 
 def _validate_expected_checksum(expected: str | None, actual: str) -> None:
@@ -377,26 +580,3 @@ def _manifest_bytes(manifest: Mapping[str, Any] | bytes | bytearray) -> tuple[by
     if not isinstance(payload, dict):
         raise ArtifactVaultIntegrityError("Manifest root must be an object")
     return data, payload
-
-
-def _validate_manifest(payload: Mapping[str, Any]) -> None:
-    files = payload.get("files")
-    if not isinstance(files, list):
-        raise ArtifactVaultIntegrityError("Manifest files must be a list")
-    for entry in files:
-        if not isinstance(entry, Mapping):
-            raise ArtifactVaultIntegrityError("Manifest file entries must be objects")
-        digest = entry.get("sha256")
-        size = entry.get("bytes")
-        if not isinstance(entry.get("path"), str):
-            raise ArtifactVaultIntegrityError("Manifest file entry path is required")
-        _validate_sha256(digest)
-        if not isinstance(size, int) or size < 0:
-            raise ArtifactVaultIntegrityError("Manifest file entry bytes must be non-negative")
-        if "object_key" in entry:
-            resolved_key = object_key_for_manifest_entry(entry)
-            pdf_match = PDF_KEY_RE.fullmatch(resolved_key)
-            if pdf_match and pdf_match.group(1) != digest:
-                raise ArtifactVaultIntegrityError(
-                    "Manifest PDF object key does not match its checksum"
-                )

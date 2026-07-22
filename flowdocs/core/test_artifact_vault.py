@@ -65,6 +65,43 @@ class ArtifactVaultTests(SimpleTestCase):
             client=self.client,
         )
 
+    @staticmethod
+    def inventory_manifest(payloads):
+        return {
+            "manifest_version": 1,
+            "read_only": True,
+            "schema": {"inventory_schema": "pdfsearch-artifact-inventory/v1"},
+            "pdf_storage": {
+                "root": "media",
+                "files": [
+                    {
+                        "path": "media/pdfs/example.pdf",
+                        "size_bytes": len(payloads["pdf"]),
+                        "sha256": hashlib.sha256(payloads["pdf"]).hexdigest(),
+                    }
+                ],
+            },
+            "faiss": {
+                "root": "faiss_indexes",
+                "files": [
+                    {
+                        "path": "faiss_indexes/folder_7.index",
+                        "size_bytes": len(payloads["faiss"]),
+                        "sha256": hashlib.sha256(payloads["faiss"]).hexdigest(),
+                    }
+                ],
+            },
+            "embedding_index": {
+                "metadata_files": [
+                    {
+                        "path": "chroma_db/embedding_metadata.json",
+                        "size_bytes": len(payloads["metadata"]),
+                        "sha256": hashlib.sha256(payloads["metadata"]).hexdigest(),
+                    }
+                ]
+            },
+        }
+
     def test_disabled_vault_fails_closed_without_client(self):
         vault = ArtifactVault(VaultConfig(enabled=False))
         with self.assertRaises(ArtifactVaultDisabled):
@@ -115,3 +152,49 @@ class ArtifactVaultTests(SimpleTestCase):
             "release-2026-07-22",
         )
         self.assertEqual(self.vault.head_manifest("release-2026-07-22").key, metadata.key)
+
+    def test_inventory_upload_normalizes_and_uploads_pdf_faiss_metadata_and_manifest(self):
+        payloads = {
+            "pdf": b"%PDF-1.7 inventory",
+            "faiss": b"faiss-generation-7",
+            "metadata": b'{"embedding_model":"test"}',
+        }
+        inventory = self.inventory_manifest(payloads)
+        normalized = self.vault.normalize_manifest(inventory, release_id="release-2026-07-22")
+
+        self.assertEqual(
+            [entry["bytes"] for entry in normalized["files"]],
+            [len(payloads["pdf"]), len(payloads["faiss"]), len(payloads["metadata"])],
+        )
+        self.assertEqual(
+            [entry["object_key"] for entry in normalized["files"]],
+            [
+                "pdfs/sha256/" + hashlib.sha256(payloads["pdf"]).hexdigest() + ".pdf",
+                "faiss/release-2026-07-22/folder_7.index",
+                "metadata/release-2026-07-22/chroma_db/embedding_metadata.json",
+            ],
+        )
+        for entry, payload in zip(normalized["files"], payloads.values()):
+            self.vault.put(entry["object_key"], payload, expected_sha256=entry["sha256"])
+
+        manifest_metadata = self.vault.put_manifest(inventory, release_id="release-2026-07-22")
+        self.assertEqual(manifest_metadata.key, "manifests/release-2026-07-22.json")
+        self.assertEqual(len(self.client.objects), 4)
+
+    def test_inventory_missing_release_id_requires_explicit_value(self):
+        payloads = {"pdf": b"pdf", "faiss": b"index", "metadata": b"{}"}
+        with self.assertRaisesRegex(ArtifactVaultIntegrityError, "explicit immutable --release-id"):
+            self.vault.normalize_manifest(self.inventory_manifest(payloads))
+
+    def test_inventory_checksum_mismatch_is_rejected_before_upload(self):
+        payloads = {"pdf": b"pdf", "faiss": b"index", "metadata": b"{}"}
+        inventory = self.inventory_manifest(payloads)
+        inventory["pdf_storage"]["files"][0]["sha256"] = "0" * 64
+        normalized = self.vault.normalize_manifest(inventory, release_id="release-2026-07-22")
+        with self.assertRaises(ArtifactVaultIntegrityError):
+            self.vault.put(
+                normalized["files"][0]["object_key"],
+                payloads["pdf"],
+                expected_sha256=normalized["files"][0]["sha256"],
+            )
+        self.assertEqual(self.client.objects, {})
