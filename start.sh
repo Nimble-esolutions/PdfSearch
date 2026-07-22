@@ -9,11 +9,14 @@ CHROMA_DIR="${CHROMA_DIR:-$DATA_ROOT/chroma_db}"
 STATIC_DIR="${STATIC_ROOT:-$DATA_ROOT/staticfiles}"
 BACKUP_DIR="${BACKUP_DIR:-$DATA_ROOT/backups}"
 LEGACY_DATA="${LEGACY_DATA_ROOT:-/mnt/legacy}"
-INIT_DB="/app/init/db.sqlite3"
+INIT_DB="${DECLARED_SEED_DB:-/app/init/db.sqlite3}"
 INIT_FAISS="/app/init/faiss_indexes"
 MIGRATION_MARKER="$DATA_ROOT/.legacy_migration_complete"
+DATA_BOOTSTRAP_MODE="${DATA_BOOTSTRAP_MODE:-strict}"
+SEED_DB_COPIED=0
 
 export DATA_ROOT DB_PATH MEDIA_DIR FAISS_DIR CHROMA_DIR STATIC_DIR BACKUP_DIR
+export DATA_BOOTSTRAP_MODE
 export SECRET_KEY="${SECRET_KEY:-}"
 export DEBUG="${DEBUG:-False}"
 export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost,127.0.0.1}"
@@ -21,6 +24,11 @@ export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-flowdocs.settings}"
 export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-}"
 export CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS:-}"
+
+case "$DATA_BOOTSTRAP_MODE" in
+    strict|empty|bootstrap) ;;
+    *) echo "[config] ERROR: DATA_BOOTSTRAP_MODE must be strict, empty, or bootstrap" >&2; exit 1 ;;
+esac
 
 printf '%s\n' '============================================================' '  FlowDocs - PDF Search Utility' '============================================================'
 printf 'DEBUG=%s\nALLOWED_HOSTS=%s\nDATA_ROOT=%s\n' "$DEBUG" "$ALLOWED_HOSTS" "$DATA_ROOT"
@@ -60,15 +68,20 @@ if [ "${IMPORT_LEGACY_DATA:-0}" = "1" ] && [ ! -f "$MIGRATION_MARKER" ] && [ -f 
 fi
 
 if [ ! -s "$DB_PATH" ]; then
-    if [ -f "$INIT_DB" ]; then
+    if [ "$DATA_BOOTSTRAP_MODE" = "empty" ] || [ "$DATA_BOOTSTRAP_MODE" = "bootstrap" ]; then
+        echo "[db] Explicit $DATA_BOOTSTRAP_MODE mode; starting with an empty database"
+    elif [ -f "$INIT_DB" ]; then
         echo "[db] Initializing from image baseline"
         cp "$INIT_DB" "$DB_PATH"
+        SEED_DB_COPIED=1
     else
         echo "[db] No database found; Django will create it during migrations"
     fi
 fi
 
-if [ -z "$(ls -A "$FAISS_DIR" 2>/dev/null)" ] && [ -d "$INIT_FAISS" ] && [ "$(ls -A "$INIT_FAISS" 2>/dev/null)" ]; then
+if [ "$DATA_BOOTSTRAP_MODE" != "empty" ] && [ "$DATA_BOOTSTRAP_MODE" != "bootstrap" ] \
+    && [ -z "$(ls -A "$FAISS_DIR" 2>/dev/null)" ] \
+    && [ -d "$INIT_FAISS" ] && [ "$(ls -A "$INIT_FAISS" 2>/dev/null)" ]; then
     echo "[faiss] Initializing indexes from image baseline"
     cp -a "$INIT_FAISS/." "$FAISS_DIR/"
 fi
@@ -89,6 +102,14 @@ fi
 
 echo "[migrate] Running Django migrations"
 python manage.py migrate --noinput
+
+if [ "$SEED_DB_COPIED" = "1" ]; then
+    echo "[data] Validating declared seed media before Gunicorn"
+    python manage.py validate_runtime_data \
+        --declared-seed "$INIT_DB" \
+        --media-root "$MEDIA_DIR" \
+        --mode "$DATA_BOOTSTRAP_MODE"
+fi
 
 if [ "${CREATE_SUPERUSER:-0}" = "1" ]; then
     : "${DJANGO_SUPERUSER_USERNAME:?DJANGO_SUPERUSER_USERNAME is required when CREATE_SUPERUSER=1}"

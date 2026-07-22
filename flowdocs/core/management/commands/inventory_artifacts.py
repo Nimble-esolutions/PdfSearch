@@ -117,9 +117,37 @@ def _table_info(connection: sqlite3.Connection, table: str) -> list[dict[str, An
     ]
 
 
-def _sqlite_inventory(database_path: Path) -> dict[str, Any]:
+def _path_contract(root: Path, configured_path: Path) -> tuple[str, str]:
+    resolved = configured_path.expanduser().resolve()
+    try:
+        return "in-contract", resolved.relative_to(root).as_posix()
+    except ValueError:
+        return "out-of-contract", str(resolved)
+
+
+def _tree_inventory(root: Path, configured_path: Path) -> dict[str, Any]:
+    contract, path_value = _path_contract(root, configured_path)
     result: dict[str, Any] = {
-        "path": database_path.name,
+        "root": path_value,
+        "contract": contract,
+        "exists": configured_path.is_dir(),
+        "files": [],
+        "file_count": None if contract == "out-of-contract" else 0,
+    }
+    if contract == "out-of-contract":
+        result["reason"] = "configured tree is outside the declared data root"
+        return result
+    files = [_file_record(root, path) for path in _iter_files(configured_path)]
+    result["files"] = sorted(files, key=lambda item: item["path"])
+    result["file_count"] = len(files)
+    return result
+
+
+def _sqlite_inventory(database_path: Path, root: Path) -> dict[str, Any]:
+    contract, path_value = _path_contract(root, database_path)
+    result: dict[str, Any] = {
+        "path": path_value,
+        "contract": contract,
         "exists": database_path.is_file(),
         "size_bytes": None,
         "sha256": None,
@@ -132,6 +160,8 @@ def _sqlite_inventory(database_path: Path) -> dict[str, Any]:
         "migrations": {"applied": [], "count": 0, "latest": None},
     }
     if not result["exists"]:
+        if contract == "out-of-contract":
+            result["reason"] = "configured database is outside the declared data root"
         return result
 
     result["size_bytes"] = database_path.stat().st_size
@@ -287,23 +317,45 @@ def _faiss_file_record(root: Path, path: Path) -> dict[str, Any]:
     return record
 
 
-def build_manifest(data_root: str | os.PathLike[str]) -> dict[str, Any]:
+def build_manifest(
+    data_root: str | os.PathLike[str],
+    *,
+    database_path: str | os.PathLike[str] | None = None,
+    media_root: str | os.PathLike[str] | None = None,
+    faiss_root: str | os.PathLike[str] | None = None,
+    chroma_root: str | os.PathLike[str] | None = None,
+    static_root: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
     """Build a deterministic, content-free inventory for one data root."""
     root = Path(data_root).expanduser().resolve()
-    database_path = root / "db.sqlite3"
-    media_root = root / "media"
-    faiss_root = root / "faiss_indexes"
+    database_path = Path(database_path or root / "db.sqlite3").expanduser().resolve()
+    media_root = Path(media_root or root / "media").expanduser().resolve()
+    faiss_root = Path(faiss_root or root / "faiss_indexes").expanduser().resolve()
+    chroma_root = Path(chroma_root or root / "chroma_db").expanduser().resolve()
+    static_root = Path(static_root or root / "staticfiles").expanduser().resolve()
     pdf_rows, pdf_schema = _pdf_rows(database_path, media_root)
+    media_inventory = _tree_inventory(root, media_root)
+    faiss_inventory = _tree_inventory(root, faiss_root)
+    chroma_inventory = _tree_inventory(root, chroma_root)
+    static_inventory = _tree_inventory(root, static_root)
     pdf_files = [
-        _file_record(root, path)
-        for path in _iter_files(media_root)
-        if path.suffix.lower() == ".pdf"
+        record
+        for record in media_inventory["files"]
+        if record["path"].lower().endswith(".pdf")
     ]
     pdf_files.sort(key=lambda item: item["path"])
-    faiss_files = sorted(
-        (_faiss_file_record(root, path) for path in _iter_files(faiss_root)),
-        key=lambda item: item["path"],
-    )
+    faiss_files = []
+    if faiss_inventory["contract"] == "in-contract":
+        faiss_files = sorted(
+            (
+                {
+                    **record,
+                    "faiss": inspect_faiss_file(root / record["path"]),
+                }
+                for record in faiss_inventory["files"]
+            ),
+            key=lambda item: item["path"],
+        )
     metadata_files = _metadata_files(root, {media_root, database_path})
 
     embedding_rows = [item["metadata"] for item in pdf_rows if item["metadata"]["embedding_count"]]
@@ -327,17 +379,27 @@ def build_manifest(data_root: str | os.PathLike[str]) -> dict[str, Any]:
                 "columns": pdf_schema["columns"],
             },
         },
-        "database": _sqlite_inventory(database_path),
+        "database": _sqlite_inventory(database_path, root),
         "pdfs": pdf_rows,
         "pdf_storage": {
-            "root": "media",
+            "root": media_inventory["root"],
+            "contract": media_inventory["contract"],
             "files": pdf_files,
-            "file_count": len(pdf_files),
+            "file_count": media_inventory["file_count"],
         },
         "faiss": {
-            "root": "faiss_indexes",
+            "root": faiss_inventory["root"],
+            "contract": faiss_inventory["contract"],
             "files": faiss_files,
-            "file_count": len(faiss_files),
+            "file_count": faiss_inventory["file_count"],
+        },
+        "chroma": chroma_inventory,
+        "static": static_inventory,
+        "configured_trees": {
+            "media": media_inventory,
+            "faiss": faiss_inventory,
+            "chroma": chroma_inventory,
+            "static": static_inventory,
         },
         "embedding_index": {
             "database_rows_with_embeddings": len(embedding_rows),
@@ -351,6 +413,8 @@ def build_manifest(data_root: str | os.PathLike[str]) -> dict[str, Any]:
             "pdf_rows_missing_files": missing_rows,
             "pdf_storage_files": len(pdf_files),
             "faiss_files": len(faiss_files),
+            "chroma_files": len(chroma_inventory["files"]),
+            "static_files": len(static_inventory["files"]),
             "metadata_files": len(metadata_files),
         },
     }
@@ -366,6 +430,9 @@ def _manifest_artifacts(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[
         artifacts[("faiss", str(item.get("path")))] = item
     for item in manifest.get("embedding_index", {}).get("metadata_files", []):
         artifacts[("metadata", str(item.get("path")))] = item
+    for tree_name in ("chroma", "static"):
+        for item in manifest.get(tree_name, {}).get("files", []):
+            artifacts[(tree_name, str(item.get("path")))] = item
     return artifacts
 
 
@@ -392,6 +459,18 @@ def _schema_differences(source: dict[str, Any], target: dict[str, Any]) -> list[
             target.get("database", {}).get("migrations"),
             "database.migrations")
     return sorted(differences, key=lambda difference: difference["field"])
+
+
+def _database_hash_differences(source: dict[str, Any], target: dict[str, Any]) -> list[dict[str, Any]]:
+    source_database = source.get("database", {})
+    target_database = target.get("database", {})
+    if source_database.get("sha256") == target_database.get("sha256"):
+        return []
+    return [{
+        "field": "database.sha256",
+        "source": source_database.get("sha256"),
+        "target": target_database.get("sha256"),
+    }]
 
 
 def compare_manifests(source: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
@@ -432,6 +511,7 @@ def compare_manifests(source: dict[str, Any], target: dict[str, Any]) -> dict[st
             })
 
     differences = _schema_differences(source, target)
+    database_hash_differences = _database_hash_differences(source, target)
     return {
         "manifest_version": MANIFEST_VERSION,
         "comparison_schema": INVENTORY_SCHEMA,
@@ -442,6 +522,7 @@ def compare_manifests(source: dict[str, Any], target: dict[str, Any]) -> dict[st
             "target_only": target_only,
             "missing_file": missing_files,
             "schema_migration_differences": differences,
+            "database_hash_differences": database_hash_differences,
         },
         "counts": {
             "exact_matches": len(exact_matches),
@@ -450,6 +531,7 @@ def compare_manifests(source: dict[str, Any], target: dict[str, Any]) -> dict[st
             "target_only": len(target_only),
             "missing_file": len(missing_files),
             "schema_migration_differences": len(differences),
+            "database_hash_differences": len(database_hash_differences),
         },
     }
 
@@ -498,7 +580,18 @@ class Command(BaseCommand):
             _write_json(compare_manifests(source, target), options["output"], self.stdout)
             return
 
-        manifest = build_manifest(options["data_root"])
+        data_root = Path(options["data_root"]).expanduser().resolve()
+        configured_root = Path(getattr(settings, "DATA_ROOT", data_root)).expanduser().resolve()
+        configured_paths = {}
+        if data_root == configured_root:
+            configured_paths = {
+                "database_path": settings.DATABASES["default"]["NAME"],
+                "media_root": settings.MEDIA_ROOT,
+                "faiss_root": settings.FAISS_INDEX_DIR,
+                "chroma_root": settings.CHROMA_DIR,
+                "static_root": settings.STATIC_ROOT,
+            }
+        manifest = build_manifest(data_root, **configured_paths)
         if options["expected_count"]:
             expected_counts = {}
             for item in options["expected_count"]:

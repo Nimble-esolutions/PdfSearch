@@ -1,90 +1,92 @@
-from django.core.management.base import BaseCommand
-from django.core.files import File
-from core.models import PDFFile, CustomUser, Folder
-from core.utils import extract_text_from_pdf, extract_keywords
-import os
 from pathlib import Path
 
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from core.models import CustomUser, Folder, PDFFile
+from core.utils import SearchDataIntegrityError, precompute_pdf_embeddings
+
+
 class Command(BaseCommand):
-    help = 'Restore PDF files from media directory to database'
+    help = "Restore PDFs already present under the configured MEDIA_ROOT"
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--folder-id',
+            "--folder-id",
             type=int,
-            default=22,  # Default to Audit folder
-            help='Folder ID to assign PDFs to (default: 22 for Audit)'
+            default=22,
+            help="Folder ID to assign PDFs to (default: 22)",
         )
 
     def handle(self, *args, **options):
-        media_pdfs_dir = Path('media/pdfs')
-        folder_id = options['folder_id']
-        
+        media_root = Path(settings.MEDIA_ROOT).expanduser().resolve()
+        media_pdfs_dir = media_root / "pdfs"
+        folder_id = options["folder_id"]
+
         try:
             folder = Folder.objects.get(id=folder_id)
-            self.stdout.write(f"Using folder: {folder.name} (ID: {folder_id})")
-        except Folder.DoesNotExist:
-            self.stdout.write(self.style.ERROR(f"Folder with ID {folder_id} not found"))
-            return
+        except Folder.DoesNotExist as exc:
+            raise CommandError(f"Folder with ID {folder_id} not found") from exc
 
-        # Get the first superadmin user
-        try:
-            user = CustomUser.objects.filter(role='superadmin').first()
-            if not user:
-                user = CustomUser.objects.first()
-            self.stdout.write(f"Using user: {user.username}")
-        except CustomUser.DoesNotExist:
-            self.stdout.write(self.style.ERROR("No users found in database"))
-            return
+        user = CustomUser.objects.filter(role="superadmin").first() or CustomUser.objects.first()
+        if user is None:
+            raise CommandError("No users found in database")
 
-        if not media_pdfs_dir.exists():
-            self.stdout.write(self.style.ERROR(f"Media PDFs directory not found: {media_pdfs_dir}"))
-            return
+        if not media_pdfs_dir.is_dir():
+            raise CommandError(f"Media PDFs directory not found: {media_pdfs_dir}")
 
-        pdf_files = list(media_pdfs_dir.glob('*.pdf'))
+        pdf_files = sorted(media_pdfs_dir.rglob("*.pdf"))
+        self.stdout.write(
+            f"Using folder: {folder.name} (ID: {folder_id}); "
+            f"media root: {media_root}"
+        )
         self.stdout.write(f"Found {len(pdf_files)} PDF files in media directory")
 
         restored_count = 0
         skipped_count = 0
+        failures: list[str] = []
 
         for pdf_path in pdf_files:
-            # Check if PDF already exists in database
-            if PDFFile.objects.filter(file=f"pdfs/{pdf_path.name}").exists():
-                self.stdout.write(f"Skipping {pdf_path.name} - already in database")
+            relative_path = pdf_path.relative_to(media_root).as_posix()
+            if PDFFile.objects.filter(file=relative_path).exists():
+                self.stdout.write(f"Skipping {relative_path} - already in database")
                 skipped_count += 1
                 continue
 
             try:
-                # Extract text and keywords
-                self.stdout.write(f"Processing {pdf_path.name}...")
-                text_content = extract_text_from_pdf(str(pdf_path))
-                keywords = extract_keywords(text_content) if text_content else []
-
-                # Create PDFFile object
-                with open(pdf_path, 'rb') as f:
-                    pdf_file = PDFFile(
-                        title=pdf_path.stem.replace('_', ' ').title(),
-                        uploaded_by=user,
-                        folder=folder,
-                        text_content=text_content,
-                        keywords=keywords
-                    )
-                    pdf_file.file.save(pdf_path.name, File(f), save=True)
+                with transaction.atomic():
+                    with pdf_path.open("rb") as stream:
+                        pdf_file = PDFFile.objects.create(
+                            title=pdf_path.stem.replace("_", " ").title(),
+                            uploaded_by=user,
+                            folder=folder,
+                            file=relative_path,
+                        )
+                    # The source file is already in MEDIA_ROOT. File() is opened
+                    # above to verify it is readable without copying it elsewhere.
+                    if not pdf_file.file.storage.exists(pdf_file.file.name):
+                        raise SearchDataIntegrityError(
+                            f"Restored file is not readable through configured storage: {relative_path}"
+                        )
+                    precompute_pdf_embeddings(pdf_file)
 
                 self.stdout.write(
-                    self.style.SUCCESS(
-                        f"✓ Restored {pdf_path.name} - {len(keywords)} keywords extracted"
-                    )
+                    self.style.SUCCESS(f"Restored {relative_path} and built searchable artifacts")
                 )
                 restored_count += 1
+            except Exception as exc:
+                failures.append(f"{relative_path}: {exc}")
+                self.stdout.write(self.style.ERROR(f"Failed to restore {relative_path}: {exc}"))
 
-            except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(f"✗ Failed to restore {pdf_path.name}: {str(e)}")
-                )
+        if failures:
+            raise CommandError(
+                f"Restoration failed for {len(failures)} PDF(s); "
+                f"{restored_count} restored, {skipped_count} skipped"
+            )
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"\nRestoration complete: {restored_count} PDFs restored, {skipped_count} skipped"
+                f"Restoration complete: {restored_count} PDFs restored, {skipped_count} skipped"
             )
         )

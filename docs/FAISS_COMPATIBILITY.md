@@ -35,10 +35,15 @@ load and search validation. A failed or unknown candidate stays quarantined.
 ## Current Versus Planned
 
 Current: operators can perform file fingerprints, load checks, metadata review,
-and representative search in an isolated target.
+database chunk-count/dimension validation, and representative search in an
+isolated target. Runtime search refuses an index whose dimensions or vector
+count differs from the database embeddings; it never substitutes zero-score
+results for an invalid index.
 
 Planned or absent: generated index manifests, automatic FAISS compatibility
-classification, and automated FAISS recovery/promotion.
+classification, and automated FAISS recovery/promotion. Restore now builds the
+canonical database chunks/embeddings/index pipeline and fails atomically if it
+cannot produce a searchable result set.
 
 ## Required Gates
 

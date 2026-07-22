@@ -31,6 +31,8 @@ services:
       - FAISS_INDEX_DIR=/app/data/faiss_indexes
       - CHROMA_DIR=/app/data/chroma_db
       - BACKUP_DIR=/app/data/backups
+      - DATA_BOOTSTRAP_MODE=${DATA_BOOTSTRAP_MODE:-empty}
+      - DECLARED_SEED_DB=${DECLARED_SEED_DB:-/app/init/db.sqlite3}
       - DEBUG=True
       - ALLOW_INSECURE_DEFAULTS=1
       - SECRET_KEY=${SECRET_KEY:-django-insecure-dev-only-change-me}

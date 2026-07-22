@@ -63,9 +63,11 @@ not create this data record.
 ## Inventory And Artifact Manifest
 
 `core.inventory_artifacts` records a deterministic nested inventory containing
-`manifest_version`, `read_only`, SQLite schema/migrations, PDF rows and storage
-files, FAISS files, and embedding metadata. The vault normalizes that inventory
-to this immutable object contract:
+`manifest_version`, `read_only`, SQLite schema/migrations and SHA-256, PDF rows
+and storage files, FAISS files, embedding metadata, and complete configured
+Chroma/static trees. A configured tree outside `DATA_ROOT` is explicitly marked
+`out-of-contract` and is not silently treated as part of the release. The vault
+normalizes that inventory to this immutable object contract:
 
 ```json
 {
@@ -100,20 +102,22 @@ python flowdocs/manage.py inventory_artifacts \
   --data-root /app/data \
   --expected-count pdf_rows=253 \
   --expected-count pdf_storage_files=242 \
-  --expected-count faiss_files=51 \
-  --expected-count faiss_vectors=8753 \
-  --expected-count preserved_target_only_rows=11 \
+   --expected-count faiss_files=51 \
+   --expected-count faiss_vectors=8753 \
+   --expected-count preserved_target_only_rows=11 \
   --output /app/data/backups/inventory.json
 ```
 
-Validation is explicit and opt-in. It opens SQLite read-only, hashes declared
-files, checks the migration leaf and applied set, validates PDF row paths and
-checksums, and loads FAISS indexes when the dependency and file format permit
-it to compare dimensions and vector counts. A missing policy, mismatch,
-unexpected missing PDF, unsafe path, failed SQLite check, or inconsistent FAISS
-metadata returns a non-zero exit status. The command never runs during
-`start.sh`, never writes under `--data-root`, and must not be used to generate
-or package production data in Git, `init/`, or an image layer:
+Validation is explicit and opt-in. It opens SQLite read-only, verifies the
+database SHA-256, hashes declared files, checks the migration leaf and applied
+set, validates PDF row paths and checksums, and loads FAISS indexes when the
+dependency and file format permit it to compare dimensions and vector counts
+against the database chunk metadata. It also compares every in-contract Chroma
+and static file. A missing policy, hash mismatch, unexpected missing PDF,
+unsafe path, failed SQLite check, or inconsistent FAISS metadata returns a
+non-zero exit status. The command never writes under `--data-root`, and must
+not be used to generate or package production data in Git, `init/`, or an image
+layer:
 
 ```bash
 python flowdocs/manage.py validate_data_release \
@@ -125,6 +129,26 @@ python flowdocs/manage.py validate_data_release \
 For an existing manifest without embedded policy, pass the same values as
 repeatable `--expected-count NAME=VALUE` overrides. Treat a failed validation as
 a release stop; do not repair the data root from inside this command.
+
+## Fresh Instance Gate
+
+`start.sh` defaults to `DATA_BOOTSTRAP_MODE=strict`. When an empty data volume
+is initialized from the declared image seed (`/app/init/db.sqlite3` by default),
+the seed's PDF rows are checked against the configured `MEDIA_ROOT` before
+Gunicorn starts. A seed with PDF rows and missing or unsafe media fails closed;
+the application is never started as an apparently healthy but unsearchable
+release. Set `DECLARED_SEED_DB` only to an explicitly reviewed seed path.
+
+For a deliberately empty first run, set `DATA_BOOTSTRAP_MODE=empty` (or
+`bootstrap`). That mode does not copy the image seed and is the only supported
+way to start without a declared data release. It is not a repair mode for an
+existing production volume.
+
+Restore operations use Django's configured `MEDIA_ROOT` and synchronously build
+text, chunks, embeddings, and the folder FAISS index. A restore is rolled back
+and exits non-zero if any stage cannot complete. Search likewise rejects stale
+FAISS dimensions/counts or incomplete database chunk metadata instead of
+returning arbitrary zero-score references.
 
 The inventory includes SQLite schema/migrations, PDF database rows and file
 hashes, FAISS file hashes, and embedding dimensions. It does not include PDF
