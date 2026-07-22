@@ -44,6 +44,15 @@ OPENAI_EMBED_MODEL = getattr(settings, "OPENAI_EMBED_MODEL", "text-embedding-3-s
 OPENAI_CHAT_MODEL = getattr(settings, "OPENAI_CHAT_MODEL", "gpt-4o-mini")  # change as needed
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
+
+def _test_embeddings_enabled() -> bool:
+    return os.getenv("PDFSEARCH_TEST_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _deterministic_embeddings(texts: list[str]) -> list[list[float]]:
+    """Use only for credential-free disposable runtime smoke tests."""
+    return [[1.0, 0.0] for _ in texts]
+
 # Embedding and chunk sizes
 CHUNK_SIZE = getattr(settings, "PDF_CHUNK_SIZE", 1200)
 CHUNK_OVERLAP = getattr(settings, "PDF_CHUNK_OVERLAP", 200)
@@ -118,6 +127,8 @@ def extract_text_from_pdf_path(path: str) -> str:
 # ---------------- Embeddings ----------------
 def create_embeddings_for_texts(texts: List[str], batch_size: int = 16) -> List[List[float]]:
     """Call OpenAI embeddings in batches. Returns list of lists (embeddings)."""
+    if _test_embeddings_enabled():
+        return _deterministic_embeddings(texts)
     if not client:
         raise RuntimeError("OpenAI not configured")
     embeddings = []
@@ -345,10 +356,13 @@ def search_pdfs_fast(folder: Folder, user_query: str, top_n_pdfs: int = 2) -> Tu
 
     # 2. create query embedding
     try:
-        if not client:
-            raise RuntimeError("OpenAI not configured")
-        emb_resp = client.embeddings.create(model=OPENAI_EMBED_MODEL, input=[user_query])
-        query_emb = np.array(emb_resp.data[0].embedding, dtype=np.float32)
+        if _test_embeddings_enabled():
+            query_emb = np.array(_deterministic_embeddings([user_query])[0], dtype=np.float32)
+        else:
+            if not client:
+                raise RuntimeError("OpenAI not configured")
+            emb_resp = client.embeddings.create(model=OPENAI_EMBED_MODEL, input=[user_query])
+            query_emb = np.array(emb_resp.data[0].embedding, dtype=np.float32)
     except Exception as exc:
         raise SearchDataIntegrityError("Unable to create the query embedding") from exc
 

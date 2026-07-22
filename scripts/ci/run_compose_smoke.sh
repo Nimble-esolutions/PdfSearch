@@ -46,7 +46,7 @@ curl --fail --silent --show-error "http://127.0.0.1:${web_port}/readyz" >/dev/nu
 "${compose[@]}" exec --no-TTY --user appuser web python -m pip check
 
 test_log="$(mktemp)"
-if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core --noinput --verbosity=2 >"$test_log" 2>&1; then
+if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.test_artifact_vault --noinput --verbosity=2 >"$test_log" 2>&1; then
     cat "$test_log"
     rm -f "$test_log"
     exit 1
