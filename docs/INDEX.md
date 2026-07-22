@@ -31,6 +31,7 @@ source, and supersession relationship.
 ## Release Promotion
 
 - [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) — current workflow guarantees and future targets
+- [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md) — Admin Operations Cockpit merge, image digest, and dev-release evidence
 - [`SECURITY_SCAN.md`](SECURITY_SCAN.md) — Trivy behavior, root cause, remediation, and verification
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — current release record and proposed artifact manifest
 - [`UI_DATA_INTEGRATION_PLAN.md`](UI_DATA_INTEGRATION_PLAN.md) — historical UI, init-data, FAISS, bootstrap, and blue-green integration plan
