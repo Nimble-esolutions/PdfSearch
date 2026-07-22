@@ -387,7 +387,7 @@ def _normalize_inventory_files(payload: Mapping[str, Any], release_id: str) -> l
     )
     normalized: list[dict[str, Any]] = []
     seen_paths: set[str] = set()
-    seen_keys: set[str] = set()
+    seen_key_records: dict[str, tuple[str, str, int]] = {}
     for section_name, field_name, artifact_type in sections:
         section = payload.get(section_name)
         if not isinstance(section, Mapping) or not isinstance(section.get(field_name), list):
@@ -406,10 +406,13 @@ def _normalize_inventory_files(payload: Mapping[str, Any], release_id: str) -> l
                 raise ArtifactVaultIntegrityError(f"Invalid size_bytes for inventory path {path}")
             _validate_sha256(digest)
             key = _inventory_object_key(artifact_type, path, digest, release_id)
-            if key in seen_keys:
+            previous = seen_key_records.get(key)
+            if previous is not None and previous != (artifact_type, digest, size):
+                raise ArtifactVaultIntegrityError("Inventory contains conflicting object keys")
+            if previous is not None and artifact_type != "pdf":
                 raise ArtifactVaultIntegrityError("Inventory contains ambiguous object keys")
             seen_paths.add(path)
-            seen_keys.add(key)
+            seen_key_records[key] = (artifact_type, digest, size)
             normalized.append(
                 {
                     "path": path,

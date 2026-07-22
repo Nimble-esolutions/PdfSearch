@@ -181,6 +181,30 @@ class ArtifactVaultTests(SimpleTestCase):
         self.assertEqual(manifest_metadata.key, "manifests/release-2026-07-22.json")
         self.assertEqual(len(self.client.objects), 4)
 
+    def test_inventory_allows_identical_pdf_content_deduplication(self):
+        payloads = {"pdf": b"same-pdf", "faiss": b"index", "metadata": b"{}"}
+        inventory = self.inventory_manifest(payloads)
+        pdf_entry = inventory["pdf_storage"]["files"][0].copy()
+        pdf_entry["path"] = "media/pdfs/duplicate-name.pdf"
+        inventory["pdf_storage"]["files"].append(pdf_entry)
+
+        normalized = self.vault.normalize_manifest(inventory, release_id="release-2026-07-22")
+        pdf_files = [entry for entry in normalized["files"] if entry["artifact_type"] == "pdf"]
+        self.assertEqual(len(pdf_files), 2)
+        self.assertEqual(pdf_files[0]["object_key"], pdf_files[1]["object_key"])
+        self.assertEqual(pdf_files[0]["bytes"], pdf_files[1]["bytes"])
+
+    def test_inventory_rejects_conflicting_pdf_object_collision(self):
+        payloads = {"pdf": b"same-pdf", "faiss": b"index", "metadata": b"{}"}
+        inventory = self.inventory_manifest(payloads)
+        pdf_entry = inventory["pdf_storage"]["files"][0].copy()
+        pdf_entry["path"] = "media/pdfs/conflicting-size.pdf"
+        pdf_entry["size_bytes"] += 1
+        inventory["pdf_storage"]["files"].append(pdf_entry)
+
+        with self.assertRaisesRegex(ArtifactVaultIntegrityError, "conflicting object keys"):
+            self.vault.normalize_manifest(inventory, release_id="release-2026-07-22")
+
     def test_inventory_missing_release_id_requires_explicit_value(self):
         payloads = {"pdf": b"pdf", "faiss": b"index", "metadata": b"{}"}
         with self.assertRaisesRegex(ArtifactVaultIntegrityError, "explicit immutable --release-id"):
