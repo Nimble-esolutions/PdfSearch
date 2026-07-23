@@ -348,9 +348,12 @@ Item 6 (SEO/AEO)             ← independent, after approval questions resolved
 
 | Item | Branch | PR | Merge SHA | Status |
 |------|--------|----|-----------|--------|
-| 1 | feat/generation-promotion-rollback | — | — | pending |
-| 2 | feat/audit-validation-models | — | — | pending |
-| 3 | feat/bulk-filter-workspace | — | — | pending |
-| 4 | feat/live-job-drawer | — | — | pending |
-| 5 | feat/document-lifecycle | — | — | pending |
-| 6 | feat/seo-aeo-implementation | — | — | pending (blocked on approval) |
+| 1 | feat/generation-promotion-rollback | #42 | dcc8b44 | merged |
+| 2 | feat/audit-validation-models | #43 | 10d9580 | merged |
+| 3 | feat/bulk-filter-workspace | #44 | 1700078 | merged |
+| 4 | feat/live-job-drawer | #45 | 9aeb15e | merged |
+| 5 | feat/document-lifecycle | #46 | a8de9d2 | merged |
+| 6 | feat/seo-aeo-implementation | #47 | 76aa159 | merged |
+
+All 6 items merged. Dev HEAD: 76aa159. Zero open PRs for these items.
+131 tests pass on full integration suite.
