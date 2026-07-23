@@ -81,16 +81,4 @@ class Migration(migrations.Migration):
                 "ordering": ["-created_at"],
             },
         ),
-        migrations.AddIndex(
-            model_name="artifactvalidation",
-            index=models.Index(fields=["generation", "validation_type"], name="core_artval_gen_type_idx"),
-        ),
-        migrations.AddIndex(
-            model_name="maintenanceauditevent",
-            index=models.Index(fields=["job", "created_at"], name="core_auditev_job_created_idx"),
-        ),
-        migrations.AddIndex(
-            model_name="maintenanceauditevent",
-            index=models.Index(fields=["event_type", "created_at"], name="core_auditev_type_created_idx"),
-        ),
     ]

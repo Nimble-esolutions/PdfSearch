@@ -243,9 +243,6 @@ class ArtifactValidation(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["generation", "validation_type"]),
-        ]
 
 
 class MaintenanceAuditEvent(models.Model):
@@ -285,7 +282,3 @@ class MaintenanceAuditEvent(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["job", "created_at"]),
-            models.Index(fields=["event_type", "created_at"]),
-        ]
