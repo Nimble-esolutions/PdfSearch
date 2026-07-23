@@ -1,38 +1,27 @@
 {% extends 'base.html' %}
 {% load i18n %}
 
-{% block title %}{% trans "Register - CC & RCS Maharashtra" %}{% endblock %}
+{% block title %}{% trans "Create user - CC & RCS Maharashtra" %}{% endblock %}
 
 {% block content %}
-<section class="admin-panel admin-panel--narrow">
-  <div class="admin-page-heading text-center">
-    <h2>{% trans "Registration Form" %}</h2>
-    <p>{% trans "Create a user account and assign access details." %}</p>
+<section class="admin-panel admin-panel--narrow access-form-panel">
+  <div class="admin-page-heading">
+    <span class="workspace-kicker">{% trans "Users & Access" %}</span>
+    <h2>{% trans "Create user account" %}</h2>
+    <p>{% trans "Create an operator account and assign its current access level." %}</p>
   </div>
-
-  <form method="post" action="{% url 'register' %}" class="admin-form">
-    {% csrf_token %}
-
-    {% for field in form %}
-      <div class="mb-3">
-        {{ field.label_tag }}
-        {{ field }}
-        {% if field.help_text %}
-          <div class="form-text">{{ field.help_text }}</div>
-        {% endif %}
-        {% for error in field.errors %}
-          <div class="invalid-feedback d-block">{{ error }}</div>
-        {% endfor %}
-      </div>
-    {% endfor %}
-
-    <button type="submit" class="btn btn-primary w-100">{% trans "Register" %}</button>
-  </form>
-
-  {% if not request.user.is_authenticated %}
-    <div class="mt-3 text-center">
-      <small>{% trans "Already have an account?" %} <a href="{% url 'login' %}">{% trans "Login here" %}</a></small>
+  <form method="post" action="{% url 'register' %}" class="admin-form">{% csrf_token %}
+    <div class="form-section"><h3>{% trans "Identity" %}</h3><p>{% trans "Use a recognizable username and a monitored email address." %}</p>
+      {% for field in form %}{% if field.name == 'username' or field.name == 'email' %}<label>{{ field.label_tag }}{{ field }}{% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</label>{% endif %}{% endfor %}
     </div>
-  {% endif %}
+    <div class="form-section"><h3>{% trans "Access assignment" %}</h3><p>{% trans "Superadmin access is limited to superadmins. Department-scoped permissions are planned for phase 2." %}</p>
+      {% for field in form %}{% if field.name == 'role' or field.name == 'department' %}<label>{{ field.label_tag }}{{ field }}{% if field.help_text %}<small class="form-text">{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</label>{% endif %}{% endfor %}
+    </div>
+    <div class="form-section"><h3>{% trans "Account password" %}</h3><p>{% trans "Use a unique password and deliver it through a secure channel." %}</p>
+      {% for field in form %}{% if field.name == 'password1' or field.name == 'password2' %}<label>{{ field.label_tag }}{{ field }}{% if field.help_text %}<small class="form-text">{{ field.help_text|safe }}</small>{% endif %}{% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</label>{% endif %}{% endfor %}
+    </div>
+    {% if form.non_field_errors %}<div class="invalid-feedback d-block">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="access-form-actions"><a href="{% url 'user_list' %}" class="btn btn-outline-secondary">{% trans "Cancel" %}</a><button type="submit" class="btn btn-primary">{% trans "Create account" %}</button></div>
+  </form>
 </section>
 {% endblock %}

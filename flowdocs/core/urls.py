@@ -25,6 +25,7 @@ urlpatterns = [
 
     # ---------------- User Management ----------------
     path("dashboard/users/", views.user_list_view, name="user_list"),
+    path("dashboard/users/<int:user_id>/edit/", views.edit_user, name="edit_user"),
     path("dashboard/users/toggle/<int:user_id>/", views.toggle_user_status, name="toggle_user_status"),
     path("dashboard/users/delete/<int:user_id>/", views.delete_user, name="delete_user"),
 

@@ -1,77 +1,79 @@
 {% extends 'base.html' %}
 {% load i18n %}
 
-{% block title %}{% trans "User List - CC & RCS Maharashtra" %}{% endblock %}
+{% block title %}{% trans "Users and Access - CC & RCS Maharashtra" %}{% endblock %}
 
 {% block content %}
-<section class="admin-panel">
+<section class="access-workspace">
   <div class="admin-page-heading admin-page-heading--split">
     <div>
-      <h2>{% trans "Registered Users" %}</h2>
-      <p>{% trans "Review user access, account status, role, and department." %}</p>
+      <span class="workspace-kicker">{% trans "Administration" %}</span>
+      <h2>{% trans "Users & Access" %}</h2>
+      <p>{% trans "Review account status and access assignments from one operational workspace." %}</p>
     </div>
-    <a href="{% url 'register' %}" class="btn btn-primary">{% trans "Add User" %}</a>
+    <a href="{% url 'register' %}" class="btn btn-primary">{% trans "Create user" %}</a>
   </div>
 
-  <div class="table-responsive admin-table-wrap">
-    <table class="table table-hover table-sm align-middle mb-0 admin-table">
-      <thead>
-        <tr>
-          <th scope="col">{% trans "Username" %}</th>
-          <th scope="col">{% trans "Email" %}</th>
-          <th scope="col">{% trans "Role" %}</th>
-          <th scope="col">{% trans "Department" %}</th>
-          <th scope="col">{% trans "Status" %}</th>
-          <th scope="col" class="text-end">{% trans "Actions" %}</th>
-        </tr>
-      </thead>
-      <tbody>
+  <div class="access-metrics" aria-label="{% trans 'User account summary' %}">
+    <div class="access-metric"><span>{% trans "Total users" %}</span><strong>{{ metrics.total }}</strong></div>
+    <div class="access-metric"><span>{% trans "Active" %}</span><strong>{{ metrics.active }}</strong></div>
+    <div class="access-metric"><span>{% trans "Admins" %}</span><strong>{{ metrics.admins }}</strong></div>
+    <div class="access-metric"><span>{% trans "Departments" %}</span><strong>{{ metrics.departments }}</strong></div>
+  </div>
+
+  <section class="admin-panel access-filter-panel">
+    <form method="get" class="access-filter-form">
+      <label class="access-search-field">
+        <span>{% trans "Search users" %}</span>
+        <input type="search" name="q" value="{{ filters.q }}" placeholder="{% trans 'Username or email' %}">
+      </label>
+      <label><span>{% trans "Role" %}</span><select name="role">
+        <option value="">{% trans "All roles" %}</option>
+        {% for value, label in role_choices %}<option value="{{ value }}"{% if filters.role == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label>
+      <label><span>{% trans "Department" %}</span><select name="department">
+        <option value="">{% trans "All departments" %}</option>
+        {% for value, label in department_choices %}<option value="{{ value }}"{% if filters.department == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label>
+      <label><span>{% trans "Status" %}</span><select name="status">
+        <option value="">{% trans "All statuses" %}</option>
+        <option value="active"{% if filters.status == 'active' %} selected{% endif %}>{% trans "Active" %}</option>
+        <option value="inactive"{% if filters.status == 'inactive' %} selected{% endif %}>{% trans "Inactive" %}</option>
+      </select></label>
+      <div class="access-filter-actions">
+        <button type="submit" class="btn btn-primary">{% trans "Apply" %}</button>
+        <a href="{% url 'user_list' %}" class="btn btn-outline-secondary">{% trans "Clear" %}</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="admin-panel">
+    <div class="access-table-heading">
+      <div><h3>{% trans "Account directory" %}</h3><p>{% blocktrans with count=users|length %}{{ count }} matching account(s){% endblocktrans %}</p></div>
+      <span class="access-policy-note">{% trans "Department-scoped permissions are planned for phase 2." %}</span>
+    </div>
+    <div class="table-responsive admin-table-wrap">
+      <table class="table table-hover table-sm align-middle mb-0 admin-table">
+        <thead><tr><th>{% trans "User" %}</th><th>{% trans "Role" %}</th><th>{% trans "Department" %}</th><th>{% trans "Status" %}</th><th>{% trans "Actions" %}</th></tr></thead>
+        <tbody>
         {% for user in users %}
           <tr>
-            <td class="fw-semibold">{{ user.username }}</td>
-            <td>{{ user.email|default:"-" }}</td>
-            <td>{{ user.role|title|default:"User" }}</td>
-            <td>{{ user.department|default:"-" }}</td>
-            <td>
-              {% if user.is_active %}
-                <span class="badge text-bg-success">{% trans "Active" %}</span>
-              {% else %}
-                <span class="badge text-bg-secondary">{% trans "Inactive" %}</span>
+            <td><strong>{{ user.username }}</strong><small class="d-block text-muted">{{ user.email|default:_('No email') }}</small></td>
+            <td><span class="access-role access-role--{{ user.role|default:'user' }}">{{ user.role|title|default:_('User') }}</span></td>
+            <td>{{ user.get_department_display|default:user.department|default:_('Unassigned') }}</td>
+            <td>{% if user.is_active %}<span class="access-status access-status--active">{% trans "Active" %}</span>{% else %}<span class="access-status access-status--inactive">{% trans "Inactive" %}</span>{% endif %}</td>
+            <td><div class="admin-row-actions">
+              {% if user.id == request.user.id %}<span class="text-muted small">{% trans "Current user" %}</span>{% else %}
+                <a href="{% url 'edit_user' user.id %}" class="btn btn-outline-secondary btn-sm">{% trans "Edit" %}</a>
+                <form method="post" action="{% url 'toggle_user_status' user.id %}">{% csrf_token %}<button type="submit" class="btn btn-outline-secondary btn-sm">{% if user.is_active %}{% trans "Deactivate" %}{% else %}{% trans "Activate" %}{% endif %}</button></form>
+                {% if request.user.role == 'superadmin' %}<form method="post" action="{% url 'delete_user' user.id %}">{% csrf_token %}<button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('{% trans 'Delete this account? Owned content must be transferred first.' %}')">{% trans "Delete" %}</button></form>{% endif %}
               {% endif %}
-            </td>
-            <td>
-              <div class="admin-row-actions justify-content-end">
-                {% if user.id == request.user.id %}
-                  <span class="text-muted small">{% trans "Current user" %}</span>
-                {% else %}
-                  <form method="post" action="{% url 'toggle_user_status' user.id %}" class="d-inline">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-outline-secondary btn-sm">
-                      {% if user.is_active %}{% trans "Deactivate" %}{% else %}{% trans "Activate" %}{% endif %}
-                    </button>
-                  </form>
-                {% endif %}
-                {% if request.user.role == 'superadmin' and user.id != request.user.id %}
-                  <form method="post" action="{% url 'delete_user' user.id %}" class="d-inline">
-                    {% csrf_token %}
-                    <button type="submit"
-                            class="btn btn-outline-danger btn-sm"
-                            aria-label="{% trans 'Delete user' %}: {{ user.username }}"
-                            onclick="return confirm('{% trans 'Delete this user? This cannot be undone.' %}')">
-                      {% trans "Delete" %}
-                    </button>
-                  </form>
-                {% endif %}
-              </div>
-            </td>
+            </div></td>
           </tr>
-        {% empty %}
-          <tr>
-            <td colspan="6" class="text-center text-muted py-4">{% trans "No users found." %}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+        {% empty %}<tr><td colspan="5" class="text-center text-muted py-5">{% trans "No accounts match these filters." %}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
 </section>
 {% endblock %}
