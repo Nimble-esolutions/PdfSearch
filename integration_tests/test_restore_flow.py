@@ -365,17 +365,67 @@ class EndToEndRestoreFlowTests(TransactionTestCase):
         self.assertTrue(Path(result["local_path"]).is_dir())
 
     def test_07_rollback_works(self):
-        """Prove rollback restores previous state."""
-        from core.activate import rollback_to_previous, read_active_pointer, preserve_previous_pointer
+        """Activate gen A, restore+activate gen B, rollback: A must be active again."""
+        from core.activate import (
+            write_active_pointer, read_active_pointer,
+            preserve_previous_pointer, rollback_to_previous,
+            activation_status as act_status,
+        )
+        from core.artifact_vault import ArtifactVault
+        from core.models import MaintenanceJob, ArtifactGeneration
+        from core.restore_pipeline import run_restore_pipeline
+        from core.restore_workspace import RestoreMode, RestoreWorkspace, WorkspaceState
 
-        prev = preserve_previous_pointer()
-        if prev is None:
-            self.skipTest("No previous pointer to roll back to")
+        self.test_01_publish_source_generation()
+        gen_a = ArtifactGeneration.objects.order_by("-created_at").first()
 
-        try:
-            result = rollback_to_previous()
-            self.assertFalse(result.get("restored_pointer") is None)
-        finally:
-            if prev:
-                from core.activate import write_active_pointer
-                write_active_pointer(prev)
+        workspace_a = str(Path(getattr(django_settings, "BACKUP_DIR", "/tmp")) / f"ws-a-{secrets.token_hex(4)}")
+        Path(workspace_a).mkdir(parents=True, exist_ok=True)
+        from core.restore_workspace import create_workspace
+        ws_a = create_workspace(
+            workspace_id=f"stage-a-{secrets.token_hex(4)}",
+            restore_job_id="rollback-test-a",
+            source_dataset_id=SOURCE_DATASET,
+            source_generation_id=gen_a.generation_id,
+            target_dataset_id=STAGING_DATASET,
+            restore_mode=RestoreMode.PINNED,
+        )
+        ws_a.transition(WorkspaceState.DOWNLOADING)
+        ws_a.transition(WorkspaceState.DOWNLOADED)
+        ws_a.transition(WorkspaceState.SOURCE_VALIDATED)
+        ws_a.transition(WorkspaceState.PREFLIGHT_PASSED)
+        ws_a.transition(WorkspaceState.APPLICATION_VALIDATED)
+        ws_a.transition(WorkspaceState.ACTIVATION_READY)
+        ws_a.activation_eligible = True
+        ws_a.save_metadata()
+
+        write_active_pointer(workspace_a)
+        self.assertIsNotNone(read_active_pointer())
+
+        preserve_previous_pointer()
+
+        gen_b_source = ArtifactGeneration.objects.order_by("-created_at").first()
+        job = MaintenanceJob.objects.create(kind="restore_generation", status="running")
+        vault = ArtifactVault()
+
+        result_b = run_restore_pipeline(
+            vault, job=job,
+            source_dataset_id=SOURCE_DATASET,
+            restore_mode=RestoreMode.PINNED,
+            pinned_generation=gen_b_source.generation_id,
+            target_dataset_id=STAGING_DATASET,
+            target_environment="staging",
+            sanitize=False,
+            run_rehearsal=False,
+            activate=True,
+        )
+        self.assertEqual(result_b["state"], WorkspaceState.ACTIVE.value,
+                         f"Gen B activation failed: {result_b.get('failure_reason', '')}")
+
+        rollback_result = rollback_to_previous()
+        restored = rollback_result.get("restored_pointer", "")
+        self.assertTrue(restored, "Rollback must restore a previous pointer")
+
+        current = read_active_pointer()
+        self.assertTrue(current and str(Path(current).resolve()) == str(Path(workspace_a).resolve()),
+                        f"Active pointer should be gen A after rollback. Current: {current}, Expected: {workspace_a}")

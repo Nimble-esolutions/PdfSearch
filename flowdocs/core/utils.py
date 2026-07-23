@@ -48,7 +48,21 @@ DetectorFactory.seed = 0
 OPENAI_API_KEY = getattr(settings, "OPENAI_API_KEY", None) or os.getenv("OPENAI_API_KEY")
 OPENAI_EMBED_MODEL = getattr(settings, "OPENAI_EMBED_MODEL", "text-embedding-3-small")
 OPENAI_CHAT_MODEL = getattr(settings, "OPENAI_CHAT_MODEL", "gpt-4o-mini")  # change as needed
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+_client: Any = None
+
+
+def _get_client():
+    global _client
+    if _client is not None:
+        return _client
+    try:
+        from .ai_guard import get_openai_client
+        _client = get_openai_client()
+    except Exception as exc:
+        from .utils import SearchDataIntegrityError
+        raise SearchDataIntegrityError(f"OpenAI client unavailable: {exc}") from exc
+    return _client
 
 
 def _test_embeddings_enabled() -> bool:
@@ -141,7 +155,7 @@ def create_embeddings_for_texts(texts: List[str], batch_size: int = 16) -> List[
     # batch manually to reduce large payloads
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
-        resp = client.embeddings.create(model=OPENAI_EMBED_MODEL, input=batch)
+        resp = _get_client().embeddings.create(model=OPENAI_EMBED_MODEL, input=batch)
         # depending on SDK, resp.data may be iterable
         for d in resp.data:
             embeddings.append(list(d.embedding))
@@ -451,7 +465,7 @@ def search_pdfs_fast(
         else:
             if not client:
                 raise RuntimeError("OpenAI not configured")
-            emb_resp = client.embeddings.create(model=OPENAI_EMBED_MODEL, input=[user_query])
+            emb_resp = _get_client().embeddings.create(model=OPENAI_EMBED_MODEL, input=[user_query])
             query_emb = np.array(emb_resp.data[0].embedding, dtype=np.float32)
     except Exception as exc:
         raise SearchDataIntegrityError("Unable to create the query embedding") from exc
@@ -589,7 +603,7 @@ def generate_gpt_answer(
         prompt = f"{prompt}\n\nSources:\n{refs_text}"
 
     try:
-        resp = client.chat.completions.create(
+        resp = _get_client().chat.completions.create(
             model=OPENAI_CHAT_MODEL,
             messages=[
                 {"role": "system", "content": system_msg},
