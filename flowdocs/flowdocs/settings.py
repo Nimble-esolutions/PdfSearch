@@ -14,6 +14,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 from core.runtime_config import validate_redis_url
+from core.environment import EnvironmentIdentity
+from core.side_effects import resolve_email_backend, validate_production_safety
 
 
 def _env_positive_int(name, default):
@@ -281,3 +283,23 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 FAISS_INDEX_DIR = Path(os.getenv('FAISS_INDEX_DIR', str(DATA_ROOT / 'faiss_indexes')))
 CHROMA_DIR = Path(os.getenv('CHROMA_DIR', str(DATA_ROOT / 'chroma_db')))
 BACKUP_DIR = Path(os.getenv('BACKUP_DIR', str(DATA_ROOT / 'backups')))
+
+# ---- Environment Identity and Side-Effect Safety ----
+_env_identity = EnvironmentIdentity.from_env()
+_env_errors = _env_identity.validate()
+if _env_errors:
+    raise ImproperlyConfigured(
+        "Environment configuration errors:\n  " + "\n  ".join(_env_errors)
+    )
+
+_side_effect_errors = validate_production_safety(_env_identity)
+if _side_effect_errors:
+    raise ImproperlyConfigured(
+        "Side-effect safety violations:\n  " + "\n  ".join(_side_effect_errors)
+    )
+
+_resolved_email_backend = resolve_email_backend(_env_identity)
+if _resolved_email_backend:
+    EMAIL_BACKEND = _resolved_email_backend
+
+ENV_IDENTITY = _env_identity
