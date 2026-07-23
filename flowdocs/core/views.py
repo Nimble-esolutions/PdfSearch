@@ -112,7 +112,8 @@ def can_access_pdf(user, pdf):
 
 def visible_pdfs(user, queryset=None, *, public=False):
     queryset = queryset if queryset is not None else PDFFile.objects.all()
-    queryset = queryset.exclude(lifecycle__in=("deprecated", "archived"))
+    if public:
+        queryset = queryset.exclude(lifecycle__in=("deprecated", "archived"))
     if public:
         return queryset.filter(
             folder__in=searchable_folders(user, public=True),
