@@ -20,6 +20,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SAFE_COMPONENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 PDF_KEY_RE = re.compile(r"^pdfs/sha256/([0-9a-f]{64})\.pdf$")
 FAISS_KEY_RE = re.compile(r"^faiss/([A-Za-z0-9][A-Za-z0-9._-]*)/(folder_[0-9]+\.index)$")
+DATABASE_KEY_RE = re.compile(r"^databases/([A-Za-z0-9][A-Za-z0-9._-]*)\.sqlite3$")
 INVENTORY_SCHEMA = "pdfsearch-artifact-inventory/v1"
 METADATA_SUFFIXES = {".json", ".jsonl", ".yaml", ".yml", ".npy", ".npz", ".pkl", ".pickle"}
 MUTABLE_RELEASE_IDS = {"active", "current", "latest", "dev", "stage", "staging", "prod", "production"}
@@ -280,6 +281,11 @@ class ArtifactVault:
         _validate_release_id(release_id)
         return f"manifests/{release_id}.json"
 
+    @staticmethod
+    def database_object_key(generation_id: str) -> str:
+        _validate_release_id(generation_id)
+        return f"databases/{generation_id}.sqlite3"
+
     def _require_enabled(self) -> None:
         if not self.config.enabled:
             raise ArtifactVaultDisabled("Artifact vault is disabled")
@@ -303,6 +309,9 @@ class ArtifactVault:
         faiss_match = FAISS_KEY_RE.fullmatch(key)
         if faiss_match:
             _validate_release_id(faiss_match.group(1))
+            return
+        if DATABASE_KEY_RE.fullmatch(key):
+            _validate_release_id(DATABASE_KEY_RE.fullmatch(key).group(1))
             return
         metadata_parts = key.split("/")
         if _is_safe_scoped_key(key, "metadata"):

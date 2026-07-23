@@ -60,9 +60,46 @@
         </div>
       </div>
 
+      {% if role == 'superadmin' %}
+        <div class="admin-panel admin-panel--inset mb-3">
+          <div class="admin-page-heading admin-page-heading--split">
+            <div>
+              <h3>{% trans "Bulk Data Operations" %}</h3>
+              <p>{% trans "Select categories, then queue a resumable operation. Work is processed by the maintenance worker." %}</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-primary btn-sm" name="operation" value="reindex_needed" form="bulk-maintenance-form" type="submit">{% trans "Reindex Needed" %}</button>
+              <button class="btn btn-outline-danger btn-sm" name="operation" value="reindex_all" form="bulk-maintenance-form" type="submit">{% trans "Reindex Selected" %}</button>
+              <button class="btn btn-outline-secondary btn-sm" name="operation" value="repair_indexes" form="bulk-maintenance-form" type="submit">{% trans "Repair Indexes" %}</button>
+              <button class="btn btn-outline-dark btn-sm" name="operation" value="validate" form="bulk-maintenance-form" type="submit">{% trans "Validate Files" %}</button>
+              <button class="btn btn-outline-success btn-sm" name="operation" value="sync_generation" form="bulk-maintenance-form" type="submit">{% trans "Sync Active Data to S3" %}</button>
+            </div>
+          </div>
+          <div class="small text-muted">{% trans "Only superadmins can queue bulk maintenance. Existing successful items remain intact when another item fails." %}</div>
+          <div class="input-group input-group-sm mt-3">
+            <select class="form-select" name="generation_choice" form="restore-generation-form" aria-label="{% trans 'Available generation' %}">
+              <option value="">{% trans "Choose a generation or enter one below" %}</option>
+              {% for generation in cockpit.generations %}
+                <option value="{{ generation.generation_id }}">{{ generation.generation_id }} ({{ generation.status }})</option>
+              {% endfor %}
+              {% for generation_id in cockpit.vault_generations %}
+                <option value="{{ generation_id }}">{{ generation_id }} (S3)</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-outline-warning" name="operation" value="restore_generation" form="restore-generation-form" type="submit">{% trans "Pull Generation to Staging" %}</button>
+          </div>
+          <input class="form-control form-control-sm mt-2" name="generation_id" form="restore-generation-form" placeholder="{% trans 'Or enter an immutable generation id' %}" aria-label="{% trans 'Or enter an immutable generation id' %}">
+        </div>
+      {% endif %}
+
       <div class="cockpit-category-grid">
         {% for folder in folders %}
           <article class="admin-category-card">
+            {% if role == 'superadmin' %}
+              <label class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="folder_ids" value="{{ folder.id }}" form="bulk-maintenance-form" aria-label="{% trans 'Select category' %}: {{ folder.name }}">
+              </label>
+            {% endif %}
             <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="admin-category-card__link">
               <span class="admin-category-card__title">{{ folder.name }}</span>
               <span class="admin-category-card__meta">
@@ -110,6 +147,14 @@
           </div>
         {% endfor %}
       </div>
+      {% if role == 'superadmin' %}
+        <form id="bulk-maintenance-form" method="post" action="{% url 'bulk_maintenance' %}">
+          {% csrf_token %}
+        </form>
+        <form id="restore-generation-form" method="post" action="{% url 'bulk_maintenance' %}">
+          {% csrf_token %}
+        </form>
+      {% endif %}
     </div>
 
     <div class="admin-panel">
@@ -139,6 +184,40 @@
   </div>
 
   <aside class="cockpit-rail">
+    {% if role == 'superadmin' %}
+      <section class="admin-panel">
+        <div class="admin-page-heading">
+          <h2>{% trans "Maintenance Jobs" %}</h2>
+          <p>{% trans "Queued and recent background work." %}</p>
+        </div>
+        <div class="ops-lane-list">
+          {% for job in cockpit.maintenance_jobs %}
+            <div class="ops-lane-item">
+              <span>
+                <strong>{{ job.get_kind_display }}</strong>
+                <small>{{ job.status|title }}</small>
+              </span>
+              <span>
+                <b>{{ job.completed_items }}/{{ job.total_items }}</b>
+                {% if job.status == 'queued' or job.status == 'running' %}
+                  <form method="post" action="{% url 'maintenance_job_action' job_id=job.public_id %}">
+                    {% csrf_token %}<input type="hidden" name="action" value="cancel">
+                    <button type="submit" class="admin-button admin-button--quiet">{% trans "Cancel" %}</button>
+                  </form>
+                {% elif job.status == 'failed' %}
+                  <form method="post" action="{% url 'maintenance_job_action' job_id=job.public_id %}">
+                    {% csrf_token %}<input type="hidden" name="action" value="retry">
+                    <button type="submit" class="admin-button admin-button--quiet">{% trans "Retry" %}</button>
+                  </form>
+                {% endif %}
+              </span>
+            </div>
+          {% empty %}
+            <div class="ops-control-note">{% trans "No maintenance jobs have been queued." %}</div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
     <section class="admin-panel">
       <div class="admin-page-heading">
         <h2>{% trans "Dispatch Board" %}</h2>

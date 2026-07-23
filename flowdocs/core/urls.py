@@ -20,6 +20,8 @@ urlpatterns = [
     # ---------------- Dashboard ----------------
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/folder/<int:folder_id>/", views.dashboard, name="dashboard_folder"),
+    path("dashboard/maintenance/", views.bulk_maintenance, name="bulk_maintenance"),
+    path("dashboard/maintenance/<uuid:job_id>/action/", views.maintenance_job_action, name="maintenance_job_action"),
 
     # ---------------- User Management ----------------
     path("dashboard/users/", views.user_list_view, name="user_list"),

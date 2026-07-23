@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+import uuid
 from django.conf import settings
 
 # ---------------- Custom User ----------------
@@ -84,3 +85,124 @@ class PDFFile(models.Model):
 
     def __str__(self):
         return f"{self.title} (Folder: {self.folder.name if self.folder else 'No Folder'})"
+
+
+class ArtifactGeneration(models.Model):
+    """An immutable, validated snapshot of application data and derived indexes."""
+
+    STATUS_CHOICES = (
+        ("staged", "Staged"),
+        ("validated", "Validated"),
+        ("active", "Active"),
+        ("failed", "Failed"),
+    )
+
+    generation_id = models.CharField(max_length=120, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="staged")
+    manifest = models.JSONField(default=dict, blank=True)
+    source = models.CharField(max_length=40, default="local")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="artifact_generations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    validated_at = models.DateTimeField(null=True, blank=True)
+    promoted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class MaintenanceJob(models.Model):
+    """Durable queue entry for indexing, validation, sync, and restore work."""
+
+    KIND_CHOICES = (
+        ("validate", "Validate data"),
+        ("reindex_needed", "Reindex needed"),
+        ("reindex_all", "Reindex all"),
+        ("repair_indexes", "Repair stored indexes"),
+        ("sync_generation", "Sync generation"),
+        ("restore_generation", "Restore generation"),
+    )
+    STATUS_CHOICES = (
+        ("queued", "Queued"),
+        ("running", "Running"),
+        ("paused", "Paused"),
+        ("cancel_requested", "Cancel requested"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("cancelled", "Cancelled"),
+    )
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default="queued")
+    scope = models.JSONField(default=dict, blank=True)
+    options = models.JSONField(default=dict, blank=True)
+    total_items = models.PositiveIntegerField(default=0)
+    completed_items = models.PositiveIntegerField(default=0)
+    failed_items = models.PositiveIntegerField(default=0)
+    error_summary = models.TextField(blank=True, default="")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="maintenance_jobs",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["kind", "created_at"]),
+        ]
+
+
+class MaintenanceJobItem(models.Model):
+    """Per-document result for resumable maintenance jobs."""
+
+    STATUS_CHOICES = (
+        ("queued", "Queued"),
+        ("running", "Running"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("skipped", "Skipped"),
+    )
+
+    job = models.ForeignKey(MaintenanceJob, on_delete=models.CASCADE, related_name="items")
+    pdf = models.ForeignKey(
+        PDFFile,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="maintenance_items",
+    )
+    folder = models.ForeignKey(
+        Folder,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="maintenance_items",
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="queued")
+    attempts = models.PositiveIntegerField(default=0)
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["job", "pdf"], name="unique_maintenance_pdf_per_job"),
+        ]
+        indexes = [
+            models.Index(fields=["job", "status"]),
+        ]
