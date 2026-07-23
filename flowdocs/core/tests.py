@@ -1800,3 +1800,78 @@ class BulkFilterTests(TestCase):
         self.assertContains(response, "Filter Documents")
         self.assertContains(response, "filter_category")
         self.assertContains(response, "Preview Count")
+
+
+class JobDrawerTests(TestCase):
+    def setUp(self):
+        self.superadmin = get_user_model().objects.create_user(
+            username="drawer-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+
+    def test_job_status_endpoint_returns_json(self):
+        job = MaintenanceJob.objects.create(
+            kind="validate",
+            status="running",
+            total_items=10,
+            completed_items=5,
+            requested_by=self.superadmin,
+        )
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("job_status", args=[job.public_id]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["job_id"], str(job.public_id))
+        self.assertEqual(data["status"], "running")
+        self.assertEqual(data["total_items"], 10)
+        self.assertEqual(data["completed_items"], 5)
+        self.assertEqual(data["progress"], 50)
+
+    def test_job_status_requires_superadmin(self):
+        admin = get_user_model().objects.create_user(
+            username="drawer-admin", password="test-password", role="admin"
+        )
+        job = MaintenanceJob.objects.create(kind="validate", status="queued")
+        self.client.force_login(admin)
+        response = self.client.get(reverse("job_status", args=[job.public_id]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_active_jobs_endpoint_returns_only_active(self):
+        running = MaintenanceJob.objects.create(kind="validate", status="running")
+        queued = MaintenanceJob.objects.create(kind="reindex_all", status="queued")
+        MaintenanceJob.objects.create(kind="validate", status="completed")
+        MaintenanceJob.objects.create(kind="validate", status="failed")
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("active_jobs"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        job_ids = [j["job_id"] for j in data["jobs"]]
+        self.assertEqual(data["count"], 2)
+        self.assertIn(str(running.public_id), job_ids)
+        self.assertIn(str(queued.public_id), job_ids)
+
+    def test_active_jobs_requires_superadmin(self):
+        admin = get_user_model().objects.create_user(
+            username="active-admin", password="test-password", role="admin"
+        )
+        self.client.force_login(admin)
+        response = self.client.get(reverse("active_jobs"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_dashboard_renders_job_drawer_toggle(self):
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "job-drawer-toggle")
+        self.assertContains(response, "Active Jobs")
+        self.assertContains(response, "job-drawer-content")
+
+    def test_dashboard_does_not_render_drawer_for_admin(self):
+        admin = get_user_model().objects.create_user(
+            username="no-drawer-admin", password="test-password", role="admin"
+        )
+        self.client.force_login(admin)
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "job-drawer-toggle")
