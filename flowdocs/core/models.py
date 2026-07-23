@@ -206,3 +206,86 @@ class MaintenanceJobItem(models.Model):
         indexes = [
             models.Index(fields=["job", "status"]),
         ]
+
+
+class ArtifactValidation(models.Model):
+    """Structured validation record for an artifact generation."""
+
+    VALIDATION_TYPE_CHOICES = (
+        ("manifest", "Manifest"),
+        ("sha256", "SHA-256"),
+        ("counts", "Counts"),
+        ("faiss", "FAISS"),
+        ("search", "Search"),
+    )
+    STATUS_CHOICES = (
+        ("passed", "Passed"),
+        ("failed", "Failed"),
+        ("warned", "Warned"),
+    )
+
+    generation = models.ForeignKey(
+        ArtifactGeneration,
+        on_delete=models.CASCADE,
+        related_name="validations",
+    )
+    validation_type = models.CharField(max_length=20, choices=VALIDATION_TYPE_CHOICES)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES)
+    details = models.JSONField(default=dict, blank=True)
+    validated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="artifact_validations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["generation", "validation_type"]),
+        ]
+
+
+class MaintenanceAuditEvent(models.Model):
+    """Append-only audit trail for maintenance job state transitions."""
+
+    EVENT_TYPE_CHOICES = (
+        ("queued", "Queued"),
+        ("claimed", "Claimed"),
+        ("item_completed", "Item completed"),
+        ("item_failed", "Item failed"),
+        ("cancelled", "Cancelled"),
+        ("retried", "Retried"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("promoted", "Promoted"),
+        ("rolled_back", "Rolled back"),
+        ("purged", "Purged"),
+    )
+
+    job = models.ForeignKey(
+        MaintenanceJob,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_events",
+    )
+    event_type = models.CharField(max_length=24, choices=EVENT_TYPE_CHOICES)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="maintenance_audit_events",
+    )
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["job", "created_at"]),
+            models.Index(fields=["event_type", "created_at"]),
+        ]
