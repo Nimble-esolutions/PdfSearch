@@ -24,6 +24,8 @@ urlpatterns = [
     path("dashboard/maintenance/preview/", views.bulk_filter_preview, name="bulk_filter_preview"),
     path("dashboard/maintenance/<uuid:job_id>/action/", views.maintenance_job_action, name="maintenance_job_action"),
     path("dashboard/maintenance/<uuid:job_id>/audit/", views.job_audit_trail, name="job_audit_trail"),
+    path("dashboard/maintenance/<uuid:job_id>/status/", views.job_status, name="job_status"),
+    path("dashboard/maintenance/active/", views.active_jobs, name="active_jobs"),
     path("dashboard/generation/<str:generation_id>/validations/", views.generation_validations, name="generation_validations"),
 
     # ---------------- Generation Lifecycle ----------------

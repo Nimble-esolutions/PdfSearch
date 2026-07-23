@@ -340,8 +340,7 @@ def public_view_pdf(request, pdf_id):
     )
     return response
 
-#===========================Registration view====================
-@admin_required
+#===========================Registration view=============@admin_required
 def register_view(request):
     # Account creation is an operator workflow. Public visitors may search,
     # but may never create accounts or select an operational role. Department
@@ -1054,6 +1053,60 @@ def purge_expired_generations_view(request):
     else:
         messages.info(request, "No expired generations to purge.")
     return redirect("dashboard")
+
+
+def _job_status_json(job):
+    """Serialize a MaintenanceJob into a JSON-serializable dict."""
+    items = []
+    if job.total_items > 0:
+        items = [
+            {
+                "id": item.pk,
+                "status": item.status,
+                "pdf_title": item.pdf.title if item.pdf else None,
+                "folder_name": item.folder.name if item.folder else None,
+                "error_code": item.error_code,
+                "attempts": item.attempts,
+            }
+            for item in job.items.order_by("pk")[:50]
+        ]
+    progress = 0
+    if job.total_items > 0:
+        progress = round((job.completed_items + job.failed_items) / job.total_items * 100)
+    return {
+        "job_id": str(job.public_id),
+        "kind": job.kind,
+        "kind_display": job.get_kind_display(),
+        "status": job.status,
+        "total_items": job.total_items,
+        "completed_items": job.completed_items,
+        "failed_items": job.failed_items,
+        "progress": progress,
+        "error_summary": job.error_summary[:200] if job.error_summary else "",
+        "created_at": job.created_at.isoformat(),
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+        "items": items,
+    }
+
+
+@superadmin_required
+def job_status(request, job_id):
+    """Return detailed status for a single maintenance job as JSON."""
+    job = get_object_or_404(MaintenanceJob, public_id=job_id)
+    return JsonResponse(_job_status_json(job))
+
+
+@superadmin_required
+def active_jobs(request):
+    """Return all queued/running/cancel_requested jobs as JSON."""
+    jobs = MaintenanceJob.objects.filter(
+        status__in=("queued", "running", "cancel_requested")
+    ).order_by("-created_at")[:20]
+    return JsonResponse({
+        "jobs": [_job_status_json(job) for job in jobs],
+        "count": len(jobs),
+    })
 
 
 # -------------- New logic for folder search --------------
