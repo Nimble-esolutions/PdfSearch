@@ -19,6 +19,91 @@ from .models import ArtifactGeneration, Folder, MaintenanceJob, MaintenanceJobIt
 from .utils import SearchDataIntegrityError, build_or_load_faiss_index_for_folder, precompute_pdf_embeddings
 
 
+def _apply_retention_expiry(generation):
+    """Stamp expires_at based on retention_policy and retention_value."""
+    now = timezone.now()
+    if generation.retention_policy == "age_based" and generation.retention_value:
+        from datetime import timedelta
+        generation.expires_at = now + timedelta(days=generation.retention_value)
+    elif generation.retention_policy == "keep_last_n":
+        generation.expires_at = None
+    else:
+        generation.expires_at = None
+    generation.save(update_fields=["expires_at"])
+
+
+def promote_active_generation(generation_id, *, requested_by=None):
+    """Atomically promote a validated generation to active, superseding the prior active."""
+    from django.db import transaction
+    try:
+        generation = ArtifactGeneration.objects.get(generation_id=generation_id)
+    except ArtifactGeneration.DoesNotExist:
+        raise SearchDataIntegrityError(f"Generation {generation_id} does not exist")
+    if generation.status not in ("validated", "active"):
+        raise SearchDataIntegrityError(
+            f"Generation {generation_id} must be validated before promotion (current: {generation.status})"
+        )
+    with transaction.atomic():
+        prior = ArtifactGeneration.objects.filter(status="active").exclude(pk=generation.pk).first()
+        if prior is not None:
+            prior.status = "superseded"
+            prior.superseded_by = generation
+            prior.save(update_fields=["status", "superseded_by", "updated_at"] if hasattr(prior, "updated_at") else ["status", "superseded_by"])
+        generation.status = "active"
+        generation.promoted_at = timezone.now()
+        _apply_retention_expiry(generation)
+        generation.save(update_fields=["status", "promoted_at", "expires_at"])
+    return generation
+
+
+def rollback_to_generation(generation_id, *, requested_by=None):
+    """Re-stage a prior generation and promote it as the new active."""
+    try:
+        generation = ArtifactGeneration.objects.get(generation_id=generation_id)
+    except ArtifactGeneration.DoesNotExist:
+        raise SearchDataIntegrityError(f"Generation {generation_id} does not exist")
+    if generation.status not in ("superseded", "validated", "active", "staged"):
+        raise SearchDataIntegrityError(
+            f"Generation {generation_id} cannot be rolled back to (current: {generation.status})"
+        )
+    if generation.status != "validated":
+        generation.status = "validated"
+        generation.validated_at = timezone.now()
+        generation.save(update_fields=["status", "validated_at"])
+    return promote_active_generation(generation_id, requested_by=requested_by)
+
+
+def purge_expired_generations(*, requested_by=None):
+    """Delete generations past their retention window that are not active or the immediate predecessor of active."""
+    now = timezone.now()
+    active = ArtifactGeneration.objects.filter(status="active").first()
+    immediate_predecessor_id = active.superseded_by_id if active else None
+    expired = ArtifactGeneration.objects.filter(
+        expires_at__isnull=False,
+        expires_at__lt=now,
+    ).exclude(status="active")
+    if immediate_predecessor_id:
+        expired = expired.exclude(pk=immediate_predecessor_id)
+    purged_ids = list(expired.values_list("generation_id", flat=True))
+    expired.update(status="purged")
+    return purged_ids
+
+
+def purge_generation(generation_id, *, requested_by=None):
+    """Manually purge a single non-active generation."""
+    try:
+        generation = ArtifactGeneration.objects.get(generation_id=generation_id)
+    except ArtifactGeneration.DoesNotExist:
+        raise SearchDataIntegrityError(f"Generation {generation_id} does not exist")
+    if generation.status == "active":
+        raise SearchDataIntegrityError("Cannot purge the active generation")
+    if generation.status == "purged":
+        return generation
+    generation.status = "purged"
+    generation.save(update_fields=["status"])
+    return generation
+
+
 def queue_job(*, kind: str, requested_by, pdfs=None, folders=None, scope=None, options=None):
     """Create a resumable job and materialize its initial item set."""
     pdfs = list(pdfs or [])
@@ -94,6 +179,58 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
             job.status = "completed"
             job.completed_items = 1
             job.options = {**job.options, "generation_id": generation.generation_id, "staged": True}
+        job.finished_at = timezone.now()
+        job.save(update_fields=["status", "failed_items", "completed_items", "error_summary", "options", "finished_at", "updated_at"])
+        return job
+
+    if job.kind == "promote_generation":
+        try:
+            generation_id = job.options.get("generation_id", "")
+            generation = promote_active_generation(generation_id, requested_by=job.requested_by)
+        except Exception as exc:
+            job.status = "failed"
+            job.failed_items = 1
+            job.error_summary = str(exc)[:2000]
+        else:
+            job.status = "completed"
+            job.completed_items = 1
+            job.options = {**job.options, "generation_id": generation.generation_id, "promoted": True}
+        job.finished_at = timezone.now()
+        job.save(update_fields=["status", "failed_items", "completed_items", "error_summary", "options", "finished_at", "updated_at"])
+        return job
+
+    if job.kind == "rollback_generation":
+        try:
+            generation_id = job.options.get("generation_id", "")
+            generation = rollback_to_generation(generation_id, requested_by=job.requested_by)
+        except Exception as exc:
+            job.status = "failed"
+            job.failed_items = 1
+            job.error_summary = str(exc)[:2000]
+        else:
+            job.status = "completed"
+            job.completed_items = 1
+            job.options = {**job.options, "generation_id": generation.generation_id, "rolled_back": True}
+        job.finished_at = timezone.now()
+        job.save(update_fields=["status", "failed_items", "completed_items", "error_summary", "options", "finished_at", "updated_at"])
+        return job
+
+    if job.kind == "purge_generation":
+        try:
+            generation_id = job.options.get("generation_id", "")
+            if generation_id:
+                purge_generation(generation_id, requested_by=job.requested_by)
+                purged = [generation_id]
+            else:
+                purged = purge_expired_generations(requested_by=job.requested_by)
+        except Exception as exc:
+            job.status = "failed"
+            job.failed_items = 1
+            job.error_summary = str(exc)[:2000]
+        else:
+            job.status = "completed"
+            job.completed_items = len(purged)
+            job.options = {**job.options, "purged_ids": purged}
         job.finished_at = timezone.now()
         job.save(update_fields=["status", "failed_items", "completed_items", "error_summary", "options", "finished_at", "updated_at"])
         return job

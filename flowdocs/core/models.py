@@ -151,6 +151,9 @@ class MaintenanceJob(models.Model):
         ("repair_indexes", "Repair stored indexes"),
         ("sync_generation", "Sync generation"),
         ("restore_generation", "Restore generation"),
+        ("promote_generation", "Promote generation"),
+        ("rollback_generation", "Rollback generation"),
+        ("purge_generation", "Purge generation"),
     )
     STATUS_CHOICES = (
         ("queued", "Queued"),
