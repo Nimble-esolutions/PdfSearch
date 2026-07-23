@@ -114,6 +114,8 @@ def run_restore_pipeline(
         ws.save_metadata()
 
         if sanitize:
+            ws.transition(WorkspaceState.SANITIZING)
+            ws.save_metadata()
             _run_sanitization(ws, sanitization_policy)
             ws.transition(WorkspaceState.SANITIZED)
             ws.save_metadata()
@@ -149,14 +151,14 @@ def run_restore_pipeline(
         ws.save_metadata()
 
         if activate:
-            ws.transition(WorkspaceState.ACTIVATING)
-            ws.save_metadata()
             from .activate import activate_generation
-            activation = activate_generation(
+            activate_generation(
                 ws.local_path,
                 generation_id=generation_id,
             )
-            ws.transition(WorkspaceState.ACTIVE)
+            ws = RestoreWorkspace.load(ws.local_path)
+            if ws is None:
+                raise RestoreError("Activation completed but workspace metadata is missing")
             ws.save_metadata()
 
         return _restore_result(ws)
