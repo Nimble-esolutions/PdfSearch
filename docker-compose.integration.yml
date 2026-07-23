@@ -1,0 +1,194 @@
+# Integration Test Stack — Distributed Publication and Restore Testing
+
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-prod-a:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+
+  redis-prod-b:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+
+  redis-staging:
+    image: redis:7-alpine
+    ports:
+      - "6382:6379"
+
+  app-prod-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - prod_a_data:/app/data
+    environment:
+      APP_ENV: production
+      DATASET_ID: ai-sahakar-test
+      AUTHORITATIVE_DATASET_ID: ai-sahakar-test
+      PRODUCTION_SOURCE_ID: prod-primary
+      DEPLOYMENT_ID: prod-a
+      INSTANCE_ID: prod-a-instance
+      BACKUP_ROLE: writer
+      BACKUP_SYNC_MODE: manual
+      DATA_MODE: local
+      EXTERNAL_SIDE_EFFECTS_MODE: enabled
+      REDIS_URL: redis://redis-prod-a:6379/0
+      ARTIFACT_VAULT_ENABLED: "1"
+      ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+      ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
+      ARTIFACT_VAULT_REGION: us-east-1
+      ARTIFACT_VAULT_ACCESS_KEY: minioadmin
+      ARTIFACT_VAULT_SECRET_KEY: minioadmin
+      ALLOW_INSECURE_DEFAULTS: "1"
+      SECRET_KEY: integration-test-key-not-for-production
+      DEBUG: "True"
+      CREATE_SUPERUSER: "1"
+      DJANGO_SUPERUSER_USERNAME: admin
+      DJANGO_SUPERUSER_EMAIL: admin@test.local
+      DJANGO_SUPERUSER_PASSWORD: admin123
+      DATA_BOOTSTRAP_MODE: empty
+    depends_on:
+      redis-prod-a:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+    networks:
+      - integration
+
+  app-prod-b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - prod_b_data:/app/data
+    environment:
+      APP_ENV: production
+      DATASET_ID: ai-sahakar-test
+      AUTHORITATIVE_DATASET_ID: ai-sahakar-test
+      PRODUCTION_SOURCE_ID: prod-primary
+      DEPLOYMENT_ID: prod-b
+      INSTANCE_ID: prod-b-instance
+      BACKUP_ROLE: writer
+      BACKUP_SYNC_MODE: manual
+      DATA_MODE: local
+      EXTERNAL_SIDE_EFFECTS_MODE: enabled
+      REDIS_URL: redis://redis-prod-b:6379/0
+      ARTIFACT_VAULT_ENABLED: "1"
+      ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+      ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
+      ARTIFACT_VAULT_REGION: us-east-1
+      ARTIFACT_VAULT_ACCESS_KEY: minioadmin
+      ARTIFACT_VAULT_SECRET_KEY: minioadmin
+      ALLOW_INSECURE_DEFAULTS: "1"
+      SECRET_KEY: integration-test-key-not-for-production
+      DEBUG: "True"
+      DATA_BOOTSTRAP_MODE: empty
+    depends_on:
+      redis-prod-b:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    ports:
+      - "8002:8000"
+    networks:
+      - integration
+
+  app-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - staging_data:/app/data
+    environment:
+      APP_ENV: staging
+      DATASET_ID: ai-sahakar-staging
+      RESTORE_SOURCE_DATASET_ID: ai-sahakar-test
+      PRODUCTION_SOURCE_ID: ""
+      DEPLOYMENT_ID: staging-01
+      BACKUP_ROLE: reader
+      DATA_MODE: s3-restore
+      EXTERNAL_SIDE_EFFECTS_MODE: disabled
+      REDIS_URL: redis://redis-staging:6379/0
+      ARTIFACT_VAULT_ENABLED: "1"
+      ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+      ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
+      ARTIFACT_VAULT_REGION: us-east-1
+      ARTIFACT_VAULT_ACCESS_KEY: minioadmin
+      ARTIFACT_VAULT_SECRET_KEY: minioadmin
+      ALLOW_INSECURE_DEFAULTS: "1"
+      SECRET_KEY: integration-test-key-not-for-production
+      DEBUG: "True"
+      DATA_BOOTSTRAP_MODE: empty
+    depends_on:
+      redis-staging:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    ports:
+      - "8003:8000"
+    networks:
+      - integration
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./flowdocs/core/tests/integration:/app/flowdocs/core/tests/integration
+    environment:
+      APP_ENV: test
+      DATA_MODE: empty
+      BACKUP_ROLE: disabled
+      ARTIFACT_VAULT_ENABLED: "1"
+      ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+      ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
+      ARTIFACT_VAULT_REGION: us-east-1
+      ARTIFACT_VAULT_ACCESS_KEY: minioadmin
+      ARTIFACT_VAULT_SECRET_KEY: minioadmin
+      ALLOW_INSECURE_DEFAULTS: "1"
+      SECRET_KEY: integration-test-key-not-for-production
+      DEBUG: "True"
+      DATA_BOOTSTRAP_MODE: empty
+      REDIS_URL: redis://redis-prod-a:6379/0
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis-prod-a:
+        condition: service_started
+      redis-prod-b:
+        condition: service_started
+      redis-staging:
+        condition: service_started
+    command: sh -lc "cd /app/flowdocs && python manage.py test core.tests.integration --no-input -v2"
+    networks:
+      - integration
+
+volumes:
+  minio_data:
+  prod_a_data:
+  prod_b_data:
+  staging_data:
+
+networks:
+  integration:
+    driver: bridge
