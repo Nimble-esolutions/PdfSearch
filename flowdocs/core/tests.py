@@ -24,8 +24,8 @@ from .forms import UploadForm
 from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
-from .models import Folder, PDFFile, MaintenanceJob, ArtifactGeneration
-from .maintenance import run_job, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations
+from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
 from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
@@ -1496,6 +1496,98 @@ class ArtifactInventoryTests(TestCase):
                     ['chunk'],
                     embeddings_matrix=np.array([[1.0, 0.0]], dtype=np.float32),
                 )
+
+
+class AuditAndValidationTests(TestCase):
+    def setUp(self):
+        self.superadmin = get_user_model().objects.create_user(
+            username="audit-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+
+    def test_audit_event_created_on_queue_job(self):
+        job = queue_job(kind="validate", requested_by=self.superadmin, scope={"test": True})
+        events = MaintenanceAuditEvent.objects.filter(job=job)
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.first().event_type, "queued")
+        self.assertEqual(events.first().actor, self.superadmin)
+
+    def test_audit_events_fire_on_job_completion(self):
+        folder = Folder.objects.create(name="Audit test", created_by=self.superadmin)
+        job = queue_job(kind="validate", requested_by=self.superadmin, folders=[folder])
+        with patch("core.maintenance._validate_pdf"):
+            run_job(job)
+        events = list(MaintenanceAuditEvent.objects.filter(job=job).order_by("created_at").values_list("event_type", flat=True))
+        self.assertIn("queued", events)
+        self.assertIn("item_completed", events)
+        self.assertIn("completed", events)
+
+    def test_audit_events_fire_on_item_failure(self):
+        folder = Folder.objects.create(name="Audit fail test", created_by=self.superadmin)
+        pdf = PDFFile.objects.create(
+            title="Audit fail PDF",
+            file="pdfs/audit-fail.pdf",
+            folder=folder,
+            uploaded_by=self.superadmin,
+        )
+        job = queue_job(kind="validate", requested_by=self.superadmin, pdfs=[pdf])
+        with patch("core.maintenance._validate_pdf", side_effect=SearchDataIntegrityError("missing file")):
+            run_job(job)
+        events = list(MaintenanceAuditEvent.objects.filter(job=job).values_list("event_type", flat=True))
+        self.assertIn("item_failed", events)
+        self.assertIn("failed", events)
+
+    def test_record_validation_creates_artifact_validation(self):
+        gen = ArtifactGeneration.objects.create(
+            generation_id="gen-val-test-001",
+            status="validated",
+            created_by=self.superadmin,
+        )
+        _record_validation(gen, validation_type="manifest", status="passed", details={"files": 5}, validated_by=self.superadmin)
+        val = ArtifactValidation.objects.get(generation=gen)
+        self.assertEqual(val.validation_type, "manifest")
+        self.assertEqual(val.status, "passed")
+        self.assertEqual(val.details, {"files": 5})
+
+    def test_job_audit_trail_endpoint_returns_json(self):
+        job = queue_job(kind="validate", requested_by=self.superadmin)
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("job_audit_trail", args=[job.public_id]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["job_id"], str(job.public_id))
+        self.assertEqual(len(data["events"]), 1)
+        self.assertEqual(data["events"][0]["event_type"], "queued")
+
+    def test_job_audit_trail_requires_superadmin(self):
+        admin = get_user_model().objects.create_user(
+            username="audit-admin", password="test-password", role="admin"
+        )
+        job = queue_job(kind="validate", requested_by=self.superadmin)
+        self.client.force_login(admin)
+        response = self.client.get(reverse("job_audit_trail", args=[job.public_id]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_generation_validations_endpoint_returns_json(self):
+        gen = ArtifactGeneration.objects.create(
+            generation_id="gen-val-endpoint-001",
+            status="validated",
+            created_by=self.superadmin,
+        )
+        _record_validation(gen, validation_type="sha256", status="passed", details={"files_verified": 3})
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("generation_validations", args=["gen-val-endpoint-001"]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["generation_id"], "gen-val-endpoint-001")
+        self.assertEqual(len(data["validations"]), 1)
+        self.assertEqual(data["validations"][0]["validation_type"], "sha256")
+
+    def test_generation_validations_404_for_nonexistent(self):
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("generation_validations", args=["gen-does-not-exist"]))
+        self.assertEqual(response.status_code, 404)
 
 
 class GenerationLifecycleTests(TestCase):

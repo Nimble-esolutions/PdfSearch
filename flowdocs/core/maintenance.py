@@ -15,8 +15,29 @@ from django.utils import timezone
 
 from .artifact_vault import ArtifactVault
 from .management.commands.inventory_artifacts import build_manifest
-from .models import ArtifactGeneration, Folder, MaintenanceJob, MaintenanceJobItem, PDFFile
+from .models import ArtifactGeneration, ArtifactValidation, Folder, MaintenanceAuditEvent, MaintenanceJob, MaintenanceJobItem, PDFFile
 from .utils import SearchDataIntegrityError, build_or_load_faiss_index_for_folder, precompute_pdf_embeddings
+
+
+def _audit(job=None, *, event_type, actor=None, payload=None):
+    """Record an append-only audit event for a job or system event."""
+    MaintenanceAuditEvent.objects.create(
+        job=job,
+        event_type=event_type,
+        actor=actor,
+        payload=payload or {},
+    )
+
+
+def _record_validation(generation, *, validation_type, status, details=None, validated_by=None):
+    """Record a structured validation result for a generation."""
+    return ArtifactValidation.objects.create(
+        generation=generation,
+        validation_type=validation_type,
+        status=status,
+        details=details or {},
+        validated_by=validated_by,
+    )
 
 
 def _apply_retention_expiry(generation):
@@ -53,6 +74,7 @@ def promote_active_generation(generation_id, *, requested_by=None):
         generation.promoted_at = timezone.now()
         _apply_retention_expiry(generation)
         generation.save(update_fields=["status", "promoted_at", "expires_at"])
+    _audit(event_type="promoted", actor=requested_by, payload={"generation_id": generation.generation_id, "superseded": prior.generation_id if prior else None})
     return generation
 
 
@@ -70,7 +92,9 @@ def rollback_to_generation(generation_id, *, requested_by=None):
         generation.status = "validated"
         generation.validated_at = timezone.now()
         generation.save(update_fields=["status", "validated_at"])
-    return promote_active_generation(generation_id, requested_by=requested_by)
+    result = promote_active_generation(generation_id, requested_by=requested_by)
+    _audit(event_type="rolled_back", actor=requested_by, payload={"generation_id": generation_id})
+    return result
 
 
 def purge_expired_generations(*, requested_by=None):
@@ -86,6 +110,8 @@ def purge_expired_generations(*, requested_by=None):
         expired = expired.exclude(pk=immediate_predecessor_id)
     purged_ids = list(expired.values_list("generation_id", flat=True))
     expired.update(status="purged")
+    for pid in purged_ids:
+        _audit(event_type="purged", actor=requested_by, payload={"generation_id": pid})
     return purged_ids
 
 
@@ -101,6 +127,7 @@ def purge_generation(generation_id, *, requested_by=None):
         return generation
     generation.status = "purged"
     generation.save(update_fields=["status"])
+    _audit(event_type="purged", actor=requested_by, payload={"generation_id": generation_id})
     return generation
 
 
@@ -126,6 +153,7 @@ def queue_job(*, kind: str, requested_by, pdfs=None, folders=None, scope=None, o
                 MaintenanceJobItem(job=job, folder=folder)
                 for folder in folders
             ])
+    _audit(job=job, event_type="queued", actor=requested_by, payload={"kind": kind, "total_items": job.total_items})
     return job
 
 
@@ -140,7 +168,9 @@ def claim_next_job():
         )
         if not changed:
             return None
-        return MaintenanceJob.objects.get(pk=job.pk)
+        job = MaintenanceJob.objects.get(pk=job.pk)
+        _audit(job=job, event_type="claimed")
+        return job
 
 
 def run_job(job: MaintenanceJob) -> MaintenanceJob:
@@ -294,11 +324,13 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
                 updated_at=timezone.now(),
             )
             job.failed_items += 1
+            _audit(job=job, event_type="item_failed", payload={"item_id": item.pk, "error_code": item.error_code, "error_message": item.error_message[:200]})
         else:
             item.status = "completed"
             item.finished_at = timezone.now()
             item.save(update_fields=["status", "finished_at"])
             job.completed_items += 1
+            _audit(job=job, event_type="item_completed", payload={"item_id": item.pk, "pdf_id": item.pdf_id, "folder_id": item.folder_id})
 
         job.save(update_fields=["completed_items", "failed_items", "updated_at"])
 
@@ -306,6 +338,7 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
     job.status = "failed" if job.failed_items else "completed"
     job.finished_at = timezone.now()
     job.save(update_fields=["status", "finished_at", "updated_at"])
+    _audit(job=job, event_type=job.status, payload={"completed_items": job.completed_items, "failed_items": job.failed_items})
     return job
 
 
@@ -369,7 +402,7 @@ def sync_active_generation(*, requested_by=None):
             "files": files,
         }
         vault.put_manifest(payload, release_id=generation_id)
-        return ArtifactGeneration.objects.create(
+        gen = ArtifactGeneration.objects.create(
             generation_id=generation_id,
             status="validated",
             manifest=payload,
@@ -377,6 +410,9 @@ def sync_active_generation(*, requested_by=None):
             created_by=requested_by,
             validated_at=timezone.now(),
         )
+        _record_validation(gen, validation_type="manifest", status="passed", details={"files": len(files)}, validated_by=requested_by)
+        _record_validation(gen, validation_type="counts", status="passed", details=manifest.get("counts", {}), validated_by=requested_by)
+        return gen
 
 
 def stage_generation(generation_id: str, *, requested_by=None):
@@ -400,7 +436,7 @@ def stage_generation(generation_id: str, *, requested_by=None):
     (staging_root / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
     )
-    return ArtifactGeneration.objects.update_or_create(
+    gen = ArtifactGeneration.objects.update_or_create(
         generation_id=generation_id,
         defaults={
             "status": "validated",
@@ -410,6 +446,8 @@ def stage_generation(generation_id: str, *, requested_by=None):
             "validated_at": timezone.now(),
         },
     )[0]
+    _record_validation(gen, validation_type="sha256", status="passed", details={"files_verified": len(manifest["files"])}, validated_by=requested_by)
+    return gen
 
 
 def _upload_file(vault, path: Path, record):
