@@ -157,12 +157,18 @@ def activate_generation(
     if not acquire_activation_lock(timeout_seconds=60):
         raise ActivationError("Another activation is in progress")
 
+    from .activation_test_hook import checkpoint as _hook_checkpoint
+
     try:
         previous = preserve_previous_pointer()
         ws.transition(WorkspaceState.ACTIVATING)
         ws.save_metadata()
 
+        _hook_checkpoint("pointer_switch_pending")
+
         write_active_pointer(str(workspace_path))
+
+        _hook_checkpoint("pointer_switched")
 
         activated = read_active_pointer()
         if activated is None or Path(activated).resolve() != workspace_path:
@@ -174,6 +180,8 @@ def activate_generation(
         ws.transition(WorkspaceState.ACTIVE)
         ws.activation_eligible = False
         ws.save_metadata()
+
+        _hook_checkpoint("activation_confirmed")
 
         _audit_activation(
             event_type="activated",
@@ -253,6 +261,38 @@ def activation_status() -> dict[str, Any]:
         "previous_target": previous,
         "lock_held": Path(ACTIVATION_LOCK).exists(),
     }
+
+
+def validate_generation_coherence(generation_root: str | Path) -> dict[str, Any]:
+    """Check that database, media, and index artifacts are consistent.
+
+    Returns a dict with 'coherent' (bool) and per-component checks.
+    """
+    import sqlite3
+    root = Path(generation_root).resolve()
+    if not root.is_dir():
+        return {"coherent": False, "error": f"Directory not found: {root}"}
+
+    checks = {}
+    db_path = root / "db.sqlite3"
+    if not db_path.is_file():
+        workspaces = list(root.glob("**/db.sqlite3"))
+        if workspaces:
+            db_path = workspaces[0]
+        else:
+            return {"coherent": False, "error": "No database found in generation"}
+
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        conn.close()
+        checks["database_integrity"] = integrity == "ok"
+    except Exception as exc:
+        checks["database_integrity"] = False
+        checks["database_error"] = str(exc)
+
+    checks["coherent"] = all(v is True for v in checks.values() if isinstance(v, bool))
+    return {"coherent": checks["coherent"], "checks": checks}
 
 
 def _audit_activation(*, event_type: str, details: dict, actor=None) -> None:

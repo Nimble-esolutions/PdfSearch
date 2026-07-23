@@ -92,7 +92,7 @@ def get_chat_provider() -> Callable:
 
 
 def _fake_embeddings(texts: list[str]) -> list[list[float]]:
-    dims = 1536
+    dims = getattr(settings, "OPENAI_EMBED_DIMENSIONS", 1536) or 1536
     result = []
     for i, t in enumerate(texts):
         seed = hashlib.sha256(f"fake-embed:{i}:{t[:50]}".encode()).digest()
