@@ -70,6 +70,17 @@ services:
       - ARTIFACT_VAULT_SECRET_KEY=${ARTIFACT_VAULT_SECRET_KEY:-}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://ai-sahakar.net,https://www.ai-sahakar.net}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://ai-sahakar.net,https://www.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000}
+      # Environment identity
+      - APP_ENV=${APP_ENV:-production}
+      - DEPLOYMENT_ID=${DEPLOYMENT_ID:-prod-mum-01}
+      - DATASET_ID=${DATASET_ID:-ai-sahakar-prod}
+      - DATA_MODE=${DATA_MODE:-local}
+      - BACKUP_ROLE=${BACKUP_ROLE:-writer}
+      - BACKUP_SYNC_MODE=${BACKUP_SYNC_MODE:-manual}
+      - EXTERNAL_SIDE_EFFECTS_MODE=${EXTERNAL_SIDE_EFFECTS_MODE:-enabled}
+      - APP_IMAGE_DIGEST=${PDFSEARCH_IMAGE:-}
+      - APP_RELEASE_VERSION=${APP_RELEASE_VERSION:-}
+      - NONPROD_DATA_POLICY=${NONPROD_DATA_POLICY:-}
       # Redis is part of this stack. Keep the service DNS name authoritative;
       # a Dokploy .env value such as localhost points back to the web container.
       - REDIS_URL=redis://redis:6379/1
@@ -152,6 +163,8 @@ services:
       DJANGO_SETTINGS_MODULE: flowdocs.settings
       REDIS_URL: redis://redis:6379/1
       ALLOW_INSECURE_DEFAULTS: ${ALLOW_INSECURE_DEFAULTS:-0}
+      APP_ENV: production
+      BACKUP_ROLE: writer
     depends_on:
       redis:
         condition: service_healthy
