@@ -25,7 +25,7 @@ from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation
-from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
 from .views import _parse_bulk_filters
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
@@ -1875,3 +1875,97 @@ class JobDrawerTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "job-drawer-toggle")
+
+
+class DocumentLifecycleTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user(
+            username="lifecycle-admin",
+            password="test-password",
+            role="admin",
+        )
+        self.folder = Folder.objects.create(name="Lifecycle test", created_by=self.admin)
+        self.pdf = PDFFile.objects.create(
+            title="Lifecycle PDF",
+            file="pdfs/lifecycle.pdf",
+            folder=self.folder,
+            uploaded_by=self.admin,
+            indexed=True,
+        )
+
+    def test_default_lifecycle_is_uploaded(self):
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+
+    def test_deprecate_sets_lifecycle_and_unindexes(self):
+        deprecate_pdf(self.pdf, requested_by=self.admin)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "deprecated")
+        self.assertFalse(self.pdf.indexed)
+
+    def test_archive_sets_lifecycle_and_unindexes(self):
+        archive_pdf(self.pdf, requested_by=self.admin)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "archived")
+        self.assertFalse(self.pdf.indexed)
+
+    def test_restore_sets_lifecycle_to_uploaded(self):
+        archive_pdf(self.pdf, requested_by=self.admin)
+        restore_pdf(self.pdf, requested_by=self.admin)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self.assertFalse(self.pdf.indexed)
+
+    def test_deprecate_archived_raises(self):
+        archive_pdf(self.pdf, requested_by=self.admin)
+        with self.assertRaises(SearchDataIntegrityError):
+            deprecate_pdf(self.pdf, requested_by=self.admin)
+
+    def test_deprecated_pdf_excluded_from_public_visible_pdfs(self):
+        deprecate_pdf(self.pdf, requested_by=self.admin)
+        from .views import visible_pdfs
+        visible = visible_pdfs(self.admin, public=True)
+        self.assertFalse(visible.filter(pk=self.pdf.pk).exists())
+
+    def test_archived_pdf_excluded_from_public_visible_pdfs(self):
+        archive_pdf(self.pdf, requested_by=self.admin)
+        from .views import visible_pdfs
+        visible = visible_pdfs(self.admin, public=True)
+        self.assertFalse(visible.filter(pk=self.pdf.pk).exists())
+
+    def test_deprecate_endpoint_requires_admin(self):
+        ordinary = get_user_model().objects.create_user(
+            username="lifecycle-ordinary", password="test-password", role="user"
+        )
+        self.client.force_login(ordinary)
+        response = self.client.post(reverse("deprecate_pdf", args=[self.pdf.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_deprecate_endpoint_redirects_on_success(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("deprecate_pdf", args=[self.pdf.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "deprecated")
+
+    def test_restore_endpoint_redirects_on_success(self):
+        archive_pdf(self.pdf, requested_by=self.admin)
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("restore_pdf", args=[self.pdf.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+
+    def test_dashboard_renders_lifecycle_badges(self):
+        deprecate_pdf(self.pdf, requested_by=self.admin)
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("dashboard_folder", args=[self.folder.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Deprecated")
+        self.assertContains(response, "Restore")
+
+    def test_dashboard_renders_deprecate_and_archive_buttons(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("dashboard_folder", args=[self.folder.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Deprecate")
+        self.assertContains(response, "Archive")
