@@ -1800,3 +1800,79 @@ class BulkFilterTests(TestCase):
         self.assertContains(response, "Filter Documents")
         self.assertContains(response, "filter_category")
         self.assertContains(response, "Preview Count")
+
+
+class SeoAeoTests(TestCase):
+    def test_robots_txt_allows_public_disallows_admin(self):
+        response = self.client.get("/robots.txt")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/plain")
+        content = response.content.decode()
+        self.assertIn("Allow: /", content)
+        self.assertIn("Allow: /search/", content)
+        self.assertIn("Disallow: /dashboard/", content)
+        self.assertIn("Disallow: /register/", content)
+        self.assertIn("Sitemap: https://ai-sahakar.net/sitemap.xml", content)
+
+    def test_sitemap_xml_contains_public_urls(self):
+        response = self.client.get("/sitemap.xml")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/xml")
+        content = response.content.decode()
+        self.assertIn("<?xml", content)
+        self.assertIn("<urlset", content)
+        self.assertIn("https://ai-sahakar.net/", content)
+        self.assertIn("https://ai-sahakar.net/search/", content)
+        self.assertIn("<lastmod>", content)
+        self.assertIn("<priority>", content)
+
+    def test_search_page_has_seo_metadata(self):
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sahakar AI")
+        self.assertContains(response, 'name="description"')
+        self.assertContains(response, 'rel="canonical"')
+        self.assertContains(response, 'property="og:title"')
+        self.assertContains(response, 'property="og:description"')
+        self.assertContains(response, 'name="twitter:card"')
+        self.assertContains(response, 'name="robots"')
+
+    def test_search_page_has_json_ld_structured_data(self):
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="application/ld+json"')
+        self.assertContains(response, '"@type": "WebSite"')
+        self.assertContains(response, '"@type": "FAQPage"')
+        self.assertContains(response, '"@type": "SearchAction"')
+        self.assertContains(response, '"@type": "Organization"')
+
+    def test_search_page_has_static_service_description(self):
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "What is Sahakar AI?")
+        self.assertContains(response, "How to ask better questions")
+        self.assertContains(response, "Important disclaimer")
+
+    def test_search_page_has_descriptive_alt_text(self):
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'alt="Banner"')
+        self.assertNotContains(response, 'alt="Logo 4"')
+
+    def test_search_page_has_hreflang_alternates(self):
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'hreflang="en"')
+        self.assertContains(response, 'hreflang="mr"')
+        self.assertContains(response, 'hreflang="x-default"')
+
+    def test_validate_public_html_script_passes(self):
+        response = self.client.get(reverse("home"))
+        import importlib.util
+        import os
+        script_path = os.path.join(settings.BASE_DIR, "..", "scripts", "ci", "validate_public_html.py")
+        spec = importlib.util.spec_from_file_location("validate_public_html", script_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        issues = mod.validate(response.content.decode())
+        self.assertEqual(issues, [], f"SEO validation failed: {issues}")
