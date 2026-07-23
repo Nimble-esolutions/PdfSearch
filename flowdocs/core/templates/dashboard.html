@@ -4,6 +4,21 @@
 {% block title %}{% trans "Operations Cockpit - CC & RCS Maharashtra" %}{% endblock %}
 
 {% block content %}
+{% if role == 'superadmin' %}
+<button type="button" id="job-drawer-toggle" class="job-drawer-toggle" aria-label="{% trans 'Active jobs' %}" aria-expanded="false" aria-controls="job-drawer">
+  <span aria-hidden="true">&#128276;</span>
+  <span class="job-drawer-badge" id="job-drawer-badge" hidden>0</span>
+</button>
+<aside id="job-drawer" class="job-drawer" hidden role="complementary" aria-label="{% trans 'Active maintenance jobs' %}">
+  <div class="job-drawer-header">
+    <h2>{% trans "Active Jobs" %}</h2>
+    <button type="button" class="btn-close" id="job-drawer-close" aria-label="{% trans 'Close' %}"></button>
+  </div>
+  <div id="job-drawer-content" class="job-drawer-content" role="status" aria-live="polite">
+    <p class="small text-muted">{% trans "Loading..." %}</p>
+  </div>
+</aside>
+{% endif %}
 <section class="cockpit-hero">
   <div class="admin-page-heading admin-page-heading--split">
     <div>
@@ -456,6 +471,7 @@
 
 <script>
 (function() {
+})();
   var filterInputs = ["filter_category", "filter_subject", "filter_indexed", "filter_keywords", "filter_uploaded_after", "filter_uploaded_before"];
   var formFieldMap = {
     "filter_category": "bulk-form-filter-category",
@@ -512,6 +528,98 @@
         });
     });
   }
+
+  {% if role == 'superadmin' %}
+  var drawer = document.getElementById("job-drawer");
+  var toggle = document.getElementById("job-drawer-toggle");
+  var closeBtn = document.getElementById("job-drawer-close");
+  var content = document.getElementById("job-drawer-content");
+  var badge = document.getElementById("job-drawer-badge");
+  var pollTimer = null;
+  var isOpen = false;
+
+  function escapeHtml(s) {
+    var div = document.createElement("div");
+    div.textContent = s || "";
+    return div.innerHTML;
+  }
+
+  function renderJobs(data) {
+    if (!data.jobs || data.jobs.length === 0) {
+      content.innerHTML = '<p class="small text-muted">{% trans "No active jobs." %}</p>';
+      badge.hidden = true;
+      return;
+    }
+    badge.hidden = false;
+    badge.textContent = data.count;
+    var html = "";
+    data.jobs.forEach(function(job) {
+      var bar = '<div class="progress" style="height:6px"><div class="progress-bar" style="width:' + job.progress + '%"></div></div>';
+      var cancelUrl = "{% url 'maintenance_job_action' job_id='00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", job.job_id);
+      var cancelBtn = "";
+      if (job.status === "queued" || job.status === "running") {
+        cancelBtn = '<form method="post" action="' + cancelUrl + '" class="d-inline mt-1">' +
+          '{% csrf_token %}<input type="hidden" name="action" value="cancel">' +
+          '<button type="submit" class="btn btn-outline-danger btn-sm">{% trans "Cancel" %}</button></form>';
+      }
+      var itemsHtml = "";
+      if (job.items && job.items.length > 0) {
+        itemsHtml = '<details class="mt-1"><summary class="small">{% trans "Items" %} (' + job.items.length + ')</summary><ul class="small list-unstyled mt-1">';
+        job.items.forEach(function(item) {
+          var cls = item.status === "completed" ? "text-success" : item.status === "failed" ? "text-danger" : "text-muted";
+          itemsHtml += '<li class="' + cls + '">' + escapeHtml(item.pdf_title || item.folder_name || "item") + " — " + item.status + "</li>";
+        });
+        itemsHtml += "</ul></details>";
+      }
+      html += '<div class="job-drawer-item border-bottom pb-2 mb-2">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+        '<strong>' + escapeHtml(job.kind_display) + '</strong>' +
+        '<span class="badge text-bg-' + (job.status === "running" ? "primary" : job.status === "cancel_requested" ? "warning" : "secondary") + '">' + job.status + '</span>' +
+        '</div>' +
+        '<div class="small text-muted">' + job.completed_items + "/" + job.total_items + ' {% trans "items" %}</div>' +
+        bar + cancelBtn + itemsHtml +
+        '</div>';
+    });
+    content.innerHTML = html;
+  }
+
+  function fetchJobs() {
+    fetch("{% url 'active_jobs' %}")
+      .then(function(r) { return r.json(); })
+      .then(renderJobs)
+      .catch(function() {
+        content.innerHTML = '<p class="small text-danger">{% trans "Failed to load jobs." %}</p>';
+      });
+  }
+
+  function startPolling() {
+    if (pollTimer) return;
+    fetchJobs();
+    pollTimer = setInterval(fetchJobs, 5000);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function openDrawer() {
+    drawer.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    isOpen = true;
+    startPolling();
+  }
+
+  function closeDrawer() {
+    drawer.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+    isOpen = false;
+    stopPolling();
+  }
+
+  toggle.addEventListener("click", function() { if (isOpen) { closeDrawer(); } else { openDrawer(); } });
+  closeBtn.addEventListener("click", closeDrawer);
+  {% endif %}
+>>>>>>> f5b80e2 (feat(templates): slide-in job drawer with polling and per-item detail)
 })();
 </script>
 {% endblock %}
