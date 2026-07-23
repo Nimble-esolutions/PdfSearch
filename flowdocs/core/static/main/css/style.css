@@ -262,6 +262,43 @@ body {
   font-weight: 600;
 }
 
+.workspace-kicker {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--admin-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.access-workspace { display: grid; gap: 1rem; }
+.access-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+.access-metric { padding: 0.9rem 1rem; border: 1px solid var(--admin-border); border-radius: var(--admin-radius); background: var(--admin-surface); box-shadow: var(--admin-shadow); }
+.access-metric span { display: block; color: var(--admin-muted); font-size: 0.8rem; }
+.access-metric strong { display: block; margin-top: 0.25rem; color: var(--admin-primary); font-size: 1.5rem; }
+.access-filter-form { display: grid; grid-template-columns: minmax(14rem, 2fr) repeat(3, minmax(9rem, 1fr)) auto; gap: 0.75rem; align-items: end; }
+.access-filter-form label, .access-filter-form label span { display: block; }
+.access-filter-form label span { margin-bottom: 0.3rem; color: var(--admin-muted); font-size: 0.8rem; font-weight: 700; }
+.access-filter-form input, .access-filter-form select { width: 100%; min-height: 2.35rem; padding: 0.45rem 0.6rem; border: 1px solid var(--admin-border); border-radius: var(--admin-radius); }
+.access-filter-actions { display: flex; gap: 0.45rem; }
+.access-table-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: start; margin-bottom: 0.9rem; }
+.access-table-heading h3 { margin: 0; color: var(--admin-primary); font-size: 1.1rem; }
+.access-table-heading p { margin: 0.25rem 0 0; color: var(--admin-muted); font-size: 0.875rem; }
+.access-policy-note { max-width: 20rem; color: var(--admin-muted); font-size: 0.8rem; text-align: right; }
+.access-role, .access-status { display: inline-flex; align-items: center; min-height: 1.55rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+.access-role--superadmin { color: #7f1d1d; background: #fee2e2; }
+.access-role--admin { color: #1e3a8a; background: #dbeafe; }
+.access-role--user { color: #365314; background: #ecfccb; }
+.access-status--active { color: #166534; background: #dcfce7; }
+.access-status--inactive { color: #52525b; background: #e4e4e7; }
+.access-form-panel { max-width: 760px; }
+.form-section { padding: 0 0 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--admin-border); }
+.form-section h3 { margin: 0 0 0.2rem; color: var(--admin-primary); font-size: 1rem; }
+.form-section p { margin: 0 0 0.8rem; color: var(--admin-muted); font-size: 0.875rem; }
+.form-section label { display: block; margin-bottom: 0.75rem; }
+.access-form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
 .cockpit-hero {
   margin-bottom: 1rem;
   padding: 1rem;
@@ -518,6 +555,14 @@ body {
 }
 
 @media (max-width: 768px) {
+  .access-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .access-filter-form { grid-template-columns: 1fr 1fr; }
+  .access-search-field, .access-filter-actions { grid-column: 1 / -1; }
+  .access-table-heading { flex-direction: column; }
+  .access-policy-note { max-width: none; text-align: left; }
+  .access-form-actions { justify-content: stretch; }
+  .access-form-actions > * { flex: 1; }
+
   .admin-main {
     width: min(100% - 1rem, 1180px);
     margin-top: 0.75rem;

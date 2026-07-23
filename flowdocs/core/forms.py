@@ -77,6 +77,12 @@ DEPARTMENT_CHOICES = [
     # Add more departments as needed
 ]
 
+ROLE_CHOICES = [
+    ('user', 'User'),
+    ('admin', 'Admin'),
+    ('superadmin', 'Superadmin'),
+]
+
 class UserRegisterForm(UserCreationForm):
     department = forms.ChoiceField(
         choices=DEPARTMENT_CHOICES,
@@ -101,14 +107,18 @@ class UserRegisterForm(UserCreationForm):
             }),
         }
 
-    def __init__(self, *args, allow_privileged_roles=False, **kwargs):
+    def __init__(self, *args, allow_privileged_roles=False, allow_superadmin=False, **kwargs):
         self.allow_privileged_roles = allow_privileged_roles
+        self.allow_superadmin = allow_superadmin
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():
             css_class = 'form-select' if name in {'department', 'role'} else 'form-control'
             existing = field.widget.attrs.get('class', '')
             field.widget.attrs['class'] = f'{existing} {css_class}'.strip()
-        if not allow_privileged_roles:
+        if allow_privileged_roles:
+            choices = ROLE_CHOICES if allow_superadmin else ROLE_CHOICES[:2]
+            self.fields['role'].choices = choices
+        else:
             # Public registration must never be able to select an operational role.
             self.fields.pop('role', None)
 
@@ -119,3 +129,23 @@ class UserRegisterForm(UserCreationForm):
         if commit:
             user.save()
         return user
+
+
+class UserManageForm(forms.ModelForm):
+    """Edit operator-managed identity fields without exposing permissions broadly."""
+
+    department = forms.ChoiceField(choices=DEPARTMENT_CHOICES)
+    role = forms.ChoiceField(choices=ROLE_CHOICES)
+
+    class Meta:
+        model = CustomUser
+        fields = ['email', 'department', 'role']
+
+    def __init__(self, *args, allow_superadmin=False, lock_role=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['role'].choices = ROLE_CHOICES if allow_superadmin else ROLE_CHOICES[:2]
+        self.fields['role'].disabled = lock_role
+        for field in self.fields.values():
+            field.widget.attrs['class'] = 'form-control'
+        self.fields['department'].widget.attrs['class'] = 'form-select'
+        self.fields['role'].widget.attrs['class'] = 'form-select'

@@ -175,7 +175,7 @@ class RegistrationSecurityTests(TestCase):
         response = self.client.get(reverse("register"))
         self.assertEqual(response.status_code, 403)
 
-    def test_admin_registration_preserves_privileged_role_selection(self):
+    def test_admin_registration_cannot_grant_superadmin(self):
         admin = get_user_model().objects.create_user(
             username="admin-creator",
             password="test-password",
@@ -188,7 +188,7 @@ class RegistrationSecurityTests(TestCase):
         self.assertContains(response, 'class="admin-shell"')
         self.assertContains(response, "Dashboard")
 
-        self.client.post(
+        response = self.client.post(
             reverse("register"),
             {
                 "username": "created-admin",
@@ -200,8 +200,31 @@ class RegistrationSecurityTests(TestCase):
             },
         )
 
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select a valid choice")
+        self.assertFalse(get_user_model().objects.filter(username="created-admin").exists())
+
+    def test_superadmin_registration_can_grant_superadmin(self):
+        superadmin = get_user_model().objects.create_user(
+            username="superadmin-creator",
+            password="test-password",
+            role="superadmin",
+        )
+        self.client.force_login(superadmin)
+        response = self.client.post(
+            reverse("register"),
+            {
+                "username": "created-superadmin",
+                "email": "created@example.com",
+                "password1": "A-strong-created-password-123!",
+                "password2": "A-strong-created-password-123!",
+                "department": "admin",
+                "role": "superadmin",
+            },
+        )
+        self.assertRedirects(response, reverse("login"))
         self.assertEqual(
-            get_user_model().objects.get(username="created-admin").role,
+            get_user_model().objects.get(username="created-superadmin").role,
             "superadmin",
         )
 
@@ -228,6 +251,7 @@ class MutationAuthorizationTests(TestCase):
             username="target-user",
             password="test-password",
             role="user",
+            department="operations",
         )
         self.folder = Folder.objects.create(name="Security folder", created_by=self.admin)
 
@@ -357,11 +381,46 @@ class MutationAuthorizationTests(TestCase):
         response = self.client.get(reverse("user_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Registered Users")
+        self.assertContains(response, "Users & Access")
+        self.assertContains(response, "Account directory")
         self.assertContains(response, "Active")
         self.assertContains(response, "Current user")
         self.assertContains(response, reverse("toggle_user_status", args=[self.target.pk]))
         self.assertContains(response, "Deactivate")
+
+    def test_user_list_filters_by_search_role_department_and_status(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse("user_list"),
+            {"q": "target", "role": "user", "department": "operations", "status": "active"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "target-user")
+        self.assertNotContains(response, "<strong>security-admin</strong>")
+
+    def test_admin_cannot_edit_superadmin_or_deactivate_last_superadmin(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(
+            self.client.get(reverse("edit_user", args=[self.superadmin.pk])).status_code,
+            403,
+        )
+        self.client.force_login(self.superadmin)
+        response = self.client.post(reverse("toggle_user_status", args=[self.superadmin.pk]))
+        self.assertRedirects(response, reverse("user_list"))
+        self.superadmin.refresh_from_db()
+        self.assertTrue(self.superadmin.is_active)
+
+    def test_superadmin_can_edit_user_access_details(self):
+        self.client.force_login(self.superadmin)
+        response = self.client.post(
+            reverse("edit_user", args=[self.target.pk]),
+            {"email": "updated@example.com", "department": "finance", "role": "admin"},
+        )
+        self.assertRedirects(response, reverse("user_list"))
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.email, "updated@example.com")
+        self.assertEqual(self.target.department, "finance")
+        self.assertEqual(self.target.role, "admin")
 
 
 class PDFViewTests(TestCase):

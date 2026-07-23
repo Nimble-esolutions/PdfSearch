@@ -20,12 +20,13 @@ from django.utils.http import content_disposition_header, url_has_allowed_host_a
 from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.utils.translation import gettext
+from django.utils import timezone
 
 from .models import ArtifactGeneration, PDFFile, Folder, CustomUser, MaintenanceJob
 from .artifact_vault import ArtifactVault, ArtifactVaultError
 from .maintenance import queue_job
 from .forms import UploadForm
-from .forms import UserRegisterForm
+from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
 from datetime import datetime
 from .utils import (
     detect_language,
@@ -346,10 +347,12 @@ def register_view(request):
     # but may never create accounts or select an operational role. Department
     # scoped admin roles remain a phase-2 authorization boundary.
     allow_privileged_roles = True
+    allow_superadmin = request.user.role == "superadmin"
     if request.method == 'POST':
         form = UserRegisterForm(
             request.POST,
             allow_privileged_roles=allow_privileged_roles,
+            allow_superadmin=allow_superadmin,
         )
         if form.is_valid():
             form.save()
@@ -358,7 +361,10 @@ def register_view(request):
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        form = UserRegisterForm(allow_privileged_roles=allow_privileged_roles)
+        form = UserRegisterForm(
+            allow_privileged_roles=allow_privileged_roles,
+            allow_superadmin=allow_superadmin,
+        )
     return render(request, 'register.html', {'form': form})
 
 #===========================Login view==========================
@@ -396,16 +402,81 @@ def logout_view(request):
 #===========================user list=================
 @admin_required
 def user_list_view(request):
-    # Fetch all users
-    users = CustomUser.objects.all()
-    return render(request, 'user_list.html', {'users': users})
+    users = CustomUser.objects.all().order_by('username')
+    query = request.GET.get('q', '').strip()
+    role = request.GET.get('role', '').strip()
+    department = request.GET.get('department', '').strip()
+    status = request.GET.get('status', '').strip()
+    if query:
+        users = users.filter(Q(username__icontains=query) | Q(email__icontains=query))
+    if role in {'user', 'admin', 'superadmin'}:
+        users = users.filter(role=role)
+    if department:
+        users = users.filter(department=department)
+    if status == 'active':
+        users = users.filter(is_active=True)
+    elif status == 'inactive':
+        users = users.filter(is_active=False)
+
+    all_users = CustomUser.objects.all()
+    metrics = {
+        'total': all_users.count(),
+        'active': all_users.filter(is_active=True).count(),
+        'admins': all_users.filter(role__in=('admin', 'superadmin')).count(),
+        'departments': all_users.exclude(department__isnull=True).exclude(department='').values('department').distinct().count(),
+    }
+    return render(request, 'user_list.html', {
+        'users': users,
+        'metrics': metrics,
+        'filters': {'q': query, 'role': role, 'department': department, 'status': status},
+        'role_choices': [('user', 'User'), ('admin', 'Admin'), ('superadmin', 'Superadmin')],
+        'department_choices': DEPARTMENT_CHOICES,
+    })
+
+
+@admin_required
+def edit_user(request, user_id):
+    user = get_object_or_404(CustomUser, pk=user_id)
+    if user.role == 'superadmin' and request.user.role != 'superadmin':
+        return HttpResponseForbidden("Only superadmins can edit superadmin accounts.")
+    if request.method == 'POST':
+        form = UserManageForm(
+            request.POST,
+            instance=user,
+            allow_superadmin=request.user.role == 'superadmin',
+            lock_role=user.pk == request.user.pk,
+        )
+        if form.is_valid():
+            updated = form.save(commit=False)
+            if user.pk == request.user.pk:
+                updated.role = user.role
+            if user.role == 'superadmin' and updated.role != 'superadmin':
+                return HttpResponseForbidden("Superadmin role changes require a separate protected workflow.")
+            updated.save()
+            messages.success(request, f"{user.username} access details updated.")
+            return redirect('user_list')
+    else:
+        form = UserManageForm(
+            instance=user,
+            allow_superadmin=request.user.role == 'superadmin',
+            lock_role=user.pk == request.user.pk,
+        )
+    return render(request, 'user_edit.html', {'form': form, 'managed_user': user})
 
 #============================================ activate deactivate users ====================================
 @admin_required
 @require_POST
 def toggle_user_status(request, user_id):
     user = get_object_or_404(CustomUser, id=user_id)
-    user.is_active = not user.is_active  # toggle active/inactive
+    if user.pk == request.user.pk:
+        messages.error(request, "You cannot deactivate your own account.")
+        return redirect('user_list')
+    if user.role == 'superadmin' and request.user.role != 'superadmin':
+        return HttpResponseForbidden("Only superadmins can change superadmin status.")
+    if user.is_active and user.role == 'superadmin' and CustomUser.objects.filter(role='superadmin', is_active=True).count() <= 1:
+        messages.error(request, "The last active superadmin cannot be deactivated.")
+        return redirect('user_list')
+    user.is_active = not user.is_active
     user.save()
     messages.success(request, f"{user.username} status updated successfully.")
     return redirect('user_list')

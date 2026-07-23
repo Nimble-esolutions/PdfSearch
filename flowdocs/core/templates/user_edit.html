@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Edit user access" %}{% endblock %}
+
+{% block content %}
+<section class="admin-panel admin-panel--narrow access-form-panel">
+  <div class="admin-page-heading">
+    <span class="workspace-kicker">{% trans "Users & Access" %}</span>
+    <h2>{% trans "Edit access details" %}</h2>
+    <p>{% blocktrans with username=managed_user.username %}Update access details for {{ username }}.{% endblocktrans %}</p>
+  </div>
+  <form method="post" class="admin-form">{% csrf_token %}
+    <div class="form-section"><h3>{% trans "Identity" %}</h3><p>{% trans "Username is fixed after account creation." %}</p><label>{% trans "Username" %}<input class="form-control" value="{{ managed_user.username }}" disabled></label><label>{{ form.email.label }}{{ form.email }}{% for error in form.email.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</label></div>
+    <div class="form-section"><h3>{% trans "Access assignment" %}</h3><p>{% trans "Department-scoped permissions will be added in phase 2." %}</p><label>{{ form.role.label }}{{ form.role }}</label><label>{{ form.department.label }}{{ form.department }}</label></div>
+    <div class="access-form-actions"><a href="{% url 'user_list' %}" class="btn btn-outline-secondary">{% trans "Cancel" %}</a><button type="submit" class="btn btn-primary">{% trans "Save changes" %}</button></div>
+  </form>
+</section>
+{% endblock %}
