@@ -340,7 +340,8 @@ def public_view_pdf(request, pdf_id):
     )
     return response
 
-#===========================Registration view=============@admin_required
+#===========================Registration view====================
+@admin_required
 def register_view(request):
     # Account creation is an operator workflow. Public visitors may search,
     # but may never create accounts or select an operational role. Department
