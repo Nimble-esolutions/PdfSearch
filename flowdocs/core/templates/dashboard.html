@@ -76,6 +76,46 @@
             </div>
           </div>
           <div class="small text-muted">{% trans "Only superadmins can queue bulk maintenance. Existing successful items remain intact when another item fails." %}</div>
+
+          <details class="mt-3" id="bulk-filter-panel">
+            <summary class="small fw-bold">{% trans "Filter Documents" %}</summary>
+            <div class="row g-2 mt-1">
+              <div class="col-md-3">
+                <label class="form-label small">{% trans "Category" %}</label>
+                <input type="text" name="filter_category" id="filter_category" class="form-control form-control-sm" placeholder="{% trans 'acts / rules / bylaws' %}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small">{% trans "Subject" %}</label>
+                <input type="text" name="filter_subject" id="filter_subject" class="form-control form-control-sm" placeholder="{% trans 'housing / audit / agriculture' %}">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small">{% trans "Indexed" %}</label>
+                <select name="filter_indexed" id="filter_indexed" class="form-select form-select-sm">
+                  <option value="">{% trans "Any" %}</option>
+                  <option value="true">{% trans "Indexed" %}</option>
+                  <option value="false">{% trans "Not indexed" %}</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">{% trans "Keywords (comma-separated)" %}</label>
+                <input type="text" name="filter_keywords" id="filter_keywords" class="form-control form-control-sm" placeholder="{% trans 'cooperative, society, act' %}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small">{% trans "Uploaded after" %}</label>
+                <input type="date" name="filter_uploaded_after" id="filter_uploaded_after" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small">{% trans "Uploaded before" %}</label>
+                <input type="date" name="filter_uploaded_before" id="filter_uploaded_before" class="form-control form-control-sm">
+              </div>
+              <div class="col-md-3 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-info btn-sm w-100" id="filter-preview-btn">{% trans "Preview Count" %}</button>
+              </div>
+            </div>
+            <div id="filter-preview-result" class="small text-muted mt-2" role="status" aria-live="polite"></div>
+            <div class="small text-muted mt-1">{% trans "Filters apply to reindex and validate operations. Select categories above, then set filters to narrow the scope." %}</div>
+          </details>
+
           <div class="input-group input-group-sm mt-3">
             <select class="form-select" name="generation_choice" form="restore-generation-form" aria-label="{% trans 'Available generation' %}">
               <option value="">{% trans "Choose a generation or enter one below" %}</option>
@@ -220,6 +260,12 @@
       {% if role == 'superadmin' %}
         <form id="bulk-maintenance-form" method="post" action="{% url 'bulk_maintenance' %}">
           {% csrf_token %}
+          <input type="hidden" name="filter_category" id="bulk-form-filter-category">
+          <input type="hidden" name="filter_subject" id="bulk-form-filter-subject">
+          <input type="hidden" name="filter_indexed" id="bulk-form-filter-indexed">
+          <input type="hidden" name="filter_keywords" id="bulk-form-filter-keywords">
+          <input type="hidden" name="filter_uploaded_after" id="bulk-form-filter-after">
+          <input type="hidden" name="filter_uploaded_before" id="bulk-form-filter-before">
         </form>
         <form id="restore-generation-form" method="post" action="{% url 'bulk_maintenance' %}">
           {% csrf_token %}
@@ -407,4 +453,65 @@
     </div>
   </div>
 {% endif %}
+
+<script>
+(function() {
+  var filterInputs = ["filter_category", "filter_subject", "filter_indexed", "filter_keywords", "filter_uploaded_after", "filter_uploaded_before"];
+  var formFieldMap = {
+    "filter_category": "bulk-form-filter-category",
+    "filter_subject": "bulk-form-filter-subject",
+    "filter_indexed": "bulk-form-filter-indexed",
+    "filter_keywords": "bulk-form-filter-keywords",
+    "filter_uploaded_after": "bulk-form-filter-after",
+    "filter_uploaded_before": "bulk-form-filter-before",
+  };
+
+  function syncFiltersToForm() {
+    filterInputs.forEach(function(id) {
+      var source = document.getElementById(id);
+      var target = document.getElementById(formFieldMap[id]);
+      if (source && target) {
+        target.value = source.value;
+      }
+    });
+  }
+
+  var bulkForm = document.getElementById("bulk-maintenance-form");
+  if (bulkForm) {
+    bulkForm.addEventListener("submit", syncFiltersToForm);
+  }
+
+  var previewBtn = document.getElementById("filter-preview-btn");
+  if (previewBtn) {
+    previewBtn.addEventListener("click", function() {
+      var checked = document.querySelectorAll('input[name="folder_ids"]:checked');
+      var folderIds = [];
+      checked.forEach(function(cb) { folderIds.push(cb.value); });
+      if (folderIds.length === 0) {
+        document.getElementById("filter-preview-result").textContent = "{% trans 'Select at least one category to preview.' %}";
+        return;
+      }
+      var params = new URLSearchParams();
+      folderIds.forEach(function(id) { params.append("folder_ids", id); });
+      filterInputs.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el && el.value) {
+          var name = id.replace("filter_", "filter_");
+          params.set(name, el.value);
+        }
+      });
+      var resultEl = document.getElementById("filter-preview-result");
+      resultEl.textContent = "{% trans 'Counting...' %}";
+      fetch("{% url 'bulk_filter_preview' %}?" + params.toString())
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          resultEl.textContent = data.count + " {% trans 'PDFs in' %} " + data.folders + " {% trans 'categories' %} (" + data.indexed + " {% trans 'indexed' %}, " + data.needs_index + " {% trans 'need index' %}).";
+        })
+        .catch(function() {
+          resultEl.textContent = "{% trans 'Preview failed.' %}";
+        });
+    });
+  }
+})();
+</script>
 {% endblock %}
