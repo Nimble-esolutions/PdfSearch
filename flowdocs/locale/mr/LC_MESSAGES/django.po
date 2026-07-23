@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PdfSearch Admin UI\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-22 19:34+0000\n"
+"POT-Creation-Date: 2026-07-23 08:32+0000\n"
 "PO-Revision-Date: 2025-09-03 12:10+0530\n"
 "Last-Translator: Codex\n"
 "Language-Team: Marathi\n"
@@ -12,615 +12,902 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n!=1);\n"
 
+#: core/templates/base.html:8 core/templates/home.html:8
 msgid ""
 "Commissioner for Cooperation and Registrar, Cooperative Societies, "
 "Maharashtra State, Pune"
 msgstr "सहकार आयुक्त व निबंधक, सहकारी संस्था, महाराष्ट्र राज्य, पुणे"
 
+#: core/templates/base.html:17
 msgid "Registrar Co-operative Societies banner"
 msgstr "निबंधक सहकारी संस्था बॅनर"
 
+#: core/templates/base.html:20 core/templates/search.html:56
 msgid "Registrar Co-operative Societies"
 msgstr "निबंधक सहकारी संस्था"
 
+#: core/templates/base.html:26
 msgid "Admin"
 msgstr "प्रशासन"
 
+#: core/templates/base.html:27
 msgid "Toggle navigation"
 msgstr "नेव्हिगेशन बदला"
 
+#: core/templates/base.html:35
 msgid "Dashboard"
 msgstr "डॅशबोर्ड"
 
+#: core/templates/base.html:38 core/templates/search.html:70
 msgid "Search"
 msgstr "शोधा "
 
+#: core/templates/base.html:42
 msgid "Add User"
 msgstr "वापरकर्ता जोडा"
 
+#: core/templates/base.html:45 core/templates/dashboard.html:45
 msgid "Users"
 msgstr "वापरकर्ते"
 
+#: core/templates/base.html:57
 msgid "English"
 msgstr "इंग्रजी"
 
+#: core/templates/base.html:70
 msgid "Logout"
 msgstr "लॉगआउट"
 
+#: core/templates/base.html:73 core/templates/home.html:23
+#: core/templates/login.html:9 core/templates/login.html:35
 msgid "Login"
 msgstr "लॉगिन"
 
+#: core/templates/base.html:86 core/templates/dashboard.html:293
+#: core/templates/dashboard.html:318 core/templates/dashboard_pdfs.html:252
+#: core/templates/dashboard_pdfs.html:278
+#: core/templates/dashboard_pdfs.html:305
 msgid "Close"
 msgstr "बंद करा"
 
+#: core/templates/base.html:98 core/templates/search.html:110
 msgid "All rights reserved© Registrar Co-operative Societies."
 msgstr "सर्व हक्क राखीव © सहकारी संस्था निबंधक."
 
+#: core/templates/base.html:102
 msgid "Nimble eSolutions"
 msgstr "निंबल ई-सोल्यूशन्स"
 
+#: core/templates/dashboard.html:4
 msgid "Operations Cockpit - CC & RCS Maharashtra"
 msgstr "संचालन नियंत्रण कक्ष - सीसी आणि आरसीएस महाराष्ट्र"
 
+#: core/templates/dashboard.html:10
 msgid "Document operations"
 msgstr "दस्तऐवज संचालन"
 
+#: core/templates/dashboard.html:11
 msgid "Operations Cockpit"
 msgstr "संचालन नियंत्रण कक्ष"
 
+#: core/templates/dashboard.html:12
 msgid ""
 "Triage categories, document readiness, uploads, and access work from one "
 "screen."
-msgstr ""
-"श्रेणी, दस्तऐवज तयारी, अपलोड आणि प्रवेशाची कामे एका स्क्रीनवर तपासा."
+msgstr "श्रेणी, दस्तऐवज तयारी, अपलोड आणि प्रवेशाची कामे एका स्क्रीनवर तपासा."
 
+#: core/templates/dashboard.html:17 core/templates/dashboard.html:317
 msgid "Add Category"
 msgstr "श्रेणी जोडा"
 
+#: core/templates/dashboard.html:22
 msgid "Operations summary"
 msgstr "संचालन सारांश"
 
+#: core/templates/dashboard.html:24
 msgid "Categories"
 msgstr "श्रेणी"
 
+#: core/templates/dashboard.html:26
 #, python-format
 msgid "%(counter)s empty"
 msgid_plural "%(counter)s empty"
 msgstr[0] "%(counter)s रिकामी"
 msgstr[1] "%(counter)s रिकाम्या"
 
+#: core/templates/dashboard.html:29 core/templates/dashboard_pdfs.html:29
 msgid "PDF rows"
 msgstr "PDF नोंदी"
 
+#: core/templates/dashboard.html:31
 msgid "visible to this role"
 msgstr "या भूमिकेसाठी दृश्यमान"
 
+#: core/templates/dashboard.html:34
 msgid "Search readiness"
 msgstr "शोध तयारी"
 
+#: core/templates/dashboard.html:36
 msgid "indexed PDFs"
 msgstr "अनुक्रमित PDF"
 
+#: core/templates/dashboard.html:39
 msgid "Provenance"
 msgstr "मूळ माहिती"
 
+#: core/templates/dashboard.html:41 core/templates/dashboard_pdfs.html:41
 msgid "unknown uploaders"
 msgstr "अज्ञात अपलोडकर्ते"
 
+#: core/templates/dashboard.html:47
 msgid "active accounts"
 msgstr "सक्रिय खाती"
 
+#: core/templates/dashboard.html:58
 msgid "Category Yard"
 msgstr "श्रेणी कार्यक्षेत्र"
 
+#: core/templates/dashboard.html:59
 msgid ""
 "Each category is a loading bay: open it to inspect PDFs, readiness, and "
 "upload state."
 msgstr ""
-"प्रत्येक श्रेणी एक कार्य विभाग आहे: PDF, तयारी आणि अपलोड स्थिती तपासण्यासाठी "
-"ती उघडा."
+"प्रत्येक श्रेणी एक कार्य विभाग आहे: PDF, तयारी आणि अपलोड स्थिती तपासण्यासाठी ती उघडा."
 
+#: core/templates/dashboard.html:67
+#, fuzzy
+#| msgid "Document operations"
+msgid "Bulk Data Operations"
+msgstr "दस्तऐवज संचालन"
+
+#: core/templates/dashboard.html:68
+msgid ""
+"Select categories, then queue a resumable operation. Work is processed by "
+"the maintenance worker."
+msgstr ""
+
+#: core/templates/dashboard.html:71
+#, fuzzy
+#| msgid "Reprocess Needed"
+msgid "Reindex Needed"
+msgstr "आवश्यक पुनर्प्रक्रिया करा"
+
+#: core/templates/dashboard.html:72
+#, fuzzy
+#| msgid "indexed"
+msgid "Reindex Selected"
+msgstr "अनुक्रमित"
+
+#: core/templates/dashboard.html:73
+#, fuzzy
+#| msgid "Repair Stored Index"
+msgid "Repair Indexes"
+msgstr "संग्रहित अनुक्रमणिका दुरुस्त करा"
+
+#: core/templates/dashboard.html:74
+msgid "Validate Files"
+msgstr ""
+
+#: core/templates/dashboard.html:75
+msgid "Sync Active Data to S3"
+msgstr ""
+
+#: core/templates/dashboard.html:78
+msgid ""
+"Only superadmins can queue bulk maintenance. Existing successful items "
+"remain intact when another item fails."
+msgstr ""
+
+#: core/templates/dashboard.html:80
+msgid "Available generation"
+msgstr ""
+
+#: core/templates/dashboard.html:81
+msgid "Choose a generation or enter one below"
+msgstr ""
+
+#: core/templates/dashboard.html:89
+msgid "Pull Generation to Staging"
+msgstr ""
+
+#: core/templates/dashboard.html:91
+msgid "Or enter an immutable generation id"
+msgstr ""
+
+#: core/templates/dashboard.html:100
+#, fuzzy
+#| msgid "Delete category"
+msgid "Select category"
+msgstr "श्रेणी हटवा"
+
+#: core/templates/dashboard.html:106
 #, python-format
 msgid "%(counter)s PDF"
 msgid_plural "%(counter)s PDFs"
 msgstr[0] "%(counter)s PDF"
 msgstr[1] "%(counter)s PDF"
 
+#: core/templates/dashboard.html:111
 msgid "Empty"
 msgstr "रिकामी"
 
+#: core/templates/dashboard.html:113 core/templates/dashboard.html:252
 msgid "Index review"
 msgstr "अनुक्रमण पुनरावलोकन"
 
+#: core/templates/dashboard.html:115 core/templates/dashboard.html:173
+#: core/templates/dashboard_pdfs.html:126
 msgid "Indexed"
 msgstr "अनुक्रमित"
 
+#: core/templates/dashboard.html:118
 msgid "Unknown owner"
 msgstr "अज्ञात जबाबदार अधिकारी"
 
+#: core/templates/dashboard.html:123
 msgid "Category actions"
 msgstr "श्रेणी क्रिया"
 
+#: core/templates/dashboard.html:128
 msgid "Rename category"
 msgstr "श्रेणीचे नाव बदला"
 
+#: core/templates/dashboard.html:129 core/templates/dashboard.html:302
+#: core/templates/dashboard_pdfs.html:156
+#: core/templates/dashboard_pdfs.html:286
 msgid "Rename"
 msgstr "नाव बदला"
 
+#: core/templates/dashboard.html:135
 msgid "Delete category"
 msgstr "श्रेणी हटवा"
 
+#: core/templates/dashboard.html:136
 msgid ""
 "Delete this category and all PDFs inside it? This cannot be undone. Confirm "
 "backup and rollback evidence first."
 msgstr ""
-"ही श्रेणी आणि तिच्यातील सर्व PDF हटवायचे? ही क्रिया पूर्ववत करता येणार "
-"नाही. आधी बॅकअप आणि रोलबॅक पुरावा तपासा."
+"ही श्रेणी आणि तिच्यातील सर्व PDF हटवायचे? ही क्रिया पूर्ववत करता येणार नाही. आधी बॅकअप "
+"आणि रोलबॅक पुरावा तपासा."
 
+#: core/templates/dashboard.html:137 core/templates/dashboard_pdfs.html:164
+#: core/templates/user_list.html:69
 msgid "Delete"
 msgstr "हटवा"
 
+#: core/templates/dashboard.html:145
 msgid "No categories yet"
 msgstr "अद्याप श्रेणी नाहीत"
 
+#: core/templates/dashboard.html:146
 msgid "Create a category before uploading PDFs."
 msgstr "PDF अपलोड करण्यापूर्वी श्रेणी तयार करा."
 
+#: core/templates/dashboard.html:162
 msgid "Recent Intake"
 msgstr "अलीकडील प्राप्ती"
 
+#: core/templates/dashboard.html:163
 msgid "Newest PDF rows visible to this operator."
 msgstr "या ऑपरेटरला दिसणाऱ्या नवीनतम PDF नोंदी."
 
+#: core/templates/dashboard.html:170
 msgid "No category"
 msgstr "श्रेणी नाही"
 
+#: core/templates/dashboard.html:173 core/templates/dashboard_pdfs.html:128
 msgid "Needs index"
 msgstr "अनुक्रमण आवश्यक"
 
+#: core/templates/dashboard.html:178
 msgid "No recent PDFs"
 msgstr "अलीकडील PDF नाहीत"
 
+#: core/templates/dashboard.html:179
 msgid "Uploads will appear here after documents are received."
 msgstr "दस्तऐवज प्राप्त झाल्यानंतर अपलोड येथे दिसतील."
 
-msgid "Dispatch Board"
-msgstr "प्रेषण फलक"
+#: core/templates/dashboard.html:190
+msgid "Maintenance Jobs"
+msgstr ""
 
-msgid "Manual work queues derived from current data."
-msgstr "सध्याच्या डेटावर आधारित मॅन्युअल कार्य रांगा."
+#: core/templates/dashboard.html:191
+msgid "Queued and recent background work."
+msgstr ""
 
-msgid "PDFs need index review"
-msgstr "PDF साठी अनुक्रमण पुनरावलोकन आवश्यक"
-
-msgid "PDFs need owner review"
-msgstr "PDF साठी जबाबदार अधिकारी पुनरावलोकन आवश्यक"
-
-msgid "empty category bays"
-msgstr "रिकामे श्रेणी विभाग"
-
-msgid "Index Debt Queue"
-msgstr "अनुक्रमण थकबाकी रांग"
-
-msgid "Open the category that needs the next operator action."
-msgstr "पुढील ऑपरेटर क्रिया आवश्यक असलेली श्रेणी उघडा."
-
-msgid "Owner review"
-msgstr "जबाबदार अधिकारी पुनरावलोकन"
-
-msgid "Empty bay"
-msgstr "रिकामा विभाग"
-
-msgid "No category-level index, owner, or intake debt is visible right now."
-msgstr "सध्या श्रेणी-स्तरीय अनुक्रमण, जबाबदार अधिकारी किंवा प्राप्ती थकबाकी दिसत नाही."
-
-msgid "Rename Category"
-msgstr "श्रेणीचे नाव बदला"
-
-msgid "New Name"
-msgstr "नवीन नाव"
-
+#: core/templates/dashboard.html:205 core/templates/dashboard.html:301
+#: core/templates/dashboard.html:332 core/templates/dashboard_pdfs.html:260
+#: core/templates/dashboard_pdfs.html:285
+#: core/templates/dashboard_pdfs.html:318 core/templates/register.html:24
+#: core/templates/user_edit.html:16
 msgid "Cancel"
 msgstr "रद्द करा"
 
+#: core/templates/dashboard.html:210
+msgid "Retry"
+msgstr ""
+
+#: core/templates/dashboard.html:216
+msgid "No maintenance jobs have been queued."
+msgstr ""
+
+#: core/templates/dashboard.html:223
+msgid "Dispatch Board"
+msgstr "प्रेषण फलक"
+
+#: core/templates/dashboard.html:224
+msgid "Manual work queues derived from current data."
+msgstr "सध्याच्या डेटावर आधारित मॅन्युअल कार्य रांगा."
+
+#: core/templates/dashboard.html:229
+msgid "PDFs need index review"
+msgstr "PDF साठी अनुक्रमण पुनरावलोकन आवश्यक"
+
+#: core/templates/dashboard.html:233
+msgid "PDFs need owner review"
+msgstr "PDF साठी जबाबदार अधिकारी पुनरावलोकन आवश्यक"
+
+#: core/templates/dashboard.html:237
+msgid "empty category bays"
+msgstr "रिकामे श्रेणी विभाग"
+
+#: core/templates/dashboard.html:244
+msgid "Index Debt Queue"
+msgstr "अनुक्रमण थकबाकी रांग"
+
+#: core/templates/dashboard.html:245
+msgid "Open the category that needs the next operator action."
+msgstr "पुढील ऑपरेटर क्रिया आवश्यक असलेली श्रेणी उघडा."
+
+#: core/templates/dashboard.html:261 core/templates/dashboard_pdfs.html:131
+msgid "Owner review"
+msgstr "जबाबदार अधिकारी पुनरावलोकन"
+
+#: core/templates/dashboard.html:270
+msgid "Empty bay"
+msgstr "रिकामा विभाग"
+
+#: core/templates/dashboard.html:277
+msgid "No category-level index, owner, or intake debt is visible right now."
+msgstr "सध्या श्रेणी-स्तरीय अनुक्रमण, जबाबदार अधिकारी किंवा प्राप्ती थकबाकी दिसत नाही."
+
+#: core/templates/dashboard.html:292
+msgid "Rename Category"
+msgstr "श्रेणीचे नाव बदला"
+
+#: core/templates/dashboard.html:296
+msgid "New Name"
+msgstr "नवीन नाव"
+
+#: core/templates/dashboard.html:322
 msgid "Category Name"
 msgstr "श्रेणीचे नाव"
 
+#: core/templates/dashboard.html:326 core/templates/dashboard_pdfs.html:255
 msgid "Keywords"
 msgstr "कीवर्ड"
 
+#: core/templates/dashboard.html:327
 msgid "act, law, rule"
 msgstr "कायदा, नियम, कर्ज"
 
+#: core/templates/dashboard.html:328 core/templates/dashboard_pdfs.html:257
 msgid "Use comma-separated terms that help route searches to this category."
 msgstr "शोध या श्रेणीकडे वळवण्यासाठी स्वल्पविरामाने वेगळे केलेले शब्द वापरा."
 
+#: core/templates/dashboard.html:333
 msgid "Add"
 msgstr "जोडा"
 
+#: core/templates/dashboard_pdfs.html:4
 msgid "Document Workbench"
 msgstr "दस्तऐवज कार्यक्षेत्र"
 
+#: core/templates/dashboard_pdfs.html:10
 msgid "Category workbench"
 msgstr "श्रेणी कार्यक्षेत्र"
 
+#: core/templates/dashboard_pdfs.html:12
 msgid ""
 "Receive PDFs, inspect search readiness, and stage high-risk actions with "
 "context."
-msgstr ""
-"PDF प्राप्त करा, शोध तयारी तपासा आणि उच्च-जोखीम क्रिया संदर्भासह तयार करा."
+msgstr "PDF प्राप्त करा, शोध तयारी तपासा आणि उच्च-जोखीम क्रिया संदर्भासह तयार करा."
 
+#: core/templates/dashboard_pdfs.html:18
 msgid "Edit Keywords"
 msgstr "कीवर्ड संपादित करा"
 
+#: core/templates/dashboard_pdfs.html:22
 msgid "Back to Dashboard"
 msgstr "डॅशबोर्डवर परत"
 
+#: core/templates/dashboard_pdfs.html:27
 msgid "Category manifest"
 msgstr "श्रेणी मॅनिफेस्ट"
 
+#: core/templates/dashboard_pdfs.html:31
 msgid "in this category"
 msgstr "या श्रेणीत"
 
+#: core/templates/dashboard_pdfs.html:34
 msgid "Index readiness"
 msgstr "अनुक्रमण तयारी"
 
+#: core/templates/dashboard_pdfs.html:36
 msgid "indexed"
 msgstr "अनुक्रमित"
 
+#: core/templates/dashboard_pdfs.html:39
 msgid "Ownership"
 msgstr "जबाबदारी"
 
+#: core/templates/dashboard_pdfs.html:44
 msgid "Latest intake"
 msgstr "नवीनतम प्राप्ती"
 
+#: core/templates/dashboard_pdfs.html:46
 msgid "most recent upload"
 msgstr "सर्वात अलीकडील अपलोड"
 
+#: core/templates/dashboard_pdfs.html:55
 msgid "Routing keywords"
 msgstr "मार्गदर्शक कीवर्ड"
 
+#: core/templates/dashboard_pdfs.html:63
 msgid "Receiving Dock"
 msgstr "प्राप्ती विभाग"
 
+#: core/templates/dashboard_pdfs.html:64
 msgid ""
 "Uploads are accepted only after PDF validation and preprocessing complete."
 msgstr "PDF पडताळणी आणि पूर्वप्रक्रिया पूर्ण झाल्यावरच अपलोड स्वीकारले जातात."
 
+#: core/templates/dashboard_pdfs.html:74
 msgid "PDF Title"
 msgstr "PDF शीर्षक"
 
+#: core/templates/dashboard_pdfs.html:81
 msgid "PDF File"
 msgstr "PDF फाइल"
 
+#: core/templates/dashboard_pdfs.html:88
 msgid "Receive"
 msgstr "प्राप्त करा"
 
+#: core/templates/dashboard_pdfs.html:97
 msgid "PDF Workbench"
 msgstr "PDF कार्यक्षेत्र"
 
+#: core/templates/dashboard_pdfs.html:98
 msgid "Each row shows ownership, search readiness, and available actions."
 msgstr "प्रत्येक ओळीत जबाबदार अधिकारी, शोध तयारी आणि उपलब्ध क्रिया दिसतात."
 
+#: core/templates/dashboard_pdfs.html:105
 msgid "Document"
 msgstr "दस्तऐवज"
 
+#: core/templates/dashboard_pdfs.html:106
+#: core/templates/dashboard_pdfs.html:309
 msgid "Owner"
 msgstr "जबाबदार अधिकारी"
 
+#: core/templates/dashboard_pdfs.html:107
 msgid "Received"
 msgstr "प्राप्त"
 
+#: core/templates/dashboard_pdfs.html:108
 msgid "Readiness"
 msgstr "तयारी"
 
+#: core/templates/dashboard_pdfs.html:109
+#: core/templates/dashboard_pdfs.html:136
 msgid "View"
 msgstr "पहा"
 
+#: core/templates/dashboard_pdfs.html:111 core/templates/user_list.html:57
 msgid "Actions"
 msgstr "क्रिया"
 
+#: core/templates/dashboard_pdfs.html:122
 msgid "Unknown"
 msgstr "अज्ञात"
 
+#: core/templates/dashboard_pdfs.html:147
 msgid "Assign owner"
 msgstr "जबाबदार अधिकारी नेमा"
 
+#: core/templates/dashboard_pdfs.html:148
+#: core/templates/dashboard_pdfs.html:304
 msgid "Assign Owner"
 msgstr "जबाबदार अधिकारी नेमा"
 
+#: core/templates/dashboard_pdfs.html:155
+#: core/templates/dashboard_pdfs.html:277
 msgid "Rename PDF"
 msgstr "PDF चे नाव बदला"
 
+#: core/templates/dashboard_pdfs.html:162
 msgid "Delete PDF"
 msgstr "PDF हटवा"
 
+#: core/templates/dashboard_pdfs.html:163
 msgid "Delete this PDF? Confirm backup and index impact before continuing."
 msgstr "हा PDF हटवायचा? पुढे जाण्यापूर्वी बॅकअप आणि अनुक्रमण परिणाम तपासा."
 
+#: core/templates/dashboard_pdfs.html:174
 msgid "No PDFs available in this category."
 msgstr "या श्रेणीत PDF उपलब्ध नाहीत."
 
+#: core/templates/dashboard_pdfs.html:187
 msgid "Blast Radius"
 msgstr "परिणाम व्याप्ती"
 
+#: core/templates/dashboard_pdfs.html:188
 msgid "Use this before renaming, deleting, or moving documents."
 msgstr "दस्तऐवजांचे नाव बदलण्यापूर्वी, हटवण्यापूर्वी किंवा हलवण्यापूर्वी हे तपासा."
 
+#: core/templates/dashboard_pdfs.html:193
 msgid "PDF rows affected by category-level changes"
 msgstr "श्रेणी-स्तरीय बदलांमुळे प्रभावित PDF नोंदी"
 
+#: core/templates/dashboard_pdfs.html:197
 msgid "documents may need index repair"
 msgstr "दस्तऐवजांना अनुक्रमण दुरुस्ती लागू शकते"
 
+#: core/templates/dashboard_pdfs.html:201
 msgid "documents need owner review"
 msgstr "दस्तऐवजांना जबाबदार अधिकारी पुनरावलोकन आवश्यक"
 
+#: core/templates/dashboard_pdfs.html:204
 msgid "Index operations"
 msgstr "अनुक्रमण कार्ये"
 
+#: core/templates/dashboard_pdfs.html:206
 msgid "Index Operations"
 msgstr "अनुक्रमण कार्ये"
 
+#: core/templates/dashboard_pdfs.html:207
 msgid "Scoped to this category only."
 msgstr "फक्त या श्रेणीपुरते मर्यादित."
 
+#: core/templates/dashboard_pdfs.html:214
 msgid "Repair Stored Index"
 msgstr "संग्रहित अनुक्रमणिका दुरुस्त करा"
 
+#: core/templates/dashboard_pdfs.html:221
 msgid "Reprocess Needed"
 msgstr "आवश्यक पुनर्प्रक्रिया करा"
 
+#: core/templates/dashboard_pdfs.html:230
 msgid ""
 "Reprocess every PDF in this category? This may call the embedding service "
 "and overwrite stored chunks."
 msgstr ""
-"या श्रेणीतील प्रत्येक PDF ची पुनर्प्रक्रिया करायची? यामुळे एम्बेडिंग सेवा "
-"वापरली जाऊ शकते आणि संग्रहित भागांवर नवीन माहिती लिहिली जाऊ शकते."
+"या श्रेणीतील प्रत्येक PDF ची पुनर्प्रक्रिया करायची? यामुळे एम्बेडिंग सेवा वापरली जाऊ शकते "
+"आणि संग्रहित भागांवर नवीन माहिती लिहिली जाऊ शकते."
 
+#: core/templates/dashboard_pdfs.html:231
 msgid "Reprocess All"
 msgstr "सर्वांची पुनर्प्रक्रिया करा"
 
+#: core/templates/dashboard_pdfs.html:236
 msgid "Superadmin access is required for reindexing and reprocessing controls."
 msgstr "पुन्हा अनुक्रमण आणि पुनर्प्रक्रिया नियंत्रणांसाठी सुपरअॅडमिन प्रवेश आवश्यक आहे."
 
+#: core/templates/dashboard_pdfs.html:251
 msgid "Manage Category Keywords"
 msgstr "श्रेणी कीवर्ड व्यवस्थापित करा"
 
+#: core/templates/dashboard_pdfs.html:256
 msgid "agriculture, loan, act"
 msgstr "कृषी, कर्ज, कायदा"
 
+#: core/templates/dashboard_pdfs.html:261
 msgid "Save Changes"
 msgstr "बदल जतन करा"
 
+#: core/templates/dashboard_pdfs.html:281
 msgid "New Title"
 msgstr "नवीन शीर्षक"
 
+#: core/templates/dashboard_pdfs.html:311
 msgid "Choose active user"
 msgstr "सक्रिय वापरकर्ता निवडा"
 
+#: core/templates/dashboard_pdfs.html:319
 msgid "Save Owner"
 msgstr "जबाबदार अधिकारी जतन करा"
 
+#: core/templates/home.html:6
 msgid "Home - CC & RCS Maharashtra"
 msgstr "मुखपृष्ठ - सीसी आणि आरसीएस महाराष्ट्र"
 
+#: core/templates/home.html:18
 msgid "येथे शोधा"
 msgstr "येथे शोधा"
 
+#: core/templates/home.html:24 core/templates/search.html:28
 msgid "Home"
 msgstr "मुखपृष्ठ"
 
+#: core/templates/home.html:25
 msgid "Contact Us"
 msgstr "संपर्क करा"
 
+#: core/templates/home.html:26
 msgid "Skip to Navigation"
 msgstr "नेव्हिगेशनकडे जा"
 
+#: core/templates/home.html:27
 msgid "Skip to Main Content"
 msgstr "मुख्य मजकुराकडे जा"
 
+#: core/templates/home.html:28
 msgid "A--"
 msgstr "अ--"
 
+#: core/templates/home.html:29
 msgid "A-"
 msgstr "अ-"
 
+#: core/templates/home.html:30
 msgid "A"
 msgstr "अ"
 
+#: core/templates/home.html:31
 msgid "A+"
 msgstr "अ+"
 
+#: core/templates/home.html:32
 msgid "A++"
 msgstr "अ++"
 
+#: core/templates/home.html:37
 msgid "मराठी"
 msgstr "मराठी"
 
+#: core/templates/home.html:48
 msgid "Left Logo"
 msgstr "डावा लोगो"
 
+#: core/templates/home.html:51
 msgid "Commissioner for Cooperation and Registrar,"
 msgstr "सहकार आयुक्त व निबंधक"
 
+#: core/templates/home.html:52
 msgid "Cooperative Societies (CC and RCS), Maharashtra State, Pune"
 msgstr "सहकारी संस्था (सीसी आणि आरसीएस), महाराष्ट्र राज्य, पुणे"
 
+#: core/templates/home.html:55
 msgid "Right Logo"
 msgstr "उजवा लोगो"
 
+#: core/templates/home.html:64 core/templates/home.html:73
 msgid "Search With AI"
 msgstr "एआयसह शोधा"
 
+#: core/templates/home.html:67
 msgid "About CC and RCS"
 msgstr "सीसी आणि आरसीएस बद्दल"
 
+#: core/templates/home.html:68
 msgid "Downloads"
 msgstr "डाउनलोड्स"
 
+#: core/templates/home.html:69
 msgid "RTS Act"
 msgstr "आरटीएस कायदा"
 
+#: core/templates/home.html:70
 msgid "FAQs"
 msgstr "वारंवार विचारले जाणारे प्रश्न"
 
+#: core/templates/home.html:71
 msgid "Tender Notices"
 msgstr "टेंडर सूचना"
 
+#: core/templates/home.html:86
 msgid "Update"
 msgstr "अपडेट"
 
+#: core/templates/home.html:89
 msgid "National Cooperation Policy 2025"
 msgstr "राष्ट्रीय सहकार धोरण २०२५"
 
+#: core/templates/home.html:90
 msgid "E-Tender Notice"
 msgstr "ई-टेंडर सूचना"
 
+#: core/templates/home.html:91
 msgid "Urban Cooperative Scheme"
 msgstr "शहरी सहकारी योजना"
 
+#: core/templates/home.html:92
 msgid "Digital Registration Scheme"
 msgstr "डिजिटल नोंदणी योजना"
 
+#: core/templates/home.html:93
 msgid "State Cooperative Awards"
 msgstr "राज्य सहकारी पुरस्कार"
 
+#: core/templates/home.html:96
 msgid "More News"
 msgstr "अधिक बातम्या"
 
+#: core/templates/home.html:98
 msgid "Quick Links"
 msgstr "त्वरित दुवे"
 
+#: core/templates/home.html:100
 msgid "Deemed Conveyance - Pratyay MahaBhumi"
 msgstr "डिम्ड कंव्हेअन्स - प्रत्यय महाभूमी"
 
+#: core/templates/home.html:101
 msgid "Amended Acts & Rules"
 msgstr "सुधारित कायदे व नियम"
 
+#: core/templates/home.html:102
 msgid "District Wise Societies"
 msgstr "जिल्हानिहाय संस्था"
 
+#: core/templates/home.html:103
 msgid "Complaint Status"
 msgstr "तक्रारीची स्थिती"
 
+#: core/templates/home.html:104
 msgid "Digital Registration Dashboard"
 msgstr "डिजिटल नोंदणी डॅशबोर्ड"
 
+#: core/templates/home.html:105
 msgid "Online Services Portal"
 msgstr "ऑनलाईन सेवा पोर्टल"
 
+#: core/templates/home.html:106
 msgid "Audit Reports & Insights"
 msgstr "लेखापरीक्षण अहवाल व माहिती"
 
+#: core/templates/home.html:115
 msgid "Slide 1"
 msgstr "स्लाईड १"
 
+#: core/templates/home.html:118
 msgid "Slide 2"
 msgstr "स्लाईड २"
 
+#: core/templates/home.html:132
 msgid "Key Person"
 msgstr "महत्त्वाची व्यक्ती"
 
+#: core/templates/home.html:135
 msgid "Shri. Devendra Fadnavis"
 msgstr "श्री. देवेंद्र फडणवीस"
 
+#: core/templates/home.html:139
 msgid "Shri. Eknath Shinde"
 msgstr "श्री. एकनाथ शिंदे"
 
+#: core/templates/home.html:143
 msgid "Shri. Ajit Pawar"
 msgstr "श्री. अजित पवार"
 
+#: core/templates/home.html:151
 msgid "Important Links"
 msgstr "महत्त्वाचे दुवे"
 
+#: core/templates/home.html:158
 msgid "Related Links"
 msgstr "संबंधित दुवे"
 
+#: core/templates/home.html:168
 msgid "Government of Maharashtra"
 msgstr "महाराष्ट्र शासन"
 
+#: core/templates/login.html:4
 msgid "Login - CC & RCS Maharashtra"
 msgstr "लॉगिन - सीसी आणि आरसीएस महाराष्ट्र"
 
+#: core/templates/login.html:10
 msgid "Sign in to manage documents, users, and categories."
 msgstr "दस्तऐवज, वापरकर्ते आणि श्रेणी व्यवस्थापित करण्यासाठी साइन इन करा."
 
+#: core/templates/login.html:16 core/templates/user_edit.html:14
 msgid "Username"
 msgstr "वापरकर्तानाव"
 
+#: core/templates/login.html:18
 msgid "Enter username"
 msgstr "वापरकर्तानाव प्रविष्ट करा"
 
+#: core/templates/login.html:21
 msgid "Password"
 msgstr "पासवर्ड"
 
+#: core/templates/login.html:24
 msgid "Enter password"
 msgstr "पासवर्ड प्रविष्ट करा"
 
+#: core/templates/login.html:30 core/templates/login.html:50
 msgid "Show"
 msgstr "दाखवा"
 
+#: core/templates/login.html:50
 msgid "Hide"
 msgstr "लपवा"
 
-msgid "Register - CC & RCS Maharashtra"
-msgstr "नोंदणी - सीसी आणि आरसीएस महाराष्ट्र"
+#: core/templates/register.html:4
+msgid "Create user - CC & RCS Maharashtra"
+msgstr "वापरकर्ता तयार करा - सीसी आणि आरसीएस महाराष्ट्र"
 
-msgid "Registration Form"
-msgstr "नोंदणी फॉर्म"
+#: core/templates/register.html:9 core/templates/user_edit.html:9
+#: core/templates/user_list.html:11
+msgid "Users & Access"
+msgstr "वापरकर्ते आणि प्रवेश"
 
-msgid "Create a user account and assign access details."
-msgstr "वापरकर्ता खाते तयार करा आणि प्रवेश तपशील नियुक्त करा."
+#: core/templates/register.html:10
+msgid "Create user account"
+msgstr "वापरकर्ता खाते तयार करा"
 
-msgid "Register"
-msgstr "नोंदणी करा"
+#: core/templates/register.html:11
+msgid "Create an operator account and assign its current access level."
+msgstr "ऑपरेटर खाते तयार करून त्याचा सध्याचा प्रवेश स्तर नियुक्त करा."
 
-msgid "Already have an account?"
-msgstr "आधीच खाते आहे?"
+#: core/templates/register.html:14 core/templates/user_edit.html:14
+msgid "Identity"
+msgstr "ओळख"
 
-msgid "Login here"
-msgstr "येथे लॉगिन करा"
+#: core/templates/register.html:14
+msgid "Use a recognizable username and a monitored email address."
+msgstr "ओळखण्यास सोपे वापरकर्तानाव आणि निरीक्षणाखालील ईमेल पत्ता वापरा."
 
+#: core/templates/register.html:17 core/templates/user_edit.html:15
+msgid "Access assignment"
+msgstr "प्रवेश नियुक्ती"
+
+#: core/templates/register.html:17
+msgid ""
+"Superadmin access is limited to superadmins. Department-scoped permissions "
+"are planned for phase 2."
+msgstr "सुपरॲडमिन प्रवेश फक्त सुपरॲडमिनसाठी मर्यादित आहे. विभागनिहाय परवानग्या टप्पा २ मध्ये नियोजित आहेत."
+
+#: core/templates/register.html:20
+msgid "Account password"
+msgstr "खाते पासवर्ड"
+
+#: core/templates/register.html:20
+msgid "Use a unique password and deliver it through a secure channel."
+msgstr "अद्वितीय पासवर्ड वापरा आणि तो सुरक्षित माध्यमातून द्या."
+
+#: core/templates/register.html:24
+msgid "Create account"
+msgstr "खाते तयार करा"
+
+#: core/templates/search.html:6
 msgid "Search With AI - CC & RCS Maharashtra"
 msgstr "एआयसह शोधा - सीसी आणि आरसीएस महाराष्ट्र"
 
+#: core/templates/search.html:8
 msgid ""
 "Commissioner for Co-operation and Registrar, Cooperative Societies, "
 "Maharashtra State, Pune"
 msgstr "सहकार आयुक्त व निबंधक, सहकारी संस्था, महाराष्ट्र राज्य, पुणे"
 
+#: core/templates/search.html:27
 msgid "Admin Login"
 msgstr "ऍडमिन लॉगिन"
 
+#: core/templates/search.html:29
 msgid "Locate Us"
 msgstr "आम्हाला शोधा"
 
+#: core/templates/search.html:55
 msgid "AI Enabled Search"
 msgstr "एआय सक्षम शोध "
 
+#: core/templates/search.html:69
 msgid "Ask your question..."
 msgstr "तुमचा प्रश्न विचारा..."
 
-msgid "I am Sahakar AI. Click here to learn how to questions to get correct answers."
-msgstr "🙏 नमस्कार — मी सहकार AI. योग्य उत्तरे मिळविण्यासाठी प्रश्न कसे विचारावेत हे जाणून घेण्यासाठी"
-
-msgid "Click Here"
-msgstr "इथे क्लिक करा"
-
-msgid "Please ask your question 🙏"
-msgstr "कृपया आपला प्रश्न विचारा 🙏"
-
-msgid "Hello! How can I help you?"
-msgstr "नमस्कार! मी तुम्हाला कशी मदत करू शकतो?"
-
-msgid "Sorry, information related to this topic is not available in this section."
-msgstr "क्षमस्व — या विषयाशी संबंधित माहिती या विभागात उपलब्ध नाही."
-
-msgid "Sorry, the requested information was not found in the available documents."
-msgstr "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही."
-
-#: .\core\templates\search.html:97
+#: core/templates/search.html:97
 msgid ""
 "⚠️ AI-generated answers should not be used for legal purposes. The AI may "
 "provide incomplete or incorrect responses. Please contact the main office "
@@ -629,47 +916,218 @@ msgstr ""
 "⚠️ AI ने दिलेल्या उत्तरांचा कायदेशीर बाबींसाठी वापर करू नये. AI उत्तरे तयार करतांना अपूर्ण "
 "उत्तर अथवा चुकीचे उत्तर देऊ शकतो.कृपया अधिक माहितीसाठी मुख्य कार्यालयाशी संपर्क करावा."
 
-msgid "User List - CC & RCS Maharashtra"
-msgstr "वापरकर्ता यादी - सीसी आणि आरसीएस महाराष्ट्र"
+#: core/templates/user_edit.html:4
+msgid "Edit user access"
+msgstr "वापरकर्ता प्रवेश संपादित करा"
 
-msgid "Registered Users"
-msgstr "नोंदणीकृत वापरकर्ते"
+#: core/templates/user_edit.html:10
+msgid "Edit access details"
+msgstr "प्रवेश तपशील संपादित करा"
 
-msgid "Review user access, account status, role, and department."
-msgstr "वापरकर्ता प्रवेश, खाते स्थिती, भूमिका आणि विभाग तपासा."
+#: core/templates/user_edit.html:11
+#, python-format
+msgid "Update access details for %(username)s."
+msgstr "%(username)s साठी प्रवेश तपशील अद्ययावत करा."
 
-msgid "Email"
-msgstr "ईमेल"
+#: core/templates/user_edit.html:14
+msgid "Username is fixed after account creation."
+msgstr "खाते तयार केल्यानंतर वापरकर्तानाव बदलता येणार नाही."
 
-msgid "Role"
-msgstr "भूमिका"
+#: core/templates/user_edit.html:15
+msgid "Department-scoped permissions will be added in phase 2."
+msgstr "विभागनिहाय परवानग्या टप्पा २ मध्ये जोडल्या जातील."
 
-msgid "Department"
-msgstr "विभाग"
+#: core/templates/user_edit.html:16
+msgid "Save changes"
+msgstr "बदल जतन करा"
 
-msgid "Status"
-msgstr "स्थिती"
+#: core/templates/user_list.html:4
+msgid "Users and Access - CC & RCS Maharashtra"
+msgstr "वापरकर्ते आणि प्रवेश - सीसी आणि आरसीएस महाराष्ट्र"
 
+#: core/templates/user_list.html:10
+msgid "Administration"
+msgstr "प्रशासन"
+
+#: core/templates/user_list.html:12
+msgid ""
+"Review account status and access assignments from one operational workspace."
+msgstr "एका संचालन कार्यक्षेत्रातून खाते स्थिती आणि प्रवेश नियुक्ती तपासा."
+
+#: core/templates/user_list.html:14
+msgid "Create user"
+msgstr "वापरकर्ता तयार करा"
+
+#: core/templates/user_list.html:17
+msgid "User account summary"
+msgstr "वापरकर्ता खाते सारांश"
+
+#: core/templates/user_list.html:18
+msgid "Total users"
+msgstr "एकूण वापरकर्ते"
+
+#: core/templates/user_list.html:19 core/templates/user_list.html:40
+#: core/templates/user_list.html:64
 msgid "Active"
 msgstr "सक्रिय"
 
+#: core/templates/user_list.html:20
+msgid "Admins"
+msgstr "ॲडमिन"
+
+#: core/templates/user_list.html:21
+msgid "Departments"
+msgstr "विभाग"
+
+#: core/templates/user_list.html:27
+#, fuzzy
+#| msgid "Search"
+msgid "Search users"
+msgstr "शोधा "
+
+#: core/templates/user_list.html:28
+#, fuzzy
+#| msgid "Username"
+msgid "Username or email"
+msgstr "वापरकर्तानाव"
+
+#: core/templates/user_list.html:30 core/templates/user_list.html:57
+msgid "Role"
+msgstr "भूमिका"
+
+#: core/templates/user_list.html:31
+msgid "All roles"
+msgstr "सर्व भूमिका"
+
+#: core/templates/user_list.html:34 core/templates/user_list.html:57
+msgid "Department"
+msgstr "विभाग"
+
+#: core/templates/user_list.html:35
+msgid "All departments"
+msgstr "सर्व विभाग"
+
+#: core/templates/user_list.html:38 core/templates/user_list.html:57
+msgid "Status"
+msgstr "स्थिती"
+
+#: core/templates/user_list.html:39
+msgid "All statuses"
+msgstr "सर्व स्थिती"
+
+#: core/templates/user_list.html:41 core/templates/user_list.html:64
 msgid "Inactive"
 msgstr "निष्क्रिय"
 
+#: core/templates/user_list.html:44
+msgid "Apply"
+msgstr "लागू करा"
+
+#: core/templates/user_list.html:45
+msgid "Clear"
+msgstr "पुसून टाका"
+
+#: core/templates/user_list.html:52
+msgid "Account directory"
+msgstr "खाते निर्देशिका"
+
+#: core/templates/user_list.html:52
+#, python-format
+msgid "%(count)s matching account(s)"
+msgstr "%(count)s जुळणारी खाती"
+
+#: core/templates/user_list.html:53
+msgid "Department-scoped permissions are planned for phase 2."
+msgstr "विभागनिहाय परवानग्या टप्पा २ मध्ये नियोजित आहेत."
+
+#: core/templates/user_list.html:57 core/templates/user_list.html:62
+msgid "User"
+msgstr "वापरकर्ता"
+
+#: core/templates/user_list.html:61
+msgid "No email"
+msgstr "ईमेल उपलब्ध नाही"
+
+#: core/templates/user_list.html:63
+msgid "Unassigned"
+msgstr "नियुक्त केलेले नाही"
+
+#: core/templates/user_list.html:66
 msgid "Current user"
 msgstr "सध्याचा वापरकर्ता"
 
+#: core/templates/user_list.html:67
+msgid "Edit"
+msgstr "संपादित करा"
+
+#: core/templates/user_list.html:68
 msgid "Deactivate"
 msgstr "निष्क्रिय करा"
 
+#: core/templates/user_list.html:68
 msgid "Activate"
 msgstr "सक्रिय करा"
 
-msgid "Delete user"
-msgstr "वापरकर्ता हटवा"
+#: core/templates/user_list.html:69
+msgid "Delete this account? Owned content must be transferred first."
+msgstr "हे खाते हटवायचे आहे का? आधी त्याच्या मालकीची सामग्री हस्तांतरित करावी लागेल."
 
-msgid "Delete this user? This cannot be undone."
-msgstr "हा वापरकर्ता हटवायचा? ही क्रिया पूर्ववत करता येणार नाही."
+#: core/templates/user_list.html:73
+msgid "No accounts match these filters."
+msgstr "या फिल्टरशी जुळणारी खाती नाहीत."
 
-msgid "No users found."
-msgstr "वापरकर्ते आढळले नाहीत."
+#: core/tests.py:90 core/views.py:897
+msgid "Click Here"
+msgstr "इथे क्लिक करा"
+
+#: core/views.py:891
+msgid ""
+"I am Sahakar AI. Click here to learn how to questions to get correct answers."
+msgstr ""
+"🙏 नमस्कार — मी सहकार AI. योग्य उत्तरे मिळविण्यासाठी प्रश्न कसे विचारावेत हे जाणून "
+"घेण्यासाठी"
+
+#: core/views.py:940
+msgid "Please ask your question 🙏"
+msgstr "कृपया आपला प्रश्न विचारा 🙏"
+
+#: core/views.py:949
+msgid "Hello! How can I help you?"
+msgstr "नमस्कार! मी तुम्हाला कशी मदत करू शकतो?"
+
+#: core/views.py:1082
+msgid ""
+"Sorry, information related to this topic is not available in this section."
+msgstr "क्षमस्व — या विषयाशी संबंधित माहिती या विभागात उपलब्ध नाही."
+
+#: core/views.py:1120
+msgid ""
+"Sorry, the requested information was not found in the available documents."
+msgstr "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही."
+
+#~ msgid "Registration Form"
+#~ msgstr "नोंदणी फॉर्म"
+
+#~ msgid "Register"
+#~ msgstr "नोंदणी करा"
+
+#~ msgid "Already have an account?"
+#~ msgstr "आधीच खाते आहे?"
+
+#~ msgid "Login here"
+#~ msgstr "येथे लॉगिन करा"
+
+#~ msgid "Registered Users"
+#~ msgstr "नोंदणीकृत वापरकर्ते"
+
+#~ msgid "Review user access, account status, role, and department."
+#~ msgstr "वापरकर्ता प्रवेश, खाते स्थिती, भूमिका आणि विभाग तपासा."
+
+#~ msgid "Delete user"
+#~ msgstr "वापरकर्ता हटवा"
+
+#~ msgid "Delete this user? This cannot be undone."
+#~ msgstr "हा वापरकर्ता हटवायचा? ही क्रिया पूर्ववत करता येणार नाही."
+
+#~ msgid "No users found."
+#~ msgstr "वापरकर्ते आढळले नाहीत."
