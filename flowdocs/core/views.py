@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent
 from .artifact_vault import ArtifactVault, ArtifactVaultError
-from .maintenance import queue_job
+from .maintenance import queue_job, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations
 from .forms import UploadForm
 from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
 from datetime import datetime
@@ -926,6 +926,57 @@ def generation_validations(request, generation_id):
             for v in validations
         ],
     })
+
+
+@superadmin_required
+@require_POST
+def promote_generation(request, generation_id):
+    """Promote a validated generation to active, superseding the prior active."""
+    try:
+        generation = promote_active_generation(generation_id, requested_by=request.user)
+    except Exception as exc:
+        messages.error(request, f"Promotion failed: {exc}")
+    else:
+        messages.success(request, f"Generation {generation.generation_id} promoted to active.")
+    return redirect("dashboard")
+
+
+@superadmin_required
+@require_POST
+def rollback_generation(request, generation_id):
+    """Roll back to a prior generation by re-staging and promoting it."""
+    try:
+        generation = rollback_to_generation(generation_id, requested_by=request.user)
+    except Exception as exc:
+        messages.error(request, f"Rollback failed: {exc}")
+    else:
+        messages.success(request, f"Rolled back to generation {generation.generation_id}.")
+    return redirect("dashboard")
+
+
+@superadmin_required
+@require_POST
+def purge_generation_view(request, generation_id):
+    """Manually purge a single non-active generation."""
+    try:
+        generation = purge_generation(generation_id, requested_by=request.user)
+    except Exception as exc:
+        messages.error(request, f"Purge failed: {exc}")
+    else:
+        messages.success(request, f"Generation {generation.generation_id} purged.")
+    return redirect("dashboard")
+
+
+@superadmin_required
+@require_POST
+def purge_expired_generations_view(request):
+    """Purge all generations past their retention window."""
+    purged_ids = purge_expired_generations(requested_by=request.user)
+    if purged_ids:
+        messages.success(request, f"Purged {len(purged_ids)} expired generation(s).")
+    else:
+        messages.info(request, "No expired generations to purge.")
+    return redirect("dashboard")
 
 
 # -------------- New logic for folder search --------------

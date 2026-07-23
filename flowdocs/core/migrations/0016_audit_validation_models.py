@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("core", "0013_artifactgeneration_maintenancejob"),
+        ("core", "0015_maintenancejob_new_kinds"),
     ]
 
     operations = [

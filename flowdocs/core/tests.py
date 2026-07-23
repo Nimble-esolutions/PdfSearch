@@ -25,7 +25,7 @@ from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation
-from .maintenance import run_job, queue_job, _audit, _record_validation
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
 from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
@@ -1588,3 +1588,122 @@ class AuditAndValidationTests(TestCase):
         self.client.force_login(self.superadmin)
         response = self.client.get(reverse("generation_validations", args=["gen-does-not-exist"]))
         self.assertEqual(response.status_code, 404)
+
+
+class GenerationLifecycleTests(TestCase):
+    def setUp(self):
+        self.superadmin = get_user_model().objects.create_user(
+            username="generation-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+
+    def _make_generation(self, gen_id="gen-test-001", status="validated"):
+        return ArtifactGeneration.objects.create(
+            generation_id=gen_id,
+            status=status,
+            source="local",
+            created_by=self.superadmin,
+        )
+
+    def test_promote_validated_generation_supersedes_prior_active(self):
+        prior = self._make_generation(gen_id="gen-prior-active", status="active")
+        new = self._make_generation(gen_id="gen-new-validated", status="validated")
+
+        promote_active_generation("gen-new-validated", requested_by=self.superadmin)
+
+        prior.refresh_from_db()
+        new.refresh_from_db()
+        self.assertEqual(new.status, "active")
+        self.assertIsNotNone(new.promoted_at)
+        self.assertEqual(prior.status, "superseded")
+        self.assertEqual(prior.superseded_by, new)
+
+    def test_promote_non_validated_generation_raises(self):
+        self._make_generation(gen_id="gen-staged-only", status="staged")
+        with self.assertRaises(SearchDataIntegrityError):
+            promote_active_generation("gen-staged-only", requested_by=self.superadmin)
+
+    def test_promote_nonexistent_generation_raises(self):
+        with self.assertRaises(SearchDataIntegrityError):
+            promote_active_generation("gen-does-not-exist", requested_by=self.superadmin)
+
+    def test_rollback_to_superseded_generation_promotes_it(self):
+        old_active = self._make_generation(gen_id="gen-old-active", status="active")
+        new = self._make_generation(gen_id="gen-new-validated", status="validated")
+        promote_active_generation("gen-new-validated", requested_by=self.superadmin)
+
+        old_active.refresh_from_db()
+        self.assertEqual(old_active.status, "superseded")
+
+        rollback_to_generation("gen-old-active", requested_by=self.superadmin)
+
+        old_active.refresh_from_db()
+        new.refresh_from_db()
+        self.assertEqual(old_active.status, "active")
+        self.assertEqual(new.status, "superseded")
+        self.assertEqual(new.superseded_by, old_active)
+
+    def test_purge_non_active_generation(self):
+        gen = self._make_generation(gen_id="gen-to-purge", status="superseded")
+        purge_generation("gen-to-purge", requested_by=self.superadmin)
+        gen.refresh_from_db()
+        self.assertEqual(gen.status, "purged")
+
+    def test_purge_active_generation_raises(self):
+        self._make_generation(gen_id="gen-active-no-purge", status="active")
+        with self.assertRaises(SearchDataIntegrityError):
+            purge_generation("gen-active-no-purge", requested_by=self.superadmin)
+
+    def test_purge_expired_generations_skips_active_and_predecessor(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        active = self._make_generation(gen_id="gen-active-exp", status="active")
+        predecessor = self._make_generation(gen_id="gen-pred-exp", status="superseded")
+        predecessor.superseded_by = active
+        predecessor.save()
+        expired_other = self._make_generation(gen_id="gen-expired-other", status="superseded")
+        expired_other.expires_at = timezone.now() - timedelta(days=1)
+        expired_other.save()
+
+        purged = purge_expired_generations(requested_by=self.superadmin)
+
+        self.assertIn("gen-expired-other", purged)
+        self.assertNotIn("gen-active-exp", purged)
+        self.assertNotIn("gen-pred-exp", purged)
+        expired_other.refresh_from_db()
+        self.assertEqual(expired_other.status, "purged")
+
+    def test_promote_endpoint_requires_superadmin(self):
+        admin = get_user_model().objects.create_user(
+            username="gen-admin", password="test-password", role="admin"
+        )
+        self.client.force_login(admin)
+        response = self.client.post(reverse("promote_generation", args=["gen-x"]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_rollback_endpoint_redirects_on_success(self):
+        self._make_generation(gen_id="gen-rollback-test", status="validated")
+        self.client.force_login(self.superadmin)
+        response = self.client.post(reverse("rollback_generation", args=["gen-rollback-test"]))
+        self.assertRedirects(response, reverse("dashboard"))
+
+    def test_purge_endpoint_redirects_on_success(self):
+        gen = self._make_generation(gen_id="gen-purge-test", status="superseded")
+        self.client.force_login(self.superadmin)
+        response = self.client.post(reverse("purge_generation", args=["gen-purge-test"]))
+        self.assertRedirects(response, reverse("dashboard"))
+        gen.refresh_from_db()
+        self.assertEqual(gen.status, "purged")
+
+    def test_dashboard_renders_generation_lifecycle_table(self):
+        self._make_generation(gen_id="gen-visible-001", status="validated")
+        self._make_generation(gen_id="gen-visible-002", status="active")
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Generation Lifecycle")
+        self.assertContains(response, "gen-visible-001")
+        self.assertContains(response, "gen-visible-002")
+        self.assertContains(response, "Promote")
+        self.assertContains(response, "Purge Expired")

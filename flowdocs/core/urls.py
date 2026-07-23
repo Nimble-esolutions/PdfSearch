@@ -25,6 +25,12 @@ urlpatterns = [
     path("dashboard/maintenance/<uuid:job_id>/audit/", views.job_audit_trail, name="job_audit_trail"),
     path("dashboard/generation/<str:generation_id>/validations/", views.generation_validations, name="generation_validations"),
 
+    # ---------------- Generation Lifecycle ----------------
+    path("dashboard/generation/<str:generation_id>/promote/", views.promote_generation, name="promote_generation"),
+    path("dashboard/generation/<str:generation_id>/rollback/", views.rollback_generation, name="rollback_generation"),
+    path("dashboard/generation/<str:generation_id>/purge/", views.purge_generation_view, name="purge_generation"),
+    path("dashboard/generation/purge-expired/", views.purge_expired_generations_view, name="purge_expired_generations"),
+
     # ---------------- User Management ----------------
     path("dashboard/users/", views.user_list_view, name="user_list"),
     path("dashboard/users/<int:user_id>/edit/", views.edit_user, name="edit_user"),
