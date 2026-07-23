@@ -26,6 +26,7 @@ from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations
+from .views import _parse_bulk_filters
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
 from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
@@ -1707,3 +1708,95 @@ class GenerationLifecycleTests(TestCase):
         self.assertContains(response, "gen-visible-002")
         self.assertContains(response, "Promote")
         self.assertContains(response, "Purge Expired")
+class BulkFilterTests(TestCase):
+    def setUp(self):
+        self.superadmin = get_user_model().objects.create_user(
+            username="filter-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        self.folder = Folder.objects.create(name="Filter test", created_by=self.superadmin)
+        self.pdf_indexed = PDFFile.objects.create(
+            title="Indexed doc",
+            file="pdfs/indexed.pdf",
+            folder=self.folder,
+            uploaded_by=self.superadmin,
+            indexed=True,
+            category="acts",
+            subject="housing",
+            keywords=["cooperative", "society"],
+        )
+        self.pdf_not_indexed = PDFFile.objects.create(
+            title="Not indexed doc",
+            file="pdfs/not-indexed.pdf",
+            folder=self.folder,
+            uploaded_by=self.superadmin,
+            indexed=False,
+            category="rules",
+            subject="audit",
+        )
+
+    def _fake_request(self, **params):
+        return SimpleNamespace(POST=params, GET={})
+
+    def test_filter_by_category(self):
+        q, filters = _parse_bulk_filters(self._fake_request(filter_category="acts"))
+        pdfs = PDFFile.objects.filter(q)
+        self.assertEqual(pdfs.count(), 1)
+        self.assertEqual(pdfs.first().title, "Indexed doc")
+
+    def test_filter_by_indexed_status(self):
+        q, _ = _parse_bulk_filters(self._fake_request(filter_indexed="false"))
+        pdfs = PDFFile.objects.filter(q)
+        self.assertEqual(pdfs.count(), 1)
+        self.assertEqual(pdfs.first().title, "Not indexed doc")
+
+    def test_filter_by_keywords(self):
+        q, _ = _parse_bulk_filters(self._fake_request(filter_keywords="cooperative"))
+        pdfs = PDFFile.objects.filter(q)
+        self.assertEqual(pdfs.count(), 1)
+        self.assertEqual(pdfs.first().title, "Indexed doc")
+
+    def test_filter_by_subject(self):
+        q, _ = _parse_bulk_filters(self._fake_request(filter_subject="audit"))
+        pdfs = PDFFile.objects.filter(q)
+        self.assertEqual(pdfs.count(), 1)
+        self.assertEqual(pdfs.first().title, "Not indexed doc")
+
+    def test_filter_combined(self):
+        q, _ = _parse_bulk_filters(self._fake_request(filter_category="acts", filter_indexed="true"))
+        pdfs = PDFFile.objects.filter(q)
+        self.assertEqual(pdfs.count(), 1)
+        self.assertEqual(pdfs.first().title, "Indexed doc")
+
+    def test_filter_no_params_returns_all(self):
+        q, filters = _parse_bulk_filters(self._fake_request())
+        self.assertEqual(filters, {})
+        self.assertEqual(PDFFile.objects.filter(q).count(), 2)
+
+    def test_bulk_filter_preview_endpoint(self):
+        self.client.force_login(self.superadmin)
+        response = self.client.get(
+            reverse("bulk_filter_preview"),
+            {"folder_ids": str(self.folder.pk), "filter_indexed": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["indexed"], 1)
+
+    def test_bulk_filter_preview_requires_superadmin(self):
+        admin = get_user_model().objects.create_user(
+            username="filter-admin", password="test-password", role="admin"
+        )
+        self.client.force_login(admin)
+        response = self.client.get(reverse("bulk_filter_preview"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_dashboard_renders_filter_panel(self):
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Filter Documents")
+        self.assertContains(response, "filter_category")
+        self.assertContains(response, "Preview Count")
