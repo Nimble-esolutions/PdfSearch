@@ -18,6 +18,10 @@ itself, use this file plus `docs/AGENT_RULE_AUTHORITY.md`.
 
 ## Repository Rules
 
+- **MANDATORY:** Follow `~/.agent-workflow-rules.md` for every code-changing
+  task. Branch from `dev`, commit locally in cherry-pickable chunks, verify
+  before pushing, open a PR into `dev`, merge only when green. No uncommitted
+  work at session end. No commits directly to `main` or `dev`.
 - Branch from `dev` for normal work.
 - Keep commits logical and reviewable: separate app, tests, docs, release
   evidence, and operational-rule changes.
