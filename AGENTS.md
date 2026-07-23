@@ -42,6 +42,21 @@ itself, use this file plus `docs/AGENT_RULE_AUTHORITY.md`.
 - Bulk indexing, OCR repair, and folder operations must queue durable
   maintenance jobs; never put embedding or FAISS work back into a synchronous
   web request. Preserve cancellation, retry, and per-item failure state.
+- **Migration discipline:** Before generating a new Django migration, check
+  the base branch (`git fetch origin dev && git show origin/dev:flowdocs/core/migrations/`)
+  to determine the next available number. Renumber manually if needed; never
+  push two branches with the same migration number. The CI migration guard
+  (`scripts/ci/validate_migrations.py`) catches collisions at PR time, but
+  avoid them by checking first.
+- **Test file isolation:** When multiple PRs add test classes that would
+  conflict in a monolithic `tests.py`, split new test classes into separate
+  files (`core/tests/test_feature.py`) and import from `__init__.py`. This
+  prevents cascading rebase conflicts. The CI test-isolation checker
+  (`validate_migrations.py --check-tests`) reports duplicate class names.
+- **Zero-commitment merges:** When multiple independent PRs must land in quick
+  succession, prefer an integration branch: merge all PRs into it, resolve
+  conflicts once, run the full suite, then fast-forward `dev`. This avoids
+  the N×N rebase matrix where each merge forces rebasing every remaining PR.
 
 ## Local Validation
 
