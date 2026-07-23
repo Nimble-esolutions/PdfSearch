@@ -22,6 +22,10 @@ the full operations workspace is present.
    Dokploy-connected application.
 6. Keep commits logical: separate UI, tests, docs, operations, release metadata,
    and emergency evidence.
+7. Treat database, PDF, FAISS, Chroma, and manifest artifacts as one immutable
+   generation when syncing or restoring through the superadmin cockpit.
+8. Never promote a staged generation without checksum, schema, count, and
+   representative-search validation.
 
 ## Permission Model
 
@@ -103,6 +107,20 @@ docker compose -f docker-compose.dev.yml exec -T web sh -lc 'cd /app/flowdocs &&
 docker compose -f docker-compose.dev.yml exec -T web sh -lc 'cd /app/flowdocs && python /app/scripts/ci/admin_ui_smoke.py'
 curl -fsS http://127.0.0.1:8000/readyz
 ```
+
+Bulk Admin UI operations require the local maintenance worker:
+
+```bash
+docker compose -f docker-compose.yml up -d maintenance
+docker compose -f docker-compose.yml exec -T maintenance sh -lc 'cd /app/flowdocs && python manage.py run_maintenance_jobs --once'
+```
+
+The public search page is intentionally anonymous and defaults to English. A
+visitor's Marathi selection is session-backed and must be sent explicitly with
+the search request so the answer language cannot be inferred incorrectly from
+the query text. `/register/` is never public: only authenticated `admin` and
+`superadmin` users may create accounts. Department-scoped admin roles are a
+phase-2 authorization boundary and must be designed server-side before use.
 
 If a test intentionally exercises a mocked failure path, tracebacks can appear
 in output while the suite still exits successfully. Report the exit result and

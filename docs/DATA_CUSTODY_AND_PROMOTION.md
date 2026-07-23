@@ -15,8 +15,9 @@ rows, 0 PDFs, and 11 FAISS files. Only 6 PDF paths overlap, and the databases
 diverge. No PDF contents belong in an incident record.
 
 The read-only `/mnt/legacy` mount is evidence/quarantine only. It is not a
-permission to import or merge. RustFS is an isolated recovery vault; application
-S3 integration is not implemented.
+permission to import or merge. RustFS is an isolated recovery vault; the
+application supports explicit superadmin generation sync and staged pull, but
+never overwrites active data during either operation.
 
 ## Required Lifecycle
 

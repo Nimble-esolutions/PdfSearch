@@ -32,8 +32,9 @@ digests and `pull_policy: always`.
   directly; use quarantine, inventory, conflict classification, staged restore,
   FAISS fingerprint validation, and explicit promotion.
 - RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` is an isolated recovery
-  vault. The application adapter is opt-in and explicit; automatic
-  cross-environment sync is not implemented.
+  vault. The application adapter is opt-in and explicit: superadmins can queue
+  an immutable sync or checksum-verified pull into staging. Automatic
+  cross-environment sync and live promotion remain disabled.
 - Use Dokploy for production deployment changes; do not hand-run a replacement `docker run` container.
 - Use the GitHub-connected Dokploy application as the deployment authority. Do
   not edit `/etc/dokploy/compose/.../code`, its ignored `.env`, or Dokploy

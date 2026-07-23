@@ -32,6 +32,12 @@ itself, use this file plus `docs/AGENT_RULE_AUTHORITY.md`.
   deployment path. Use the GitHub-to-Dokploy release contract.
 - For local verification, prefer Docker commands from this repository when host
   Python dependencies are not guaranteed.
+- Public search is intentionally anonymous, but `/register/` is never public:
+  only authenticated `admin` and `superadmin` users may create accounts.
+  Department-scoped admin roles are a phase-2 authorization design item.
+- Bulk indexing, OCR repair, and folder operations must queue durable
+  maintenance jobs; never put embedding or FAISS work back into a synchronous
+  web request. Preserve cancellation, retry, and per-item failure state.
 
 ## Local Validation
 

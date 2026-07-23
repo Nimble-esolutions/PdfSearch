@@ -10,9 +10,8 @@ Supersedes: None
 ## Current Boundary
 
 RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` contains timestamped
-active and legacy snapshots and checksums. RustFS is currently isolated from the
-FlowDocs application network. Application-level S3 integration is **not
-implemented**.
+active and legacy snapshots and checksums. Runtime access remains disabled by
+default and must be enabled only with immutable generation manifests.
 
 The bucket is an operator recovery vault only. It is not mounted by the
 application, is not a runtime source of PDFs or indexes, and does not provide
@@ -39,8 +38,10 @@ promotion decision references them.
 Current: timestamped snapshots and checksums are available for operator-led
 recovery.
 
-Planned: application S3 integration, runtime bucket access, automatic
-cross-environment sync, generated artifact manifests, and automated promotion.
+The application now exposes generation and maintenance contracts for UI-driven
+operations. Runtime restore and promotion remain fail-closed until a worker
+stages a manifest, verifies every checksum, and records an explicit promotion
+event. No operation may overwrite the active data root directly.
 
 ## Gates
 
