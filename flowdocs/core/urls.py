@@ -22,6 +22,8 @@ urlpatterns = [
     path("dashboard/folder/<int:folder_id>/", views.dashboard, name="dashboard_folder"),
     path("dashboard/maintenance/", views.bulk_maintenance, name="bulk_maintenance"),
     path("dashboard/maintenance/<uuid:job_id>/action/", views.maintenance_job_action, name="maintenance_job_action"),
+    path("dashboard/maintenance/<uuid:job_id>/audit/", views.job_audit_trail, name="job_audit_trail"),
+    path("dashboard/generation/<str:generation_id>/validations/", views.generation_validations, name="generation_validations"),
 
     # ---------------- User Management ----------------
     path("dashboard/users/", views.user_list_view, name="user_list"),

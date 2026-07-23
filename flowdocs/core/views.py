@@ -22,7 +22,7 @@ from django.urls import reverse
 from django.utils.translation import gettext
 from django.utils import timezone
 
-from .models import ArtifactGeneration, PDFFile, Folder, CustomUser, MaintenanceJob
+from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent
 from .artifact_vault import ArtifactVault, ArtifactVaultError
 from .maintenance import queue_job
 from .forms import UploadForm
@@ -879,6 +879,54 @@ def maintenance_job_action(request, job_id):
     else:
         messages.info(request, "That job cannot accept this action in its current state.")
     return redirect("dashboard")
+
+
+@superadmin_required
+def job_audit_trail(request, job_id):
+    """Return the audit trail for a maintenance job as JSON."""
+    job = get_object_or_404(MaintenanceJob, public_id=job_id)
+    events = job.audit_events.order_by("created_at").values(
+        "event_type", "created_at", "payload",
+    )
+    return JsonResponse({
+        "job_id": str(job.public_id),
+        "kind": job.kind,
+        "status": job.status,
+        "events": [
+            {
+                "event_type": e["event_type"],
+                "created_at": e["created_at"].isoformat() if e["created_at"] else None,
+                "payload": e["payload"],
+            }
+            for e in events
+        ],
+    })
+
+
+@superadmin_required
+def generation_validations(request, generation_id):
+    """Return validation records for a generation as JSON."""
+    try:
+        generation = ArtifactGeneration.objects.get(generation_id=generation_id)
+    except ArtifactGeneration.DoesNotExist:
+        return JsonResponse({"error": "not_found"}, status=404)
+    validations = generation.validations.order_by("-created_at").values(
+        "validation_type", "status", "details", "created_at",
+    )
+    return JsonResponse({
+        "generation_id": generation.generation_id,
+        "status": generation.status,
+        "validations": [
+            {
+                "validation_type": v["validation_type"],
+                "status": v["status"],
+                "details": v["details"],
+                "created_at": v["created_at"].isoformat() if v["created_at"] else None,
+            }
+            for v in validations
+        ],
+    })
+
 
 # -------------- New logic for folder search --------------
 def search_query(request):
