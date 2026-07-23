@@ -198,9 +198,9 @@ REDIS_URL = validate_redis_url(
     allow_loopback=_allow_insecure_defaults,
 )
 
-PUBLIC_SEARCH_ENABLED = os.getenv('PUBLIC_SEARCH_ENABLED', '0').lower() in {'1', 'true', 'yes'}
+PUBLIC_SEARCH_ENABLED = os.getenv('PUBLIC_SEARCH_ENABLED', '1').lower() in {'1', 'true', 'yes'}
 _public_search_folder_ids = os.getenv('PUBLIC_SEARCH_FOLDER_IDS', '').strip().lower()
-PUBLIC_SEARCH_ALL_FOLDERS = _public_search_folder_ids == 'all'
+PUBLIC_SEARCH_ALL_FOLDERS = _public_search_folder_ids in {'', 'all'}
 try:
     PUBLIC_SEARCH_FOLDER_IDS = frozenset(
         int(value.strip())

@@ -427,6 +427,7 @@ def search_pdfs_fast(
     user_query: str,
     top_n_pdfs: int = 2,
     pdfs=None,
+    language: str = "en",
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Fast search that:
@@ -547,15 +548,28 @@ def search_pdfs_fast(
     combined_context = truncate_context(combined_context, max_words=MAX_CONTEXT_WORDS)
 
     # 5. generate answer
-    answer = generate_gpt_answer(user_question=user_query, context=combined_context, references=refs, max_words=400)
+    answer = generate_gpt_answer(
+        user_question=user_query,
+        context=combined_context,
+        references=refs,
+        max_words=400,
+        language=language,
+    )
     return answer, refs
 
 # ------------------ GPT answer ------------------
-def generate_gpt_answer(user_question: str, context: str, references: List[Dict[str, Any]] = None, max_words: int = 200) -> str:
+def generate_gpt_answer(
+    user_question: str,
+    context: str,
+    references: List[Dict[str, Any]] = None,
+    max_words: int = 200,
+    language: str = "en",
+) -> str:
     """
     Query the LLM with a small, high-quality context. Use cached responses if available.
     """
-    cache_key = f"gpt_ans:{hash(user_question + (context or ''))}"
+    language = language if language in {"en", "mr"} else "en"
+    cache_key = f"gpt_ans:{language}:{hash(user_question + (context or ''))}"
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -563,8 +577,7 @@ def generate_gpt_answer(user_question: str, context: str, references: List[Dict[
     if not client:
         return "OpenAI API key not configured."
 
-    lang = detect_language(user_question)
-    if lang == "mr":
+    if language == "mr":
         system_msg = "तुम्ही एक सहाय्यक आहात. मराठीतून उत्तर द्या. मर्यादा 200 शब्द."
         prompt = f"प्रश्न: {user_question}\n\nसंदर्भ:\n{context}"
     else:

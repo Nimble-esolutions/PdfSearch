@@ -24,7 +24,8 @@ from .forms import UploadForm
 from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
-from .models import Folder, PDFFile
+from .models import Folder, PDFFile, MaintenanceJob
+from .maintenance import run_job
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
 from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
@@ -143,11 +144,11 @@ class UploadValidationTests(TestCase):
 
 
 class RegistrationSecurityTests(TestCase):
-    def test_anonymous_registration_cannot_assign_privileged_role(self):
+    def test_anonymous_registration_is_not_public(self):
         response = self.client.get(reverse("register"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'name="role"')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response["Location"])
 
         response = self.client.post(
             reverse("register"),
@@ -161,9 +162,18 @@ class RegistrationSecurityTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("login"))
-        user = get_user_model().objects.get(username="public-user")
-        self.assertEqual(user.role, "user")
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(get_user_model().objects.filter(username="public-user").exists())
+
+    def test_ordinary_authenticated_user_cannot_register_accounts(self):
+        user = get_user_model().objects.create_user(
+            username="ordinary-user",
+            password="test-password",
+            role="user",
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("register"))
+        self.assertEqual(response.status_code, 403)
 
     def test_admin_registration_preserves_privileged_role_selection(self):
         admin = get_user_model().objects.create_user(
@@ -494,14 +504,13 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertNotIn("/media/", payload["references"][0]["url"])
         self.assertEqual(payload["answer"], "<b>unsafe</b>\nमराठी")
 
-    def test_anonymous_search_post_returns_json_401_without_document_content(self):
+    def test_anonymous_search_post_is_allowed_without_document_content(self):
         response = self.client.post(
             reverse("search_query"),
             {"query": "private policy question"},
         )
 
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json()["error"], "authentication_required")
+        self.assertEqual(response.status_code, 200)
         self.assertNotIn("private", response.content.decode())
 
     def test_anonymous_search_uses_approved_public_scope(self):
@@ -1007,6 +1016,38 @@ class DashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_superadmin_can_cancel_and_retry_maintenance_job(self):
+        superadmin = get_user_model().objects.create_user(
+            username="maintenance-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        self.client.force_login(superadmin)
+        queued = MaintenanceJob.objects.create(kind="validate", status="queued")
+
+        response = self.client.post(
+            reverse("maintenance_job_action", args=[queued.public_id]),
+            {"action": "cancel"},
+        )
+
+        self.assertRedirects(response, reverse("dashboard"))
+        queued.refresh_from_db()
+        self.assertEqual(queued.status, "cancelled")
+
+        failed = MaintenanceJob.objects.create(
+            kind="validate", status="failed", failed_items=1, error_summary="old error"
+        )
+        response = self.client.post(
+            reverse("maintenance_job_action", args=[failed.public_id]),
+            {"action": "retry"},
+        )
+
+        self.assertRedirects(response, reverse("dashboard"))
+        failed.refresh_from_db()
+        self.assertEqual(failed.status, "queued")
+        self.assertEqual(failed.failed_items, 0)
+        self.assertEqual(failed.error_summary, "")
+
     def test_superadmin_can_repair_index_from_stored_artifacts(self):
         superadmin = get_user_model().objects.create_user(
             username="repair-superadmin",
@@ -1025,17 +1066,19 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
-        with patch("core.views.build_or_load_faiss_index_for_folder", return_value=(object(), [], [])):
-            response = self.client.post(
-                reverse("folder_operations", args=[folder.pk]),
-                {"operation": "repair_stored_index"},
-                follow=True,
-            )
+        response = self.client.post(
+            reverse("folder_operations", args=[folder.pk]),
+            {"operation": "repair_stored_index"},
+            follow=True,
+        )
+        job = MaintenanceJob.objects.get(kind="repair_indexes")
+        with patch("core.maintenance.build_or_load_faiss_index_for_folder", return_value=(object(), [], [])):
+            run_job(job)
 
         self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
         pdf.refresh_from_db()
         self.assertTrue(pdf.indexed)
-        self.assertContains(response, "Search index rebuilt from stored artifacts")
+        self.assertContains(response, "Repair job queued")
 
     def test_superadmin_can_reprocess_needed_documents(self):
         superadmin = get_user_model().objects.create_user(
@@ -1060,17 +1103,19 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
-        with patch("core.views.precompute_pdf_embeddings") as precompute:
-            response = self.client.post(
-                reverse("folder_operations", args=[folder.pk]),
-                {"operation": "reprocess_needed"},
-                follow=True,
-            )
+        response = self.client.post(
+            reverse("folder_operations", args=[folder.pk]),
+            {"operation": "reprocess_needed"},
+            follow=True,
+        )
+        job = MaintenanceJob.objects.get(kind="reindex_needed")
+        with patch("core.maintenance.precompute_pdf_embeddings") as precompute:
+            run_job(job)
 
         self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
         precompute.assert_called_once_with(needed_pdf)
         self.assertNotEqual(precompute.call_args.args[0].pk, indexed_pdf.pk)
-        self.assertContains(response, "Reprocessed 1 of 1 document")
+        self.assertContains(response, "Reindex job queued")
 
     def test_reprocess_needed_preserves_ocr_artifacts_when_pdf_has_no_text(self):
         superadmin = get_user_model().objects.create_user(
@@ -1090,25 +1135,26 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
+        response = self.client.post(
+            reverse("folder_operations", args=[folder.pk]),
+            {"operation": "reprocess_needed"},
+            follow=True,
+        )
+        job = MaintenanceJob.objects.get(kind="reindex_needed")
         with patch(
-            "core.views.precompute_pdf_embeddings",
+            "core.maintenance.precompute_pdf_embeddings",
             side_effect=SearchDataIntegrityError("PDF has no extractable text"),
         ), patch(
-            "core.views.build_or_load_faiss_index_for_folder",
+            "core.maintenance.build_or_load_faiss_index_for_folder",
             return_value=(object(), [], []),
         ) as rebuild:
-            response = self.client.post(
-                reverse("folder_operations", args=[folder.pk]),
-                {"operation": "reprocess_needed"},
-                follow=True,
-            )
+            run_job(job)
 
         self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
         rebuild.assert_called_once_with(folder, force_rebuild=True)
         pdf.refresh_from_db()
         self.assertTrue(pdf.indexed)
-        self.assertContains(response, "Preserved stored OCR/search artifacts")
-        self.assertNotContains(response, "could not be reprocessed")
+        self.assertContains(response, "Reindex job queued")
 
     def test_pdf_rename_redirects_back_to_its_folder(self):
         self.client.force_login(self.user)

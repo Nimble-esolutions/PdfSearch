@@ -135,11 +135,19 @@ import os
 from django.contrib.auth import get_user_model
 User = get_user_model()
 username = os.environ["DJANGO_SUPERUSER_USERNAME"]
-if not User.objects.filter(username=username).exists():
-    User.objects.create_superuser(username, os.environ["DJANGO_SUPERUSER_EMAIL"], os.environ["DJANGO_SUPERUSER_PASSWORD"])
+user = User.objects.filter(username=username).first()
+if user is None:
+    user = User.objects.create_superuser(username, os.environ["DJANGO_SUPERUSER_EMAIL"], os.environ["DJANGO_SUPERUSER_PASSWORD"])
     print("Created configured superuser")
 else:
     print("Configured superuser already exists")
+if getattr(user, "role", None) != "superadmin":
+    user.role = "superadmin"
+    user.is_staff = True
+    user.is_superuser = True
+    user.is_active = True
+    user.save(update_fields=["role", "is_staff", "is_superuser", "is_active"])
+    print("Reconciled configured superuser application role")
 '
 fi
 

@@ -81,7 +81,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY . .
 
-RUN chmod +x ./start.sh ./docker-entrypoint.sh 2>/dev/null || true
+RUN chmod +x ./start.sh ./docker-entrypoint.sh ./worker-entrypoint.sh 2>/dev/null || true
 
 RUN bash -lc 'cd /app/flowdocs && \
     SECRET_KEY=build-only-not-for-runtime DEBUG=True ALLOW_INSECURE_DEFAULTS=1 \

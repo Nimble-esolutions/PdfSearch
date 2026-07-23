@@ -73,7 +73,7 @@ services:
       # Redis is part of this stack. Keep the service DNS name authoritative;
       # a Dokploy .env value such as localhost points back to the web container.
       - REDIS_URL=redis://redis:6379/1
-      - PUBLIC_SEARCH_ENABLED=${PUBLIC_SEARCH_ENABLED:-0}
+      - PUBLIC_SEARCH_ENABLED=${PUBLIC_SEARCH_ENABLED:-1}
       - PUBLIC_SEARCH_FOLDER_IDS=${PUBLIC_SEARCH_FOLDER_IDS:-}
       - PUBLIC_SEARCH_MAX_WORDS=${PUBLIC_SEARCH_MAX_WORDS:-30}
       - PUBLIC_SEARCH_RATE_LIMIT=${PUBLIC_SEARCH_RATE_LIMIT:-30}
@@ -130,6 +130,33 @@ services:
     networks:
       - internal
       - dokploy-network
+
+  maintenance:
+    image: ${PDFSEARCH_IMAGE:-ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest}
+    pull_policy: always
+    env_file:
+      - path: .env
+        required: false
+    entrypoint: ["./worker-entrypoint.sh"]
+    volumes:
+      - flowdocs_data:/app/data
+      - prod_flowdocs:/mnt/legacy:ro
+    environment:
+      DATA_ROOT: /app/data
+      SQLITE_DB_PATH: /app/data/db.sqlite3
+      MEDIA_ROOT: /app/data/media
+      FAISS_INDEX_DIR: /app/data/faiss_indexes
+      CHROMA_DIR: /app/data/chroma_db
+      BACKUP_DIR: /app/data/backups
+      DJANGO_SETTINGS_MODULE: flowdocs.settings
+      REDIS_URL: redis://redis:6379/1
+      ALLOW_INSECURE_DEFAULTS: ${ALLOW_INSECURE_DEFAULTS:-0}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - internal
 
 volumes:
   redis_data:

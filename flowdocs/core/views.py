@@ -21,7 +21,9 @@ from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.utils.translation import gettext
 
-from .models import PDFFile, Folder, CustomUser
+from .models import ArtifactGeneration, PDFFile, Folder, CustomUser, MaintenanceJob
+from .artifact_vault import ArtifactVault, ArtifactVaultError
+from .maintenance import queue_job
 from .forms import UploadForm
 from .forms import UserRegisterForm
 from datetime import datetime
@@ -338,11 +340,12 @@ def public_view_pdf(request, pdf_id):
     return response
 
 #===========================Registration view====================
+@admin_required
 def register_view(request):
-    if request.user.is_authenticated and not is_admin_user(request.user):
-        return HttpResponseForbidden("Administrator permission required.")
-
-    allow_privileged_roles = is_admin_user(request.user)
+    # Account creation is an operator workflow. Public visitors may search,
+    # but may never create accounts or select an operational role. Department
+    # scoped admin roles remain a phase-2 authorization boundary.
+    allow_privileged_roles = True
     if request.method == 'POST':
         form = UserRegisterForm(
             request.POST,
@@ -601,88 +604,30 @@ def folder_operations(request, folder_id):
     operation = request.POST.get("operation", "").strip()
 
     if operation == "repair_stored_index":
-        try:
-            repaired, remaining = _repair_folder_index_from_stored_artifacts(folder)
-        except SearchDataIntegrityError as exc:
-            messages.error(request, f"Search index repair failed: {exc}")
-        else:
-            if repaired:
-                messages.success(
-                    request,
-                    (
-                        f"Search index rebuilt from stored artifacts for {repaired} "
-                        f"document(s). {remaining} document(s) still need reprocessing."
-                    ),
-                )
-            else:
-                messages.warning(
-                    request,
-                    "No stored chunks or embeddings were available to repair this category.",
-                )
+        job = queue_job(
+            kind="repair_indexes",
+            requested_by=request.user,
+            folders=[folder],
+            scope={"folder_id": folder.pk},
+        )
+        messages.success(request, f"Repair job queued: {job.public_id}.")
         return redirect("dashboard_folder", folder_id=folder.pk)
 
     if operation in {"reprocess_needed", "reprocess_all"}:
         candidates = PDFFile.objects.filter(folder=folder).order_by("pk")
         if operation == "reprocess_needed":
             candidates = candidates.filter(indexed=False)
-
-        total = candidates.count()
-        processed = 0
-        stored_artifact_fallbacks = 0
-        failures = []
-        for pdf in candidates:
-            try:
-                precompute_pdf_embeddings(pdf)
-            except Exception as exc:
-                if _pdf_has_stored_search_artifacts(pdf):
-                    stored_artifact_fallbacks += 1
-                    continue
-                PDFFile.objects.filter(pk=pdf.pk).update(indexed=False)
-                failures.append(f"{pdf.title}: {exc}")
-            else:
-                processed += 1
-
-        repaired_from_stored = 0
-        remaining_after_repair = PDFFile.objects.filter(folder=folder, indexed=False).count()
-        if stored_artifact_fallbacks:
-            try:
-                repaired_from_stored, remaining_after_repair = _repair_folder_index_from_stored_artifacts(folder)
-            except SearchDataIntegrityError as exc:
-                failures.append(f"stored artifact repair: {exc}")
-
-        if processed:
-            messages.success(
-                request,
-                f"Reprocessed {processed} of {total} document(s) in '{folder.name}'.",
-            )
-        if stored_artifact_fallbacks:
-            if repaired_from_stored:
-                messages.success(
-                    request,
-                    (
-                        f"Preserved stored OCR/search artifacts for {stored_artifact_fallbacks} "
-                        f"image-only or transcript-backed document(s). "
-                        f"{remaining_after_repair} document(s) still need reprocessing."
-                    ),
-                )
-            else:
-                messages.warning(
-                    request,
-                    (
-                        f"{stored_artifact_fallbacks} document(s) had stored artifacts, "
-                        "but the category index could not be repaired from them."
-                    ),
-                )
-        if failures:
-            messages.warning(
-                request,
-                (
-                    f"{len(failures)} document(s) could not be reprocessed. "
-                    f"First failure: {failures[0]}"
-                ),
-            )
-        if total == 0:
+        candidates = list(candidates)
+        if not candidates:
             messages.info(request, "No documents matched that maintenance action.")
+            return redirect("dashboard_folder", folder_id=folder.pk)
+        job = queue_job(
+            kind={"reprocess_needed": "reindex_needed", "reprocess_all": "reindex_all"}[operation],
+            requested_by=request.user,
+            pdfs=candidates,
+            scope={"folder_id": folder.pk},
+        )
+        messages.success(request, f"Reindex job queued for {len(candidates)} document(s): {job.public_id}.")
         return redirect("dashboard_folder", folder_id=folder.pk)
 
     messages.error(request, "Unknown folder maintenance action.")
@@ -772,11 +717,97 @@ def dashboard(request, folder_id=None):
 
     # else: folders list
     folders, cockpit = admin_cockpit_context(request.user)
+    cockpit["maintenance_jobs"] = list(
+        MaintenanceJob.objects.select_related("requested_by").order_by("-created_at")[:8]
+    ) if is_superadmin_user(request.user) else []
+    cockpit["generations"] = list(ArtifactGeneration.objects.order_by("-created_at")[:12]) if is_superadmin_user(request.user) else []
+    if is_superadmin_user(request.user) and os.getenv("ARTIFACT_VAULT_ENABLED", "0").lower() in {"1", "true", "yes"}:
+        try:
+            cockpit["vault_generations"] = [
+                item.key.rsplit("/", 1)[-1][:-5]
+                for item in ArtifactVault().list_manifests()
+            ]
+        except ArtifactVaultError:
+            cockpit["vault_generations"] = []
+    else:
+        cockpit["vault_generations"] = []
     return render(
         request,
         "dashboard.html",
         {"folders": folders, "cockpit": cockpit, "role": role},
     )
+
+
+@superadmin_required
+@require_POST
+def bulk_maintenance(request):
+    """Queue one bulk operation from the cockpit without doing work in Gunicorn."""
+    operation = request.POST.get("operation", "").strip()
+    if operation not in {"reindex_needed", "reindex_all", "repair_indexes", "validate", "sync_generation", "restore_generation"}:
+        messages.error(request, "Unknown maintenance operation.")
+        return redirect("dashboard")
+
+    folder_ids = [int(value) for value in request.POST.getlist("folder_ids") if value.isdigit()]
+    folders = Folder.objects.filter(pk__in=folder_ids)
+    if operation == "sync_generation":
+        job = queue_job(kind=operation, requested_by=request.user, scope={"folder_ids": folder_ids})
+        messages.success(request, f"S3 generation sync queued: {job.public_id}.")
+        return redirect("dashboard")
+    if operation == "restore_generation":
+        generation_id = (
+            request.POST.get("generation_id", "").strip()
+            or request.POST.get("generation_choice", "").strip()
+        )
+        if not generation_id:
+            messages.error(request, "Enter an immutable generation id before staging a restore.")
+            return redirect("dashboard")
+        job = queue_job(
+            kind=operation,
+            requested_by=request.user,
+            scope={},
+            options={"generation_id": generation_id},
+        )
+        messages.success(request, f"Generation pull queued for staging: {job.public_id}.")
+        return redirect("dashboard")
+    if operation == "repair_indexes":
+        items = list(folders)
+        job = queue_job(kind=operation, requested_by=request.user, folders=items, scope={"folder_ids": folder_ids})
+    else:
+        pdfs = PDFFile.objects.filter(folder_id__in=folder_ids).order_by("pk")
+        if operation == "reindex_needed":
+            pdfs = pdfs.filter(indexed=False)
+        items = list(pdfs)
+        job = queue_job(kind=operation, requested_by=request.user, pdfs=items, scope={"folder_ids": folder_ids})
+    if not items:
+        messages.info(request, "No documents or categories matched that maintenance operation.")
+    else:
+        messages.success(request, f"{operation.replace('_', ' ').title()} job queued for {len(items)} item(s).")
+    return redirect("dashboard")
+
+
+@superadmin_required
+@require_POST
+def maintenance_job_action(request, job_id):
+    """Cancel active work or requeue a failed job from the cockpit."""
+    job = get_object_or_404(MaintenanceJob, public_id=job_id)
+    action = request.POST.get("action", "").strip()
+    if action == "cancel" and job.status in {"queued", "running"}:
+        job.status = "cancel_requested" if job.status == "running" else "cancelled"
+        if job.status == "cancelled":
+            job.finished_at = timezone.now()
+        job.save(update_fields=["status", "finished_at", "updated_at"])
+        messages.success(request, f"Maintenance job {job.public_id} cancellation recorded.")
+    elif action == "retry" and job.status == "failed":
+        job.status = "queued"
+        job.error_summary = ""
+        job.finished_at = None
+        job.failed_items = 0
+        job.items.filter(status="failed").update(status="queued", error_code="", error_message="", finished_at=None)
+        job.save(update_fields=["status", "error_summary", "finished_at", "failed_items", "updated_at"])
+        messages.success(request, f"Maintenance job {job.public_id} requeued.")
+    else:
+        messages.info(request, "That job cannot accept this action in its current state.")
+    return redirect("dashboard")
 
 # -------------- New logic for folder search --------------
 def search_query(request):
@@ -809,6 +840,9 @@ def search_query(request):
             )
         try:
             query = request.POST.get("query", "").strip()
+            language = request.POST.get("language", request.LANGUAGE_CODE).split("-", 1)[0]
+            if language not in {"en", "mr"}:
+                language = "en"
 
             if len(query.split()) > settings.PUBLIC_SEARCH_MAX_WORDS:
                 return JsonResponse(
@@ -898,6 +932,7 @@ def search_query(request):
                             query,
                             top_n_pdfs=3,
                             pdfs=scoped_pdfs,
+                            language=language,
                         )
 
                         for r in refs:
@@ -961,7 +996,8 @@ def search_query(request):
                         user_question=query,
                         context=combined_context,
                         references=final_refs,
-                        max_words=400
+                        max_words=400,
+                        language=language,
                     )
 
                     return JsonResponse({
@@ -997,6 +1033,7 @@ def search_query(request):
                             public=public_search,
                         )
                     ),
+                    language=language,
                 )
                 if answer.strip():
                     return JsonResponse({

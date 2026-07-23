@@ -185,6 +185,7 @@ async function sendMessage(){
 
     const formData = new FormData();
     formData.append('query', query);
+    formData.append('language', document.documentElement.lang === 'mr' ? 'mr' : 'en');
 
     try {
         const response = await fetch("{% url 'search_query' %}", {
