@@ -41,6 +41,16 @@ authority and fix the lower adapter in a separate docs/rules PR.
   identity.
 - Application code is immutable in the image under `/app/flowdocs`.
 - Active mutable application data belongs under `/app/data`.
+- Maintenance work is queued through the Admin UI and executed by the single
+  Compose `maintenance` worker; agents must not turn bulk indexing into a web
+  request loop.
+- S3/RustFS data is addressed by immutable generation IDs. Pull means staged
+  and checksum-verified until an explicit promotion record exists.
+- Public search is intentionally enabled by default; do not reintroduce a
+  login requirement without an approved product decision and test update.
+- `/register/` is never public. Require an authenticated `admin` or
+  `superadmin`; ordinary users and visitors must not reach the form or create
+  accounts. Department-scoped admin roles are deferred to phase 2.
 - Legacy data is recovery-only and must not be copied directly into active
   production.
 

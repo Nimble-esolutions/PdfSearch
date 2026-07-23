@@ -173,8 +173,10 @@ The adapter accepts duplicate PDF paths when their size and SHA-256 match, since
 content-addressed storage safely deduplicates identical bytes. Conflicting
 FAISS or metadata keys remain rejected.
 
-**Planned:** automated startup synchronization, release promotion, restore, and
-retention workflows are not implemented by this adapter.
+**Current boundary:** explicit superadmin sync creates an immutable generation;
+explicit pull verifies every object and writes only to a quarantine staging
+directory. Automated startup synchronization, live release promotion, and
+retention deletion are not implemented by this adapter.
 
 ## Reconciliation Record: 2026-07-22
 

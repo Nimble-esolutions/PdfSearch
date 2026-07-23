@@ -69,5 +69,6 @@ Legacy and active data are not interchangeable: legacy contains 242 PDFs and 45
 FAISS files; active contains 17 PDF rows, 0 PDFs, and 11 FAISS files; only 6 PDF
 paths overlap; and the SQLite databases diverge. Never merge by direct copy.
 Use quarantine, inventory, conflict classification, staged restore, FAISS
-fingerprint validation, and explicit promotion. RustFS snapshots/checksums are
-recovery evidence only; application S3 integration is not implemented.
+fingerprint validation, and explicit promotion. The application adapter now
+supports immutable, checksum-verified generations and staged pulls; it still
+does not promote a staged generation into live data automatically.

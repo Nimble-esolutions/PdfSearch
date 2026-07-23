@@ -35,8 +35,16 @@ These rules apply to every PdfSearch production change.
 - Legacy and active data are divergent custody domains. Never copy them directly;
   require quarantine, inventory, conflict classification, staged restore, FAISS
   fingerprint validation, and explicit promotion.
-- RustFS is currently an isolated operator recovery vault. Application-level S3
-  integration and automatic cross-environment sync are not implemented.
+- RustFS/S3 remains disabled by default. When enabled, sync and restore must use
+  immutable generation manifests, checksum validation, staged promotion, and a
+  single maintenance worker. Never restore directly into the active data root.
+- The web process queues maintenance work; it must not execute bulk reindex or
+  restore loops inside a request.
+- Public search is enabled by default. Restrict it only through an explicit
+  `PUBLIC_SEARCH_FOLDER_IDS` allowlist and a reviewed deployment record.
+- `/register/` is admin-only. Keep anonymous search separate from account
+  creation; department-scoped admin roles require a phase-2 authorization
+  design and server-side enforcement.
 
 ## Startup and Health
 

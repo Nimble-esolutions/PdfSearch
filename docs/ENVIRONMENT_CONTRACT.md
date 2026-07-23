@@ -83,18 +83,41 @@ Production Compose owns Redis and passes `REDIS_URL=redis://redis:6379/1`.
 Do not set a loopback Redis URL in Dokploy; `localhost` resolves inside the web
 container and is rejected unless local insecure defaults are enabled.
 
-Anonymous search is disabled by default:
+Anonymous search is enabled by default for the public corpus:
 
 ```text
-PUBLIC_SEARCH_ENABLED=0
+PUBLIC_SEARCH_ENABLED=1
 PUBLIC_SEARCH_FOLDER_IDS=
 PUBLIC_SEARCH_MAX_WORDS=30
 PUBLIC_SEARCH_RATE_LIMIT=30
 PUBLIC_SEARCH_RATE_WINDOW=60
 ```
 
-If anonymous search is enabled, `PUBLIC_SEARCH_FOLDER_IDS` must be `all` or a
-comma-separated allowlist of folder IDs.
+An empty `PUBLIC_SEARCH_FOLDER_IDS` means all folders. Use `all` explicitly or a
+comma-separated allowlist when a deployment requires a restricted corpus.
+
+Registration is not controlled by the public-search flag: `/register/` always
+requires an authenticated `admin` or `superadmin`. Department-scoped admin
+roles are deliberately deferred to phase 2.
+
+## Maintenance Worker And Generations
+
+The web process only queues maintenance work. The Compose `maintenance` service
+runs `run_maintenance_jobs` and records per-document progress in SQLite. Keep a
+single worker active for the SQLite data root. Generation sync and restore remain
+fail-closed until their manifests pass staging validation.
+
+```text
+MAINTENANCE_WORKER_POLL_SECONDS=3
+ARTIFACT_VAULT_AUTO_SYNC=0
+ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY=0
+ARTIFACT_VAULT_BOOTSTRAP_GENERATION=
+ARTIFACT_VAULT_RETENTION_COUNT=5
+```
+
+The `AUTO_*` and retention values are reserved configuration for a future
+scheduled automation release. They do not enable background sync or deletion;
+all current vault actions are explicit superadmin jobs.
 
 ## Bootstrap Credentials
 
