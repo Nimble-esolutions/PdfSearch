@@ -95,6 +95,13 @@ class ArtifactGeneration(models.Model):
         ("validated", "Validated"),
         ("active", "Active"),
         ("failed", "Failed"),
+        ("superseded", "Superseded"),
+        ("purged", "Purged"),
+    )
+    RETENTION_CHOICES = (
+        ("keep_all", "Keep all"),
+        ("keep_last_n", "Keep last N"),
+        ("age_based", "Age based"),
     )
 
     generation_id = models.CharField(max_length=120, unique=True)
@@ -111,9 +118,27 @@ class ArtifactGeneration(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     validated_at = models.DateTimeField(null=True, blank=True)
     promoted_at = models.DateTimeField(null=True, blank=True)
+    superseded_by = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="predecessors",
+    )
+    retention_policy = models.CharField(
+        max_length=20, choices=RETENTION_CHOICES, default="keep_all"
+    )
+    retention_value = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="N for keep_last_n, or days for age_based",
+    )
+    expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+        ]
 
 
 class MaintenanceJob(models.Model):
