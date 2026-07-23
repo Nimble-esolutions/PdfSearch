@@ -76,7 +76,8 @@ def _check_migration_compat(manifest: Mapping[str, Any], report: CompatibilityRe
 
     manifest_migrations = manifest.get("database", {}).get("migrations", {})
     manifest_leaf = manifest_migrations.get("latest", "")
-    manifest_applied = set(manifest_migrations.get("applied", []))
+    raw_applied = manifest_migrations.get("applied", [])
+    manifest_applied = {_normalize_migration_name(m) for m in raw_applied}
 
     if not manifest_leaf and not manifest_applied:
         report.checks["migrations"] = True
@@ -143,3 +144,16 @@ def _check_sanitization_compat(manifest: Mapping[str, Any], report: Compatibilit
             report.warnings.append(
                 f"Sanitization policy: {sanitized.get('policy_version')} (current: pdfsearch-sanitize/v1)"
             )
+
+
+def _normalize_migration_name(m: Any) -> str:
+    """Normalize a migration entry to a dotted string like 'core.0001_initial'."""
+    if isinstance(m, str):
+        return m
+    if isinstance(m, dict):
+        app = m.get("app", "")
+        name = m.get("name", "")
+        return f"{app}.{name}" if app and name else str(m)
+    if isinstance(m, (list, tuple)) and len(m) == 2:
+        return f"{m[0]}.{m[1]}"
+    return str(m)

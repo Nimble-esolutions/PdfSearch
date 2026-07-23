@@ -139,7 +139,7 @@ def validate_sanitization(database_path: Path) -> list[str]:
                     issues.append(f"Non-sanitized email domain found: {email}")
 
         c.execute(
-            "SELECT id FROM django_session LIMIT 1"
+            "SELECT session_key FROM django_session LIMIT 1"
         )
         if c.fetchone():
             issues.append("Active sessions found in sanitized database")
