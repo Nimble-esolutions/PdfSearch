@@ -5,6 +5,7 @@ import signal
 import time
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -13,6 +14,8 @@ from core.models import MaintenanceJob, MaintenanceAuditEvent
 
 HEARTBEAT_FILE = "/tmp/worker_heartbeat"
 ORPHAN_TIMEOUT_MINUTES = 5
+SCHEDULER_INTERVAL_SECONDS = 60
+LAST_SCHEDULER_TICK = "/tmp/worker_last_scheduler_tick"
 
 _shutdown_flag = False
 
@@ -25,6 +28,14 @@ def _handle_shutdown(signum, frame):
 def _write_heartbeat():
     try:
         with open(HEARTBEAT_FILE, "w") as f:
+            f.write(f"{os.getpid()}\n{int(time.time())}")
+    except OSError:
+        pass
+
+
+def _write_scheduler_tick():
+    try:
+        with open(LAST_SCHEDULER_TICK, "w") as f:
             f.write(f"{os.getpid()}\n{int(time.time())}")
     except OSError:
         pass
@@ -49,15 +60,40 @@ def _recover_orphaned_jobs():
                 "note": "Recovered after worker restart; previous run may have crashed.",
             },
         )
-
         job.items.filter(status="running").update(
             status="queued", started_at=None
         )
     return orphaned.count()
 
 
+def _should_evaluate_scheduler() -> bool:
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    if env_identity is None:
+        return False
+    if not env_identity.maintenance_scheduler_enabled:
+        return False
+    if not env_identity.is_backup_writer:
+        return False
+    if env_identity.backup_sync_mode.value == "manual":
+        return False
+    return True
+
+
+def _evaluate_scheduler() -> int:
+    """Check backup policy and queue a sync if needed. Returns jobs queued."""
+    if not _should_evaluate_scheduler():
+        return 0
+    try:
+        from core.backup_policy import queue_backup_if_needed
+        job = queue_backup_if_needed(min_interval_seconds=SCHEDULER_INTERVAL_SECONDS)
+        _write_scheduler_tick()
+        return 1 if job else 0
+    except Exception:
+        return 0
+
+
 class Command(BaseCommand):
-    help = "Run queued PdfSearch maintenance jobs"
+    help = "Run queued PdfSearch maintenance jobs with optional backup scheduling"
 
     def add_arguments(self, parser):
         parser.add_argument("--once", action="store_true")
@@ -75,7 +111,18 @@ class Command(BaseCommand):
                 )
             )
 
+        last_scheduler_eval = 0
+
         while not _shutdown_flag:
+            now = time.time()
+            if now - last_scheduler_eval >= SCHEDULER_INTERVAL_SECONDS:
+                queued = _evaluate_scheduler()
+                if queued:
+                    self.stdout.write(
+                        self.style.SUCCESS("Scheduled backup queued.")
+                    )
+                last_scheduler_eval = now
+
             job = claim_next_job()
             if job is None:
                 _write_heartbeat()
