@@ -321,6 +321,12 @@ class ArtifactVault:
         if manifest_match:
             _validate_release_id(manifest_match.group(1))
             return
+        if _is_safe_scoped_key(key, "control"):
+            return
+        if _is_safe_scoped_key(key, "generations"):
+            return
+        if _is_safe_scoped_key(key, "blobs"):
+            return
         raise ArtifactVaultConfigurationError("Unsupported immutable artifact key")
 
 
@@ -528,7 +534,13 @@ def _safe_relative_parts(path: str) -> tuple[str, ...]:
 
 def _is_safe_scoped_key(key: str, prefix: str) -> bool:
     parts = key.split("/")
-    return len(parts) >= 3 and parts[0] == prefix and all(
+    if len(parts) < 3:
+        return False
+    if parts[0] == "datasets" and len(parts) >= 4:
+        return parts[2] == prefix and all(
+            SAFE_COMPONENT_RE.fullmatch(part) for part in parts[1:]
+        )
+    return parts[0] == prefix and all(
         SAFE_COMPONENT_RE.fullmatch(part) for part in parts[1:]
     )
 
