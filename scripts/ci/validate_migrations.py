@@ -64,7 +64,8 @@ def check_migration_sequence(numbers: list[int], label: str) -> list[str]:
 def check_no_collision(branch_numbers: list[int], base_numbers: list[int]) -> list[str]:
     errors = []
     base_set = set(base_numbers)
-    for n in branch_numbers:
+    branch_unique = [n for n in branch_numbers if n not in base_set]
+    for n in branch_unique:
         if n in base_set:
             errors.append(
                 f"Migration collision: {n:04d} exists in both the branch and the base branch. "
