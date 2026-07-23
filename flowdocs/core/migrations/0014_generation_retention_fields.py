@@ -62,8 +62,4 @@ class Migration(migrations.Migration):
                 max_length=20,
             ),
         ),
-        migrations.AddIndex(
-            model_name="artifactgeneration",
-            index=models.Index(fields=["status", "created_at"], name="core_artif_status_e2695f_idx"),
-        ),
     ]
