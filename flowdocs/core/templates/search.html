@@ -3,19 +3,92 @@
 <html lang="{{ request.LANGUAGE_CODE }}">
 <head>
   <meta charset="UTF-8">
-  <title>{% trans "Search With AI - CC & RCS Maharashtra" %}</title>
+  <title>{% trans "Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra" %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="{% trans 'Commissioner for Co-operation and Registrar, Cooperative Societies, Maharashtra State, Pune' %}">
-   <!-- ✅ Faster font loading for Safari -->
+  <meta name="description" content="{% trans 'Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance. Sahakar AI provides instant answers from official government documents.' %}">
+  <link rel="canonical" href="https://ai-sahakar.net/">
+  <link rel="alternate" hreflang="en" href="https://ai-sahakar.net/">
+  <link rel="alternate" hreflang="mr" href="https://ai-sahakar.net/">
+  <link rel="alternate" hreflang="x-default" href="https://ai-sahakar.net/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{% trans 'Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra' %}">
+  <meta property="og:description" content="{% trans 'Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance.' %}">
+  <meta property="og:url" content="https://ai-sahakar.net/">
+  <meta property="og:site_name" content="Sahakar AI">
+  <meta property="og:locale" content="{{ request.LANGUAGE_CODE|default:'en' }}">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{% trans 'Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra' %}">
+  <meta name="twitter:description" content="{% trans 'Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance.' %}">
+
+  <meta name="robots" content="index, follow">
+
+   <!-- Faster font loading for Safari -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Google Font for Marathi / Devanagari -->
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari&display=block" rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari&display=block" rel="stylesheet">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="{% static 'main/css/style.css' %}">
-  
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Sahakar AI",
+    "url": "https://ai-sahakar.net/",
+    "description": "Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance.",
+    "inLanguage": ["en", "mr"],
+    "publisher": {
+      "@type": "Organization",
+      "name": "Registrar Co-operative Societies, Maharashtra",
+      "url": "https://sahakarayukta.maharashtra.gov.in/"
+    },
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://ai-sahakar.net/search/?query={query}"
+      },
+      "query-input": "required name=query"
+    }
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What documents can I search on Sahakar AI?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "You can search Maharashtra cooperative society acts, rules, bylaws, and related government documents."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Are the answers from Sahakar AI official legal advice?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Answers are AI-generated assistance based on available documents. They should not be used for legal purposes. Always review the source references before making official decisions."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Sahakar AI support Marathi?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Sahakar AI supports both English and Marathi. Use the language toggle to switch between them."
+        }
+      }
+    ]
+  }
+  </script>
 
 </head>
 <body>
@@ -48,7 +121,7 @@
     <!-- Mobile banner -->
     <source media="(max-width: 768px)" srcset="{% static 'main/images/banner-mobile-1.jpg' %}">
     <!-- Desktop banner (default) -->
-    <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}" alt="Banner" class="banner-img">
+    <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}" alt="{% trans 'Registrar Co-operative Societies, Maharashtra — official banner' %}" class="banner-img">
   </picture>
 
   <div class="banner-text">
@@ -102,6 +175,26 @@
   </div>
 </div>
 
+<!-- Static service description for SEO and answer engines -->
+<section class="seo-static-content" aria-label="{% trans 'About this service' %}">
+  <div class="container py-4">
+    <h2 class="h5">{% trans "What is Sahakar AI?" %}</h2>
+    <p class="text-muted">
+      {% trans "Sahakar AI is an AI-powered search tool for Maharashtra cooperative society laws, acts, rules, and bylaws. It helps you find relevant information from official government documents quickly, with answers generated in English and Marathi." %}
+    </p>
+    <h3 class="h6 mt-3">{% trans "How to ask better questions" %}</h3>
+    <ul class="text-muted small">
+      <li>{% trans "Use specific terms like act names, section numbers, or subject areas (e.g., housing, audit, agriculture)." %}</li>
+      <li>{% trans "Ask in English or Marathi — both are supported." %}</li>
+      <li>{% trans "Review the source references provided with each answer before making official decisions." %}</li>
+    </ul>
+    <h3 class="h6 mt-3">{% trans "Important disclaimer" %}</h3>
+    <p class="text-muted small">
+      {% trans "Answers are AI-generated assistance, not legal advice. The AI may provide incomplete or incorrect responses. Always verify with the source documents and contact the Registrar's office for official guidance." %}
+    </p>
+  </div>
+</section>
+
 <!-- Footer -->
 <footer class="bg-light py-2  border-top">
   <div class="container-fluid">
@@ -110,7 +203,7 @@
         <small>{% trans "All rights reserved© Registrar Co-operative Societies." %}</small>
       </div>
       <div class="d-flex gap-3">
-        <a href="https://nimble-esolutions.com/" target="_blank" rel="noopener noreferrer"><img src="{% static 'main/images/footer-logo-nimble.jpg' %}" alt="Logo 4" height="40"></a>
+        <a href="https://nimble-esolutions.com/" target="_blank" rel="noopener noreferrer"><img src="{% static 'main/images/footer-logo-nimble.jpg' %}" alt="{% trans 'Nimble eSolutions — technology partner' %}" height="40"></a>
       </div>
     </div>
   </div>

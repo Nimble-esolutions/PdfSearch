@@ -17,7 +17,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count, Max, Q
 from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.urls import reverse
 from django.utils.translation import gettext
 from django.utils import timezone
@@ -1001,7 +1001,6 @@ def maintenance_job_action(request, job_id):
         messages.info(request, "That job cannot accept this action in its current state.")
     return redirect("dashboard")
 
-
 @superadmin_required
 def job_audit_trail(request, job_id):
     """Return the audit trail for a maintenance job as JSON."""
@@ -1152,6 +1151,52 @@ def active_jobs(request):
         "jobs": [_job_status_json(job) for job in jobs],
         "count": len(jobs),
     })
+
+
+@require_GET
+def robots_txt(request):
+    """Serve robots.txt — allow public pages, disallow admin and auth routes."""
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "Allow: /search/",
+        "Allow: /livez",
+        "Allow: /readyz",
+        "Disallow: /dashboard/",
+        "Disallow: /register/",
+        "Disallow: /login/",
+        "Disallow: /logout/",
+        "Disallow: /pdf/",
+        "Disallow: /folder/",
+        "Disallow: /i18n/",
+        "",
+        "Sitemap: https://ai-sahakar.net/sitemap.xml",
+    ]
+    return HttpResponse("\n".join(lines), content_type="text/plain")
+
+
+@require_GET
+def sitemap_xml(request):
+    """Serve sitemap.xml with static public URLs."""
+    base_url = "https://ai-sahakar.net"
+    lastmod = timezone.now().strftime("%Y-%m-%d")
+    urls = [
+        {"loc": f"{base_url}/", "changefreq": "weekly", "priority": "1.0"},
+        {"loc": f"{base_url}/search/", "changefreq": "weekly", "priority": "0.9"},
+        {"loc": f"{base_url}/livez", "changefreq": "daily", "priority": "0.3"},
+        {"loc": f"{base_url}/readyz", "changefreq": "daily", "priority": "0.3"},
+    ]
+    xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>']
+    xml_parts.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
+    for url in urls:
+        xml_parts.append("  <url>")
+        xml_parts.append(f"    <loc>{url['loc']}</loc>")
+        xml_parts.append(f"    <lastmod>{lastmod}</lastmod>")
+        xml_parts.append(f"    <changefreq>{url['changefreq']}</changefreq>")
+        xml_parts.append(f"    <priority>{url['priority']}</priority>")
+        xml_parts.append("  </url>")
+    xml_parts.append("</urlset>")
+    return HttpResponse("\n".join(xml_parts), content_type="application/xml")
 
 
 # -------------- New logic for folder search --------------

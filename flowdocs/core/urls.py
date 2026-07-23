@@ -6,6 +6,8 @@ from . import views
 urlpatterns = [
     path('livez', views.livez, name='livez'),
     path('readyz', views.readyz, name='readyz'),
+    path('robots.txt', views.robots_txt, name='robots_txt'),
+    path('sitemap.xml', views.sitemap_xml, name='sitemap_xml'),
 
     # ---------------- Public Pages ----------------
     path('', views.search_query, name='home'),
