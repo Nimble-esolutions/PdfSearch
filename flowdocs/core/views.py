@@ -809,6 +809,59 @@ def dashboard(request, folder_id=None):
     )
 
 
+def _parse_bulk_filters(request):
+    """Parse filter parameters from POST/GET data and return a Q object + dict."""
+    filters = {}
+    q_obj = Q()
+
+    category = request.POST.get("filter_category") or request.GET.get("filter_category") or ""
+    if category:
+        filters["category"] = category
+        q_obj &= Q(category=category)
+
+    subject = request.POST.get("filter_subject") or request.GET.get("filter_subject") or ""
+    if subject:
+        filters["subject"] = subject
+        q_obj &= Q(subject=subject)
+
+    indexed = request.POST.get("filter_indexed") or request.GET.get("filter_indexed") or ""
+    if indexed == "true":
+        filters["indexed"] = "true"
+        q_obj &= Q(indexed=True)
+    elif indexed == "false":
+        filters["indexed"] = "false"
+        q_obj &= Q(indexed=False)
+
+    keywords_raw = request.POST.get("filter_keywords") or request.GET.get("filter_keywords") or ""
+    if keywords_raw:
+        keywords = [kw.strip() for kw in keywords_raw.split(",") if kw.strip()]
+        filters["keywords"] = keywords
+        keyword_q = Q()
+        for kw in keywords:
+            keyword_q |= Q(keywords__icontains=kw)
+        q_obj &= keyword_q
+
+    uploaded_after = request.POST.get("filter_uploaded_after") or request.GET.get("filter_uploaded_after") or ""
+    if uploaded_after:
+        try:
+            dt = datetime.strptime(uploaded_after, "%Y-%m-%d")
+            filters["uploaded_after"] = uploaded_after
+            q_obj &= Q(uploaded_at__gte=dt)
+        except ValueError:
+            pass
+
+    uploaded_before = request.POST.get("filter_uploaded_before") or request.GET.get("filter_uploaded_before") or ""
+    if uploaded_before:
+        try:
+            dt = datetime.strptime(uploaded_before, "%Y-%m-%d")
+            filters["uploaded_before"] = uploaded_before
+            q_obj &= Q(uploaded_at__lte=dt)
+        except ValueError:
+            pass
+
+    return q_obj, filters
+
+
 @superadmin_required
 @require_POST
 def bulk_maintenance(request):
@@ -820,8 +873,11 @@ def bulk_maintenance(request):
 
     folder_ids = [int(value) for value in request.POST.getlist("folder_ids") if value.isdigit()]
     folders = Folder.objects.filter(pk__in=folder_ids)
+
+    filter_q, filter_params = _parse_bulk_filters(request)
+
     if operation == "sync_generation":
-        job = queue_job(kind=operation, requested_by=request.user, scope={"folder_ids": folder_ids})
+        job = queue_job(kind=operation, requested_by=request.user, scope={"folder_ids": folder_ids, "filters": filter_params})
         messages.success(request, f"S3 generation sync queued: {job.public_id}.")
         return redirect("dashboard")
     if operation == "restore_generation":
@@ -842,18 +898,39 @@ def bulk_maintenance(request):
         return redirect("dashboard")
     if operation == "repair_indexes":
         items = list(folders)
-        job = queue_job(kind=operation, requested_by=request.user, folders=items, scope={"folder_ids": folder_ids})
+        job = queue_job(kind=operation, requested_by=request.user, folders=items, scope={"folder_ids": folder_ids, "filters": filter_params})
     else:
         pdfs = PDFFile.objects.filter(folder_id__in=folder_ids).order_by("pk")
+        if filter_q:
+            pdfs = pdfs.filter(filter_q)
         if operation == "reindex_needed":
             pdfs = pdfs.filter(indexed=False)
         items = list(pdfs)
-        job = queue_job(kind=operation, requested_by=request.user, pdfs=items, scope={"folder_ids": folder_ids})
+        job = queue_job(kind=operation, requested_by=request.user, pdfs=items, scope={"folder_ids": folder_ids, "filters": filter_params})
     if not items:
         messages.info(request, "No documents or categories matched that maintenance operation.")
     else:
         messages.success(request, f"{operation.replace('_', ' ').title()} job queued for {len(items)} item(s).")
     return redirect("dashboard")
+
+
+@superadmin_required
+def bulk_filter_preview(request):
+    """Return a JSON count of PDFs matching the current filter for the selected folders."""
+    folder_ids = [int(value) for value in request.GET.getlist("folder_ids") if value.isdigit()]
+    if not folder_ids:
+        return JsonResponse({"count": 0, "folders": 0})
+    pdfs = PDFFile.objects.filter(folder_id__in=folder_ids)
+    filter_q, _ = _parse_bulk_filters(request)
+    if filter_q:
+        pdfs = pdfs.filter(filter_q)
+    indexed_count = pdfs.filter(indexed=True).count()
+    return JsonResponse({
+        "count": pdfs.count(),
+        "folders": len(folder_ids),
+        "indexed": indexed_count,
+        "needs_index": pdfs.count() - indexed_count,
+    })
 
 
 @superadmin_required
