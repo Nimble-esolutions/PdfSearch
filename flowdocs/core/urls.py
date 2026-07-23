@@ -6,6 +6,12 @@ from . import views
 urlpatterns = [
     path('livez', views.livez, name='livez'),
     path('readyz', views.readyz, name='readyz'),
+    path('health/data/', views.health_data, name='health_data'),
+    path('health/lease/', views.health_lease, name='health_lease'),
+    path('health/metrics/', views.metrics_view, name='health_metrics'),
+    path('dashboard/operations/', views.operations_panel, name='operations_panel'),
+    path('dashboard/operations/data/', views.operations_data, name='operations_data'),
+    path('dashboard/operations/lease/', views.operations_lease, name='operations_lease'),
     path('robots.txt', views.robots_txt, name='robots_txt'),
     path('sitemap.xml', views.sitemap_xml, name='sitemap_xml'),
 

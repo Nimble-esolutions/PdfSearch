@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Operations — Data Lifecycle - CC & RCS Maharashtra" %}{% endblock %}
+
+{% block content %}
+<section class="container-fluid py-4">
+  <div class="admin-page-heading mb-4">
+    <p class="admin-kicker">{% trans "Environment & Data Lifecycle" %}</p>
+    <h2>{% trans "Operations" %}</h2>
+    <p>{% trans "Dataset identity, writer authority, generation status, and restore workspace state." %}</p>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white"><strong>{% trans "Environment" %}</strong></div>
+        <div class="card-body">
+          <dl class="row small mb-0">
+            <dt class="col-sm-5">{% trans "APP_ENV" %}</dt>
+            <dd class="col-sm-7"><span class="badge {% if app_env == 'production' %}bg-success{% elif app_env == 'staging' %}bg-warning{% else %}bg-secondary{% endif %}">{{ app_env }}</span></dd>
+
+            <dt class="col-sm-5">{% trans "Dataset" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ dataset_id|default:"—" }}</dd>
+
+            <dt class="col-sm-5">{% trans "Authoritative" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ authoritative_dataset_id|default:"—" }}</dd>
+
+            <dt class="col-sm-5">{% trans "Restore Source" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ restore_source_dataset_id|default:"—" }}</dd>
+
+            <dt class="col-sm-5">{% trans "Production Source" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ production_source_id|default:"—" }}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-info text-white"><strong>{% trans "Deployment" %}</strong></div>
+        <div class="card-body">
+          <dl class="row small mb-0">
+            <dt class="col-sm-5">{% trans "Deployment ID" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ deployment_id|default:"—" }}</dd>
+
+            <dt class="col-sm-5">{% trans "Instance ID" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ instance_id|default:"—" }}</dd>
+
+            <dt class="col-sm-5">{% trans "Build Digest" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ build_digest|default:"—" }}</dd>
+
+            <dt class="col-sm-5">{% trans "Release" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ app_release|default:"—" }}</dd>
+
+            {% if digest_mismatch %}
+            <dt class="col-sm-5"></dt>
+            <dd class="col-sm-7"><span class="badge bg-danger">{% trans "Digest mismatch" %}</span></dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-dark text-white"><strong>{% trans "Backup & Data" %}</strong></div>
+        <div class="card-body">
+          <dl class="row small mb-0">
+            <dt class="col-sm-5">{% trans "Backup Role" %}</dt>
+            <dd class="col-sm-7"><span class="badge {% if backup_role == 'writer' %}bg-success{% elif backup_role == 'reader' %}bg-info{% else %}bg-secondary{% endif %}">{{ backup_role }}</span></dd>
+
+            <dt class="col-sm-5">{% trans "Sync Mode" %}</dt>
+            <dd class="col-sm-7">{{ backup_sync_mode }}</dd>
+
+            <dt class="col-sm-5">{% trans "Data Mode" %}</dt>
+            <dd class="col-sm-7">{{ data_mode }}</dd>
+
+            <dt class="col-sm-5">{% trans "Side Effects" %}</dt>
+            <dd class="col-sm-7"><span class="badge {% if side_effects == 'enabled' %}bg-success{% elif side_effects == 'sandbox' %}bg-warning{% else %}bg-danger{% endif %}">{{ side_effects }}</span></dd>
+
+            <dt class="col-sm-5">{% trans "Scheduler" %}</dt>
+            <dd class="col-sm-7">{% if scheduler_enabled %}<span class="badge bg-success">{% trans "Active" %}</span>{% else %}<span class="badge bg-secondary">{% trans "Disabled" %}</span>{% endif %}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-success text-white"><strong>{% trans "Local Generation" %}</strong></div>
+        <div class="card-body">
+          <dl class="row small mb-0">
+            <dt class="col-sm-5">{% trans "Generation" %}</dt>
+            <dd class="col-sm-7 font-monospace small">{{ local_generation|default:"—" }}</dd>
+
+            <dt class="col-sm-5">{% trans "Age" %}</dt>
+            <dd class="col-sm-7">{% if local_generation_days is not None %}{{ local_generation_days }}d {{ local_generation_hours }}h{% else %}—{% endif %}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    {% if activation_status %}
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header {% if activation_status.incomplete_activations %}bg-warning{% else %}bg-success{% endif %} text-white"><strong>{% trans "Activation Journal" %}</strong></div>
+        <div class="card-body">
+          <dl class="row small mb-0">
+            <dt class="col-sm-5">{% trans "Lock Held" %}</dt>
+            <dd class="col-sm-7">{{ activation_status.lock_held|yesno:_("Yes,No") }}</dd>
+            <dt class="col-sm-5">{% trans "Incomplete" %}</dt>
+            <dd class="col-sm-7">{{ activation_status.incomplete_activations|length }}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

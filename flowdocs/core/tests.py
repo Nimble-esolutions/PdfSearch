@@ -32,6 +32,9 @@ from .views import _parse_bulk_filters
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
 from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
+from .environment import EnvironmentIdentity, AppEnv, BackupRole, DataMode, ExternalSideEffectsMode, EnvironmentIdentityError
+from .side_effects import SideEffectPolicy, resolve_email_backend
+from .compatibility import check_generation_compatibility
 
 
 class StaticFilesConfigurationTests(TestCase):
@@ -2154,3 +2157,197 @@ class WorkerRecoveryTests(TestCase):
             lines = f.read().strip().split("\n")
         age = time.time() - int(lines[1])
         self.assertLess(age, 5)
+
+
+class EnvironmentIdentityTests(TestCase):
+    def test_missing_app_env_fails_closed(self):
+        env = {"ALLOW_INSECURE_DEFAULTS": "0"}
+        with patch.dict(os.environ, env, clear=True):
+            with self.assertRaises(EnvironmentIdentityError):
+                EnvironmentIdentity.from_env(environ=env)
+
+    def test_prod_requires_dataset_id(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "production",
+            "BACKUP_ROLE": "disabled",
+        })
+        errors = identity.validate()
+        self.assertTrue(any("DATASET_ID" in e for e in errors))
+
+    def test_prod_requires_production_source_id(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "production",
+            "DATASET_ID": "prod-dataset",
+            "DEPLOYMENT_ID": "prod-mum-01",
+            "BACKUP_ROLE": "disabled",
+        })
+        errors = identity.validate()
+        self.assertTrue(any("PRODUCTION_SOURCE_ID" in e for e in errors))
+
+    def test_valid_production_config(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "production",
+            "DATASET_ID": "prod-dataset",
+            "AUTHORITATIVE_DATASET_ID": "prod-dataset",
+            "PRODUCTION_SOURCE_ID": "prod-primary",
+            "DEPLOYMENT_ID": "prod-mum-01",
+            "BACKUP_ROLE": "reader",
+        })
+        errors = identity.validate()
+        self.assertEqual(errors, [])
+
+    def test_writer_requires_image_digest(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "production",
+            "DATASET_ID": "prod-dataset",
+            "AUTHORITATIVE_DATASET_ID": "prod-dataset",
+            "PRODUCTION_SOURCE_ID": "prod-primary",
+            "DEPLOYMENT_ID": "prod-mum-01",
+            "BACKUP_ROLE": "writer",
+        })
+        errors = identity.validate()
+        self.assertTrue(any("PRODUCTION_SOURCE_ID" in e or "APP_IMAGE_DIGEST" in e or "ARTIFACT_VAULT" in e for e in errors), errors)
+
+    def test_writer_requires_vault_enabled(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "production",
+            "DATASET_ID": "prod-dataset",
+            "AUTHORITATIVE_DATASET_ID": "prod-dataset",
+            "PRODUCTION_SOURCE_ID": "prod-primary",
+            "DEPLOYMENT_ID": "prod-mum-01",
+            "BACKUP_ROLE": "writer",
+            "APP_IMAGE_DIGEST": "sha256:abc123",
+        })
+        with patch.dict(os.environ, {"ARTIFACT_VAULT_ENABLED": "0"}, clear=False):
+            errors = identity.validate()
+        self.assertTrue(any("ARTIFACT_VAULT_ENABLED" in e for e in errors))
+
+    def test_nonprod_disables_side_effects_by_default(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "staging",
+            "DATA_MODE": "local",
+            "RESTORE_SOURCE_DATASET_ID": "prod-dataset",
+        })
+        self.assertEqual(
+            identity.external_side_effects,
+            ExternalSideEffectsMode.DISABLED,
+        )
+
+    def test_empty_data_mode_rejected_in_production(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "production",
+            "DATASET_ID": "prod-dataset",
+            "AUTHORITATIVE_DATASET_ID": "prod-dataset",
+            "PRODUCTION_SOURCE_ID": "prod-primary",
+            "DEPLOYMENT_ID": "prod-mum-01",
+            "DATA_MODE": "empty",
+            "BACKUP_ROLE": "disabled",
+        })
+        errors = identity.validate()
+        self.assertTrue(any("DATA_MODE" in e for e in errors))
+
+    def test_exact_production_rejected_in_production(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "production",
+            "DATASET_ID": "prod-dataset",
+            "AUTHORITATIVE_DATASET_ID": "prod-dataset",
+            "PRODUCTION_SOURCE_ID": "prod-primary",
+            "DEPLOYMENT_ID": "prod-mum-01",
+            "DATA_MODE": "exact-production",
+            "BACKUP_ROLE": "disabled",
+        })
+        errors = identity.validate()
+        self.assertTrue(any("DATA_MODE" in e for e in errors))
+
+    def test_s3_restore_conflicts_with_writer(self):
+        identity = EnvironmentIdentity.from_env(environ={
+            "APP_ENV": "staging",
+            "DATA_MODE": "s3-restore",
+            "RESTORE_SOURCE_DATASET_ID": "prod-dataset",
+            "BACKUP_ROLE": "writer",
+            "DATASET_ID": "staging-dataset",
+        })
+        errors = identity.validate()
+        self.assertTrue(any(
+            "writer" in e.lower() or "restore" in e.lower()
+            for e in errors
+        ), errors)
+
+
+class SideEffectsTests(TestCase):
+    def test_enabled_policy_email(self):
+        identity = EnvironmentIdentity(
+            app_env=AppEnv.PRODUCTION,
+            external_side_effects=ExternalSideEffectsMode.ENABLED,
+        )
+        policy = SideEffectPolicy.from_identity(identity)
+        self.assertTrue(policy.email_enabled)
+        self.assertTrue(policy.payment_enabled)
+
+    def test_disabled_policy(self):
+        identity = EnvironmentIdentity(
+            app_env=AppEnv.STAGING,
+            external_side_effects=ExternalSideEffectsMode.DISABLED,
+        )
+        policy = SideEffectPolicy.from_identity(identity)
+        self.assertFalse(policy.email_enabled)
+        self.assertFalse(policy.payment_enabled)
+
+    def test_sandbox_policy_email_console(self):
+        identity = EnvironmentIdentity(
+            app_env=AppEnv.STAGING,
+            external_side_effects=ExternalSideEffectsMode.SANDBOX,
+        )
+        policy = SideEffectPolicy.from_identity(identity)
+        self.assertTrue(policy.email_enabled)
+        self.assertTrue("console" in policy.email_backend)
+        self.assertFalse(policy.payment_enabled)
+
+    def test_email_backend_resolution(self):
+        identity = EnvironmentIdentity(
+            app_env=AppEnv.PRODUCTION,
+            external_side_effects=ExternalSideEffectsMode.ENABLED,
+        )
+        backend = resolve_email_backend(identity)
+        self.assertIn("smtp", backend)
+
+        identity_staging = EnvironmentIdentity(
+            app_env=AppEnv.STAGING,
+            external_side_effects=ExternalSideEffectsMode.DISABLED,
+        )
+        backend = resolve_email_backend(identity_staging)
+        self.assertIn("dummy", backend)
+
+
+class CompatibilityTests(TestCase):
+    def test_empty_manifest_is_compatible(self):
+        report = check_generation_compatibility({})
+        self.assertTrue(report.compatible)
+
+    def test_unsupported_manifest_version(self):
+        report = check_generation_compatibility({"manifest_version": 2})
+        self.assertFalse(report.compatible)
+
+    def test_embedding_model_mismatch(self):
+        with self.settings(OPENAI_EMBED_MODEL="text-embedding-3-large"):
+            report = check_generation_compatibility({
+                "manifest_version": 1,
+                "embedding_index": {"model": "text-embedding-3-small"},
+            })
+        self.assertFalse(report.compatible)
+
+    def test_sanitized_generation_warns(self):
+        report = check_generation_compatibility({
+            "manifest_version": 1,
+            "sanitization": {"policy_version": "pdfsearch-sanitize/v1"},
+        })
+        self.assertTrue(report.compatible)
+        self.assertTrue(any("sanitized" in w.lower() for w in report.warnings))
+
+    def test_same_embedding_model_passes(self):
+        with self.settings(OPENAI_EMBED_MODEL="text-embedding-3-small"):
+            report = check_generation_compatibility({
+                "manifest_version": 1,
+                "embedding_index": {"model": "text-embedding-3-small"},
+            })
+        self.assertTrue(report.compatible)

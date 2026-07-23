@@ -24,6 +24,7 @@ from django.utils import timezone
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent
 from .artifact_vault import ArtifactVault, ArtifactVaultError
+from .metrics import metrics_view
 from .maintenance import (
     archive_pdf,
     deprecate_pdf,
@@ -305,9 +306,47 @@ def readyz(request):
     except Exception:
         checks["migrations"] = "error"
 
+
+    try:
+        checks["data"] = _data_readiness_check()
+    except Exception:
+        checks["data"] = "error"
+
+    try:
+        checks["backup"] = _backup_readiness_check()
+    except Exception:
+        checks["backup"] = "error"
+
     ready = all(value in ("ok", "not_configured") for value in checks.values())
     return JsonResponse({"status": "ready" if ready else "not_ready", "checks": checks}, status=200 if ready else 503)
 
+
+
+def _data_readiness_check():
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    if env_identity is None:
+        return "not_configured"
+    if env_identity.data_mode.value in ("empty", "seed"):
+        return "ok"
+    if not PDFFile.objects.exists():
+        return "empty" if env_identity.data_mode.value == "local" else "ok"
+    indexed = PDFFile.objects.filter(indexed=True).count()
+    total = PDFFile.objects.count()
+    if total > 0 and indexed == 0:
+        return "degraded"
+    return "ok"
+
+
+def _backup_readiness_check():
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    if env_identity is None or env_identity.backup_role.value == "disabled":
+        return "not_configured"
+    last_gen = ArtifactGeneration.objects.order_by("-created_at").first()
+    if last_gen is None:
+        return "no_generations"
+    if last_gen.status == "failed":
+        return "degraded"
+    return "ok"
 
 @login_required
 def view_pdf(request, pdf_id):
@@ -1459,3 +1498,87 @@ def search_query(request):
                 "detail": "The search request could not be completed. Please try again later.",
                 "references": []
             }, status=500)
+
+
+@superadmin_required
+def operations_panel(request):
+    """Environment and Data Lifecycle operations dashboard."""
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    ctx = {"title": "Operations \u2014 Data Lifecycle"}
+    if env_identity:
+        ctx.update({
+            "app_env": env_identity.app_env.value,
+            "dataset_id": env_identity.dataset_id,
+            "authoritative_dataset_id": env_identity.authoritative_dataset_id,
+            "restore_source_dataset_id": env_identity.restore_source_dataset_id,
+            "production_source_id": env_identity.production_source_id,
+            "deployment_id": env_identity.deployment_id,
+            "instance_id": env_identity.instance_id[:20] if env_identity.instance_id else "",
+            "backup_role": env_identity.backup_role.value,
+            "backup_sync_mode": env_identity.backup_sync_mode.value,
+            "scheduler_enabled": env_identity.maintenance_scheduler_enabled,
+            "data_mode": env_identity.data_mode.value,
+            "side_effects": env_identity.external_side_effects.value,
+            "build_digest": (env_identity.build_image_digest or env_identity.app_image_digest)[:24] if env_identity.app_image_digest else "",
+            "app_release": env_identity.app_release_version or env_identity.build_release_version,
+            "digest_mismatch": bool(env_identity.build_image_digest and env_identity.app_image_digest and env_identity.build_image_digest != env_identity.app_image_digest),
+        })
+    try:
+        local_gen = ArtifactGeneration.objects.filter(status="active").order_by("-promoted_at").first()
+        if local_gen:
+            ctx["local_generation"] = local_gen.generation_id
+            age = timezone.now() - local_gen.created_at
+            ctx["local_generation_days"] = age.days
+            ctx["local_generation_hours"] = age.seconds // 3600
+    except Exception:
+        pass
+    try:
+        from .activation_journal import activation_status
+        ctx["activation_status"] = activation_status()
+    except Exception:
+        pass
+    return render(request, "dashboard_operations.html", ctx)
+def health_data(request):
+    """Public: return coarse data readiness status only."""
+    return JsonResponse({"status": _data_readiness_check()})
+
+def health_lease(request):
+    """Public: return coarse lease status only."""
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    if env_identity is None or env_identity.backup_role.value == "disabled":
+        return JsonResponse({"status": "not_configured"})
+    try:
+        from .lease import get_lease_status
+        status = get_lease_status(env_identity.dataset_id)
+        return JsonResponse({"status": "held" if status is not None else "not_held"})
+    except Exception:
+        return JsonResponse({"status": "error"})
+
+
+@superadmin_required
+def operations_data(request):
+    """Superadmin: full dataset metadata."""
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    local_gen = ArtifactGeneration.objects.filter(status="active").order_by("-promoted_at").first()
+    return JsonResponse({
+        "app_env": env_identity.app_env.value if env_identity else "unknown",
+        "dataset_id": env_identity.dataset_id if env_identity else "",
+        "data_mode": env_identity.data_mode.value if env_identity else "",
+        "backup_role": env_identity.backup_role.value if env_identity else "",
+        "local_active_generation": local_gen.generation_id if local_gen else None,
+        "pdf_count": PDFFile.objects.count(),
+        "indexed_pdf_count": PDFFile.objects.filter(indexed=True).count(),
+    })
+
+
+@superadmin_required
+def operations_lease(request):
+    """Superadmin: full lease details."""
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    ds_id = env_identity.dataset_id if env_identity else ""
+    try:
+        from .lease import get_lease_status
+        status = get_lease_status(ds_id)
+    except Exception:
+        status = None
+    return JsonResponse({"dataset_id": ds_id, "lease_held": status is not None, "lease": status})
