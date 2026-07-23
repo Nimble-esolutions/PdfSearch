@@ -7,6 +7,7 @@ creation and validated before every authoritative operation.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 import time
@@ -210,6 +211,7 @@ def update_authoritative_pointer(
     }
 
     data = json.dumps(pointer, indent=2, sort_keys=True).encode()
+    digest = hashlib.sha256(data).hexdigest()
 
     try:
         if expected_pointer_etag is None:
@@ -218,6 +220,7 @@ def update_authoritative_pointer(
                 Key=pointer_key,
                 Body=data,
                 ContentType="application/json",
+                Metadata={"sha256": digest, "immutable": "true"},
                 IfNoneMatch="*",
             )
         else:
@@ -226,6 +229,7 @@ def update_authoritative_pointer(
                 Key=pointer_key,
                 Body=data,
                 ContentType="application/json",
+                Metadata={"sha256": digest, "immutable": "true"},
                 IfMatch=expected_pointer_etag,
             )
     except Exception as exc:
@@ -289,10 +293,16 @@ def update_authoritative_pointer_cas(
 def get_authoritative_pointer(
     vault: ArtifactVault, dataset_id: str
 ) -> dict[str, Any] | None:
-    """Read the authoritative generation pointer. Returns None if absent."""
+    """Read the authoritative generation pointer. Returns None if absent.
+
+    Uses raw S3 client to also capture ETag for CAS operations."""
     keys = KeyBuilder(dataset_id)
+    pointer_key = keys.control_authoritative()
     try:
-        raw = vault.get(keys.control_authoritative())
-        return json.loads(raw) if isinstance(raw, bytes) else raw
+        resp = vault.client.get_object(Bucket=vault.config.bucket, Key=pointer_key)
+        data = resp["Body"].read()
+        result = json.loads(data)
+        result["_etag"] = resp.get("ETag", "")
+        return result
     except Exception:
         return None

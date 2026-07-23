@@ -113,6 +113,7 @@ def acquire_global_writer(
     }
 
     data = json.dumps(record, sort_keys=True).encode()
+    digest = hashlib.sha256(data).hexdigest()
 
     try:
         if existing is None:
@@ -121,6 +122,7 @@ def acquire_global_writer(
                 Key=key,
                 Body=data,
                 ContentType="application/json",
+                Metadata={"sha256": digest, "immutable": "true"},
                 IfNoneMatch="*",
             )
         else:
@@ -129,6 +131,7 @@ def acquire_global_writer(
                 Key=key,
                 Body=data,
                 ContentType="application/json",
+                Metadata={"sha256": digest, "immutable": "true"},
                 IfMatch=expected_etag,
             )
     except Exception as exc:
@@ -163,6 +166,7 @@ def renew_global_writer(
     record.pop("_token", None)
 
     data = json.dumps(record, sort_keys=True).encode()
+    digest = hashlib.sha256(data).hexdigest()
 
     try:
         resp = vault.client.put_object(
@@ -170,6 +174,7 @@ def renew_global_writer(
             Key=key,
             Body=data,
             ContentType="application/json",
+            Metadata={"sha256": digest, "immutable": "true"},
             IfMatch=expected_etag,
         )
     except Exception as exc:
