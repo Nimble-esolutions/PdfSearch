@@ -17,6 +17,8 @@ from .artifact_vault import ArtifactVault
 from .management.commands.inventory_artifacts import build_manifest
 from .models import ArtifactGeneration, ArtifactValidation, Folder, MaintenanceAuditEvent, MaintenanceJob, MaintenanceJobItem, PDFFile
 from .utils import SearchDataIntegrityError, build_or_load_faiss_index_for_folder, precompute_pdf_embeddings
+from .namespace import KeyBuilder
+from .registration import RegistrationError
 
 
 def _audit(job=None, *, event_type, actor=None, payload=None):
@@ -210,7 +212,7 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
 
     if job.kind == "sync_generation":
         try:
-            generation = sync_active_generation(requested_by=job.requested_by)
+            generation = sync_active_generation(requested_by=job.requested_by, job=job)
         except Exception as exc:
             job.status = "failed"
             job.failed_items = 1
@@ -372,21 +374,113 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
     return job
 
 
-def sync_active_generation(*, requested_by=None):
-    """Upload a content-addressed active snapshot and register its manifest."""
+def sync_active_generation(*, requested_by=None, job=None):
+    """Upload a content-addressed active snapshot as an authoritative generation.
+
+    The complete authenticated publish flow:
+      1. Validate environment identity (dataset, source, role).
+      2. Detect S3 capabilities (conditional ops required).
+      3. Validate or register the dataset namespace.
+      4. Acquire global writer authority (CAS: If-None-Match or If-Match).
+      5. Create consistent SQLite snapshot.
+      6. Build manifest, upload immutable artifacts with scoped keys.
+      7. Upload candidate manifest.
+      8. Revalidate global writer (epoch, token, source, instance).
+      9. Update authoritative pointer with exact CAS (If-Match or If-None-Match).
+     10. Record local generation as active.
+    """
+    from django.conf import settings
+
     vault = ArtifactVault()
     if not vault.enabled:
         raise SearchDataIntegrityError("Artifact vault is disabled")
 
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    if env_identity is None:
+        raise SearchDataIntegrityError(
+            "Environment identity is not configured; "
+            "generation sync requires explicit APP_ENV, DATASET_ID, "
+            "and PRODUCTION_SOURCE_ID."
+        )
+
+    if not env_identity.is_authoritative_writer:
+        raise SearchDataIntegrityError(
+            f"Environment {env_identity.app_env.value} is not an authoritative "
+            f"writer for dataset {env_identity.dataset_id}. "
+            f"Check APP_ENV, BACKUP_ROLE, DATASET_ID, AUTHORITATIVE_DATASET_ID, "
+            f"and PRODUCTION_SOURCE_ID."
+        )
+
+    dataset_id = env_identity.dataset_id
+    keys = KeyBuilder(dataset_id)
+
+    try:
+        from .registration import (
+            validate_registration, register_dataset,
+            update_authoritative_pointer,
+        )
+        registration = validate_registration(
+            vault, dataset_id,
+            app_identifier="pdfsearch",
+            production_source_id=env_identity.production_source_id,
+        )
+    except RegistrationError as exc:
+        if "not registered" in str(exc):
+            registration = register_dataset(
+                vault, dataset_id,
+                production_source_id=env_identity.production_source_id,
+                instance_id=env_identity.instance_id,
+                app_identifier="pdfsearch",
+            )
+            _audit(job=job, event_type="registered", actor=requested_by,
+                   payload={"dataset_id": dataset_id})
+        else:
+            raise SearchDataIntegrityError(str(exc)) from exc
+
+    lease = None
+    writer_record = None
+    writer_epoch = 0
+
+    try:
+        from .global_writer import acquire_global_writer, validate_writer_for_publication
+        from .object_store_capabilities import probe_capabilities
+
+        caps = probe_capabilities(vault, deployment_id=env_identity.deployment_id)
+        if not caps.authoritative_publication_allowed:
+            raise SearchDataIntegrityError(
+                "S3 endpoint does not support conditional operations needed for "
+                "safe authoritative publication"
+            )
+
+        writer_record = acquire_global_writer(
+            vault, dataset_id,
+            production_source_id=env_identity.production_source_id,
+            instance_id=env_identity.instance_id,
+            deployment_id=env_identity.deployment_id,
+            replica_id=env_identity.replica_id,
+            app_release=env_identity.app_release_version,
+            image_digest=env_identity.app_image_digest,
+        )
+        writer_epoch = writer_record.get("writer_epoch", 0)
+    except Exception as exc:
+        raise SearchDataIntegrityError(
+            f"Cannot acquire global writer for dataset {dataset_id}: {exc}"
+        ) from exc
+
     generation_id = timezone.now().strftime("gen-%Y%m%dT%H%M%S-") + secrets.token_hex(4)
+
+    if job is not None:
+        job.refresh_from_db(fields=["status"])
+        if job.status == "cancel_requested":
+            release_lease_safe(lease)
+            raise SearchDataIntegrityError("Backup job was cancelled")
+
     root = Path(settings.DATA_ROOT).resolve()
     database_path = Path(settings.DATABASES["default"]["NAME"]).resolve()
     if not database_path.is_file():
+        release_lease_safe(lease)
         raise SearchDataIntegrityError("Configured SQLite database is missing")
 
-    # SQLite backup produces a consistent point-in-time copy without stopping
-    # the web or worker processes. The temporary file is never registered as
-    # live application data and is removed after the immutable upload.
     with tempfile.TemporaryDirectory(prefix="pdfsearch-sync-", dir=settings.BACKUP_DIR) as temporary_dir:
         snapshot_path = Path(temporary_dir) / "db.sqlite3"
         source = sqlite3.connect(database_path)
@@ -405,33 +499,101 @@ def sync_active_generation(*, requested_by=None):
             chroma_root=settings.CHROMA_DIR,
             static_root=settings.STATIC_ROOT,
         )
+
+        db_sha256 = _file_sha256(snapshot_path)
         files = [{
             "path": "db.sqlite3",
             "bytes": snapshot_path.stat().st_size,
-            "sha256": _file_sha256(snapshot_path),
-            "object_key": vault.database_object_key(generation_id),
+            "sha256": db_sha256,
+            "object_key": keys.generation_database(generation_id),
             "artifact_type": "database",
         }]
+
         for entry in manifest.get("pdf_storage", {}).get("files", []):
-            path = root / entry["path"]
-            files.append({**entry, "bytes": entry["size_bytes"], "object_key": vault.pdf_object_key(entry["sha256"]), "artifact_type": "pdf"})
-            _upload_file(vault, path, files[-1])
-        for entry in manifest.get("faiss", {}).get("files", []):
-            path = root / entry["path"]
-            folder_id = int(Path(entry["path"]).stem.split("_")[-1])
-            record = {**entry, "bytes": entry["size_bytes"], "object_key": vault.faiss_object_key(generation_id, folder_id), "artifact_type": "faiss"}
+            pdf_digest = entry["sha256"]
+            pdf_path = root / entry["path"]
+            record = {
+                **entry,
+                "bytes": entry["size_bytes"],
+                "sha256": pdf_digest,
+                "object_key": keys.blob_pdf(pdf_digest),
+                "artifact_type": "pdf",
+            }
             files.append(record)
-            _upload_file(vault, path, record)
+            _upload_file(vault, pdf_path, record)
+
+        for entry in manifest.get("faiss", {}).get("files", []):
+            faiss_path = root / entry["path"]
+            folder_id = int(Path(entry["path"]).stem.split("_")[-1])
+            record = {
+                **entry,
+                "bytes": entry["size_bytes"],
+                "sha256": entry["sha256"],
+                "object_key": keys.generation_faiss(generation_id, folder_id),
+                "artifact_type": "faiss",
+            }
+            files.append(record)
+            _upload_file(vault, faiss_path, record)
+
         _upload_file(vault, snapshot_path, files[0])
+
+        manifest_object_key = keys.generation_manifest(generation_id)
         payload = {
             "release_id": generation_id,
             "manifest_version": 1,
             "read_only": True,
             "source": "active-data-root",
+            "dataset_id": dataset_id,
+            "writer_epoch": writer_epoch,
+            "production_source_id": env_identity.production_source_id,
+            "schema": manifest.get("schema", {}),
+            "database": manifest.get("database", {}),
             "counts": manifest.get("counts", {}),
             "files": files,
         }
-        vault.put_manifest(payload, release_id=generation_id)
+        manifest_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+        vault.put(manifest_object_key, manifest_bytes, content_type="application/json")
+
+        if job is not None:
+            job.refresh_from_db(fields=["status"])
+            if job.status == "cancel_requested":
+                _release_writer_safe(vault, dataset_id, writer_record)
+                candidate_gen = ArtifactGeneration.objects.create(
+                    generation_id=generation_id,
+                    status="staged",
+                    manifest=payload,
+                    source="s3-candidate",
+                    created_by=requested_by,
+                )
+                _audit(job=job, event_type="cancelled", actor=requested_by,
+                       payload={"generation_id": generation_id, "stage": "candidate-uploaded"})
+                return candidate_gen
+
+        writer_record = validate_writer_for_publication(
+            vault, dataset_id,
+            writer_record=writer_record,
+            production_source_id=env_identity.production_source_id,
+            instance_id=env_identity.instance_id,
+            expected_epoch=writer_epoch,
+        )
+
+        database_schema = manifest.get("database", {}).get("migrations", {}).get("latest", "")
+        from .registration import update_authoritative_pointer_cas
+        update_authoritative_pointer_cas(
+            vault, dataset_id,
+            generation_id=generation_id,
+            manifest_object_key=manifest_object_key,
+            manifest_sha256=manifest_digest,
+            writer_record=writer_record,
+            production_source_id=env_identity.production_source_id,
+            instance_id=env_identity.instance_id,
+            app_release=env_identity.app_release_version,
+            image_digest=env_identity.app_image_digest,
+            database_schema=database_schema,
+            previous_generation_id=_previous_active_generation_id(),
+        )
+
         gen = ArtifactGeneration.objects.create(
             generation_id=generation_id,
             status="validated",
@@ -440,8 +602,15 @@ def sync_active_generation(*, requested_by=None):
             created_by=requested_by,
             validated_at=timezone.now(),
         )
-        _record_validation(gen, validation_type="manifest", status="passed", details={"files": len(files)}, validated_by=requested_by)
-        _record_validation(gen, validation_type="counts", status="passed", details=manifest.get("counts", {}), validated_by=requested_by)
+        _record_validation(gen, validation_type="manifest", status="passed",
+                          details={"files": len(files), "writer_epoch": writer_epoch},
+                          validated_by=requested_by)
+        _record_validation(gen, validation_type="counts", status="passed",
+                          details=manifest.get("counts", {}), validated_by=requested_by)
+        _audit(job=job, event_type="completed", actor=requested_by,
+               payload={"generation_id": generation_id, "writer_epoch": writer_epoch})
+
+        _release_writer_safe(vault, dataset_id, writer_record)
         return gen
 
 
@@ -533,3 +702,34 @@ def _error_code(exc: Exception) -> str:
     if isinstance(exc, SearchDataIntegrityError):
         return "integrity"
     return exc.__class__.__name__.lower()[:64]
+
+
+def _release_writer_safe(vault, dataset_id, writer_record) -> None:
+    if writer_record is None:
+        return
+    try:
+        from .global_writer import release_global_writer
+        release_global_writer(vault, dataset_id, writer_record=writer_record)
+    except Exception:
+        pass
+
+
+def release_lease_safe(lease) -> None:
+    """Release a Redis writer lease without propagating errors."""
+    if lease is None:
+        return
+    try:
+        from .lease import release_lease as _release_redis_lease
+        _release_redis_lease(lease)
+    except Exception:
+        pass
+
+
+def _previous_active_generation_id() -> str:
+    try:
+        prev = ArtifactGeneration.objects.filter(
+            status="active"
+        ).order_by("-promoted_at").first()
+        return prev.generation_id if prev else ""
+    except Exception:
+        return ""
