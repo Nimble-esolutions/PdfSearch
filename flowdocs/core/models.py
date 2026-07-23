@@ -68,6 +68,18 @@ class PDFFile(models.Model):
         help_text="Relative path like housing/acts/154B.pdf",
     )
     indexed = models.BooleanField(default=False, help_text="FAISS index built or not")
+    lifecycle = models.CharField(
+        max_length=20,
+        choices=(
+            ("uploaded", "Uploaded"),
+            ("processing", "Processing"),
+            ("ready", "Ready"),
+            ("deprecated", "Deprecated"),
+            ("archived", "Archived"),
+        ),
+        default="uploaded",
+        help_text="Document lifecycle state for search and visibility control",
+    )
     subject = models.CharField(
         max_length=50,
         blank=True,
