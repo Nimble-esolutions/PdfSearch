@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import skipUnless
@@ -26,6 +27,7 @@ from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
+from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat, HEARTBEAT_FILE
 from .views import _parse_bulk_filters
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
@@ -2045,3 +2047,102 @@ class SeoAeoTests(TestCase):
         spec.loader.exec_module(mod)
         issues = mod.validate(response.content.decode())
         self.assertEqual(issues, [], f"SEO validation failed: {issues}")
+
+
+class WorkerRecoveryTests(TestCase):
+    def setUp(self):
+        self.superadmin = get_user_model().objects.create_user(
+            username="worker-recovery-admin",
+            password="test-password",
+            role="superadmin",
+        )
+
+    def test_recover_orphaned_jobs_resets_running_to_queued(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        past = timezone.now() - timedelta(minutes=10)
+        job = MaintenanceJob.objects.create(
+            kind="validate",
+            status="running",
+            started_at=past,
+        )
+        recovered = _recover_orphaned_jobs()
+        self.assertEqual(recovered, 1)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "queued")
+        self.assertIsNone(job.started_at)
+
+    def test_recover_orphaned_jobs_skips_recently_started(self):
+        from django.utils import timezone
+        job = MaintenanceJob.objects.create(
+            kind="validate",
+            status="running",
+            started_at=timezone.now(),
+        )
+        recovered = _recover_orphaned_jobs()
+        self.assertEqual(recovered, 0)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "running")
+
+    def test_recover_orphaned_jobs_creates_audit_event(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        past = timezone.now() - timedelta(minutes=10)
+        job = MaintenanceJob.objects.create(
+            kind="reindex_all",
+            status="running",
+            started_at=past,
+        )
+        _recover_orphaned_jobs()
+        events = MaintenanceAuditEvent.objects.filter(job=job, event_type="worker_died")
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.first().payload["previous_status"], "running")
+
+    def test_recover_orphaned_jobs_resets_running_items(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        folder = Folder.objects.create(name="Recovery test", created_by=self.superadmin)
+        pdf = PDFFile.objects.create(
+            title="Recovery PDF",
+            file="pdfs/recovery.pdf",
+            folder=folder,
+            uploaded_by=self.superadmin,
+        )
+        past = timezone.now() - timedelta(minutes=10)
+        job = queue_job(kind="reindex_needed", requested_by=self.superadmin, pdfs=[pdf])
+        job.status = "running"
+        job.started_at = past
+        job.save()
+        job.items.update(status="running")
+        _recover_orphaned_jobs()
+        self.assertEqual(job.items.filter(status="queued").count(), 1)
+        self.assertEqual(job.items.filter(status="running").count(), 0)
+
+    def test_worker_died_is_valid_audit_event_type(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        past = timezone.now() - timedelta(minutes=10)
+        job = MaintenanceJob.objects.create(
+            kind="validate",
+            status="running",
+            started_at=past,
+        )
+        _recover_orphaned_jobs()
+        event = MaintenanceAuditEvent.objects.get(job=job, event_type="worker_died")
+        self.assertEqual(event.event_type, "worker_died")
+
+    def test_heartbeat_file_includes_pid_and_timestamp(self):
+        _write_heartbeat()
+        self.assertTrue(os.path.exists(HEARTBEAT_FILE))
+        with open(HEARTBEAT_FILE) as f:
+            lines = f.read().strip().split("\n")
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].isdigit())
+        self.assertTrue(lines[1].isdigit())
+
+    def test_heartbeat_timestamp_is_recent(self):
+        _write_heartbeat()
+        with open(HEARTBEAT_FILE) as f:
+            lines = f.read().strip().split("\n")
+        age = time.time() - int(lines[1])
+        self.assertLess(age, 5)

@@ -297,6 +297,7 @@ class MaintenanceAuditEvent(models.Model):
         ("promoted", "Promoted"),
         ("rolled_back", "Rolled back"),
         ("purged", "Purged"),
+        ("worker_died", "Worker died"),
     )
 
     job = models.ForeignKey(
