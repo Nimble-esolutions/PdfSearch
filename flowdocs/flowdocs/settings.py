@@ -199,6 +199,7 @@ REDIS_URL = validate_redis_url(
 )
 
 PUBLIC_SEARCH_ENABLED = os.getenv('PUBLIC_SEARCH_ENABLED', '1').lower() in {'1', 'true', 'yes'}
+DISPLAY_SERVICE_FOOTER = os.getenv('DISPLAY_SERVICE_FOOTER', '0').lower() in {'1', 'true', 'yes'}
 _public_search_folder_ids = os.getenv('PUBLIC_SEARCH_FOLDER_IDS', '').strip().lower()
 PUBLIC_SEARCH_ALL_FOLDERS = _public_search_folder_ids in {'', 'all'}
 try:

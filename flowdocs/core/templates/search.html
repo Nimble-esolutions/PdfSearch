@@ -176,6 +176,7 @@
 </div>
 
 <!-- Static service description for SEO and answer engines -->
+{% if display_service_footer %}
 <section class="seo-static-content" aria-label="{% trans 'About this service' %}">
   <div class="container py-4">
     <h2 class="h5">{% trans "What is Sahakar AI?" %}</h2>
@@ -194,6 +195,7 @@
     </p>
   </div>
 </section>
+{% endif %}
 
 <!-- Footer -->
 <footer class="bg-light py-2  border-top">

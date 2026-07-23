@@ -2017,12 +2017,20 @@ class SeoAeoTests(TestCase):
         self.assertContains(response, '"@type": "SearchAction"')
         self.assertContains(response, '"@type": "Organization"')
 
-    def test_search_page_has_static_service_description(self):
-        response = self.client.get(reverse("home"))
+    def test_static_service_description_visible_when_enabled(self):
+        with self.settings(DISPLAY_SERVICE_FOOTER=True):
+            response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "What is Sahakar AI?")
         self.assertContains(response, "How to ask better questions")
         self.assertContains(response, "Important disclaimer")
+
+    def test_static_service_description_hidden_by_default(self):
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "What is Sahakar AI?")
+        self.assertNotContains(response, "How to ask better questions")
+        self.assertNotContains(response, "Important disclaimer")
 
     def test_search_page_has_descriptive_alt_text(self):
         response = self.client.get(reverse("home"))
