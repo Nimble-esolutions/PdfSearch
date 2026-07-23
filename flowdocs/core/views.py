@@ -24,7 +24,16 @@ from django.utils import timezone
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent
 from .artifact_vault import ArtifactVault, ArtifactVaultError
-from .maintenance import queue_job, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations
+from .maintenance import (
+    archive_pdf,
+    deprecate_pdf,
+    promote_active_generation,
+    purge_expired_generations,
+    purge_generation,
+    queue_job,
+    restore_pdf,
+    rollback_to_generation,
+)
 from .forms import UploadForm
 from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
 from datetime import datetime
@@ -103,6 +112,7 @@ def can_access_pdf(user, pdf):
 
 def visible_pdfs(user, queryset=None, *, public=False):
     queryset = queryset if queryset is not None else PDFFile.objects.all()
+    queryset = queryset.exclude(lifecycle__in=("deprecated", "archived"))
     if public:
         return queryset.filter(
             folder__in=searchable_folders(user, public=True),
@@ -665,6 +675,39 @@ def delete_pdf(request, file_id):
     except Exception as e:
         messages.error(request, f"Error deleting PDF: {e}")
 
+    return safe_referer_redirect(request)
+
+
+@admin_required
+@require_POST
+def deprecate_pdf_view(request, pdf_id):
+    """Mark a PDF as deprecated — hides from search but preserves the row."""
+    pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    try:
+        deprecate_pdf(pdf, requested_by=request.user)
+        messages.success(request, f"Document '{pdf.title}' deprecated. It will no longer appear in search results.")
+    except Exception as exc:
+        messages.error(request, f"Cannot deprecate: {exc}")
+    return safe_referer_redirect(request)
+
+
+@admin_required
+@require_POST
+def archive_pdf_view(request, pdf_id):
+    """Mark a PDF as archived — hides from search and dashboard lists."""
+    pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    archive_pdf(pdf, requested_by=request.user)
+    messages.success(request, f"Document '{pdf.title}' archived.")
+    return safe_referer_redirect(request)
+
+
+@admin_required
+@require_POST
+def restore_pdf_view(request, pdf_id):
+    """Restore a deprecated or archived PDF to uploaded state."""
+    pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    restore_pdf(pdf, requested_by=request.user)
+    messages.success(request, f"Document '{pdf.title}' restored. It will be reindexed by the maintenance worker.")
     return safe_referer_redirect(request)
 
 

@@ -127,6 +127,15 @@
                   {% else %}
                     <span class="badge text-bg-warning">{% trans "Needs index" %}</span>
                   {% endif %}
+                  {% if pdf.lifecycle == 'deprecated' %}
+                    <span class="badge text-bg-secondary">{% trans "Deprecated" %}</span>
+                  {% elif pdf.lifecycle == 'archived' %}
+                    <span class="badge text-bg-dark">{% trans "Archived" %}</span>
+                  {% elif pdf.lifecycle == 'processing' %}
+                    <span class="badge text-bg-info">{% trans "Processing" %}</span>
+                  {% elif pdf.lifecycle == 'ready' %}
+                    <span class="badge text-bg-success">{% trans "Ready" %}</span>
+                  {% endif %}
                   {% if not pdf.uploaded_by %}
                     <span class="badge text-bg-light">{% trans "Owner review" %}</span>
                   {% endif %}
@@ -155,6 +164,29 @@
                               aria-label="{% trans 'Rename PDF' %}: {{ pdf.title }}">
                         {% trans "Rename" %}
                       </button>
+                      {% if pdf.lifecycle != 'deprecated' and pdf.lifecycle != 'archived' %}
+                        <form method="post" action="{% url 'deprecate_pdf' pdf.id %}" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-outline-secondary btn-sm"
+                                  onclick="return confirm('{% trans 'Deprecate this document? It will be hidden from search results.' %}')">
+                            {% trans "Deprecate" %}
+                          </button>
+                        </form>
+                        <form method="post" action="{% url 'archive_pdf' pdf.id %}" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-outline-dark btn-sm"
+                                  onclick="return confirm('{% trans 'Archive this document? It will be hidden from search and lists.' %}')">
+                            {% trans "Archive" %}
+                          </button>
+                        </form>
+                      {% else %}
+                        <form method="post" action="{% url 'restore_pdf' pdf.id %}" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-outline-success btn-sm">
+                            {% trans "Restore" %}
+                          </button>
+                        </form>
+                      {% endif %}
                       <form method="post" action="{% url 'delete_pdf' pdf.id %}" class="d-inline">
                         {% csrf_token %}
                         <button type="submit"

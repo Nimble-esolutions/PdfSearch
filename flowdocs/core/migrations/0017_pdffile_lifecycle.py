@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("core", "0013_artifactgeneration_maintenancejob"),
+        ("core", "0016_audit_validation_models"),
     ]
 
     operations = [

@@ -131,6 +131,32 @@ def purge_generation(generation_id, *, requested_by=None):
     return generation
 
 
+def deprecate_pdf(pdf, *, requested_by=None):
+    """Mark a PDF as deprecated — hides it from search but preserves the row and file."""
+    if pdf.lifecycle == "archived":
+        raise SearchDataIntegrityError("Cannot deprecate an archived document — restore it first")
+    pdf.lifecycle = "deprecated"
+    pdf.indexed = False
+    pdf.save(update_fields=["lifecycle", "indexed"])
+    return pdf
+
+
+def archive_pdf(pdf, *, requested_by=None):
+    """Mark a PDF as archived — hides it from search and dashboard lists."""
+    pdf.lifecycle = "archived"
+    pdf.indexed = False
+    pdf.save(update_fields=["lifecycle", "indexed"])
+    return pdf
+
+
+def restore_pdf(pdf, *, requested_by=None):
+    """Restore a deprecated or archived PDF to uploaded state, requeuing reindex."""
+    pdf.lifecycle = "uploaded"
+    pdf.indexed = False
+    pdf.save(update_fields=["lifecycle", "indexed"])
+    return pdf
+
+
 def queue_job(*, kind: str, requested_by, pdfs=None, folders=None, scope=None, options=None):
     """Create a resumable job and materialize its initial item set."""
     pdfs = list(pdfs or [])
@@ -283,7 +309,11 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
             if job.kind in {"reindex_needed", "reindex_all"}:
                 if item.pdf is None:
                     raise SearchDataIntegrityError("PDF no longer exists")
+                PDFFile.objects.filter(pk=item.pdf.pk).update(lifecycle="processing")
+                item.pdf.refresh_from_db()
                 precompute_pdf_embeddings(item.pdf)
+                PDFFile.objects.filter(pk=item.pdf.pk).update(lifecycle="ready")
+                item.pdf.refresh_from_db()
             elif job.kind == "repair_indexes":
                 if item.folder is None:
                     raise SearchDataIntegrityError("Category no longer exists")

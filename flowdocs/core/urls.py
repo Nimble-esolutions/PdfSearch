@@ -52,6 +52,9 @@ urlpatterns = [
     path("pdf/<int:pdf_id>/rename/", views.rename_pdf, name="rename_pdf"),
     path("pdf/<int:pdf_id>/owner/", views.assign_pdf_owner, name="assign_pdf_owner"),
     path("pdf/<int:file_id>/delete/", views.delete_pdf, name="delete_pdf"),
+    path("pdf/<int:pdf_id>/deprecate/", views.deprecate_pdf_view, name="deprecate_pdf"),
+    path("pdf/<int:pdf_id>/archive/", views.archive_pdf_view, name="archive_pdf"),
+    path("pdf/<int:pdf_id>/restore/", views.restore_pdf_view, name="restore_pdf"),
     path("pdf/<int:pdf_id>/public/", views.public_view_pdf, name="public_view_pdf"),
     path("pdf/<int:pdf_id>/view/", views.view_pdf, name="view_pdf"),
 ]
