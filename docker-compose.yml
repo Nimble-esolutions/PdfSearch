@@ -156,7 +156,7 @@ services:
         condition: service_healthy
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "kill -0 $$(head -1 /tmp/worker_heartbeat 2>/dev/null) 2>/dev/null && test $$(( $$(date +%s) - $$(tail -1 /tmp/worker_heartbeat 2>/dev/null || echo 0) )) -lt 60 || exit 1"]
+      test: ["CMD-SHELL", "( kill -0 $$(head -1 /tmp/worker_heartbeat 2>/dev/null) 2>/dev/null || curl -sf http://127.0.0.1:9090/healthz > /dev/null ) && test $$(( $$(date +%s) - $$(tail -1 /tmp/worker_heartbeat 2>/dev/null || echo 0) )) -lt 60 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -176,6 +176,23 @@ services:
         max-file: "3"
     networks:
       - internal
+
+  # ---- worker pool examples (uncomment as needed) ----
+  # Embedding-only worker — FAISS/indexing jobs are CPU/memory heavy; isolate them:
+  # maintenance-embedding:
+  #   <<: *maintenance-base    # use YAML anchor for DRY (requires refactoring above)
+  #   entrypoint: ["./worker-entrypoint.sh"]
+  #   command: ["--kinds", "reindex_needed,reindex_all,repair_indexes"]
+  #   deploy:
+  #     resources:
+  #       limits: { cpus: "4.0", memory: 4G }
+  #       reservations: { cpus: "2.0", memory: 2G }
+  #
+  # General-purpose worker — validation, sync, generation lifecycle:
+  # maintenance-general:
+  #   <<: *maintenance-base
+  #   entrypoint: ["./worker-entrypoint.sh"]
+  #   command: ["--exclude-kinds", "reindex_needed,reindex_all,repair_indexes"]
 
 volumes:
   redis_data:

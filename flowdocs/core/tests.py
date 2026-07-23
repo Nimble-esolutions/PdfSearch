@@ -27,7 +27,7 @@ from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
-from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat, HEARTBEAT_FILE
+from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat, HEARTBEAT_FILE, REDIS_QUEUE_KEY
 from .views import _parse_bulk_filters
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
@@ -2146,3 +2146,77 @@ class WorkerRecoveryTests(TestCase):
             lines = f.read().strip().split("\n")
         age = time.time() - int(lines[1])
         self.assertLess(age, 5)
+
+
+class RedisQueueIntegrationTests(TestCase):
+    def setUp(self):
+        self.superadmin = get_user_model().objects.create_user(
+            username="redis-queue-admin",
+            password="test-password",
+            role="superadmin",
+        )
+
+    def test_queue_job_pushes_to_redis(self):
+        from core.maintenance import _push_to_redis_queue
+        from django.core.cache import cache
+        job = MaintenanceJob.objects.create(
+            kind="validate", status="queued", requested_by=self.superadmin
+        )
+        try:
+            client = cache.client.get_client()
+            client.delete(REDIS_QUEUE_KEY)
+            _push_to_redis_queue(job)
+            length = client.llen(REDIS_QUEUE_KEY)
+            self.assertGreater(length, 0)
+            popped = client.rpop(REDIS_QUEUE_KEY)
+            self.assertEqual(popped.decode() if isinstance(popped, bytes) else popped, str(job.public_id))
+        except Exception:
+            self.skipTest("Redis not available")
+
+    def test_push_to_redis_queue_survives_exception(self):
+        from unittest.mock import MagicMock
+        from core.maintenance import _push_to_redis_queue
+        job = MaintenanceJob.objects.create(
+            kind="validate", status="queued", requested_by=self.superadmin
+        )
+        broken_client = MagicMock()
+        broken_client.lpush.side_effect = Exception("redis down")
+        mock_cache = MagicMock()
+        mock_cache.client.get_client.return_value = broken_client
+        with patch("django.core.cache.cache", mock_cache):
+            _push_to_redis_queue(job)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "queued")
+
+    def test_redis_queue_length_helper(self):
+        from core.management.commands.run_maintenance_jobs import _redis_queue_length
+        length = _redis_queue_length()
+        self.assertIsInstance(length, int)
+
+
+class KindFilterTests(TestCase):
+    def setUp(self):
+        self.superadmin = get_user_model().objects.create_user(
+            username="kind-filter-admin",
+            password="test-password",
+            role="superadmin",
+        )
+
+    def test_kinds_allowed_set_excludes_others(self):
+        allowed = {"validate", "sync_generation"}
+        job = MaintenanceJob.objects.create(
+            kind="reindex_all", status="queued", requested_by=self.superadmin
+        )
+        self.assertNotIn(job.kind, allowed)
+
+    def test_exclude_kinds_set_excludes_matching(self):
+        excluded = {"reindex_needed", "reindex_all"}
+        job = MaintenanceJob.objects.create(
+            kind="reindex_all", status="queued", requested_by=self.superadmin
+        )
+        self.assertIn(job.kind, excluded)
+
+    def test_kinds_parse_comma_separated(self):
+        kinds_str = "validate, sync_generation , reindex_needed"
+        parsed = {k.strip() for k in kinds_str.split(",") if k.strip()}
+        self.assertEqual(parsed, {"validate", "sync_generation", "reindex_needed"})

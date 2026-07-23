@@ -180,7 +180,17 @@ def queue_job(*, kind: str, requested_by, pdfs=None, folders=None, scope=None, o
                 for folder in folders
             ])
     _audit(job=job, event_type="queued", actor=requested_by, payload={"kind": kind, "total_items": job.total_items})
+    _push_to_redis_queue(job)
     return job
+
+
+def _push_to_redis_queue(job):
+    try:
+        from django.core.cache import cache
+        client = cache.client.get_client()
+        client.lpush("maintenance:queue", str(job.public_id))
+    except Exception:
+        pass
 
 
 def claim_next_job():
