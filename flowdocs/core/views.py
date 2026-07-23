@@ -1214,6 +1214,7 @@ def search_query(request):
                     "edit?usp=sharing"
                 ),
                 "welcome_help_label": gettext("Click Here"),
+                "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
             },
         )
 
