@@ -491,6 +491,17 @@ def sync_active_generation(*, requested_by=None, job=None):
             snapshot.close()
             source.close()
 
+        from .activate import validate_generation_coherence
+        try:
+            coherence = validate_generation_coherence(snapshot_path.parent)
+            if not coherence.get("coherent"):
+                raise SearchDataIntegrityError(
+                    f"Coherence validation failed: {coherence.get('checks', {})}"
+                )
+        except SearchDataIntegrityError:
+            release_lease_safe(lease)
+            raise
+
         manifest = build_manifest(
             root,
             database_path=snapshot_path,
@@ -635,6 +646,19 @@ def stage_generation(generation_id: str, *, requested_by=None):
     (staging_root / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
     )
+    db_entries = [e for e in manifest["files"] if e.get("artifact_type") == "database"]
+    if db_entries:
+        db_path = artifacts_root / db_entries[0]["object_key"]
+        if db_path.is_file():
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            try:
+                integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+                if integrity != "ok":
+                    raise SearchDataIntegrityError(
+                        f"Staged database integrity check failed: {integrity}"
+                    )
+            finally:
+                conn.close()
     gen = ArtifactGeneration.objects.update_or_create(
         generation_id=generation_id,
         defaults={

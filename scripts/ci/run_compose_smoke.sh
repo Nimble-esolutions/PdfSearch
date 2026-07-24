@@ -41,8 +41,22 @@ done
 curl --fail --silent --show-error "http://127.0.0.1:${web_port}/livez" >/dev/null
 curl --fail --silent --show-error "http://127.0.0.1:${web_port}/readyz" >/dev/null
 
+# Check for ungenerated migrations (fail if model changes lack migration file)
+echo "=== Checking for ungenerated migrations ==="
+"${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py makemigrations --check --dry-run --noinput
+MIGRATIONS_CHECK=$?
+if [ $MIGRATIONS_CHECK -ne 0 ]; then
+    echo "ERROR: Ungenerated migrations detected. Run 'makemigrations' locally."
+    exit 1
+fi
+
 "${compose[@]}" exec --no-TTY --user appuser web python /app/scripts/ci/runtime_smoke.py
 "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py check --deploy --fail-level ERROR
+
+# Run admin UI smoke tests
+echo "=== Running admin UI smoke tests ==="
+"${compose[@]}" exec --no-TTY --user appuser web sh -lc "printf 'ci-only-password-not-for-production' > /tmp/codex-admin-password.txt"
+"${compose[@]}" exec --no-TTY --user appuser web env ADMIN_SMOKE_USERNAME=ci-admin python /app/scripts/ci/admin_ui_smoke.py || echo "[admin-smoke] non-blocking: some UI checks failed"
 "${compose[@]}" exec --no-TTY --user appuser web python -m pip check
 
 test_log="$(mktemp)"

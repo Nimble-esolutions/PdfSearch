@@ -83,7 +83,7 @@ prevents production credentials from being used in a misconfigured environment.
 
 `side_effects.py` gates all external calls (email, AI embeddings, AI chat)
 through `EXTERNAL_SIDE_EFFECTS_MODE`. In `disabled` mode, all external calls
-are no-ops. In `dry_run` mode, calls are logged but not executed. Only
+are no-ops. In `sandbox` mode, calls return fake responses. Only
 `enabled` mode permits real external communication. The email backend in
 `settings.py` is also gated by environment identity.
 
@@ -110,3 +110,14 @@ role. Only one instance may hold the writer lease at any time. The writer
 record is stored as a CAS-guarded object in the artifact vault. Writer
 handover requires an explicit epoch increment and takeover ceremony with a
 recorded reason. This prevents split-brain publication races.
+
+## Known Accepted Risks (2026-07-24)
+
+### Health Endpoint Authentication
+All health endpoints (`/livez`, `/readyz`, `/health/data/`, `/health/lease/`, `/health/metrics/`) are intentionally unauthenticated. They are only accessible via Traefik reverse proxy on the internal Docker network (port 8000 bound to 127.0.0.1). They must never be exposed on a public interface.
+
+### Environment Variable Secrets
+Credentials (`SECRET_KEY`, `OPENAI_API_KEY`, `ARTIFACT_VAULT_ACCESS_KEY`, `ARTIFACT_VAULT_SECRET_KEY`, `DJANGO_SUPERUSER_PASSWORD`) are passed as environment variables rather than Docker secrets. This is the current Dokploy deployment model. Migration to Docker secrets is planned for a future release.
+
+### API Key Export in start.sh
+`OPENAI_API_KEY` is exported in the entrypoint script for runtime availability. This makes it visible in `/proc/<pid>/environ` for processes with container access. Mitigation: production containers are single-purpose with no multi-tenant access.

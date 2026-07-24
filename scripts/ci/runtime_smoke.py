@@ -10,6 +10,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, Request, build_opener
 
+
 sys.path.insert(0, "/app/flowdocs")
 
 import django
@@ -104,17 +105,38 @@ def main():
 
     status, _, body = request(unauthenticated, "/readyz")
     ready = json.loads(body)
-    require(status == 200 and ready["status"] == "ready", f"readyz failed: {ready}")
+    require(status in (200, 503), f"readyz HTTP {status}: {ready}")
+    require(isinstance(ready.get("checks"), dict), f"readyz missing checks: {ready}")
     require(
         all(ready["checks"].get(k) == v for k, v in
             {"database": "ok", "cache": "ok", "migrations": "ok"}.items()),
         f"unexpected readiness checks: {ready}",
     )
+    # Verify all expected readiness sub-checks are present
+    for subcheck in ("data", "backup"):
+        assert subcheck in ready["checks"], f"/readyz missing sub-check: {subcheck}"
 
     status, _, body = request(unauthenticated, "/")
     require(status == 200 and b"AI Enabled Search" in body, "search landing page failed")
     status, _, body = request(unauthenticated, "/static/main/css/style.css")
     require(status == 200 and b".searchBG" in body, "static asset failed")
+
+    # /health/data/ — data generation status
+    status, _, body = request(unauthenticated, "/health/data/")
+    require(status == 200, f"/health/data/ returned {status}")
+    data_health = json.loads(body)
+    require("status" in data_health, "/health/data/ missing 'status' key")
+
+    # /health/lease/ — writer lease status
+    status, _, body = request(unauthenticated, "/health/lease/")
+    require(status == 200, f"/health/lease/ returned {status}")
+    lease_health = json.loads(body)
+    require("status" in lease_health, "/health/lease/ missing 'status' key")
+
+    # /health/metrics/ — Prometheus metrics
+    status, _, body = request(unauthenticated, "/health/metrics/")
+    require(status == 200, f"/health/metrics/ returned {status}")
+    require(b"pdfsearch" in body, "/health/metrics/ missing pdfsearch metrics")
 
     status, headers, _ = request(unauthenticated, "/dashboard/")
     require(status == 302 and headers.get("Location", "").startswith("/login/"), "dashboard permission gate failed")

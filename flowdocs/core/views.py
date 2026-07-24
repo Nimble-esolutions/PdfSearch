@@ -1,9 +1,43 @@
 # views.py (optimized)
-import traceback
+import functools
 import hashlib
+import logging
 import os
 import time
 from functools import wraps
+
+logger = logging.getLogger(__name__)
+
+import redis as redis_lib
+
+
+def rate_limit(max_attempts: int = 5, window_seconds: int = 60):
+    """Decorator: rate-limit by client IP using Redis."""
+    def decorator(view_func):
+        @functools.wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            if request.method != "POST":
+                return view_func(request, *args, **kwargs)
+            try:
+                r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis:6379/1"))
+                client_ip = request.META.get("REMOTE_ADDR", "unknown")
+                key = f"ratelimit:login:{client_ip}"
+                attempts = r.get(key)
+                if attempts and int(attempts) >= max_attempts:
+                    from django.http import HttpResponse
+                    return HttpResponse(
+                        "Too many login attempts. Try again later.",
+                        status=429,
+                    )
+                pipe = r.pipeline()
+                pipe.incr(key)
+                pipe.expire(key, window_seconds)
+                pipe.execute()
+            except Exception:
+                pass
+            return view_func(request, *args, **kwargs)
+        return wrapper
+    return decorator
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.contrib.auth.decorators import login_required
@@ -318,22 +352,39 @@ def readyz(request):
         checks["backup"] = "error"
 
     ready = all(value in ("ok", "not_configured", "empty") for value in checks.values())
-    return JsonResponse({"status": "ready" if ready else "not_ready", "checks": checks}, status=200 if ready else 503)
+    response = {"status": "ready" if ready else "not_ready", "checks": checks}
+
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+    if env_identity is not None:
+        response["data_mode"] = env_identity.data_mode.value
+    else:
+        response["data_mode"] = None
+
+    try:
+        active_gen = ArtifactGeneration.objects.filter(status="active").order_by("-promoted_at").first()
+        if active_gen:
+            age = timezone.now() - active_gen.created_at
+            response["generation_age_hours"] = round(age.total_seconds() / 3600, 1)
+    except Exception:
+        pass
+
+    return JsonResponse(response, status=200 if ready else 503)
 
 
 
 def _data_readiness_check():
-    env_identity = getattr(settings, "ENV_IDENTITY", None)
-    if env_identity is None:
-        return "not_configured"
-    if env_identity.data_mode.value in ("empty", "seed"):
-        return "ok"
-    if not PDFFile.objects.exists():
-        return "empty" if env_identity.data_mode.value == "local" else "ok"
-    indexed = PDFFile.objects.filter(indexed=True).count()
+    from .models import PDFFile
     total = PDFFile.objects.count()
-    if total > 0 and indexed == 0:
+    indexed = PDFFile.objects.filter(
+        lifecycle__in=("ready", "processing")
+    ).count()
+    if total == 0:
+        return "empty"
+    ratio = indexed / total if total > 0 else 0
+    if ratio < 0.5:
         return "degraded"
+    if ratio < 0.9:
+        return "partial"
     return "ok"
 
 
@@ -418,6 +469,7 @@ def register_view(request):
     return render(request, 'register.html', {'form': form})
 
 #===========================Login view==========================
+@rate_limit(max_attempts=5, window_seconds=60)
 def login_view(request):
     next_url = _safe_login_destination(request)
     if request.method == "POST":
@@ -821,14 +873,14 @@ def dashboard(request, folder_id=None):
                         # the same transaction as the PDF row.
                         precompute_pdf_embeddings(pdf)
                 except Exception:
-                    traceback.print_exc()
+                    logger.exception("PDF upload preprocessing or indexing failed")
                     try:
                         if pdf.pk:
                             pdf.delete()
                         elif pdf.file:
                             pdf.file.delete(save=False)
                     except Exception:
-                        traceback.print_exc()
+                        logger.exception("Failed to clean up PDF after preprocessing failure")
                     form.add_error(
                         None,
                         "PDF upload failed during preprocessing or indexing. "
@@ -1482,7 +1534,7 @@ def search_query(request):
             })
 
         except SearchDataIntegrityError:
-            traceback.print_exc()
+            logger.exception("Search integrity error")
             return JsonResponse(
                 {
                     "error": "search_unavailable",
@@ -1492,7 +1544,7 @@ def search_query(request):
                 status=503,
             )
         except Exception:
-            traceback.print_exc()
+            logger.exception("Unhandled search error")
             return JsonResponse({
                 "error": "search_failed",
                 "detail": "The search request could not be completed. Please try again later.",

@@ -1,0 +1,65 @@
+groups:
+  - name: pdfsearch
+    rules:
+      - alert: PdfSearchDataNotReady
+        expr: pdfsearch_data_ready == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PdfSearch data is not ready"
+          description: "pdfsearch_data_ready has been 0 for 5 minutes on {{ $labels.instance }}."
+
+      - alert: PdfSearchMaintenanceQueueBacklog
+        expr: pdfsearch_maintenance_queue_depth > 10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PdfSearch maintenance queue backlog"
+          description: "Queue depth is {{ $value }} on {{ $labels.instance }} for 15 minutes."
+
+      - alert: PdfSearchBackupStale
+        expr: pdfsearch_backup_dirty_age_seconds > 86400
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "PdfSearch backup is stale"
+          description: "Backup dirty age is {{ $value }}s (>24h) on {{ $labels.instance }}."
+
+      - alert: PdfSearchGenerationStale
+        expr: pdfsearch_current_generation_age_seconds > 604800
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "PdfSearch generation is stale"
+          description: "Current generation is {{ $value }}s old (>7 days) on {{ $labels.instance }}."
+
+      - alert: PdfSearchWorkerDead
+        expr: pdfsearch_worker_heartbeat_age_seconds > 120
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PdfSearch maintenance worker is dead"
+          description: "Worker heartbeat is {{ $value }}s old on {{ $labels.instance }}."
+
+      - alert: PdfSearchBackupFailures
+        expr: pdfsearch_backup_failure_count > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PdfSearch backup failures detected"
+          description: "{{ $value }} backup failures in last 24h on {{ $labels.instance }}."
+
+      - alert: PdfSearchVaultSyncFailures
+        expr: pdfsearch_vault_sync_failure_count > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PdfSearch vault sync failures"
+          description: "{{ $value }} vault sync failures in last 24h on {{ $labels.instance }}."

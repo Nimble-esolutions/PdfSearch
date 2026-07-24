@@ -101,9 +101,24 @@ fi
 
 TIMESTAMP=$(date +%F_%H%M%S)
 if [ -s "$DB_PATH" ]; then
+    echo "[db] Running integrity check..."
+    INTEGRITY=$(sqlite3 "$DB_PATH" "PRAGMA integrity_check")
+    if [ "$INTEGRITY" != "ok" ]; then
+        echo "[db] FATAL: database integrity check failed: $INTEGRITY" >&2
+        exit 1
+    fi
+    echo "[db] Integrity check: ok"
+
     BACKUP_FILE="$BACKUP_DIR/db_backup_$TIMESTAMP.sqlite3"
     echo "[backup] Creating consistent SQLite snapshot"
     sqlite3 "$DB_PATH" ".backup '$BACKUP_FILE'"
+
+    BACKUP_OK=$(sqlite3 "$BACKUP_FILE" "PRAGMA integrity_check")
+    if [ "$BACKUP_OK" != "ok" ]; then
+        echo "[backup] WARNING: emergency backup integrity check failed: $BACKUP_OK" >&2
+    else
+        echo "[backup] Emergency backup verified: ok"
+    fi
 fi
 
 cd /app/flowdocs
@@ -115,6 +130,14 @@ fi
 
 echo "[migrate] Running Django migrations"
 python manage.py migrate --noinput
+
+echo "[db] Running post-migration integrity check..."
+POST_INTEGRITY=$(sqlite3 "$DB_PATH" "PRAGMA integrity_check")
+if [ "$POST_INTEGRITY" != "ok" ]; then
+    echo "[db] FATAL: post-migration integrity check failed: $POST_INTEGRITY" >&2
+    exit 1
+fi
+echo "[db] Post-migration integrity: ok"
 
 if [ "$SEED_DB_COPIED" = "1" ] || [ -f "$SEED_VALIDATION_MARKER" ]; then
     echo "[data] Validating declared seed media before Gunicorn"
@@ -150,6 +173,17 @@ if getattr(user, "role", None) != "superadmin":
     print("Reconciled configured superuser application role")
 '
 fi
+
+echo "[activation] Reconciling incomplete activations..."
+python manage.py shell -c "
+from core.activation_journal import reconcile_incomplete_activations
+actions = reconcile_incomplete_activations()
+if actions:
+    for a in actions:
+        print(f'[activation] Recovery: {a[\"activation_id\"]} -> {a[\"action_taken\"]}')
+else:
+    print('[activation] No incomplete activations found')
+"
 
 if [ -n "$(ls -A "$CHROMA_DIR" 2>/dev/null)" ]; then
     echo "[chroma] $(find "$CHROMA_DIR" -type f | wc -l | tr -d ' ') files present"
