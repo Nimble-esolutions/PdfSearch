@@ -47,7 +47,11 @@ def _recover_orphaned_jobs():
         status="running",
         started_at__lt=cutoff,
     )
+    recovered = 0
     for job in orphaned:
+        if job.kind == "sync_generation":
+            _release_writer_lock_for_orphaned_job(job)
+
         job.status = "queued"
         job.started_at = None
         job.save(update_fields=["status", "started_at"])
@@ -56,14 +60,52 @@ def _recover_orphaned_jobs():
             event_type="worker_died",
             payload={
                 "previous_status": "running",
-                "started_at": str(job.started_at),
-                "note": "Recovered after worker restart; previous run may have crashed.",
+                "started_at": str(cutoff),
+                "writer_lock_released": job.kind == "sync_generation",
+                "reason": "stale_running_job_recovered",
             },
         )
         job.items.filter(status="running").update(
             status="queued", started_at=None
         )
-    return orphaned.count()
+        recovered += 1
+
+    if recovered:
+        print(f"[worker] Recovered {recovered} orphaned job(s)")
+
+    return recovered
+
+
+def _release_writer_lock_for_orphaned_job(job):
+    """Release any held global writer lock for an orphaned sync job."""
+    try:
+        from core.maintenance import get_global_writer, release_global_writer
+        from core.maintenance import get_lease_status as _get_lease_status
+
+        writer_status = get_global_writer()
+        if writer_status and writer_status.get("lease_held"):
+            lease_info = writer_status.get("lease", {})
+            held_by = lease_info.get("instance_id", "")
+            current_instance = os.environ.get("INSTANCE_ID", "")
+            if held_by == current_instance or not held_by:
+                release_global_writer(
+                    reason=f"Crash recovery for orphaned job {job.public_id}"
+                )
+                print(f"[worker] Released stale writer lock for job {job.public_id}")
+
+        try:
+            lease_status = _get_lease_status()
+            if lease_status and lease_status.get("held"):
+                held_by = lease_status.get("instance_id", "")
+                if held_by == current_instance or not held_by:
+                    from django.core.cache import cache
+                    cache.delete("global_writer_lease")
+                    print(f"[worker] Released stale cache lease for {job.public_id}")
+        except Exception:
+            pass
+
+    except Exception as e:
+        print(f"[worker] Could not release writer lock for {job.public_id}: {e}")
 
 
 _scheduler_logged_reason = False
