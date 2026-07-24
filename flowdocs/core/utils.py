@@ -149,13 +149,7 @@ def create_embeddings_for_texts(texts: List[str], batch_size: int = 16) -> List[
     """Call OpenAI embeddings in batches. Returns list of lists (embeddings)."""
     if _test_embeddings_enabled():
         return _deterministic_embeddings(texts)
-    if not client:
-        raise RuntimeError("OpenAI not configured")
-    embeddings = []
-    # batch manually to reduce large payloads
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        resp = _get_client().embeddings.create(model=OPENAI_EMBED_MODEL, input=batch)
+    resp = _get_client().embeddings.create(model=OPENAI_EMBED_MODEL, input=batch)
         # depending on SDK, resp.data may be iterable
         for d in resp.data:
             embeddings.append(list(d.embedding))
@@ -463,8 +457,6 @@ def search_pdfs_fast(
         if _test_embeddings_enabled():
             query_emb = np.array(_deterministic_embeddings([user_query])[0], dtype=np.float32)
         else:
-            if not client:
-                raise RuntimeError("OpenAI not configured")
             emb_resp = _get_client().embeddings.create(model=OPENAI_EMBED_MODEL, input=[user_query])
             query_emb = np.array(emb_resp.data[0].embedding, dtype=np.float32)
     except Exception as exc:
@@ -588,7 +580,7 @@ def generate_gpt_answer(
     if cached:
         return cached
 
-    if not client:
+    if not _get_client():
         return "OpenAI API key not configured."
 
     if language == "mr":
