@@ -851,11 +851,15 @@ def folder_operations(request, folder_id):
     messages.error(request, "Unknown folder maintenance action.")
     return redirect("dashboard_folder", folder_id=folder.pk)
 
-# ---------------- Home View ----------------
-def home_view(request):
-    return render(request, 'home.html')
+# ---------------- DPDA / Legal Pages ----------------
+def privacy_view(request):
+    return render(request, "privacy.html", {"title": "Privacy Policy"})
 
+def terms_view(request):
+    return render(request, "terms.html", {"title": "Terms of Service"})
 
+def data_policy_view(request):
+    return render(request, "data_policy.html", {"title": "Data Policy"})
 
 
 # -------------- Dashboard upload: call precompute on upload --------------
@@ -1661,6 +1665,50 @@ def operations_lease(request):
     except Exception:
         status = None
     return JsonResponse({"dataset_id": ds_id, "lease_held": status is not None, "lease": status})
+
+
+@superadmin_required
+def s3_operations_view(request):
+    """Dedicated S3 artifact vault and bulk operations page."""
+    from .models import ArtifactGeneration
+
+    generations = ArtifactGeneration.objects.all().order_by("-created_at")
+    active_gen = generations.filter(status="active").first()
+
+    vault_healthy = False
+    vault_error = ""
+    vault_manifests = []
+    vault_config = {}
+    try:
+        vault = ArtifactVault()
+        if vault.enabled:
+            vault_config = {
+                "endpoint": vault.config.endpoint,
+                "bucket": vault.config.bucket,
+                "region": vault.config.region,
+            }
+            vault_manifests = [
+                {"key": m.key, "sha256": m.sha256[:16], "size": m.size}
+                for m in vault.list_manifests()
+            ]
+            vault_healthy = True
+    except Exception as exc:
+        vault_error = str(exc)[:200]
+
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+
+    context = {
+        "title": "S3 Artifact Vault & Operations",
+        "generations": generations,
+        "active_generation": active_gen,
+        "vault_healthy": vault_healthy,
+        "vault_error": vault_error,
+        "vault_manifests": vault_manifests,
+        "vault_config": vault_config,
+        "backup_role": env_identity.backup_role.value if env_identity else "unknown",
+        "vault_enabled": getattr(env_identity, "is_backup_writer", False),
+    }
+    return render(request, "dashboard_s3ops.html", context)
 
 
 ALLOWED_SETTING_KEYS = {
