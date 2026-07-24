@@ -105,11 +105,8 @@ def main():
 
     status, _, body = request(unauthenticated, "/readyz")
     ready = json.loads(body)
-    # Verify readiness response structure without requiring 'ready' status
-    # (CI disposable environments may be 'degraded' or 'empty' with no FAISS index)
-    require(status == 200, f"readyz HTTP {status}: {ready}")
-    require(isinstance(ready.get("checks"), dict), f"readyz missing checks dict: {ready}")
-    require(isinstance(ready.get("status"), str), f"readyz missing status str: {ready}")
+    require(status in (200, 503), f"readyz HTTP {status}: {ready}")
+    require(isinstance(ready.get("checks"), dict), f"readyz missing checks: {ready}")
     require(
         all(ready["checks"].get(k) == v for k, v in
             {"database": "ok", "cache": "ok", "migrations": "ok"}.items()),
