@@ -720,6 +720,7 @@ class SearchAndAuthenticationTests(TestCase):
         response = self.client.get(reverse("home"))
         self.assertContains(response, 'class="public-search-topbar"')
         self.assertContains(response, 'class="public-search-header"')
+        self.assertContains(response, 'class="public-search-identity__wordmark"')
         self.assertContains(response, 'aria-label="Public service links"')
         self.assertContains(response, 'id="search-page-heading"')
         self.assertContains(response, 'aria-label="Search answers"')
@@ -815,7 +816,7 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
 
     def test_search_template_uses_text_rendering_and_resets_request_state(self):
-        response = self.client.get(reverse("search_query"))
+        response = self.client.get(reverse("search_query"), follow=True)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "search.js")
@@ -2095,7 +2096,9 @@ class SeoAeoTests(TestCase):
         self.assertIn("<?xml", content)
         self.assertIn("<urlset", content)
         self.assertIn("https://ai-sahakar.net/", content)
-        self.assertIn("https://ai-sahakar.net/search/", content)
+        self.assertNotIn("https://ai-sahakar.net/search/", content)
+        self.assertNotIn("https://ai-sahakar.net/livez", content)
+        self.assertNotIn("https://ai-sahakar.net/readyz", content)
         self.assertIn("<lastmod>", content)
         self.assertIn("<priority>", content)
 
@@ -2116,8 +2119,8 @@ class SeoAeoTests(TestCase):
         self.assertContains(response, 'type="application/ld+json"')
         self.assertContains(response, '"@type": "WebSite"')
         self.assertContains(response, '"@type": "FAQPage"')
-        self.assertContains(response, '"@type": "SearchAction"')
         self.assertContains(response, '"@type": "Organization"')
+        self.assertContains(response, '"@type": "WebPage"')
 
     def test_static_service_description_visible_when_enabled(self):
         with self.settings(DISPLAY_SERVICE_FOOTER=True):
@@ -2127,12 +2130,23 @@ class SeoAeoTests(TestCase):
         self.assertContains(response, "How to ask better questions")
         self.assertContains(response, "Important disclaimer")
 
-    def test_static_service_description_hidden_by_default(self):
+    def test_core_service_description_is_visible_by_default(self):
         response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "What is Sahakar AI?")
+        self.assertContains(response, "What is Sahakar AI?")
+        self.assertContains(response, "Common questions")
+        self.assertContains(response, "seo-support")
+
+    def test_extended_service_description_can_be_disabled(self):
+        with self.settings(DISPLAY_SERVICE_FOOTER=False):
+            response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "How to ask better questions")
         self.assertNotContains(response, "Important disclaimer")
+
+    def test_search_page_is_canonicalized_to_homepage(self):
+        response = self.client.get(reverse("search_query"))
+        self.assertRedirects(response, reverse("home"), status_code=301)
 
     def test_search_page_has_descriptive_alt_text(self):
         response = self.client.get(reverse("home"))
@@ -2140,12 +2154,12 @@ class SeoAeoTests(TestCase):
         self.assertNotContains(response, 'alt="Banner"')
         self.assertNotContains(response, 'alt="Logo 4"')
 
-    def test_search_page_has_hreflang_alternates(self):
+    def test_search_page_does_not_claim_unstable_hreflang_alternates(self):
         response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'hreflang="en"')
-        self.assertContains(response, 'hreflang="mr"')
-        self.assertContains(response, 'hreflang="x-default"')
+        self.assertNotContains(response, 'hreflang="en"')
+        self.assertNotContains(response, 'hreflang="mr"')
+        self.assertNotContains(response, 'hreflang="x-default"')
 
     def test_validate_public_html_script_passes(self):
         response = self.client.get(reverse("home"))
