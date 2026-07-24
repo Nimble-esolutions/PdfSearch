@@ -320,3 +320,32 @@ class MaintenanceAuditEvent(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class SiteSetting(models.Model):
+    """Runtime-overridable site settings persisted in the database.
+
+    Settings are read in order: database → cache → environment variable.
+    A value stored here takes precedence over the corresponding
+    environment variable.  This allows superadmins to toggle feature
+    flags without restarting the container.
+    """
+
+    key = models.CharField(max_length=128, unique=True)
+    value = models.TextField(blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Site Setting"
+        verbose_name_plural = "Site Settings"
+        ordering = ["key"]
+
+    def __str__(self):
+        return f"{self.key} = {self.value[:60]}" if self.value else f"{self.key} (empty)"

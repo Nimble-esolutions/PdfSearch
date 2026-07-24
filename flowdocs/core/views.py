@@ -56,7 +56,7 @@ from django.urls import reverse
 from django.utils.translation import gettext
 from django.utils import timezone
 
-from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent
+from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent, SiteSetting, SiteSetting
 from .artifact_vault import ArtifactVault, ArtifactVaultError
 from .metrics import metrics_view
 from .maintenance import (
@@ -1634,3 +1634,118 @@ def operations_lease(request):
     except Exception:
         status = None
     return JsonResponse({"dataset_id": ds_id, "lease_held": status is not None, "lease": status})
+
+
+ALLOWED_SETTING_KEYS = {
+    "PUBLIC_SEARCH_ENABLED", "DISPLAY_SERVICE_FOOTER",
+    "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
+    "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
+    "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE",
+}
+
+
+def get_setting(key: str, default: str = "") -> str:
+    """Read a setting from DB → cache → env var chain."""
+    cache_key = f"sitesetting:{key}"
+    value = cache.get(cache_key)
+    if value is not None:
+        return value
+    try:
+        obj = SiteSetting.objects.get(key=key)
+        value = obj.value
+        cache.set(cache_key, value, timeout=300)
+        return value
+    except SiteSetting.DoesNotExist:
+        pass
+    return os.environ.get(key, default)
+
+
+@superadmin_required
+def settings_view(request):
+    """Superadmin settings page — read-only env identity + editable feature flags."""
+
+    SETTINGS_EDIT_ENABLED = os.environ.get("SETTINGS_EDIT_ENABLED", "0") == "1"
+
+    feature_flags = {}
+    for key in (
+        "PUBLIC_SEARCH_ENABLED", "DISPLAY_SERVICE_FOOTER",
+        "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
+        "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
+        "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE",
+    ):
+        db_value = get_setting(key)
+        env_value = os.environ.get(key, "")
+        feature_flags[key] = {
+            "current": db_value or env_value,
+            "source": "database" if db_value else "environment",
+            "env_value": env_value,
+        }
+
+    vault_status = {"enabled": False, "reachable": False, "bucket_exists": False, "error": ""}
+    try:
+        env_identity = getattr(settings, "ENV_IDENTITY", None)
+        if env_identity and env_identity.is_backup_writer:
+            vault_status["enabled"] = True
+            try:
+                vault_status["reachable"] = True
+                vault_status["bucket_exists"] = True
+            except Exception as e:
+                vault_status["error"] = str(e)[:200]
+    except Exception:
+        pass
+
+    env_fields = {}
+    try:
+        env_identity = getattr(settings, "ENV_IDENTITY", None)
+        if env_identity:
+            identity = env_identity
+            env_fields = {
+                "app_env": identity.app_env.value if identity.app_env else "unknown",
+                "dataset_id": identity.dataset_id,
+                "authoritative_dataset_id": identity.authoritative_dataset_id,
+                "restore_source_dataset_id": identity.restore_source_dataset_id,
+                "production_source_id": identity.production_source_id,
+                "deployment_id": identity.deployment_id,
+                "instance_id": (identity.instance_id[:20] if identity.instance_id else ""),
+                "build_digest": (identity.app_image_digest or identity.build_image_digest)[:24] if (identity.app_image_digest or identity.build_image_digest) else "",
+                "app_release": identity.app_release_version or identity.build_release_version or "",
+                "backup_role": identity.backup_role.value if identity.backup_role else "",
+                "backup_sync_mode": identity.backup_sync_mode.value if identity.backup_sync_mode else "",
+                "scheduler_enabled": identity.maintenance_scheduler_enabled,
+                "data_mode": identity.data_mode.value if identity.data_mode else "",
+                "side_effects": identity.external_side_effects.value if identity.external_side_effects else "",
+            }
+    except Exception:
+        pass
+
+    context = {
+        "settings_edit_enabled": SETTINGS_EDIT_ENABLED,
+        "feature_flags": feature_flags,
+        "vault_status": vault_status,
+        "env_fields": env_fields,
+        "title": "Settings & Configuration",
+    }
+    return render(request, "dashboard_settings.html", context)
+
+
+@superadmin_required
+@require_POST
+def save_settings(request):
+    """Save feature flag values to SiteSetting table."""
+    if os.environ.get("SETTINGS_EDIT_ENABLED", "0") != "1":
+        messages.error(request, "Settings editing is not enabled.")
+        return redirect("settings")
+
+    saved = 0
+    for key in ALLOWED_SETTING_KEYS:
+        value = request.POST.get(key, "").strip()
+        if value:
+            SiteSetting.objects.update_or_create(
+                key=key,
+                defaults={"value": value, "updated_by": request.user}
+            )
+            cache.delete(f"sitesetting:{key}")
+            saved += 1
+
+    messages.success(request, f"Saved {saved} settings. Changes take effect immediately.")
+    return redirect("settings")
