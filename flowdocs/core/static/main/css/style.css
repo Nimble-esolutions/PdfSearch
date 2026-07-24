@@ -804,6 +804,164 @@ body {
   }
 }
 
+/* Keep legacy admin templates inside the Hallmark system while they are
+   incrementally upgraded. This is intentionally scoped to the admin shell. */
+.admin-shell .card {
+  border-color: var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-shell .card-header {
+  border-bottom-color: var(--admin-border);
+  background: var(--admin-primary-strong) !important;
+  color: var(--admin-surface) !important;
+  font-weight: 700;
+}
+
+.admin-shell .card-header.bg-warning {
+  background: var(--admin-gold) !important;
+  color: var(--admin-text) !important;
+}
+
+.admin-shell .card-header.bg-dark {
+  background: var(--admin-text) !important;
+}
+
+.admin-shell .card-body,
+.admin-shell .list-group-item {
+  background: var(--admin-surface);
+}
+
+.admin-shell .table {
+  --bs-table-bg: var(--admin-surface);
+  --bs-table-striped-bg: #f8f3eb;
+  --bs-table-hover-bg: #f4eadb;
+  color: var(--admin-text);
+  margin-bottom: 0;
+}
+
+.admin-shell .table thead th {
+  border-bottom-color: var(--admin-border);
+  background: var(--admin-surface-muted);
+  color: var(--admin-text);
+  font-weight: 700;
+}
+
+.admin-shell .table-responsive {
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+}
+
+.admin-shell .admin-upload-panel,
+.admin-shell .admin-empty-state {
+  background: var(--admin-surface);
+}
+
+.cockpit-hero {
+  background: var(--admin-surface);
+}
+
+.admin-category-card:hover {
+  border-color: var(--admin-gold);
+  box-shadow: 0 8px 18px rgba(92, 15, 27, 0.1);
+}
+
+.job-drawer-toggle {
+  background: var(--admin-primary) !important;
+  border-color: var(--admin-primary-strong) !important;
+}
+
+.job-drawer-toggle:hover,
+.job-drawer-toggle:focus-visible {
+  background: var(--admin-primary-strong) !important;
+}
+
+.job-drawer {
+  border-color: var(--admin-border) !important;
+  background: var(--admin-surface) !important;
+  color: var(--admin-text);
+  box-shadow: 0 14px 36px rgba(28, 27, 26, 0.18) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+.legal-document {
+  max-width: 920px;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+  color: var(--admin-text);
+}
+
+.legal-document h1 {
+  margin-bottom: 0.35rem;
+  color: var(--admin-primary);
+  font-size: clamp(1.7rem, 3vw, 2.25rem);
+}
+
+.legal-document h2 {
+  margin-top: 2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--admin-border);
+  color: var(--admin-primary-strong);
+  font-size: 1.3rem;
+}
+
+.legal-document h3 {
+  margin-top: 1.35rem;
+  color: var(--admin-text);
+  font-size: 1.05rem;
+}
+
+.legal-document p,
+.legal-document li {
+  line-height: 1.65;
+}
+
+.legal-document .table {
+  margin: 1rem 0 1.4rem;
+  font-size: 0.92rem;
+}
+
+.legal-document .table th {
+  white-space: normal;
+}
+
+.legal-document a {
+  color: var(--admin-primary);
+}
+
+@media print {
+  .admin-header,
+  .admin-nav,
+  .admin-footer,
+  .admin-flash,
+  .job-drawer-toggle,
+  .job-drawer {
+    display: none !important;
+  }
+
+  .legal-document {
+    max-width: none;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+}
+
 .searchBG {
   font-size: 14px;
   padding: 5px 8px;

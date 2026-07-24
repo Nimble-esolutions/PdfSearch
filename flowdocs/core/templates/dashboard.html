@@ -78,14 +78,14 @@
       {% if role == 'superadmin' %}
         <div class="admin-panel admin-panel--inset mb-3">
           <div class="ops-card">
-            <h3>⚙️ Bulk Operations</h3>
-            <p>Reindex, validate, and sync data to S3.</p>
-            <a href="{% url 'vault_operations' %}" class="btn btn-primary">Open Vault & Operations</a>
+            <h3>{% trans "Bulk Operations" %}</h3>
+            <p>{% trans "Reindex, validate, and sync data to S3." %}</p>
+            <a href="{% url 'vault_operations' %}" class="btn btn-primary">{% trans "Open Vault & Operations" %}</a>
           </div>
           <div class="ops-card mt-3">
-            <h3>📦 Data Generations</h3>
-            <p>Manage generation lifecycle: promote, rollback, purge.</p>
-            <a href="{% url 'vault_operations' %}#generations" class="btn btn-outline-primary">Manage Generations</a>
+            <h3>{% trans "Data Generations" %}</h3>
+            <p>{% trans "Manage generation lifecycle: promote, rollback, purge." %}</p>
+            <a href="{% url 'vault_operations' %}#generations" class="btn btn-outline-primary">{% trans "Manage Generations" %}</a>
           </div>
         </div>
       {% endif %}
@@ -349,6 +349,15 @@
   var badge = document.getElementById("job-drawer-badge");
   var pollTimer = null;
   var isOpen = false;
+  var returnFocusTo = null;
+
+  function focusableElements() {
+    return Array.prototype.slice.call(drawer.querySelectorAll(
+      'a[href], button:not([disabled]), summary, input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter(function(element) {
+      return element.offsetParent !== null;
+    });
+  }
 
   function escapeHtml(s) {
     var div = document.createElement("div");
@@ -415,9 +424,11 @@
   }
 
   function openDrawer() {
+    returnFocusTo = document.activeElement;
     drawer.hidden = false;
     toggle.setAttribute("aria-expanded", "true");
     isOpen = true;
+    closeBtn.focus();
     startPolling();
   }
 
@@ -426,10 +437,39 @@
     toggle.setAttribute("aria-expanded", "false");
     isOpen = false;
     stopPolling();
+    if (returnFocusTo && typeof returnFocusTo.focus === "function") {
+      returnFocusTo.focus();
+    } else {
+      toggle.focus();
+    }
+    returnFocusTo = null;
   }
 
   toggle.addEventListener("click", function() { if (isOpen) { closeDrawer(); } else { openDrawer(); } });
   closeBtn.addEventListener("click", closeDrawer);
+  drawer.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDrawer();
+      return;
+    }
+    if (event.key !== "Tab" || !isOpen) return;
+    var focusables = focusableElements();
+    if (focusables.length === 0) {
+      event.preventDefault();
+      closeBtn.focus();
+      return;
+    }
+    var first = focusables[0];
+    var last = focusables[focusables.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   {% endif %}
 })();
 </script>
