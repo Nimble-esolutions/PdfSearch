@@ -2560,6 +2560,90 @@ class LegalPageTests(TestCase):
         self.assertContains(response, "Feature Flags")
         self.assertContains(response, "hallmark")
 
+
+class Sahakar2ThemeTests(TestCase):
+    """SAHAKAR 2.0 theme — standalone no-Bootstrap design system."""
+
+    def setUp(self):
+        super().setUp()
+        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
+        from core.models import SiteSetting
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "sahakar2"})
+        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
+
+    def tearDown(self):
+        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
+        super().tearDown()
+
+    def test_renders_v2_template(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "sahakar2-banner")
+        self.assertContains(response, "sahakar2-chat")
+        self.assertContains(response, "sahakar2-notice")
+        self.assertContains(response, "sahakar2-input")
+
+    def test_no_bootstrap_loaded(self):
+        response = self.client.get(reverse("home"))
+        self.assertNotContains(response, "bootstrap.min.css")
+        self.assertNotContains(response, "bootstrap.bundle")
+
+    def test_has_notice_board_empty_state(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "noticeBoard")
+        self.assertContains(response, "notice-card-stripe")
+        self.assertContains(response, "सामान्य विषय")
+
+    def test_has_cm_helpline(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "1800")
+
+    def test_has_marathi_labels(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "गोपनीयता")
+        self.assertContains(response, "अस्वीकरण")
+        self.assertContains(response, "कुकीज")
+        self.assertContains(response, "डेटा धोरण")
+        self.assertContains(response, "अटी")
+
+    def test_has_government_ownership_footer(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "मालकी")
+
+    def test_css_file_loads(self):
+        response = self.client.get("/static/main/css/sahakar2.css")
+        self.assertEqual(response.status_code, 200)
+        content = b"".join(response.streaming_content).decode()
+        self.assertIn("@layer reset", content)
+        self.assertIn("@layer tokens", content)
+        self.assertIn("@layer base", content)
+        self.assertIn("@layer components", content)
+        self.assertIn("@layer responsive", content)
+        self.assertIn("@media (max-width: 768px)", content)
+        self.assertIn("@media (max-width: 390px)", content)
+        self.assertIn("prefers-reduced-motion", content)
+        self.assertIn(":focus-visible", content)
+
+    def test_theme_isolation_default_does_not_load(self):
+        from core.models import SiteSetting
+        # Completely reset: delete DB record first, then flush cache
+        SiteSetting.objects.filter(key="PUBLIC_UI_THEME").delete()
+        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
+        # Render page BEFORE recreating sahakar2 setting
+        response = self.client.get(reverse("home"))
+        self.assertNotContains(response, "sahakar2.css")
+        self.assertNotContains(response, "sahakar2-banner")
+        # Restore for other tests in this class
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "sahakar2"})
+        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
+
+    def test_cookie_consent_present(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "मान्य")
+
+    def test_doc_count_present(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "documents indexed")
+
     def test_hallmark_settings_table_shows_theme_value(self):
         from core.models import SiteSetting
         SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
