@@ -160,6 +160,7 @@
             {% csrf_token %}
             <input type="hidden" name="operation" value="restore_generation">
             <div class="col-md-8">
+              <label for="restore-generation-select" class="form-label">{% trans "Generation to restore" %}</label>
               <select name="generation_id" class="form-select" id="restore-generation-select">
                 <option value="">{% trans "— Select a generation —" %}</option>
                 {% for m in vault_manifests %}
@@ -253,7 +254,7 @@
                 <tr>
                   <td>
                     <span class="font-monospace small">{{ gen.generation_id }}</span>
-                    <button type="button" class="btn btn-sm btn-outline-secondary ms-1 gen-detail-toggle" data-gen-id="{{ gen.generation_id }}" aria-label="{% trans 'Expand details' %}">
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-1 gen-detail-toggle" data-gen-id="{{ gen.generation_id }}" aria-controls="gen-detail-{{ gen.generation_id }}" aria-expanded="false" data-expand-label="{% trans 'Expand details' %}" data-collapse-label="{% trans 'Collapse details' %}" aria-label="{% trans 'Expand details' %}">
                       +
                     </button>
                   </td>
@@ -529,6 +530,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (row) {
         row.hidden = !row.hidden;
         this.textContent = row.hidden ? '+' : '−';
+        this.setAttribute('aria-expanded', String(!row.hidden));
+        this.setAttribute('aria-label', row.hidden ? this.dataset.expandLabel : this.dataset.collapseLabel);
       }
     });
   });
