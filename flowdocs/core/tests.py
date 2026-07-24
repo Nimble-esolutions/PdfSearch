@@ -75,9 +75,20 @@ class LanguageAndPublicUiTests(TestCase):
         self.assertEqual(response.context["welcome_prompt_label"], "Try asking")
         self.assertEqual(len(response.context["welcome_prompts"]), 3)
         self.assertEqual(len(response.context["search_loading_stages"]), 3)
+        self.assertEqual(response.context["search_messages"]["unexpected"], "Something went wrong")
         self.assertContains(response, "Registrar Co-operative Societies, Maharashtra")
         self.assertContains(response, 'name="language" value="mr"')
         self.assertContains(response, '<html lang="en">')
+
+    def test_public_search_uses_fullscreen_desk_structure(self):
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="search-app"')
+        self.assertContains(response, 'id="searchComposer"')
+        self.assertContains(response, 'id="aboutDialog"')
+        self.assertContains(response, 'data-about-open')
+        self.assertContains(response, 'id="source-documents-label"')
 
     def test_language_switch_renders_marathi_greeting_and_english_return(self):
         response = self.client.post(
@@ -91,6 +102,7 @@ class LanguageAndPublicUiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("मी सहकार AI", response.context["welcome_message"])
         self.assertEqual(response.context["welcome_help_label"], "इथे क्लिक करा")
+        self.assertEqual(response.context["search_messages"]["unexpected"], "काहीतरी चूक झाली")
         self.assertContains(response, 'name="language" value="en"')
         self.assertContains(response, '<html lang="mr">')
 
