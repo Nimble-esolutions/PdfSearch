@@ -4,18 +4,20 @@
 {% block title %}{% trans "Operations — Data Lifecycle - CC & RCS Maharashtra" %}{% endblock %}
 
 {% block content %}
-<section class="container-fluid py-4">
+<section class="container-fluid py-4" aria-labelledby="operations-page-heading">
   <div class="admin-page-heading mb-4">
     <p class="admin-kicker">{% trans "Environment & Data Lifecycle" %}</p>
-    <h2>{% trans "Operations" %}</h2>
+    <h2 id="operations-page-heading">{% trans "Operations" %}</h2>
     <p>{% trans "Dataset identity, writer authority, generation status, and restore workspace state." %}</p>
   </div>
 
   <div class="row g-4">
     <div class="col-md-6 col-lg-4">
-      <div class="card shadow-sm">
-        <div class="card-header bg-secondary text-white"><strong>{% trans "Environment" %}</strong></div>
-        <div class="card-body">
+      <section class="admin-panel h-100" aria-labelledby="operations-environment-heading">
+        <div class="border-bottom pb-2 mb-3">
+          <h3 id="operations-environment-heading" class="h6 mb-0">{% trans "Environment" %}</h3>
+        </div>
+        <div>
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "APP_ENV" %}</dt>
             <dd class="col-sm-7"><span class="badge {% if app_env == 'production' %}bg-success{% elif app_env == 'staging' %}bg-warning{% else %}bg-secondary{% endif %}">{{ app_env }}</span></dd>
@@ -33,13 +35,15 @@
             <dd class="col-sm-7 font-monospace small">{{ production_source_id|default:"—" }}</dd>
           </dl>
         </div>
-      </div>
+      </section>
     </div>
 
     <div class="col-md-6 col-lg-4">
-      <div class="card shadow-sm">
-        <div class="card-header bg-secondary text-white"><strong>{% trans "Deployment" %}</strong></div>
-        <div class="card-body">
+      <section class="admin-panel h-100" aria-labelledby="operations-deployment-heading">
+        <div class="border-bottom pb-2 mb-3">
+          <h3 id="operations-deployment-heading" class="h6 mb-0">{% trans "Deployment" %}</h3>
+        </div>
+        <div>
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "Deployment ID" %}</dt>
             <dd class="col-sm-7 font-monospace small">{{ deployment_id|default:"—" }}</dd>
@@ -54,18 +58,20 @@
             <dd class="col-sm-7 font-monospace small">{{ app_release|default:"—" }}</dd>
 
             {% if digest_mismatch %}
-            <dt class="col-sm-5"></dt>
+            <dt class="col-sm-5">{% trans "Release integrity" %}</dt>
             <dd class="col-sm-7"><span class="badge bg-danger">{% trans "Digest mismatch" %}</span></dd>
             {% endif %}
           </dl>
         </div>
-      </div>
+      </section>
     </div>
 
     <div class="col-md-6 col-lg-4">
-      <div class="card shadow-sm">
-        <div class="card-header bg-secondary text-white"><strong>{% trans "Backup & Data" %}</strong></div>
-        <div class="card-body">
+      <section class="admin-panel h-100" aria-labelledby="operations-backup-heading">
+        <div class="border-bottom pb-2 mb-3">
+          <h3 id="operations-backup-heading" class="h6 mb-0">{% trans "Backup & Data" %}</h3>
+        </div>
+        <div>
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "Backup Role" %}</dt>
             <dd class="col-sm-7"><span class="badge {% if backup_role == 'writer' %}bg-success{% elif backup_role == 'reader' %}bg-info{% else %}bg-secondary{% endif %}">{{ backup_role }}</span></dd>
@@ -83,13 +89,15 @@
             <dd class="col-sm-7">{% if scheduler_enabled %}<span class="badge bg-success">{% trans "Active" %}</span>{% else %}<span class="badge bg-secondary">{% trans "Disabled" %}</span>{% endif %}</dd>
           </dl>
         </div>
-      </div>
+      </section>
     </div>
 
     <div class="col-md-6 col-lg-4">
-      <div class="card shadow-sm">
-        <div class="card-header bg-secondary text-white"><strong>{% trans "Local Generation" %}</strong></div>
-        <div class="card-body">
+      <section class="admin-panel h-100" aria-labelledby="local-generation-heading">
+        <div class="border-bottom pb-2 mb-3">
+          <h3 id="local-generation-heading" class="h6 mb-0">{% trans "Local Generation" %}</h3>
+        </div>
+        <div>
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "Generation" %}</dt>
             <dd class="col-sm-7 font-monospace small">{{ local_generation|default:"—" }}</dd>
@@ -98,14 +106,16 @@
             <dd class="col-sm-7">{% if local_generation_days is not None %}{{ local_generation_days }}d {{ local_generation_hours }}h{% else %}—{% endif %}</dd>
           </dl>
         </div>
-      </div>
+      </section>
     </div>
 
     {% if activation_status %}
     <div class="col-md-6 col-lg-4">
-      <div class="card shadow-sm">
-        <div class="card-header bg-secondary text-white"><strong>{% trans "Activation Journal" %}</strong></div>
-        <div class="card-body">
+      <section class="admin-panel h-100" aria-labelledby="activation-journal-heading">
+        <div class="border-bottom pb-2 mb-3">
+          <h3 id="activation-journal-heading" class="h6 mb-0">{% trans "Activation Journal" %}</h3>
+        </div>
+        <div>
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "Lock Held" %}</dt>
             <dd class="col-sm-7">{{ activation_status.lock_held|yesno:_("Yes,No") }}</dd>
@@ -113,7 +123,7 @@
             <dd class="col-sm-7">{{ activation_status.incomplete_activations|length }}</dd>
           </dl>
         </div>
-      </div>
+      </section>
     </div>
     {% endif %}
   </div>

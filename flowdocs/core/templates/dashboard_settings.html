@@ -4,21 +4,23 @@
 {% block title %}{% trans "Settings & Configuration - CC & RCS Maharashtra" %}{% endblock %}
 
 {% block content %}
-<section class="container-fluid py-4">
+<section class="container-fluid py-4" aria-labelledby="settings-page-heading">
   <div class="admin-page-heading mb-4">
     <p class="admin-kicker">{% trans "Superadmin" %}</p>
-    <h2>{% trans "Settings & Configuration" %}</h2>
+    <h2 id="settings-page-heading">{% trans "Settings & Configuration" %}</h2>
     <p>{% trans "Environment identity, artifact vault status, and runtime feature flags." %}</p>
   </div>
 
   {% if env_fields %}
-  <div class="mb-4">
-    <h4 class="border-bottom pb-2 mb-3">{% trans "Environment Identity" %}</h4>
+  <section class="mb-4" aria-labelledby="environment-identity-heading">
+    <h3 id="environment-identity-heading" class="border-bottom pb-2 mb-3">{% trans "Environment Identity" %}</h3>
     <div class="row g-3">
       <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-header bg-primary text-white"><strong>{% trans "Environment" %}</strong></div>
-          <div class="card-body">
+        <section class="admin-panel h-100" aria-labelledby="settings-environment-heading">
+          <div class="border-bottom pb-2 mb-3">
+            <h4 id="settings-environment-heading" class="h6 mb-0">{% trans "Environment" %}</h4>
+          </div>
+          <div>
             <dl class="row small mb-0">
               <dt class="col-sm-5">{% trans "APP_ENV" %}</dt>
               <dd class="col-sm-7"><span class="badge {% if env_fields.app_env == 'production' %}bg-success{% elif env_fields.app_env == 'staging' %}bg-warning{% else %}bg-secondary{% endif %}">{{ env_fields.app_env }}</span></dd>
@@ -36,13 +38,15 @@
               <dd class="col-sm-7 font-monospace small">{{ env_fields.production_source_id|default:"—" }}</dd>
             </dl>
           </div>
-        </div>
+        </section>
       </div>
 
       <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-header bg-info text-white"><strong>{% trans "Deployment" %}</strong></div>
-          <div class="card-body">
+        <section class="admin-panel h-100" aria-labelledby="settings-deployment-heading">
+          <div class="border-bottom pb-2 mb-3">
+            <h4 id="settings-deployment-heading" class="h6 mb-0">{% trans "Deployment" %}</h4>
+          </div>
+          <div>
             <dl class="row small mb-0">
               <dt class="col-sm-5">{% trans "Deployment ID" %}</dt>
               <dd class="col-sm-7 font-monospace small">{{ env_fields.deployment_id|default:"—" }}</dd>
@@ -57,13 +61,15 @@
               <dd class="col-sm-7 font-monospace small">{{ env_fields.app_release|default:"—" }}</dd>
             </dl>
           </div>
-        </div>
+        </section>
       </div>
 
       <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm h-100">
-          <div class="card-header bg-dark text-white"><strong>{% trans "Backup & Data" %}</strong></div>
-          <div class="card-body">
+        <section class="admin-panel h-100" aria-labelledby="settings-backup-heading">
+          <div class="border-bottom pb-2 mb-3">
+            <h4 id="settings-backup-heading" class="h6 mb-0">{% trans "Backup & Data" %}</h4>
+          </div>
+          <div>
             <dl class="row small mb-0">
               <dt class="col-sm-5">{% trans "Backup Role" %}</dt>
               <dd class="col-sm-7"><span class="badge {% if env_fields.backup_role == 'writer' %}bg-success{% elif env_fields.backup_role == 'reader' %}bg-info{% else %}bg-secondary{% endif %}">{{ env_fields.backup_role }}</span></dd>
@@ -81,19 +87,21 @@
               <dd class="col-sm-7">{% if env_fields.scheduler_enabled %}<span class="badge bg-success">{% trans "Active" %}</span>{% else %}<span class="badge bg-secondary">{% trans "Disabled" %}</span>{% endif %}</dd>
             </dl>
           </div>
-        </div>
+        </section>
       </div>
     </div>
-  </div>
+  </section>
   {% endif %}
 
-  <div class="mb-4">
-    <h4 class="border-bottom pb-2 mb-3">{% trans "S3 Artifact Vault Status" %}</h4>
+  <section class="mb-4" aria-labelledby="vault-status-heading">
+    <h3 id="vault-status-heading" class="border-bottom pb-2 mb-3">{% trans "S3 Artifact Vault Status" %}</h3>
     <div class="row">
       <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm">
-          <div class="card-header bg-secondary text-white"><strong>{% trans "Vault Connectivity" %}</strong></div>
-          <div class="card-body">
+        <section class="admin-panel h-100" aria-labelledby="vault-connectivity-heading">
+          <div class="border-bottom pb-2 mb-3">
+            <h4 id="vault-connectivity-heading" class="h6 mb-0">{% trans "Vault Connectivity" %}</h4>
+          </div>
+          <div>
             <dl class="row small mb-0">
               <dt class="col-sm-5">{% trans "Vault Enabled" %}</dt>
               <dd class="col-sm-7"><span class="badge {% if vault_status.enabled %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.enabled|yesno:_("Enabled,Disabled") }}</span></dd>
@@ -110,13 +118,13 @@
               {% endif %}
             </dl>
           </div>
-        </div>
+        </section>
       </div>
     </div>
-  </div>
+  </section>
 
-  <div class="mb-4">
-    <h4 class="border-bottom pb-2 mb-3">{% trans "Feature Flags" %}</h4>
+  <section class="mb-4" aria-labelledby="feature-flags-heading">
+    <h3 id="feature-flags-heading" class="border-bottom pb-2 mb-3">{% trans "Feature Flags" %}</h3>
 
     {% if not settings_edit_enabled %}
     <div class="alert alert-info">
@@ -124,15 +132,15 @@
     </div>
     {% endif %}
 
-    <div class="card shadow-sm">
+    <section class="admin-panel p-0" aria-labelledby="feature-flags-heading">
       <div class="table-responsive">
-        <table class="table table-hover mb-0">
-          <thead class="table-dark">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
             <tr>
-              <th>{% trans "Flag Name" %}</th>
-              <th>{% trans "Current Value" %}</th>
-              <th>{% trans "Source" %}</th>
-              {% if settings_edit_enabled %}<th>{% trans "Action" %}</th>{% endif %}
+              <th scope="col">{% trans "Flag Name" %}</th>
+              <th scope="col">{% trans "Current Value" %}</th>
+              <th scope="col">{% trans "Source" %}</th>
+              {% if settings_edit_enabled %}<th scope="col">{% trans "Action" %}</th>{% endif %}
             </tr>
           </thead>
           <tbody>
@@ -146,7 +154,8 @@
                 <form method="post" action="{% url 'save_settings' %}" class="d-flex gap-2 align-items-center">
                   {% csrf_token %}
                   <input type="hidden" name="key" value="{{ key }}">
-                  <input type="text" name="value" value="{{ info.current }}" class="form-control form-control-sm" style="max-width: 140px;">
+                  <label class="visually-hidden" for="setting-value-{{ forloop.counter }}">{% trans "New value" %}: {{ key }}</label>
+                  <input id="setting-value-{{ forloop.counter }}" type="text" name="value" value="{{ info.current }}" class="form-control form-control-sm" style="max-width: 140px;">
                   <button type="submit" class="btn btn-primary btn-sm">{% trans "Save" %}</button>
                 </form>
               </td>
@@ -156,7 +165,7 @@
           </tbody>
         </table>
       </div>
-    </div>
-  </div>
+    </section>
+  </section>
 </section>
 {% endblock %}
