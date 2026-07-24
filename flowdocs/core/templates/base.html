@@ -6,12 +6,16 @@
   <title>{% block title %}CC & RCS Maharashtra{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{% trans 'Commissioner for Cooperation and Registrar, Cooperative Societies, Maharashtra State, Pune' %}">
+  {% block seo %}{% endblock %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="{% static 'main/css/style.css' %}">
   {% block extra_css %}{% endblock %}
 </head>
-<body class="admin-shell">
+<body class="{% block body_class %}admin-shell{% endblock %}">
 
+{% block public_header %}{% endblock %}
+
+{% block admin_shell %}
 <header class="admin-header">
   <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}"
        alt="{% trans 'Registrar Co-operative Societies banner' %}"
@@ -86,6 +90,21 @@
     </div>
   </div>
 </nav>
+{% endblock %}
+
+{% block breadcrumbs %}
+  {% if breadcrumb_items %}
+  <nav aria-label="breadcrumb" class="breadcrumb-nav">
+    <ol class="breadcrumb">
+      {% for item in breadcrumb_items %}
+        <li class="breadcrumb-item {% if forloop.last %}active{% endif %}">
+          {% if not forloop.last %}<a href="{{ item.url }}">{{ item.label }}</a>{% else %}{{ item.label }}{% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  </nav>
+  {% endif %}
+{% endblock %}
 
 <main class="admin-main">
   {% if messages %}
@@ -100,6 +119,8 @@
   {% endif %}
   {% block content %}{% endblock %}
 </main>
+
+{% block public_footer %}{% endblock %}
 
 <footer class="admin-footer">
   <div class="container-fluid">
