@@ -10,7 +10,6 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, Request, build_opener
 
-import requests
 
 sys.path.insert(0, "/app/flowdocs")
 
@@ -122,21 +121,21 @@ def main():
     require(status == 200 and b".searchBG" in body, "static asset failed")
 
     # /health/data/ — data generation status
-    r = requests.get(f"{BASE_URL}/health/data/", timeout=10)
-    assert r.status_code == 200, f"/health/data/ returned {r.status_code}"
-    data_health = r.json()
-    assert "status" in data_health, "/health/data/ missing 'status' key"
+    status, _, body = request(unauthenticated, "/health/data/")
+    require(status == 200, f"/health/data/ returned {status}")
+    data_health = json.loads(body)
+    require("status" in data_health, "/health/data/ missing 'status' key")
 
     # /health/lease/ — writer lease status
-    r = requests.get(f"{BASE_URL}/health/lease/", timeout=10)
-    assert r.status_code == 200, f"/health/lease/ returned {r.status_code}"
-    lease_health = r.json()
-    assert "status" in lease_health, "/health/lease/ missing 'status' key"
+    status, _, body = request(unauthenticated, "/health/lease/")
+    require(status == 200, f"/health/lease/ returned {status}")
+    lease_health = json.loads(body)
+    require("status" in lease_health, "/health/lease/ missing 'status' key")
 
     # /health/metrics/ — Prometheus metrics
-    r = requests.get(f"{BASE_URL}/health/metrics/", timeout=10)
-    assert r.status_code == 200, f"/health/metrics/ returned {r.status_code}"
-    assert "pdfsearch" in r.text, "/health/metrics/ missing pdfsearch metrics"
+    status, _, body = request(unauthenticated, "/health/metrics/")
+    require(status == 200, f"/health/metrics/ returned {status}")
+    require(b"pdfsearch" in body, "/health/metrics/ missing pdfsearch metrics")
 
     status, headers, _ = request(unauthenticated, "/dashboard/")
     require(status == 302 and headers.get("Location", "").startswith("/login/"), "dashboard permission gate failed")
