@@ -3,6 +3,10 @@ const sendBtn = document.getElementById('sendBtn');
 const userQuery = document.getElementById('userQuery');
 const wordCounter = document.getElementById("wordCounter");
 const viewPdfUrlTemplate = window.PdfSearch.viewPdfUrlTemplate;
+const welcomePromptLabel = JSON.parse(document.getElementById("welcome-prompt-label").textContent);
+const welcomePrompts = JSON.parse(document.getElementById("welcome-prompts").textContent);
+const searchLoadingStages = JSON.parse(document.getElementById("search-loading-stages").textContent);
+const retryLabel = JSON.parse(document.getElementById("retry-label").textContent);
 let requestPending = false;
 let activeController = null;
 let requestTimeout = null;
@@ -25,7 +29,7 @@ async function sendMessage(){
 
     const wordCount = query.split(/\s+/).length;
     if(wordCount > 30){
-        appendMessage("Your query is too long (maximum 30 words). Please shorten it.", "gpt");
+        appendErrorMessage("Question is too long", "Please keep it within 30 words.", query);
         return;
     }
 
@@ -38,22 +42,25 @@ async function sendMessage(){
 
     const typingDiv = appendMessage('', 'gpt', true);
     typingDiv.classList.add('typing');
+    typingDiv.classList.add('search-loading');
     typingDiv.setAttribute("role", "status");
     typingDiv.setAttribute("aria-live", "polite");
 
-    const stages = [" Searching", " Analyzing", " Composing"];
+    const stages = searchLoadingStages;
     let stageIndex = 0;
 
     function showStage() {
         typingDiv.replaceChildren();
-        const stage = document.createElement("strong");
+        const stage = document.createElement("span");
+        stage.className = "search-loading__label";
         stage.textContent = stages[stageIndex];
-        typingDiv.appendChild(stage);
-        ["•", "•", "•"].forEach(symbol => {
+        [0, 1, 2].forEach(index => {
             const dot = document.createElement("span");
-            dot.textContent = symbol;
+            dot.className = "search-loading__dot";
+            dot.style.animationDelay = `${index * 0.18}s`;
             typingDiv.appendChild(dot);
         });
+        typingDiv.prepend(stage);
         stageIndex++;
         if(stageIndex < stages.length) {
             stageTimer = setTimeout(showStage, 2000);
@@ -86,9 +93,10 @@ async function sendMessage(){
                 503: "The search service is temporarily unavailable. Please try again later.",
                 429: "Please wait a moment before starting another search.",
             };
-            appendMessage(
-                errorMessages[response.status] || data.detail || "The search request could not be completed.",
-                "gpt",
+            appendErrorMessage(
+                errorMessages[response.status] || "The search request could not be completed.",
+                data.detail,
+                query,
             );
             return;
         }
@@ -96,14 +104,14 @@ async function sendMessage(){
         if(data.answer){
             typeEffect(data.answer, data.references || []);
         } else if(data.error){
-            appendMessage('Search error: ' + data.error, 'gpt');
+            appendErrorMessage("Search unavailable", data.detail || "Please try again later.", query);
         }
     } catch(err) {
         typingDiv.remove();
         if (err.name === "AbortError") {
-            appendMessage('The search is taking too long. Please try again.', 'gpt');
+            appendErrorMessage("Search is taking longer than expected", "Please try again.", query);
         } else {
-            appendMessage('Something went wrong. Please try again later.', 'gpt');
+            appendErrorMessage("Something went wrong", "Please try again later.", query);
             console.error(err);
         }
     } finally {
@@ -148,6 +156,54 @@ function appendWelcomeMessage(text, href, label) {
     link.rel = 'noopener noreferrer';
     link.textContent = label;
     div.appendChild(link);
+
+    const promptLabel = document.createElement('span');
+    promptLabel.className = 'welcome-prompts__label';
+    promptLabel.textContent = welcomePromptLabel;
+    div.appendChild(promptLabel);
+
+    const promptWrap = document.createElement('div');
+    promptWrap.className = 'prompt-chips';
+    welcomePrompts.forEach(prompt => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'prompt-chip';
+        button.textContent = prompt;
+        button.addEventListener('click', () => {
+            userQuery.value = prompt;
+            userQuery.dispatchEvent(new Event('input', {bubbles: true}));
+            userQuery.focus();
+        });
+        promptWrap.appendChild(button);
+    });
+    div.appendChild(promptWrap);
+}
+
+function appendErrorMessage(title, detail, retryQuery) {
+    const box = document.createElement('div');
+    box.className = 'search-error';
+
+    const content = document.createElement('div');
+    const heading = document.createElement('strong');
+    heading.textContent = title;
+    const message = document.createElement('p');
+    message.textContent = detail || '';
+    content.append(heading, message);
+
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'search-error__retry';
+    retry.textContent = retryLabel;
+    retry.addEventListener('click', () => {
+        userQuery.value = retryQuery || '';
+        userQuery.dispatchEvent(new Event('input', {bubbles: true}));
+        sendMessage();
+    });
+    content.appendChild(retry);
+    box.appendChild(content);
+    chatMain.appendChild(box);
+    chatMain.scrollTop = chatMain.scrollHeight;
+    return box;
 }
 
 
@@ -239,13 +295,16 @@ userQuery.addEventListener("input", function () {
     const words = this.value.trim().split(/\s+/).filter(w => w.length > 0);
     const count = words.length;
 
-    wordCounter.textContent = `${count}/30 words`;
+    wordCounter.textContent = `${count}/30`;
 
     if (count > 30) {
-        wordCounter.style.color = "red";
+        wordCounter.className = "word-counter word-counter--over";
+        updateSendButton();
+    } else if (count >= 25) {
+        wordCounter.className = "word-counter word-counter--warn";
         updateSendButton();
     } else {
-        wordCounter.style.color = "gray";
+        wordCounter.className = "word-counter word-counter--ok";
         updateSendButton();
     }
 });

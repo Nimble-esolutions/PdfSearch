@@ -1541,6 +1541,42 @@ msgstr "या फिल्टरशी जुळणारी खाती न�
 msgid "Click Here"
 msgstr "इथे क्लिक करा"
 
+#: core/views.py:1368
+msgid "I am Sahakar AI. Learn how to ask better questions and get more useful answers."
+msgstr "मी सहकार AI आहे. अधिक उपयुक्त उत्तरे मिळविण्यासाठी चांगले प्रश्न कसे विचारावेत ते जाणून घ्या."
+
+#: core/views.py:1378
+msgid "Try asking"
+msgstr "असे विचारून पहा"
+
+#: core/views.py:1380
+msgid "Housing society audit procedure"
+msgstr "गृहनिर्माण संस्थेच्या लेखापरीक्षणाची प्रक्रिया"
+
+#: core/views.py:1381
+msgid "Co-operative member rights"
+msgstr "सहकारी सभासदांचे हक्क"
+
+#: core/views.py:1382
+msgid "Agricultural credit society rules"
+msgstr "कृषी पतसंस्थेचे नियम"
+
+#: core/views.py:1385
+msgid "Searching documents"
+msgstr "दस्तऐवज शोधत आहे"
+
+#: core/views.py:1386
+msgid "Reviewing sources"
+msgstr "स्रोत तपासत आहे"
+
+#: core/views.py:1387
+msgid "Preparing answer"
+msgstr "उत्तर तयार करत आहे"
+
+#: core/views.py:1389
+msgid "Try again"
+msgstr "पुन्हा प्रयत्न करा"
+
 #: core/views.py:1250
 msgid ""
 "I am Sahakar AI. Click here to learn how to questions to get correct answers."

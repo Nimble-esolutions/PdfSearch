@@ -167,8 +167,11 @@
 
       <div class="chat-input">
          <img src="{% static 'main/images/Option-1 BOT.png' %}" alt="" class="chat-input__avatar" aria-hidden="true">
-          <label class="visually-hidden" for="userQuery">{% trans "Ask your question" %}</label>
-          <input type="text" id="userQuery" placeholder="{% trans 'Ask your question...' %}" autocomplete="off" maxlength="240">
+          <div class="chat-query-field">
+            <label class="visually-hidden" for="userQuery">{% trans "Ask your question" %}</label>
+            <input type="text" id="userQuery" placeholder="{% trans 'Ask your question...' %}" autocomplete="off" maxlength="240">
+            <small id="wordCounter" class="word-counter" aria-live="polite">0/30</small>
+          </div>
           <button id="sendBtn" type="button">{% trans "Search" %}</button>
 
 <a href="https://wa.me/{{ whatsapp_number|default:"919421200000" }}" target="_blank" rel="noopener noreferrer" class="whatsapp-link" aria-label="{% trans 'Contact support on WhatsApp' %}">
@@ -191,11 +194,6 @@
 
       <div id="chatMain" aria-live="polite" aria-label="{% trans 'Search answers' %}" aria-busy="false">
       </div>
-
-      <small id="wordCounter" class="word-counter" aria-live="polite">
-        0/30 words
-      </small>
-
 
       <div class="search-disclaimer">
           {% trans "AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}
@@ -255,6 +253,10 @@
 {{ welcome_message|json_script:"welcome-message" }}
 {{ welcome_help_url|json_script:"welcome-help-url" }}
 {{ welcome_help_label|json_script:"welcome-help-label" }}
+{{ welcome_prompt_label|json_script:"welcome-prompt-label" }}
+{{ welcome_prompts|json_script:"welcome-prompts" }}
+{{ search_loading_stages|json_script:"search-loading-stages" }}
+{{ retry_label|json_script:"retry-label" }}
 <script>
 window.PdfSearch = {
   viewPdfUrlTemplate: "{% url 'view_pdf' 0 %}",
