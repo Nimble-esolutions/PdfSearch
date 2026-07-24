@@ -850,6 +850,17 @@ def data_policy_view(request):
     return render(request, "data_policy.html", {"title": "Data Policy"})
 
 
+# ---------------- Legal / DPDA Compliance ----------------
+def privacy_view(request):
+    return render(request, "privacy.html", {"title": "Privacy Policy"})
+
+def terms_view(request):
+    return render(request, "terms.html", {"title": "Terms of Service"})
+
+def data_policy_view(request):
+    return render(request, "data_policy.html", {"title": "Data Policy"})
+
+
 # -------------- Dashboard upload: call precompute on upload --------------
 @login_required
 def dashboard(request, folder_id=None):
@@ -1310,6 +1321,9 @@ def search_query(request):
                 ),
                 "welcome_help_label": gettext("Click Here"),
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
+                "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
+                "indexed_count": PDFFile.objects.filter(lifecycle__in=("ready", "processing")).count(),
+                "total_count": PDFFile.objects.count(),
             },
         )
 
