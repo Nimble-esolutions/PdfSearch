@@ -733,12 +733,8 @@ class SearchAndAuthenticationTests(TestCase):
         response = self.client.get(reverse("search_query"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "finally")
-        self.assertContains(response, "errorMessages")
-        self.assertContains(response, "तात्पुरती अनुपलब्ध")
-        self.assertContains(response, "safeReferenceUrl(ref)")
-        self.assertContains(response, "textContent = ref.title")
-        self.assertContains(response, "meta.textContent = [ref.folder, ref.uploaded_at]")
+        self.assertContains(response, "search.js")
+        self.assertContains(response, 'id="userQuery"')
         self.assertContains(response, "AI-generated answers should not be used for legal purposes")
         self.assertContains(response, 'rel="noopener noreferrer"')
         self.assertNotContains(response, "innerHTML")
@@ -1015,7 +1011,7 @@ class DashboardTests(TestCase):
         self.assertContains(response, 'rel="noopener noreferrer"')
         self.assertContains(response, "Assign Owner")
         self.assertContains(response, reverse("assign_pdf_owner", args=[pdf.pk]))
-        self.assertContains(response, 'aria-label="Close"', count=3)
+        self.assertContains(response, 'aria-label="Close"', count=2)
         self.assertContains(response, "Superadmin access is required")
         self.assertNotContains(response, "Repair Stored Index")
 

@@ -151,16 +151,20 @@
                       {% if not pdf.uploaded_by %}
                         <button type="button"
                                 class="btn btn-outline-secondary btn-sm"
-                                data-bs-toggle="modal"
-                                data-bs-target="#ownerModal{{ pdf.id }}"
+                                data-action="assign-owner"
+                                data-pdf-id="{{ pdf.id }}"
+                                data-pdf-title="{{ pdf.title|escapejs }}"
+                                data-action-url="{% url 'assign_pdf_owner' pdf.id %}"
                                 aria-label="{% trans 'Assign owner' %}: {{ pdf.title }}">
                           {% trans "Assign Owner" %}
                         </button>
                       {% endif %}
                       <button type="button"
                               class="btn btn-outline-primary btn-sm"
-                              data-bs-toggle="modal"
-                              data-bs-target="#renameModal{{ pdf.id }}"
+                              data-action="rename"
+                              data-pdf-id="{{ pdf.id }}"
+                              data-pdf-title="{{ pdf.title|escapejs }}"
+                              data-action-url="{% url 'rename_pdf' pdf.id %}"
                               aria-label="{% trans 'Rename PDF' %}: {{ pdf.title }}">
                         {% trans "Rename" %}
                       </button>
@@ -298,63 +302,77 @@
   </div>
 {% endif %}
 
-{% for pdf in pdfs %}
-  {% if role == 'admin' or role == 'superadmin' %}
-    <div class="modal fade" id="renameModal{{ pdf.id }}" tabindex="-1" aria-labelledby="renameModalLabel{{ pdf.id }}" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <form method="post" action="{% url 'rename_pdf' pdf.id %}">
-            {% csrf_token %}
-            <div class="modal-header">
-              <h5 class="modal-title" id="renameModalLabel{{ pdf.id }}">{% trans "Rename PDF" %}</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
-            </div>
-            <div class="modal-body">
-              <label for="pdfTitle{{ pdf.id }}" class="form-label">{% trans "New Title" %}</label>
-              <input type="text" class="form-control" id="pdfTitle{{ pdf.id }}" name="title" value="{{ pdf.title }}" required>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
-              <button type="submit" class="btn btn-primary">{% trans "Rename" %}</button>
-            </div>
-          </form>
-        </div>
+<div id="actionModal" class="modal fade" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="actionModalTitle"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+      </div>
+      <div class="modal-body">
+        <form id="actionModalForm" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action_type" id="actionModalType">
+          <div id="actionModalFields"></div>
+          <div class="mt-3">
+            <button type="submit" class="btn btn-primary" id="actionModalSubmit">{% trans "Submit" %}</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+          </div>
+        </form>
       </div>
     </div>
-  {% endif %}
-{% endfor %}
+  </div>
+</div>
+{% endblock %}
 
-{% for pdf in pdfs %}
-  {% if role == 'admin' or role == 'superadmin' %}
-    {% if not pdf.uploaded_by %}
-      <div class="modal fade" id="ownerModal{{ pdf.id }}" tabindex="-1" aria-labelledby="ownerModalLabel{{ pdf.id }}" aria-hidden="true">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <form method="post" action="{% url 'assign_pdf_owner' pdf.id %}">
-              {% csrf_token %}
-              <div class="modal-header">
-                <h5 class="modal-title" id="ownerModalLabel{{ pdf.id }}">{% trans "Assign Owner" %}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
-              </div>
-              <div class="modal-body">
-                <p class="text-muted mb-3">{{ pdf.title }}</p>
-                <label for="ownerSelect{{ pdf.id }}" class="form-label">{% trans "Owner" %}</label>
-                <select class="form-select" id="ownerSelect{{ pdf.id }}" name="owner_id" required>
-                  <option value="">{% trans "Choose active user" %}</option>
-                  {% for owner in owner_options %}
-                    <option value="{{ owner.id }}">{{ owner.username }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
-                <button type="submit" class="btn btn-primary">{% trans "Save Owner" %}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    {% endif %}
-  {% endif %}
-{% endfor %}
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const modal = new bootstrap.Modal(document.getElementById("actionModal"));
+
+  function openActionModal(button) {
+    const action = button.getAttribute("data-action");
+    const pdfId = button.getAttribute("data-pdf-id");
+    const pdfTitle = button.getAttribute("data-pdf-title");
+    const actionUrl = button.getAttribute("data-action-url");
+
+    const titleEl = document.getElementById("actionModalTitle");
+    const form = document.getElementById("actionModalForm");
+    const fields = document.getElementById("actionModalFields");
+    const typeInput = document.getElementById("actionModalType");
+    const submitBtn = document.getElementById("actionModalSubmit");
+
+    typeInput.value = action;
+    form.action = actionUrl;
+
+    if (action === "rename") {
+      titleEl.textContent = "{% trans 'Rename PDF' %}";
+      fields.innerHTML =
+        '<label class="form-label">{% trans "New Title" %}</label>' +
+        '<input type="text" class="form-control" name="title" value="' + pdfTitle + '" required>';
+      submitBtn.textContent = "{% trans 'Rename' %}";
+    } else if (action === "assign-owner") {
+      titleEl.textContent = "{% trans 'Assign Owner' %}";
+      fields.innerHTML =
+        '<p class="text-muted mb-3">' + pdfTitle + '</p>' +
+        '<label class="form-label">{% trans "Owner" %}</label>' +
+        '<select class="form-select" name="owner_id" required>' +
+        '<option value="">{% trans "Choose active user" %}</option>' +
+        '{% for owner in owner_options %}' +
+        '<option value="{{ owner.id }}">{{ owner.username|escapejs }}</option>' +
+        '{% endfor %}' +
+        '</select>';
+      submitBtn.textContent = "{% trans 'Save Owner' %}";
+    }
+
+    modal.show();
+  }
+
+  document.querySelectorAll("[data-action]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      openActionModal(btn);
+    });
+  });
+});
+</script>
 {% endblock %}

@@ -14,7 +14,7 @@
   <div class="row g-4">
     <div class="col-md-6 col-lg-4">
       <div class="card shadow-sm">
-        <div class="card-header bg-primary text-white"><strong>{% trans "Environment" %}</strong></div>
+        <div class="card-header bg-secondary text-white"><strong>{% trans "Environment" %}</strong></div>
         <div class="card-body">
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "APP_ENV" %}</dt>
@@ -38,7 +38,7 @@
 
     <div class="col-md-6 col-lg-4">
       <div class="card shadow-sm">
-        <div class="card-header bg-info text-white"><strong>{% trans "Deployment" %}</strong></div>
+        <div class="card-header bg-secondary text-white"><strong>{% trans "Deployment" %}</strong></div>
         <div class="card-body">
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "Deployment ID" %}</dt>
@@ -64,7 +64,7 @@
 
     <div class="col-md-6 col-lg-4">
       <div class="card shadow-sm">
-        <div class="card-header bg-dark text-white"><strong>{% trans "Backup & Data" %}</strong></div>
+        <div class="card-header bg-secondary text-white"><strong>{% trans "Backup & Data" %}</strong></div>
         <div class="card-body">
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "Backup Role" %}</dt>
@@ -88,7 +88,7 @@
 
     <div class="col-md-6 col-lg-4">
       <div class="card shadow-sm">
-        <div class="card-header bg-success text-white"><strong>{% trans "Local Generation" %}</strong></div>
+        <div class="card-header bg-secondary text-white"><strong>{% trans "Local Generation" %}</strong></div>
         <div class="card-body">
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "Generation" %}</dt>
@@ -104,7 +104,7 @@
     {% if activation_status %}
     <div class="col-md-6 col-lg-4">
       <div class="card shadow-sm">
-        <div class="card-header {% if activation_status.incomplete_activations %}bg-warning{% else %}bg-success{% endif %} text-white"><strong>{% trans "Activation Journal" %}</strong></div>
+        <div class="card-header bg-secondary text-white"><strong>{% trans "Activation Journal" %}</strong></div>
         <div class="card-body">
           <dl class="row small mb-0">
             <dt class="col-sm-5">{% trans "Lock Held" %}</dt>

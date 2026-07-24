@@ -533,6 +533,10 @@ def user_list_view(request):
         'filters': {'q': query, 'role': role, 'department': department, 'status': status},
         'role_choices': [('user', 'User'), ('admin', 'Admin'), ('superadmin', 'Superadmin')],
         'department_choices': DEPARTMENT_CHOICES,
+        'breadcrumb_items': [
+            {"label": gettext("Dashboard"), "url": reverse("dashboard")},
+            {"label": gettext("Users"), "url": None},
+        ],
     })
 
 
@@ -563,7 +567,15 @@ def edit_user(request, user_id):
             allow_superadmin=request.user.role == 'superadmin',
             lock_role=user.pk == request.user.pk,
         )
-    return render(request, 'user_edit.html', {'form': form, 'managed_user': user})
+    return render(request, 'user_edit.html', {
+        'form': form,
+        'managed_user': user,
+        'breadcrumb_items': [
+            {"label": gettext("Dashboard"), "url": reverse("dashboard")},
+            {"label": gettext("Users"), "url": reverse("user_list")},
+            {"label": user.username, "url": None},
+        ],
+    })
 
 #============================================ activate deactivate users ====================================
 @admin_required
@@ -850,17 +862,6 @@ def data_policy_view(request):
     return render(request, "data_policy.html", {"title": "Data Policy"})
 
 
-# ---------------- Legal / DPDA Compliance ----------------
-def privacy_view(request):
-    return render(request, "privacy.html", {"title": "Privacy Policy"})
-
-def terms_view(request):
-    return render(request, "terms.html", {"title": "Terms of Service"})
-
-def data_policy_view(request):
-    return render(request, "data_policy.html", {"title": "Data Policy"})
-
-
 # -------------- Dashboard upload: call precompute on upload --------------
 @login_required
 def dashboard(request, folder_id=None):
@@ -913,6 +914,10 @@ def dashboard(request, folder_id=None):
                             "form": form,
                             "role": role,
                             "owner_options": owner_options,
+                            "breadcrumb_items": [
+                                {"label": gettext("Dashboard"), "url": reverse("dashboard")},
+                                {"label": folder.name, "url": None},
+                            ],
                         },
                         status=400,
                     )
@@ -933,6 +938,10 @@ def dashboard(request, folder_id=None):
                 "form": form,
                 "role": role,
                 "owner_options": owner_options,
+                "breadcrumb_items": [
+                    {"label": gettext("Dashboard"), "url": reverse("dashboard")},
+                    {"label": folder.name, "url": None},
+                ],
             },
         )
 
@@ -955,7 +964,14 @@ def dashboard(request, folder_id=None):
     return render(
         request,
         "dashboard.html",
-        {"folders": folders, "cockpit": cockpit, "role": role},
+        {
+            "folders": folders,
+            "cockpit": cockpit,
+            "role": role,
+            "breadcrumb_items": [
+                {"label": gettext("Dashboard"), "url": None},
+            ],
+        },
     )
 
 
@@ -1321,9 +1337,6 @@ def search_query(request):
                 ),
                 "welcome_help_label": gettext("Click Here"),
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
-                "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
-                "indexed_count": PDFFile.objects.filter(lifecycle__in=("ready", "processing")).count(),
-                "total_count": PDFFile.objects.count(),
             },
         )
 
@@ -1607,51 +1620,7 @@ def operations_panel(request):
         ctx["activation_status"] = activation_status()
     except Exception:
         pass
-    return render(request, "dashboard_operations.html", ctx)
-
-
-@superadmin_required
-def s3_operations_view(request):
-    """Dedicated S3 artifact vault and bulk operations page."""
-    generations = ArtifactGeneration.objects.all().order_by("-created_at")
-    active_gen = generations.filter(status="active").first()
-
-    vault_healthy = False
-    vault_error = ""
-    vault_manifests = []
-    vault_config = {}
-    try:
-        vault = ArtifactVault()
-        if vault.enabled:
-            vault_config = {
-                "endpoint": vault.config.endpoint,
-                "bucket": vault.config.bucket,
-                "region": vault.config.region,
-            }
-            vault_manifests = [
-                {"key": m.key, "sha256": m.sha256[:16], "size": m.size}
-                for m in vault.list_manifests()
-            ]
-            vault_healthy = True
-    except Exception as exc:
-        vault_error = str(exc)[:200]
-
-    env_identity = getattr(settings, "ENV_IDENTITY", None)
-
-    context = {
-        "title": "S3 Artifact Vault & Operations",
-        "generations": generations,
-        "active_generation": active_gen,
-        "vault_healthy": vault_healthy,
-        "vault_error": vault_error,
-        "vault_manifests": vault_manifests,
-        "vault_config": vault_config,
-        "backup_role": env_identity.backup_role.value if env_identity else "unknown",
-        "vault_enabled": getattr(env_identity, "is_backup_writer", False),
-    }
-    return render(request, "dashboard_s3ops.html", context)
-
-
+    return render(request, "dashboard_operations.html", {**ctx, "breadcrumb_items": [{"label": gettext("Dashboard"), "url": reverse("dashboard")}, {"label": gettext("Operations"), "url": None}]})
 def health_data(request):
     """Public: return coarse data readiness status only."""
     return JsonResponse({"status": _data_readiness_check()})
@@ -1696,6 +1665,50 @@ def operations_lease(request):
     except Exception:
         status = None
     return JsonResponse({"dataset_id": ds_id, "lease_held": status is not None, "lease": status})
+
+
+@superadmin_required
+def s3_operations_view(request):
+    """Dedicated S3 artifact vault and bulk operations page."""
+    from .models import ArtifactGeneration
+
+    generations = ArtifactGeneration.objects.all().order_by("-created_at")
+    active_gen = generations.filter(status="active").first()
+
+    vault_healthy = False
+    vault_error = ""
+    vault_manifests = []
+    vault_config = {}
+    try:
+        vault = ArtifactVault()
+        if vault.enabled:
+            vault_config = {
+                "endpoint": vault.config.endpoint,
+                "bucket": vault.config.bucket,
+                "region": vault.config.region,
+            }
+            vault_manifests = [
+                {"key": m.key, "sha256": m.sha256[:16], "size": m.size}
+                for m in vault.list_manifests()
+            ]
+            vault_healthy = True
+    except Exception as exc:
+        vault_error = str(exc)[:200]
+
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+
+    context = {
+        "title": "S3 Artifact Vault & Operations",
+        "generations": generations,
+        "active_generation": active_gen,
+        "vault_healthy": vault_healthy,
+        "vault_error": vault_error,
+        "vault_manifests": vault_manifests,
+        "vault_config": vault_config,
+        "backup_role": env_identity.backup_role.value if env_identity else "unknown",
+        "vault_enabled": getattr(env_identity, "is_backup_writer", False),
+    }
+    return render(request, "dashboard_s3ops.html", context)
 
 
 ALLOWED_SETTING_KEYS = {
@@ -1786,6 +1799,10 @@ def settings_view(request):
         "vault_status": vault_status,
         "env_fields": env_fields,
         "title": "Settings & Configuration",
+        "breadcrumb_items": [
+            {"label": gettext("Dashboard"), "url": reverse("dashboard")},
+            {"label": gettext("Settings"), "url": None},
+        ],
     }
     return render(request, "dashboard_settings.html", context)
 
