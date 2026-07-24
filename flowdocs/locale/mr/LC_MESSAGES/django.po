@@ -3,8 +3,8 @@ msgstr ""
 "Project-Id-Version: PdfSearch Admin UI\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-24 08:51+0000\n"
-"PO-Revision-Date: 2025-09-03 12:10+0530\n"
-"Last-Translator: Codex\n"
+"PO-Revision-Date: 2026-07-24 14:56+0530\n"
+"Last-Translator: Sahakar AI Team\n"
 "Language-Team: Marathi\n"
 "Language: mr\n"
 "MIME-Version: 1.0\n"
@@ -91,7 +91,7 @@ msgstr "सक्रिय"
 
 #: core/templates/dashboard.html:12
 msgid "Active maintenance jobs"
-msgstr ""
+msgstr "सक्रिय देखभाल कार्ये"
 
 #: core/templates/dashboard.html:14
 #, fuzzy
@@ -101,7 +101,7 @@ msgstr "सक्रिय"
 
 #: core/templates/dashboard.html:18
 msgid "Loading..."
-msgstr ""
+msgstr "लोड होत आहे..."
 
 #: core/templates/dashboard.html:25
 msgid "Document operations"
@@ -186,6 +186,8 @@ msgid ""
 "Select categories, then queue a resumable operation. Work is processed by "
 "the maintenance worker."
 msgstr ""
+"श्रेणी निवडा, मग पुनरुत्पादित करण्यायोग्य ऑपरेशन रांगेत लावा. कार्य देखभाल "
+"कार्यकर्त्याद्वारे प्रक्रिया केले जाते."
 
 #: core/templates/dashboard.html:86
 #, fuzzy
@@ -207,17 +209,19 @@ msgstr "संग्रहित अनुक्रमणिका दुरु�
 
 #: core/templates/dashboard.html:89
 msgid "Validate Files"
-msgstr ""
+msgstr "फाइल्स पडताळा"
 
 #: core/templates/dashboard.html:90
 msgid "Sync Active Data to S3"
-msgstr ""
+msgstr "सक्रिय डेटा S3 शी समक्रमित करा"
 
 #: core/templates/dashboard.html:93
 msgid ""
 "Only superadmins can queue bulk maintenance. Existing successful items "
 "remain intact when another item fails."
 msgstr ""
+"फक्त सुपरॲडमिनच मोठ्या प्रमाणात देखभाल रांगेत लावू शकतात. दुसरी वस्तू अपयशी ठरली तरी "
+"विद्यमान यशस्वी वस्तू तशाच राहतात."
 
 #: core/templates/dashboard.html:96
 #, fuzzy
@@ -233,15 +237,15 @@ msgstr "श्रेणी जोडा"
 
 #: core/templates/dashboard.html:100
 msgid "acts / rules / bylaws"
-msgstr ""
+msgstr "कायदे / नियम / उपविधी"
 
 #: core/templates/dashboard.html:103
 msgid "Subject"
-msgstr ""
+msgstr "विषय"
 
 #: core/templates/dashboard.html:104
 msgid "housing / audit / agriculture"
-msgstr ""
+msgstr "गृहनिर्माण / लेखापरीक्षण / कृषी"
 
 #: core/templates/dashboard.html:107 core/templates/dashboard.html:110
 #: core/templates/dashboard.html:240 core/templates/dashboard.html:304
@@ -251,7 +255,7 @@ msgstr "अनुक्रमित"
 
 #: core/templates/dashboard.html:109
 msgid "Any"
-msgstr ""
+msgstr "कोणतेही"
 
 #: core/templates/dashboard.html:111
 #, fuzzy
@@ -261,49 +265,51 @@ msgstr "अनुक्रमित"
 
 #: core/templates/dashboard.html:115
 msgid "Keywords (comma-separated)"
-msgstr ""
+msgstr "कीवर्ड (स्वल्पविरामाने वेगळे केलेले)"
 
 #: core/templates/dashboard.html:116
 msgid "cooperative, society, act"
-msgstr ""
+msgstr "सहकारी, संस्था, कायदा"
 
 #: core/templates/dashboard.html:119
 msgid "Uploaded after"
-msgstr ""
+msgstr "नंतर अपलोड केलेले"
 
 #: core/templates/dashboard.html:123
 msgid "Uploaded before"
-msgstr ""
+msgstr "आधी अपलोड केलेले"
 
 #: core/templates/dashboard.html:127
 msgid "Preview Count"
-msgstr ""
+msgstr "पूर्वावलोकन संख्या"
 
 #: core/templates/dashboard.html:131
 msgid ""
 "Filters apply to reindex and validate operations. Select categories above, "
 "then set filters to narrow the scope."
 msgstr ""
+"फिल्टर्स पुन्हा अनुक्रमण आणि पडताळणी कार्यांवर लागू होतात. वरील श्रेणी निवडा, "
+"मग फिल्टर्स सेट करून व्याप्ती कमी करा."
 
 #: core/templates/dashboard.html:135
 msgid "Available generation"
-msgstr ""
+msgstr "उपलब्ध पिढी"
 
 #: core/templates/dashboard.html:136
 msgid "Choose a generation or enter one below"
-msgstr ""
+msgstr "पिढी निवडा किंवा खाली एक प्रविष्ट करा"
 
 #: core/templates/dashboard.html:144
 msgid "Pull Generation to Staging"
-msgstr ""
+msgstr "पिढी स्टेजिंगवर आणा"
 
 #: core/templates/dashboard.html:146
 msgid "Or enter an immutable generation id"
-msgstr ""
+msgstr "किंवा एक अपरिवर्तनीय पिढी आयडी प्रविष्ट करा"
 
 #: core/templates/dashboard.html:150
 msgid "Generation Lifecycle"
-msgstr ""
+msgstr "पिढी जीवनचक्र"
 
 #: core/templates/dashboard.html:155
 #: core/templates/dashboard_operations.html:94
@@ -319,7 +325,7 @@ msgstr "स्थिती"
 
 #: core/templates/dashboard.html:157
 msgid "Retention"
-msgstr ""
+msgstr "धारणा"
 
 #: core/templates/dashboard.html:158 core/templates/dashboard_pdfs.html:111
 #: core/templates/user_list.html:57
@@ -334,54 +340,57 @@ msgstr "सक्रिय"
 
 #: core/templates/dashboard.html:169
 msgid "Validated"
-msgstr ""
+msgstr "पडताळलेले"
 
 #: core/templates/dashboard.html:171
 msgid "Superseded"
-msgstr ""
+msgstr "बदललेले"
 
 #: core/templates/dashboard.html:173
 msgid "Purged"
-msgstr ""
+msgstr "काढून टाकलेले"
 
 #: core/templates/dashboard.html:175
 msgid "Failed"
-msgstr ""
+msgstr "अपयशी"
 
 #: core/templates/dashboard.html:177
 msgid "Staged"
-msgstr ""
+msgstr "स्टेज केलेले"
 
 #: core/templates/dashboard.html:189
 msgid ""
 "Promote this generation to active? The current active will be superseded."
 msgstr ""
+"ही पिढी सक्रिय करा? सध्याची सक्रिय पिढी बदलली जाईल."
 
 #: core/templates/dashboard.html:189
 msgid "Promote"
-msgstr ""
+msgstr "प्रमोट करा"
 
 #: core/templates/dashboard.html:195
 msgid "Roll back to this generation? This will supersede the current active."
-msgstr ""
+msgstr "या पिढीवर परत जायचे? यामुळे सध्याची सक्रिय पिढी बदलली जाईल."
 
 #: core/templates/dashboard.html:195
 msgid "Rollback"
-msgstr ""
+msgstr "रोलबॅक"
 
 #: core/templates/dashboard.html:201
 msgid ""
 "Purge this generation? This marks it purged and removes it from active "
 "rotation."
 msgstr ""
+"ही पिढी काढून टाकायची? यामुळे ती काढून टाकलेली म्हणून चिन्हांकित केली जाईल आणि "
+"सक्रिय फिरण्यातून काढून टाकली जाईल."
 
 #: core/templates/dashboard.html:201
 msgid "Purge"
-msgstr ""
+msgstr "काढून टाका"
 
 #: core/templates/dashboard.html:213
 msgid "Purge Expired"
-msgstr ""
+msgstr "कालबाह्य काढून टाका"
 
 #: core/templates/dashboard.html:225
 #, fuzzy
@@ -473,11 +482,11 @@ msgstr "दस्तऐवज प्राप्त झाल्यानंत�
 
 #: core/templates/dashboard.html:321
 msgid "Maintenance Jobs"
-msgstr ""
+msgstr "देखभाल कार्ये"
 
 #: core/templates/dashboard.html:322
 msgid "Queued and recent background work."
-msgstr ""
+msgstr "रांगेत लावलेली आणि अलीकडील पार्श्वभूमीतील कार्ये."
 
 #: core/templates/dashboard.html:336 core/templates/dashboard.html:432
 #: core/templates/dashboard.html:463 core/templates/dashboard.html:563
@@ -490,11 +499,11 @@ msgstr "रद्द करा"
 
 #: core/templates/dashboard.html:341
 msgid "Retry"
-msgstr ""
+msgstr "पुन्हा प्रयत्न करा"
 
 #: core/templates/dashboard.html:347
 msgid "No maintenance jobs have been queued."
-msgstr ""
+msgstr "कोणतीही देखभाल कार्ये रांगेत लावलेली नाहीत."
 
 #: core/templates/dashboard.html:354
 msgid "Dispatch Board"
@@ -566,15 +575,15 @@ msgstr "जोडा"
 
 #: core/templates/dashboard.html:507
 msgid "Select at least one category to preview."
-msgstr ""
+msgstr "पूर्वावलोकनासाठी किमान एक श्रेणी निवडा."
 
 #: core/templates/dashboard.html:520
 msgid "Counting..."
-msgstr ""
+msgstr "मोजत आहे..."
 
 #: core/templates/dashboard.html:524
 msgid "PDFs in"
-msgstr ""
+msgstr "मधील PDF"
 
 #: core/templates/dashboard.html:524
 #, fuzzy
@@ -594,7 +603,7 @@ msgstr "अनुक्रमण आवश्यक"
 
 #: core/templates/dashboard.html:527
 msgid "Preview failed."
-msgstr ""
+msgstr "पूर्वावलोकन अपयशी."
 
 #: core/templates/dashboard.html:549
 #, fuzzy
@@ -604,15 +613,15 @@ msgstr "सक्रिय वापरकर्ता निवडा"
 
 #: core/templates/dashboard.html:567
 msgid "Items"
-msgstr ""
+msgstr "वस्तू"
 
 #: core/templates/dashboard.html:579
 msgid "items"
-msgstr ""
+msgstr "वस्तू"
 
 #: core/templates/dashboard.html:591
 msgid "Failed to load jobs."
-msgstr ""
+msgstr "कार्ये लोड करण्यात अपयशी."
 
 #: core/templates/dashboard_operations.html:4
 #, fuzzy
@@ -622,7 +631,7 @@ msgstr "संचालन नियंत्रण कक्ष - सीसी 
 
 #: core/templates/dashboard_operations.html:9
 msgid "Environment & Data Lifecycle"
-msgstr ""
+msgstr "पर्यावरण आणि डेटा जीवनचक्र"
 
 #: core/templates/dashboard_operations.html:10
 #, fuzzy
@@ -635,30 +644,31 @@ msgid ""
 "Dataset identity, writer authority, generation status, and restore workspace "
 "state."
 msgstr ""
+"डेटासेट ओळख, लेखक अधिकार, पिढी स्थिती आणि कार्यक्षेत्र स्थिती पुनर्संचयित करा."
 
 #: core/templates/dashboard_operations.html:17
 msgid "Environment"
-msgstr ""
+msgstr "पर्यावरण"
 
 #: core/templates/dashboard_operations.html:20
 msgid "APP_ENV"
-msgstr ""
+msgstr "अॅप_पर्यावरण"
 
 #: core/templates/dashboard_operations.html:23
 msgid "Dataset"
-msgstr ""
+msgstr "डेटासेट"
 
 #: core/templates/dashboard_operations.html:26
 msgid "Authoritative"
-msgstr ""
+msgstr "अधिकृत"
 
 #: core/templates/dashboard_operations.html:29
 msgid "Restore Source"
-msgstr ""
+msgstr "स्रोत पुनर्संचयित करा"
 
 #: core/templates/dashboard_operations.html:32
 msgid "Production Source"
-msgstr ""
+msgstr "उत्पादन स्रोत"
 
 #: core/templates/dashboard_operations.html:41
 #, fuzzy
@@ -674,19 +684,19 @@ msgstr "विभाग"
 
 #: core/templates/dashboard_operations.html:47
 msgid "Instance ID"
-msgstr ""
+msgstr "इन्स्टन्स आयडी"
 
 #: core/templates/dashboard_operations.html:50
 msgid "Build Digest"
-msgstr ""
+msgstr "बिल्ड डायजेस्ट"
 
 #: core/templates/dashboard_operations.html:53
 msgid "Release"
-msgstr ""
+msgstr "प्रकाशन"
 
 #: core/templates/dashboard_operations.html:58
 msgid "Digest mismatch"
-msgstr ""
+msgstr "डायजेस्ट विसंगती"
 
 #: core/templates/dashboard_operations.html:67
 #, fuzzy
@@ -696,27 +706,27 @@ msgstr "डॅशबोर्डवर परत"
 
 #: core/templates/dashboard_operations.html:70
 msgid "Backup Role"
-msgstr ""
+msgstr "बॅकअप भूमिका"
 
 #: core/templates/dashboard_operations.html:73
 msgid "Sync Mode"
-msgstr ""
+msgstr "समक्रमण मोड"
 
 #: core/templates/dashboard_operations.html:76
 msgid "Data Mode"
-msgstr ""
+msgstr "डेटा मोड"
 
 #: core/templates/dashboard_operations.html:79
 msgid "Side Effects"
-msgstr ""
+msgstr "दुष्परिणाम"
 
 #: core/templates/dashboard_operations.html:82
 msgid "Scheduler"
-msgstr ""
+msgstr "शेड्यूलर"
 
 #: core/templates/dashboard_operations.html:83
 msgid "Disabled"
-msgstr ""
+msgstr "अक्षम"
 
 #: core/templates/dashboard_operations.html:91
 #, fuzzy
@@ -726,23 +736,23 @@ msgstr "दस्तऐवज संचालन"
 
 #: core/templates/dashboard_operations.html:97
 msgid "Age"
-msgstr ""
+msgstr "वय"
 
 #: core/templates/dashboard_operations.html:107
 msgid "Activation Journal"
-msgstr ""
+msgstr "सक्रियकरण जर्नल"
 
 #: core/templates/dashboard_operations.html:110
 msgid "Lock Held"
-msgstr ""
+msgstr "लॉक धरलेले"
 
 #: core/templates/dashboard_operations.html:111
 msgid "Yes,No"
-msgstr ""
+msgstr "होय,नाही"
 
 #: core/templates/dashboard_operations.html:112
 msgid "Incomplete"
-msgstr ""
+msgstr "अपूर्ण"
 
 #: core/templates/dashboard_pdfs.html:4
 msgid "Document Workbench"
@@ -851,7 +861,7 @@ msgstr "अज्ञात"
 
 #: core/templates/dashboard_pdfs.html:131
 msgid "Deprecated"
-msgstr ""
+msgstr "अप्रचलित"
 
 #: core/templates/dashboard_pdfs.html:133
 #, fuzzy
@@ -861,11 +871,11 @@ msgstr "प्राप्त"
 
 #: core/templates/dashboard_pdfs.html:135
 msgid "Processing"
-msgstr ""
+msgstr "प्रक्रिया करत आहे"
 
 #: core/templates/dashboard_pdfs.html:137
 msgid "Ready"
-msgstr ""
+msgstr "तयार"
 
 #: core/templates/dashboard_pdfs.html:156
 msgid "Assign owner"
@@ -883,23 +893,23 @@ msgstr "PDF चे नाव बदला"
 
 #: core/templates/dashboard_pdfs.html:171
 msgid "Deprecate this document? It will be hidden from search results."
-msgstr ""
+msgstr "हा दस्तऐवज अप्रचलित करायचा? तो शोध परिणामांमधून लपवला जाईल."
 
 #: core/templates/dashboard_pdfs.html:172
 msgid "Deprecate"
-msgstr ""
+msgstr "अप्रचलित करा"
 
 #: core/templates/dashboard_pdfs.html:178
 msgid "Archive this document? It will be hidden from search and lists."
-msgstr ""
+msgstr "हा दस्तऐवज संग्रहित करायचा? तो शोध आणि यादींमधून लपवला जाईल."
 
 #: core/templates/dashboard_pdfs.html:179
 msgid "Archive"
-msgstr ""
+msgstr "संग्रहित करा"
 
 #: core/templates/dashboard_pdfs.html:186
 msgid "Restore"
-msgstr ""
+msgstr "पुनर्संचयित करा"
 
 #: core/templates/dashboard_pdfs.html:194
 msgid "Delete PDF"
@@ -1261,7 +1271,7 @@ msgstr "खाते तयार करा"
 #: core/templates/search.html:6 core/templates/search.html:15
 #: core/templates/search.html:22
 msgid "Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra"
-msgstr ""
+msgstr "सहकार AI — सहकारी संस्था कायदे व अधिनियम शोधा, महाराष्ट्र"
 
 #: core/templates/search.html:8
 msgid ""
@@ -1269,12 +1279,15 @@ msgid ""
 "assistance. Sahakar AI provides instant answers from official government "
 "documents."
 msgstr ""
+"AI सहाय्याने महाराष्ट्र सहकारी संस्था कायदे, नियम आणि उपविधी शोधा. सहकार AI "
+"अधिकृत सरकारी दस्तऐवजांमधून त्वरित उत्तरे प्रदान करते."
 
 #: core/templates/search.html:16 core/templates/search.html:23
 msgid ""
 "Search Maharashtra cooperative society acts, rules, and bylaws with AI "
 "assistance."
 msgstr ""
+"AI सहाय्याने महाराष्ट्र सहकारी संस्था कायदे, नियम आणि उपविधी शोधा."
 
 #: core/templates/search.html:100
 msgid "Admin Login"
@@ -1309,11 +1322,11 @@ msgstr ""
 
 #: core/templates/search.html:179
 msgid "About this service"
-msgstr ""
+msgstr "या सेवेबद्दल"
 
 #: core/templates/search.html:181
 msgid "What is Sahakar AI?"
-msgstr ""
+msgstr "सहकार AI काय आहे?"
 
 #: core/templates/search.html:183
 msgid ""
@@ -1322,26 +1335,32 @@ msgid ""
 "official government documents quickly, with answers generated in English and "
 "Marathi."
 msgstr ""
+"सहकार AI हे महाराष्ट्र सहकारी संस्था कायदे, अधिनियम, नियम आणि उपविधींसाठी "
+"AI-आधारित शोध साधन आहे. हे तुम्हाला अधिकृत सरकारी दस्तऐवजांमधून संबंधित माहिती "
+"त्वरित शोधण्यास मदत करते, इंग्रजी आणि मराठीमध्ये उत्तरे तयार करते."
 
 #: core/templates/search.html:185
 msgid "How to ask better questions"
-msgstr ""
+msgstr "चांगले प्रश्न कसे विचारावेत"
 
 #: core/templates/search.html:187
 msgid ""
 "Use specific terms like act names, section numbers, or subject areas (e.g., "
 "housing, audit, agriculture)."
 msgstr ""
+"कायद्यांची नावे, विभाग क्रमांक किंवा विषय क्षेत्रे (उदा., गृहनिर्माण, लेखापरीक्षण, "
+"कृषी) यांसारखे विशिष्ट शब्द वापरा."
 
 #: core/templates/search.html:188
 msgid "Ask in English or Marathi — both are supported."
-msgstr ""
+msgstr "इंग्रजी किंवा मराठीत विचारा — दोन्ही समर्थित आहेत."
 
 #: core/templates/search.html:189
 msgid ""
 "Review the source references provided with each answer before making "
 "official decisions."
 msgstr ""
+"अधिकृत निर्णय घेण्यापूर्वी प्रत्येक उत्तरासह प्रदान केलेले स्रोत संदर्भ तपासा."
 
 #: core/templates/search.html:191
 #, fuzzy
@@ -1365,7 +1384,7 @@ msgstr ""
 
 #: core/templates/search.html:206
 msgid "Nimble eSolutions — technology partner"
-msgstr ""
+msgstr "निंबल ई-सोल्यूशन्स — तंत्रज्ञान भागीदार"
 
 #: core/templates/user_edit.html:4
 msgid "Edit user access"
