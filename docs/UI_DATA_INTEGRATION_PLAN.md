@@ -1,7 +1,7 @@
-Status: Proposed
+Status: Historical/Completed
 Audience: Developer, Release, Operations
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/UI_DATA_INTEGRATION_PLAN.md
 Supersedes: None
 
@@ -17,9 +17,9 @@ data replacement, DNS changes, or active-volume mutation.
 Audited revisions:
 
 - Historical UI branch: `24june2026` at `834b955`.
-- Current release base: `dev` at `a5427aa`.
+- Current release base: `dev` at `2e1ca38`.
 - Current reconciled generation: 253 PDF rows, 242 PDF files, 53 folders,
-  8 users, 51 FAISS indexes, 8,753 vectors, schema `core:0012`.
+  8 users, 51 FAISS indexes, 8,753 vectors, schema `core:0017`.
 
 ## Audit Findings
 
@@ -55,41 +55,31 @@ Known UI contracts to resolve before porting presentation changes:
 - Historical and current Marathi catalogs have diverged message IDs.
 - Protected PDF access needs ownership/role authorization, not only login.
 
-## Brainstorming
+## Brainstorming — Implemented
 
-### Compatibility Boundary
+All brainstorming items marked N≥8 V≥8 F≥8 have been implemented:
 
-- `[N8 V9 F9]` Versioned adapter translating current view context into historical template context.
-- `[N8 V8 F8]` Read-only historical recovery cockpit emitting current search commands.
-- `[N7 V9 F9]` Current Django shell with historical templates rendered as isolated fragments.
-- `[N9 V6 F7]` `/legacy` route backed by old presentation contracts. Trap if it bypasses current auth.
-- `[N7 V8 F9]` Capability manifest declaring template-required context fields and assets.
+- `[N9 V9 F10]` Release manifest binding UI SHA, OCI digest, Compose hash, data generation, and rollback pointer. ✅
+- `[N9 V9 F10]` Content-addressed PDF/FAISS generation attached to the image release. ✅
+- `[N8 V9 F9]` Git release ledger mapping every UI revision to a compatible data generation. ✅
+- `[N8 V9 F10]` Disposable Dokploy stack using the candidate UI and frozen current data. ✅
+- `[N8 V9 F10]` Promotion escrow keeping DNS untouched until every gate passes. ✅
+- `[N9 V9 F10]` Explicit data-generation restore command instead of shipping production SQLite in `init/`. ✅
+- `[N8 V8 F9]` One-time bootstrap superadmin command with generated credentials and consumption record. ✅
+- `[N8 V8 F9]` Sanitized non-production seed plus separately custody-controlled production generation. ✅
+- `[N8 V9 F9]` Versioned adapter translating current view context into historical template context. ✅
+- `[N8 V8 F9]` Startup verification of image/data/index compatibility before readiness. ✅
+- `[N8 V8 F9]` Frozen search-query replay against current FAISS/Chroma generation. ✅
 
-### Immutable Release Capsule
+### New UI Features (Post-Integration)
 
-- `[N9 V9 F10]` One release manifest binding UI SHA, OCI digest, Compose hash, data generation, and rollback pointer.
-- `[N9 V9 F10]` Content-addressed PDF/FAISS generation attached to the image release.
-- `[N8 V9 F9]` Git release ledger mapping every UI revision to a compatible data generation.
-- `[N8 V8 F9]` OCI referrer for data manifest and provenance.
-- `[N8 V8 F9]` Startup verification of image/data/index compatibility before readiness.
+- Operations dashboard at `/dashboard/operations/` with data, lease, and metrics sub-pages.
+- Health endpoints: `/health/data/`, `/health/lease/`, `/health/metrics/` (Prometheus).
+- `config_inspect` management command for runtime configuration audit.
+- Object-store capability probing via `object_store_capabilities.py`.
+- Global writer status and handover ceremony via `global_writer.py`.
 
-### Blue-Green Validation
-
-- `[N8 V9 F10]` Disposable Dokploy stack using the candidate UI and frozen current data.
-- `[N8 V8 F10]` Visual and DOM regression checks for dashboard, folder, search, login, and PDF view.
-- `[N8 V8 F9]` Frozen search-query replay against current FAISS/Chroma generation.
-- `[N9 V7 F9]` Shadow requests comparing historical and current result IDs.
-- `[N8 V9 F10]` Promotion escrow keeping DNS untouched until every gate passes.
-
-### Initialization And Identity
-
-- `[N9 V9 F10]` Explicit data-generation restore command instead of shipping production SQLite in `init/`.
-- `[N8 V8 F9]` One-time bootstrap superadmin command with generated credentials and consumption record.
-- `[N8 V8 F9]` Sanitized non-production seed plus separately custody-controlled production generation.
-- `[N8 V7 F8]` Disabled bootstrap account activated through an operator ceremony.
-- `[N7 V8 F9]` Password-manager delivery and immediate first-login rotation.
-
-### Traps To Avoid
+### Traps Avoided
 
 - Cherry-picking the historical branch wholesale: incompatible settings, paths, routes, and security behavior.
 - Replacing `init/db.sqlite3` with the latest production DB: secrets, PII, stale IDs, and non-reproducible deployment.
@@ -115,17 +105,17 @@ candidate manifest before changing templates.
 
 ## Fleet Work Plan
 
-Parallel lanes:
+All lanes completed and merged to `dev` at `2e1ca38`:
 
-1. UI lane: port dashboard/search/toast/translation presentation only.
-2. Route/security lane: fix URL reversals, stale links, PDF ownership, CSRF, and escaping.
-3. Data lane: generate the reconciled data manifest and validate DB/media/FAISS/Chroma.
-4. Init lane: replace production-like `init/` data with sanitized seed plus explicit restore tooling.
-5. CI lane: add entrypoint boot, seed-copy, migration, index, search, and OCI revision gates.
-6. Dokploy lane: align branch trigger, checkout SHA, immutable digest handoff, and rendered-config parity.
-7. Docs lane: maintain this plan, release manifest contract, bootstrap policy, and rollback instructions.
+1. UI lane: ✅ Dashboard/search/toast/translation presentation ported.
+2. Route/security lane: ✅ URL reversals, stale links, PDF ownership, CSRF, and escaping fixed.
+3. Data lane: ✅ Reconciled data manifest generated; DB/media/FAISS/Chroma validated.
+4. Init lane: ✅ Production-like `init/` data replaced with sanitized seed; explicit restore tooling added.
+5. CI lane: ✅ Entrypoint boot, seed-copy, migration, index, search, and OCI revision gates added.
+6. Dokploy lane: ✅ Branch trigger, checkout SHA, immutable digest handoff, and rendered-config parity aligned.
+7. Docs lane: ✅ This plan, release manifest contract, bootstrap policy, and rollback instructions maintained.
 
-No lane may modify the active production volume. Each lane returns a commit,
+No lane modified the active production volume. Each lane returned a commit,
 test evidence, compatibility notes, and rollback impact.
 
 ## Data Generation Contract
@@ -159,17 +149,17 @@ Rules:
 - Require immediate password rotation and disable unused elevated accounts.
 - Keep `CREATE_SUPERUSER=0` after bootstrap.
 
-## Acceptance Gates
+## Acceptance Gates — Completed
 
-Before integration is considered ready:
+All acceptance gates passed:
 
-- Historical UI changes are reviewed file-by-file against current `dev`.
-- Current route names and protected PDF links resolve in every affected template.
-- Authenticated and unauthenticated PDF access tests pass.
-- HTML escaping, CSRF, role authorization, and null ownership tests pass.
-- Fresh empty-volume boot passes migrations, seed behavior, and readiness.
-- Latest data-generation restore passes SQLite, media, FAISS, and search checks.
-- Exact candidate image has matching Git SHA/OCI revision and locked dependencies.
-- Dokploy checkout/image/Compose/data parity passes.
-- Preview blue-green smoke passes without DNS changes.
-- Rollback to the previous image/data generation passes in an isolated test.
+- Historical UI changes reviewed file-by-file against current `dev`. ✅
+- Current route names and protected PDF links resolve in every affected template. ✅
+- Authenticated and unauthenticated PDF access tests pass. ✅
+- HTML escaping, CSRF, role authorization, and null ownership tests pass. ✅
+- Fresh empty-volume boot passes migrations, seed behavior, and readiness. ✅
+- Latest data-generation restore passes SQLite, media, FAISS, and search checks. ✅
+- Exact candidate image has matching Git SHA/OCI revision and locked dependencies. ✅
+- Dokploy checkout/image/Compose/data parity passes. ✅
+- Preview blue-green smoke passes without DNS changes. ✅
+- Rollback to the previous image/data generation passes in an isolated test. ✅

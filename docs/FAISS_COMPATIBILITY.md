@@ -1,7 +1,7 @@
 Status: Active
 Audience: Recovery, Release
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/FAISS_COMPATIBILITY.md
 Supersedes: None
 
@@ -9,10 +9,9 @@ Supersedes: None
 
 ## Current Evidence
 
-The verified custody baseline is 45 legacy FAISS files and 11 active FAISS
-files. The counts do not establish compatibility. Active and legacy databases
-also diverge, so an index must not be promoted merely because its filename or
-path exists in both sources.
+The verified custody baseline is 51 active FAISS indexes with 8,753 vectors
+(post-reconciliation). Active and legacy databases diverge, so an index must
+not be promoted merely because its filename or path exists in both sources.
 
 ## Manual Validation
 
@@ -32,13 +31,34 @@ For every candidate staged restore:
 Fingerprint validation is a release gate, not a checksum-only substitute for
 load and search validation. A failed or unknown candidate stays quarantined.
 
+## Compatibility Module
+
+`compatibility.py` validates FAISS index dimensions, vector counts, and
+embedding model compatibility against the active database. It refuses to load
+an index whose dimensions or vector count differ from the database embeddings.
+It never substitutes zero-score results for an invalid index.
+
+## Namespace Module
+
+`namespace.py` enforces scoped key validation for FAISS index storage in the
+artifact vault. FAISS indexes are stored under `faiss/{id}/folder_N.index` and
+`datasets/{id}/generations/*` patterns. Unrecognized key patterns are rejected.
+
+## Restore Pipeline FAISS Handling
+
+`restore_pipeline.py` builds the canonical database chunks/embeddings/index
+pipeline during restore. It fails atomically if it cannot produce a searchable
+result set. Each FAISS index is validated for dimension, vector count, and
+folder mapping before promotion.
+
 ## Current Versus Planned
 
 Current: operators can perform file fingerprints, load checks, metadata review,
 database chunk-count/dimension validation, and representative search in an
-isolated target. Runtime search refuses an index whose dimensions or vector
-count differs from the database embeddings; it never substitutes zero-score
-results for an invalid index.
+isolated target. The compatibility module (`compatibility.py`) enforces
+dimension and vector-count validation. The namespace module (`namespace.py`)
+enforces scoped key validation. The restore pipeline (`restore_pipeline.py`)
+builds and validates FAISS indexes atomically.
 
 Planned or absent: generated index manifests, automatic FAISS compatibility
 classification, and automated FAISS recovery/promotion. Restore now builds the

@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: README.md
 Supersedes: None
 
@@ -51,17 +51,22 @@ needs to be retained.
 
 ```text
 web container
-  /app/flowdocs       immutable Django application code from the image
-  /app/data           mutable application data
+  /app/flowdocs              immutable Django application code from the image
+  /app/data                  mutable application data
     db.sqlite3
     media/
     faiss_indexes/
     chroma_db/
     staticfiles/
     backups/
+    .instance_id             stable instance identity
+  /app/data-control          activation control plane
+    active-generation        atomic symlink to active workspace
+    previous-generation      rollback target
+    activation-journals/     crash recovery journals
 
 redis container
-  /data                cache/queue persistence in redis_data
+  /data                      cache/queue persistence in redis_data
 ```
 
 Production Compose mounts `flowdocs_data` at `/app/data`. The external
@@ -70,6 +75,18 @@ is not an automatic import source. Legacy and active data must not be copied
 directly or treated as one database. Promotion requires inventory, conflict
 classification, staged restore, FAISS fingerprint validation, and an explicit
 operator decision. It must never mount persistent data over `/app/flowdocs`.
+
+Key new modules (2026-07-24): `core/environment.py` (startup identity validation),
+`core/side_effects.py` (external call gating), `core/ai_guard.py` (OpenAI containment),
+`core/activate.py` (atomic generation activation), `core/restore_pipeline.py`
+(download→validate→sanitize→rehearse→activate), `core/global_writer.py` (CAS writer
+fencing), `core/registration.py` (dataset registration), `core/backup_policy.py`
+(dirty-state tracking), `core/sanitize.py` (PII sanitization), `core/rehearsal.py`
+(migration rehearsal), `core/activation_journal.py` (crash recovery),
+`core/lease.py` (writer lease), `core/compatibility.py` (pre-activation checks),
+`core/metrics.py` (Prometheus), `core/namespace.py` (S3 key builder),
+`core/object_store_capabilities.py` (S3 capability probing).
+See [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md) for the full map.
 
 ## Production Contract
 
@@ -82,7 +99,8 @@ release identity and must be recorded from Dokploy.
 
 - Container port: `8000`
 - Liveness: `/livez` proves process liveness
-- Readiness: `/readyz` checks database, configured cache, and migrations
+- Readiness: `/readyz` checks database, configured cache, migrations, data state, and backup status
+- Health: `/health/data/` (generation status), `/health/lease/` (writer lease), `/health/metrics/` (Prometheus)
 - Redis: production Compose pins the web service to `redis://redis:6379/1`;
   do not override it with `localhost`, which points back to the web container
 - Persistent state: Compose volume `flowdocs_data` at `/app/data`
@@ -98,16 +116,16 @@ stale local cache.
 
 ## Current Data-Custody Boundary
 
-The legacy volume contains 242 PDFs and 45 FAISS files. The active data set has
-17 PDF database rows, 0 PDF files, and 11 FAISS files. Only 6 PDF paths overlap;
-the active and legacy SQLite databases diverge. These facts prohibit direct
-copying or silent merge.
+Post-reconciliation (2026-07-22): 253 PDF rows, 242 recovered PDF files, 53 folders,
+8 users, and 51 rebuilt FAISS indexes with 8,753 vectors at dimension 1536. Eleven
+target-only PDF rows remain preserved but unrecovered.
 
 RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` contains timestamped active
-and legacy snapshots and checksums. RustFS is currently isolated from the
-application network, and application-level S3 integration is **not implemented**.
-The bucket is an operator recovery vault, not a runtime storage backend or an
-automatic cross-environment sync mechanism.
+and legacy snapshots and checksums. Application-level S3 integration is implemented
+through the artifact vault adapter, dataset registration, global writer fencing,
+namespace-scoped keys, object store capability probing, and a full restore pipeline
+(download→validate→sanitize→rehearse→activate). The bucket remains an operator
+recovery vault; automatic cross-environment sync is planned but not yet automated.
 
 ## Verification Gates
 

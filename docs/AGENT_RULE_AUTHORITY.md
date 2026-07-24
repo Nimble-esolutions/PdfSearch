@@ -1,7 +1,7 @@
 Status: Active
 Audience: Agent operators and maintainers
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/AGENT_RULE_AUTHORITY.md
 Supersedes: ad hoc Kilo/OpenCode/Codex rule copies when they conflict
 
@@ -45,7 +45,11 @@ authority and fix the lower adapter in a separate docs/rules PR.
   Compose `maintenance` worker; agents must not turn bulk indexing into a web
   request loop.
 - S3/RustFS data is addressed by immutable generation IDs. Pull means staged
-  and checksum-verified until an explicit promotion record exists.
+  and checksum-verified until an explicit promotion record exists. The
+  `object_store_capabilities` module detects and verifies S3-compatible storage;
+  the `restore_pipeline` and `restore_workspace` modules orchestrate isolated
+  restore operations; the `activate` module performs atomic active-release
+  pointer switches.
 - Public search is intentionally enabled by default; do not reintroduce a
   login requirement without an approved product decision and test update.
 - `/register/` is never public. Require an authenticated `admin` or
@@ -53,6 +57,32 @@ authority and fix the lower adapter in a separate docs/rules PR.
   accounts. Department-scoped admin roles are deferred to phase 2.
 - Legacy data is recovery-only and must not be copied directly into active
   production.
+- New core modules (PRs #42-#53, merged at `2e1ca38`): `environment`
+  (APP_ENV, PRODUCTION_SOURCE_ID, AUTHORITATIVE_DATASET_ID, DATASET_ID,
+  BACKUP_ROLE, EXTERNAL_SIDE_EFFECTS_MODE, DATA_MODE), `side_effects`
+  (external side-effect safety gating), `ai_guard` (AI operation
+  authorization), `activate` (atomic active-release pointer switch),
+  `activation_journal` (activation audit trail), `restore_pipeline` and
+  `restore_workspace` (isolated restore orchestration), `global_writer`
+  (global writer fencing), `registration` (dataset registration), `backup_policy`
+  (backup policy enforcement), `sanitize` (data sanitization), `rehearsal`
+  (migration rehearsal), `lease` (writer lease management), `compatibility`
+  (compatibility checks), `metrics` (metrics collection), `namespace`
+  (namespace management), `object_store_capabilities` (object store
+  capability detection).
+- New health endpoints: `/health/data/`, `/health/lease/`, `/health/metrics/`.
+- New management commands: `config_inspect`, `verify_object_store_capabilities`,
+  `inventory_artifacts`, `validate_data_release`.
+- New UI: `/dashboard/operations/`, `/dashboard/users/`, PDF lifecycle,
+  generation lifecycle.
+- Post-reconciliation data: 253 PDF rows, 242 PDF files, 53 folders, 8 users,
+  51 FAISS indexes, 8,753 vectors.
+- COMPLETION_PLAN: the data release pipeline (environment identity, global
+  writer fencing, dataset registration, restore pipeline, compatibility
+  checks, sanitization, migration rehearsal, activation journal, writer
+  lease, backup policy, object store capabilities, namespace, metrics) is
+  implemented and merged. Remaining planned items: automatic artifact
+  publishing and cross-environment synchronization.
 
 ## Adapter Maintenance Rules
 

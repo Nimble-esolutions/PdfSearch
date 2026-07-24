@@ -1,13 +1,13 @@
-Status: Active
+Status: Completed
+Completed: 2026-07-24
 Owner: FlowDocs maintainers
 Created: 2026-07-23
 
-# PdfSearch Completion Plan — Closing All Partial / Plan-Only / Pending / Gaps
+# PdfSearch Completion Plan — All Items Completed
 
-This document enumerates every incomplete work item identified in the
-2026-07-23 audit, assigns each to a logically-named branch, breaks it into
-cherry-pickable commits, and specifies the verification gates that must pass
-before a PR is opened against `dev`.
+This document enumerated every incomplete work item identified in the
+2026-07-23 audit. All 6 items were completed and merged. The plan is retained
+as a historical record of the completion sprint.
 
 ## Universal Workflow (applies to every item below)
 
@@ -324,14 +324,8 @@ curl -fsS http://localhost:8000/ | python /app/scripts/ci/validate_public_html.p
 
 ## Dependency Order
 
-Items 1 and 2 share the `ArtifactGeneration` model and should be done in
-sequence (1 before 2, since 2's `ArtifactValidation` FKs to generations and
-the promote/rollback events feed the audit trail).
-
-Items 3, 4, 5, and 6 are independent and can be parallelized across
-worktrees or agents once their base is `origin/dev`.
-
-Recommended merge order:
+All items completed. The recommended merge order was followed:
+Item 1 → Item 2, with Items 3-6 parallelized.
 
 ```
 Item 2 (audit models)        ← after Item 1
@@ -341,8 +335,6 @@ Item 3 (bulk filter)         ← independent
 Item 4 (job drawer)          ← independent
 Item 6 (SEO/AEO)             ← independent, after approval questions resolved
 ```
-
----
 
 ## Completion Tracking
 
@@ -355,5 +347,47 @@ Item 6 (SEO/AEO)             ← independent, after approval questions resolved
 | 5 | feat/document-lifecycle | #46 | a8de9d2 | merged |
 | 6 | feat/seo-aeo-implementation | #47 | 76aa159 | merged |
 
-All 6 items merged. Dev HEAD: 76aa159. Zero open PRs for these items.
-131 tests pass on full integration suite.
+All 6 items merged. Dev HEAD: 2e1ca38 (PR #53). Zero open PRs for these items.
+157+ tests pass on full integration suite.
+
+## Post-Completion: Core Infrastructure Modules (2026-07-24)
+
+After the 6 completion-plan items merged, 16 new core modules were added
+(PRs #48-#53) to harden the production data safety boundary:
+
+| Module | Purpose |
+|--------|---------|
+| `core/environment.py` | EnvironmentIdentity with AppEnv/DataMode/BackupRole enums, startup validation |
+| `core/side_effects.py` | SideEffectPolicy gating email, OpenAI, payments, webhooks |
+| `core/ai_guard.py` | OpenAI client containment with enabled/sandbox/disabled modes |
+| `core/activate.py` | Atomic symlink-based generation activation |
+| `core/activation_journal.py` | Heartbeat-based crash recovery for activation |
+| `core/restore_pipeline.py` | Full restore: download→validate→sanitize→rehearse→activate |
+| `core/restore_workspace.py` | Workspace state machine for restore |
+| `core/global_writer.py` | CAS-based single-writer fencing per dataset |
+| `core/registration.py` | Dataset registration with conditional create |
+| `core/backup_policy.py` | Dirty-state tracking, fingerprint, debouncing |
+| `core/sanitize.py` | PII sanitization for non-prod data |
+| `core/rehearsal.py` | Migration rehearsal against isolated copy |
+| `core/lease.py` | Writer lease with Redis+DB fallback |
+| `core/compatibility.py` | Schema/embedding/FAISS compatibility checks |
+| `core/metrics.py` | Prometheus metrics at /health/metrics/ |
+| `core/namespace.py` | Dataset-scoped S3 key builder |
+| `core/object_store_capabilities.py` | S3 conditional operation probing |
+
+New env vars required: `APP_ENV`, `PRODUCTION_SOURCE_ID`,
+`AUTHORITATIVE_DATASET_ID`, `DATASET_ID`, `BACKUP_ROLE`,
+`EXTERNAL_SIDE_EFFECTS_MODE`, `DATA_MODE`.
+
+New health endpoints: `/health/data/`, `/health/lease/`, `/health/metrics/`.
+
+New management commands: `config_inspect`, `verify_object_store_capabilities`,
+`inventory_artifacts`, `validate_data_release`.
+
+New UI routes: `/dashboard/operations/`, `/dashboard/users/`, PDF lifecycle
+(deprecate/archive/restore), generation lifecycle (promote/rollback/purge).
+
+Post-reconciliation data: 253 PDF rows, 242 PDF files, 53 folders, 8 users,
+51 FAISS indexes, 8,753 vectors.
+
+PR chain: #24 → #37 → #39 → #42-#53. Current dev HEAD: 2e1ca38.

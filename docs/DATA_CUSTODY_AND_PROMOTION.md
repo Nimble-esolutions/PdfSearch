@@ -1,7 +1,7 @@
 Status: Active
 Audience: Recovery, Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/DATA_CUSTODY_AND_PROMOTION.md
 Supersedes: None
 
@@ -10,9 +10,11 @@ Supersedes: None
 ## Boundary
 
 The active application volume and the legacy volume are separate custody
-domains. Legacy contains 242 PDFs and 45 FAISS files. Active contains 17 PDF
-rows, 0 PDFs, and 11 FAISS files. Only 6 PDF paths overlap, and the databases
-diverge. No PDF contents belong in an incident record.
+domains. Legacy contains 242 PDFs and 45 FAISS files. After the 2026-07-22
+reconciliation, active custody holds 253 PDF rows, 242 PDF files, 53 folders,
+8 users, and 51 rebuilt FAISS indexes with 8,753 vectors. Only 6 PDF paths
+overlap between legacy and active, and the databases diverge. No PDF contents
+belong in an incident record.
 
 The read-only `/mnt/legacy` mount is evidence/quarantine only. It is not a
 permission to import or merge. RustFS is an isolated recovery vault; the
@@ -34,8 +36,18 @@ never overwrites active data during either operation.
    index load, expected dimensions/model metadata when available, and search
    behavior. See [`FAISS_COMPATIBILITY.md`](FAISS_COMPATIBILITY.md).
 6. **Explicit promotion:** an operator records the selected source, conflict
-   decisions, image/data compatibility, and approval before reconnecting or
-   replacing active data.
+    decisions, image/data compatibility, and approval before reconnecting or
+    replacing active data.
+7. **Compatibility check:** verify image, schema, embedding model, and index
+    format compatibility before staging (`compatibility` module).
+8. **Migration rehearsal:** dry-run migration against a disposable copy to
+    detect schema conflicts before touching active data (`rehearsal` module).
+9. **Sanitization:** remove sensitive or out-of-contract data before promotion
+    (`sanitize` module).
+10. **Activation journal:** record every activation step with audit trail
+    (`activation_journal` module).
+11. **Atomic pointer switch:** the `activate` module performs an atomic
+    active-release pointer switch after all gates pass.
 
 Legacy and active data must not be copied directly. `IMPORT_LEGACY_DATA` does
 not replace this lifecycle and must not be treated as automatic promotion.
@@ -43,9 +55,13 @@ not replace this lifecycle and must not be treated as automatic promotion.
 ## RustFS Handling
 
 Use the timestamped snapshots and checksums in bucket
-`ai-sahakar-prod-flowdocs-data-volume` as recovery evidence. Because the bucket
-is isolated from the application network, recovery is an operator-mediated
-restore, not a runtime read or automatic sync.
+`ai-sahakar-prod-flowdocs-data-volume` as recovery evidence. The bucket is
+isolated from the application network; recovery is an operator-mediated restore
+through the `restore_pipeline` and `restore_workspace` modules, not a runtime
+read or automatic sync. The `object_store_capabilities` module detects and
+verifies S3-compatible storage capabilities. Explicit superadmin generation sync
+creates immutable generations; explicit pull verifies every object and writes
+only to a quarantine staging directory.
 
 ## Gates
 
@@ -56,7 +72,12 @@ failed isolated targets and evidence until the recovery decision is closed.
 ## Current Versus Planned
 
 Current: manual custody, inventory, conflict classification, staged restore,
-fingerprint checks, and explicit promotion.
+fingerprint checks, explicit promotion, compatibility checks, migration
+rehearsal, sanitization, activation journal, atomic pointer switch, global
+writer fencing, dataset registration, writer lease, backup policy, object
+store capabilities, namespace, and metrics.
 
 Planned: generated artifact manifests, automatic reconciliation, automatic
-cross-environment sync, and automated FAISS recovery.
+cross-environment sync, and automated FAISS recovery. The restore pipeline
+and activation journal provide the foundation for these; full automation
+remains a future target.

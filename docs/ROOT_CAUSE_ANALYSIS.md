@@ -1,7 +1,7 @@
 Status: Historical
 Audience: Recovery
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/OPERATIONS_RUNBOOK.md
 Supersedes: None
 
@@ -65,10 +65,61 @@ than treating any one fix as sufficient.
 
 ## Verified Data Divergence
 
-Legacy and active data are not interchangeable: legacy contains 242 PDFs and 45
-FAISS files; active contains 17 PDF rows, 0 PDFs, and 11 FAISS files; only 6 PDF
-paths overlap; and the SQLite databases diverge. Never merge by direct copy.
-Use quarantine, inventory, conflict classification, staged restore, FAISS
-fingerprint validation, and explicit promotion. The application adapter now
-supports immutable, checksum-verified generations and staged pulls; it still
-does not promote a staged generation into live data automatically.
+Legacy and active data were reconciled on 2026-07-22. Post-reconciliation:
+253 PDF rows, 242 recovered PDF files, 53 folders, 8 users, 51 FAISS indexes,
+8,753 vectors. Eleven target-only PDF rows remain preserved but unrecovered.
+Never merge by direct copy. Use quarantine, inventory, conflict classification,
+staged restore, FAISS fingerprint validation, and explicit promotion.
+
+The application now supports the full restore pipeline: namespace-scoped S3 keys
+(`core/namespace.py`), conditional operation probing
+(`core/object_store_capabilities.py`), CAS-based single-writer fencing
+(`core/global_writer.py`), immutable generation manifests, staged restore with
+migration rehearsal (`core/rehearsal.py`), PII sanitization for non-prod
+(`core/sanitize.py`), compatibility checks (`core/compatibility.py`), and
+atomic symlink-based activation with crash recovery (`core/activate.py`,
+`core/activation_journal.py`).
+
+## Prevention Mechanisms (2026-07-24)
+
+The following mechanisms were added to prevent recurrence of the data
+divergence and deployment incidents documented above:
+
+### Environment Identity (`core/environment.py`)
+Fail-closed startup validation ensures every deployment declares its
+`APP_ENV`, `DATA_MODE`, `BACKUP_ROLE`, and `EXTERNAL_SIDE_EFFECTS_MODE`.
+Production requires `DATA_MODE=live` and a non-empty `PRODUCTION_SOURCE_ID`.
+An invalid identity exits before migrations run — no silent misconfiguration.
+
+### Side-Effect Policy (`core/side_effects.py`)
+External calls (email, OpenAI, payments, webhooks) are gated by
+`EXTERNAL_SIDE_EFFECTS_MODE`. Production uses `live`; staging uses `sandbox`
+(payments/webhooks blocked); dev uses `disabled`. The AI guard
+(`core/ai_guard.py`) enforces OpenAI containment at construction time.
+
+### Global Writer Fencing (`core/global_writer.py`)
+CAS-based single-writer fencing prevents two instances from writing to the
+same dataset. Writer leases (`core/lease.py`) use Redis with SQLite fallback.
+This prevents the "two instances diverging" failure mode.
+
+### Restore Pipeline (`core/restore_pipeline.py`)
+The strict download→validate→sanitize→rehearse→activate sequence prevents
+direct data copying. Migration rehearsal runs against an isolated copy before
+activation. Compatibility checks verify schema, embedding dimensions, and
+FAISS format before promotion.
+
+### Activation Safety (`core/activate.py`, `core/activation_journal.py`)
+Atomic symlink swap prevents partial activation. Heartbeat-based crash
+recovery detects and rolls back incomplete activations. This prevents the
+"half-promoted generation" failure mode.
+
+### Backup Policy (`core/backup_policy.py`)
+Dirty-state tracking with fingerprinting and debouncing prevents redundant
+backups and ensures backups are taken only when data has changed. This
+prevents the "stale backup masking data loss" failure mode.
+
+### Object Store Capabilities (`core/object_store_capabilities.py`)
+Conditional operation probing at startup verifies that the S3/RustFS endpoint
+supports If-None-Match and If-Match before any write path is enabled. This
+prevents the "silent CAS failure" mode where writes succeed but fencing is
+ineffective.
