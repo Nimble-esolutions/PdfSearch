@@ -720,6 +720,7 @@ class SearchAndAuthenticationTests(TestCase):
         response = self.client.get(reverse("home"))
         self.assertContains(response, 'class="public-search-topbar"')
         self.assertContains(response, 'class="public-search-header"')
+        self.assertContains(response, 'aria-label="Public service links"')
         self.assertContains(response, 'id="search-page-heading"')
         self.assertContains(response, 'aria-label="Search answers"')
         self.assertContains(response, 'aria-label="Contact support on WhatsApp"')

@@ -41,7 +41,7 @@ body.public-search {
     justify-content: flex-end;
     align-items: center;
 }
-.public-search-topbar__inner > div {
+.public-search-topbar__inner > nav {
     display: flex;
     align-items: center;
     gap: .9rem;
@@ -60,7 +60,7 @@ body.public-search {
 }
 .public-search-topbar a:hover,
 .public-search-topbar button:hover { color: #f6d9a5; }
-.public-search-topbar .text-white-50 { color: #f4e8d6 !important; }
+.public-search-topbar__identity { color: #f4e8d6; }
 
 .public-search-header {
     position: relative;
@@ -85,7 +85,9 @@ body.public-search {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 1rem 0;
+    padding: 1rem 1.25rem;
+    background: rgba(255, 253, 247, .9);
+    border-left: 4px solid var(--search-gold);
     color: var(--search-ink);
     text-shadow: 0 1px 0 rgba(255, 255, 255, .75);
 }
@@ -280,18 +282,35 @@ body.public-search {
 .seo-static-content p,
 .seo-static-content li { color: var(--search-muted) !important; }
 
+.public-search .admin-footer {
+    background: var(--search-maroon-strong);
+    color: #f8eee1;
+    border-top: 4px solid var(--search-gold);
+}
+.public-search .admin-footer__inner { width: min(1180px, calc(100% - 2rem)); }
+.public-search .admin-footer a { color: #fff; }
+.public-search .admin-footer a:hover { color: #f6d9a5; }
+.public-search .admin-footer__legal nav {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+    font-size: 0;
+}
+.public-search .admin-footer__legal nav a { font-size: .78rem; }
+.public-search .admin-footer__legal nav a::after { content: none; }
+
 @media (max-width: 768px) {
     .public-search-topbar__inner {
         width: calc(100% - 1rem);
         min-height: 44px;
     }
-    .public-search-topbar__inner > div { justify-content: center; gap: .65rem; }
+    .public-search-topbar__inner > nav { justify-content: center; gap: .65rem; }
     .public-search-header__image { min-height: 170px; object-fit: cover; }
     .public-search-header__title {
         inset: 0 1rem;
         width: auto;
         max-width: 24rem;
-        padding: .8rem 0;
+        padding: .8rem 1rem;
     }
     .public-search-header__title h1 { font-size: 1.45rem; }
     .public-search-header__title p { max-width: 19rem; font-size: .84rem; }
@@ -315,7 +334,7 @@ body.public-search {
 }
 
 @media (max-width: 430px) {
-    .public-search-topbar__inner > div { font-size: .78rem; }
+    .public-search-topbar__inner > nav { font-size: .78rem; }
     .public-search-header__title { inset-inline: .75rem; }
     .public-search-header__title > span { font-size: .68rem; }
     .public-search-header__title h1 { font-size: 1.2rem; }
