@@ -153,9 +153,8 @@
               <td>
                 <form method="post" action="{% url 'save_settings' %}" class="d-flex gap-2 align-items-center">
                   {% csrf_token %}
-                  <input type="hidden" name="key" value="{{ key }}">
                   <label class="visually-hidden" for="setting-value-{{ forloop.counter }}">{% trans "New value" %}: {{ key }}</label>
-                  <input id="setting-value-{{ forloop.counter }}" type="text" name="value" value="{{ info.current }}" class="form-control form-control-sm" style="max-width: 140px;">
+                  <input id="setting-value-{{ forloop.counter }}" type="text" name="{{ key }}" value="{{ info.current }}" class="form-control form-control-sm" style="max-width: 140px;">
                   <button type="submit" class="btn btn-primary btn-sm">{% trans "Save" %}</button>
                 </form>
               </td>
@@ -166,6 +165,31 @@
         </table>
       </div>
     </section>
+  </section>
+
+  <section class="mb-4" aria-labelledby="configuration-inventory-heading">
+    <h3 id="configuration-inventory-heading" class="border-bottom pb-2 mb-3">{% trans "Configuration Inventory" %}</h3>
+    <p class="text-muted small">{% trans "Effective configuration posture. Secrets are never displayed. Deployment settings are read-only and may require a restart." %}</p>
+    {% for group in configuration_groups %}
+    <section class="admin-panel mb-3" aria-labelledby="configuration-group-{{ forloop.counter }}">
+      <h4 id="configuration-group-{{ forloop.counter }}" class="h6 border-bottom pb-2 mb-3">{{ group.name }}</h4>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>{% trans "Setting" %}</th><th>{% trans "Effective value" %}</th><th>{% trans "Source" %}</th><th>{% trans "Lifecycle" %}</th></tr></thead>
+          <tbody>
+          {% for row in group.rows %}
+          <tr>
+            <th scope="row"><span class="font-monospace small">{{ row.key }}</span><span class="d-block text-muted small">{{ row.label }}</span></th>
+            <td><code>{{ row.value }}</code></td>
+            <td><span class="badge {% if row.source == 'database' %}bg-primary{% elif row.source == 'environment' %}bg-secondary{% else %}bg-light text-dark{% endif %}">{{ row.source }}</span></td>
+            <td>{% if row.editable %}<span class="badge bg-success">{% trans "Runtime" %}</span>{% elif row.restart_required %}<span class="badge bg-warning text-dark">{% trans "Restart required" %}</span>{% else %}<span class="badge bg-light text-dark">{% trans "Read only" %}</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endfor %}
   </section>
 </section>
 {% endblock %}

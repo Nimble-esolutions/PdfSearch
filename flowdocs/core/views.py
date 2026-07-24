@@ -57,6 +57,7 @@ from django.utils.translation import gettext
 from django.utils import timezone
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent, SiteSetting, SiteSetting
+from .configuration_registry import build_configuration_groups
 from .artifact_vault import ArtifactVault, ArtifactVaultError
 from .metrics import metrics_view
 from .maintenance import (
@@ -1773,19 +1774,22 @@ def settings_view(request):
     SETTINGS_EDIT_ENABLED = os.environ.get("SETTINGS_EDIT_ENABLED", "0") == "1"
 
     feature_flags = {}
+    setting_values = {}
     for key in (
         "PUBLIC_SEARCH_ENABLED", "DISPLAY_SERVICE_FOOTER",
         "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
         "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
         "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE",
     ):
-        db_value = get_setting(key)
+        db_value = SiteSetting.objects.filter(key=key).values_list("value", flat=True).first()
         env_value = os.environ.get(key, "")
+        current_value = db_value if db_value not in (None, "") else env_value
         feature_flags[key] = {
-            "current": db_value or env_value,
-            "source": "database" if db_value else "environment",
+            "current": current_value,
+            "source": "database" if db_value not in (None, "") else "environment",
             "env_value": env_value,
         }
+        setting_values[key] = db_value
 
     vault_status = {"enabled": False, "reachable": False, "bucket_exists": False, "error": ""}
     try:
@@ -1827,6 +1831,7 @@ def settings_view(request):
     context = {
         "settings_edit_enabled": SETTINGS_EDIT_ENABLED,
         "feature_flags": feature_flags,
+        "configuration_groups": build_configuration_groups(settings, setting_values),
         "vault_status": vault_status,
         "env_fields": env_fields,
         "title": "Settings & Configuration",
