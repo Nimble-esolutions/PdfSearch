@@ -184,3 +184,6 @@ dev/staticfiles/
 # that should be tracked to enable instant fresh deployments
 !init/
 !init/**
+node_modules/
+test-results/
+playwright-report/
