@@ -281,6 +281,18 @@ body.public-search {
 .seo-static-content h3 { color: var(--search-maroon); }
 .seo-static-content p,
 .seo-static-content li { color: var(--search-muted) !important; }
+.seo-static-content details {
+    max-width: 48rem;
+    padding: .7rem 0;
+    border-top: 1px solid var(--search-border);
+}
+.seo-static-content details:last-of-type { border-bottom: 1px solid var(--search-border); }
+.seo-static-content summary {
+    color: var(--search-maroon);
+    cursor: pointer;
+    font-weight: 700;
+}
+.seo-static-content details p { margin: .5rem 0 0; }
 
 .public-search .admin-footer {
     background: var(--search-maroon-strong);

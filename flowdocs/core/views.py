@@ -1336,14 +1336,11 @@ def sitemap_xml(request):
     lastmod = timezone.now().strftime("%Y-%m-%d")
     urls = [
         {"loc": f"{base_url}/", "changefreq": "weekly", "priority": "1.0"},
-        {"loc": f"{base_url}/search/", "changefreq": "weekly", "priority": "0.9"},
         {"loc": f"{base_url}/privacy/", "changefreq": "monthly", "priority": "0.5"},
         {"loc": f"{base_url}/terms/", "changefreq": "monthly", "priority": "0.5"},
         {"loc": f"{base_url}/data-policy/", "changefreq": "monthly", "priority": "0.5"},
         {"loc": f"{base_url}/cookies/", "changefreq": "monthly", "priority": "0.5"},
         {"loc": f"{base_url}/disclaimer/", "changefreq": "monthly", "priority": "0.5"},
-        {"loc": f"{base_url}/livez", "changefreq": "daily", "priority": "0.3"},
-        {"loc": f"{base_url}/readyz", "changefreq": "daily", "priority": "0.3"},
     ]
     xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>']
     xml_parts.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
@@ -1361,6 +1358,8 @@ def sitemap_xml(request):
 # -------------- New logic for folder search --------------
 def search_query(request):
     if request.method in {"GET", "HEAD"}:
+        if request.path.rstrip("/") == "/search":
+            return redirect("home", permanent=True)
         return render(
             request,
             "search.html",

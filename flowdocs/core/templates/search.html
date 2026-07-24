@@ -13,9 +13,7 @@
 {% block seo %}
   <meta name="description" content="{% trans 'Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance. Sahakar AI provides instant answers from official government documents.' %}">
   <link rel="canonical" href="https://ai-sahakar.net/">
-  <link rel="alternate" hreflang="en" href="https://ai-sahakar.net/">
-  <link rel="alternate" hreflang="mr" href="https://ai-sahakar.net/">
-  <link rel="alternate" hreflang="x-default" href="https://ai-sahakar.net/">
+  {# Stable locale URLs will be added with genuinely translated page variants. #}
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="{% trans 'Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra' %}">
@@ -38,6 +36,7 @@
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": "https://ai-sahakar.net/#website",
     "name": "Sahakar AI",
     "url": "https://ai-sahakar.net/",
     "description": "Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance.",
@@ -47,14 +46,23 @@
       "name": "Registrar Co-operative Societies, Maharashtra",
       "url": "https://sahakarayukta.maharashtra.gov.in/"
     },
-    "potentialAction": {
-      "@type": "SearchAction",
-      "target": {
-        "@type": "EntryPoint",
-        "urlTemplate": "https://ai-sahakar.net/search/?query={query}"
-      },
-      "query-input": "required name=query"
-    }
+    "sameAs": [
+      "https://mahasahakar.maharashtra.gov.in/en/commissioner-cooperation-and-rcs/",
+      "https://mahasahakar.maharashtra.gov.in/en/document-category/acts-rules/"
+    ]
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": "https://ai-sahakar.net/#webpage",
+    "url": "https://ai-sahakar.net/",
+    "name": "Sahakar AI Search",
+    "description": "Search Maharashtra cooperative society acts, rules, and official documents in English and Marathi.",
+    "isPartOf": {"@id": "https://ai-sahakar.net/#website" },
+    "inLanguage": "{{ request.LANGUAGE_CODE|default:'en' }}"
   }
   </script>
 
@@ -191,26 +199,42 @@
 </div>
 {% endblock %}
 
-{% if display_service_footer %}
 <section class="seo-static-content" aria-label="{% trans 'About this service' %}">
   <div class="container py-4">
     <h2 class="h5">{% trans "What is Sahakar AI?" %}</h2>
     <p class="text-muted">
       {% trans "Sahakar AI is an AI-powered search tool for Maharashtra cooperative society laws, acts, rules, and bylaws. It helps you find relevant information from official government documents quickly, with answers generated in English and Marathi." %}
     </p>
-    <h3 class="h6 mt-3">{% trans "How to ask better questions" %}</h3>
-    <ul class="text-muted small">
-      <li>{% trans "Use specific terms like act names, section numbers, or subject areas (e.g., housing, audit, agriculture)." %}</li>
-      <li>{% trans "Ask in English or Marathi — both are supported." %}</li>
-      <li>{% trans "Review the source references provided with each answer before making official decisions." %}</li>
-    </ul>
-    <h3 class="h6 mt-3">{% trans "Important disclaimer" %}</h3>
-    <p class="text-muted small">
-      {% trans "Answers are AI-generated assistance, not legal advice. The AI may provide incomplete or incorrect responses. Always verify with the source documents and contact the Registrar's office for official guidance." %}
+    <p class="small">
+      {% trans "The service covers topics such as registration, member rights, management, audit, inspection, disputes, liquidation, offences, penalties, appeals, and revisions." %}
+      <a href="https://mahasahakar.maharashtra.gov.in/en/commissioner-cooperation-and-rcs/" target="_blank" rel="noopener noreferrer">{% trans "Learn about the Commissionerate and Registrar" %}</a>.
     </p>
+    <h3 class="h6 mt-3">{% trans "Common questions" %}</h3>
+    <details>
+      <summary>{% trans "What documents can I search?" %}</summary>
+      <p>{% trans "You can search Maharashtra cooperative society acts, rules, bylaws, and related government documents." %}</p>
+    </details>
+    <details>
+      <summary>{% trans "Are the answers legal advice?" %}</summary>
+      <p>{% trans "No. Answers are AI-generated assistance and should be checked against official source documents before an official decision." %}</p>
+    </details>
+    <details>
+      <summary>{% trans "Does the service support Marathi?" %}</summary>
+      <p>{% trans "Yes. You can ask questions in English or Marathi using the language switch." %}</p>
+    </details>
+    {% if display_service_footer %}
+      <h3 class="h6 mt-3">{% trans "How to ask better questions" %}</h3>
+      <ul class="text-muted small">
+        <li>{% trans "Use specific terms like act names, section numbers, or subject areas such as housing, audit, or agriculture." %}</li>
+        <li>{% trans "Review the source references provided with each answer before making official decisions." %}</li>
+      </ul>
+      <h3 class="h6 mt-3">{% trans "Important disclaimer" %}</h3>
+      <p class="text-muted small">
+        {% trans "Answers are AI-generated assistance, not legal advice. The AI may provide incomplete or incorrect responses. Always verify with the source documents and contact the Registrar's office for official guidance." %}
+      </p>
+    {% endif %}
   </div>
 </section>
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
