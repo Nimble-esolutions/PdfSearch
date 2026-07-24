@@ -466,7 +466,14 @@ def register_view(request):
             allow_privileged_roles=allow_privileged_roles,
             allow_superadmin=allow_superadmin,
         )
-    return render(request, 'register.html', {'form': form})
+    return render(request, 'register.html', {
+        'form': form,
+        'breadcrumb_items': [
+            {"label": gettext("Dashboard"), "url": reverse("dashboard")},
+            {"label": gettext("Users"), "url": reverse("user_list")},
+            {"label": gettext("Create user"), "url": None},
+        ],
+    })
 
 #===========================Login view==========================
 @rate_limit(max_attempts=5, window_seconds=60)
@@ -1726,6 +1733,11 @@ def s3_operations_view(request):
         "vault_config": vault_config,
         "backup_role": env_identity.backup_role.value if env_identity else "unknown",
         "vault_enabled": getattr(env_identity, "is_backup_writer", False),
+        "breadcrumb_items": [
+            {"label": gettext("Dashboard"), "url": reverse("dashboard")},
+            {"label": gettext("Operations"), "url": reverse("operations_panel")},
+            {"label": gettext("Artifact Vault"), "url": None},
+        ],
     }
     return render(request, "dashboard_s3ops.html", context)
 
