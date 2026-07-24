@@ -17,50 +17,64 @@
 
 {% block admin_shell %}
 <header class="admin-header">
-  <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}"
-       alt="{% trans 'Registrar Co-operative Societies banner' %}"
-       class="admin-header__image">
-  <div class="admin-header__title">
-    <h1>{% trans "Registrar Co-operative Societies" %}</h1>
+  <div class="admin-header__inner">
+    <a class="admin-header__mark" href="{% url 'dashboard' %}" aria-label="{% trans 'Go to dashboard' %}">CC</a>
+    <div class="admin-header__title">
+      <h1>{% trans "Registrar Co-operative Societies" %}<small>{% trans "Commissioner for Cooperation, Maharashtra" %}</small></h1>
+    </div>
+    <div class="admin-header__context">{% trans "Official administration" %}</div>
   </div>
 </header>
 
 <nav class="navbar navbar-expand-lg navbar-dark admin-nav">
   <div class="container-fluid">
-    <a class="navbar-brand fw-semibold" href="{% url 'dashboard' %}">{% trans "Admin" %}</a>
+    <a class="navbar-brand fw-semibold" href="{% url 'dashboard' %}">{% trans "Admin console" %}</a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#adminMenu" aria-controls="adminMenu" aria-expanded="false" aria-label="{% trans 'Toggle navigation' %}">
       <span class="navbar-toggler-icon"></span>
     </button>
 
     <div class="collapse navbar-collapse" id="adminMenu">
+      {% with current_url=request.resolver_match.url_name %}
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         {% if request.user.is_authenticated %}
           <li class="nav-item">
-            <a class="nav-link" href="{% url 'dashboard' %}">{% trans "Dashboard" %}</a>
+            <a class="nav-link" href="{% url 'dashboard' %}"{% if current_url == 'dashboard' or current_url == 'dashboard_folder' %} aria-current="page"{% endif %}>
+              <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/></svg>{% trans "Dashboard" %}
+            </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="{% url 'search_query' %}">{% trans "Search" %}</a>
+            <a class="nav-link" href="{% url 'search_query' %}"{% if current_url == 'search_query' %} aria-current="page"{% endif %}>
+              <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>{% trans "Search" %}
+            </a>
           </li>
           {% if request.user.role == 'admin' or request.user.role == 'superadmin' %}
             <li class="nav-item">
-              <a class="nav-link" href="{% url 'register' %}">{% trans "Add User" %}</a>
+              <a class="nav-link" href="{% url 'register' %}"{% if current_url == 'register' %} aria-current="page"{% endif %}>
+                <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.7-3.4 3-5 6.5-5s5.8 1.6 6.5 5M18 8v7m3.5-3.5h-7"/></svg>{% trans "Add User" %}
+              </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="{% url 'user_list' %}">{% trans "Users" %}</a>
+              <a class="nav-link" href="{% url 'user_list' %}"{% if current_url == 'user_list' or current_url == 'edit_user' %} aria-current="page"{% endif %}>
+                <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20c.5-3.2 2.3-5 5.5-5s5 1.8 5.5 5M14 16c2.8-.5 5.8.8 6.5 4"/></svg>{% trans "Users" %}
+              </a>
             </li>
             {% if request.user.role == 'superadmin' %}
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'vault_operations' %}">📦 {% trans "Vault" %}</a>
+            <li class="nav-system-group" aria-label="{% trans 'System tools' %}">
+              <a class="nav-link" href="{% url 'operations_panel' %}"{% if current_url == 'operations_panel' %} aria-current="page"{% endif %}>
+                <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/><circle cx="18" cy="17" r="2"/></svg>{% trans "Operations" %}
+              </a>
+              <a class="nav-link" href="{% url 'vault_operations' %}"{% if current_url == 'vault_operations' %} aria-current="page"{% endif %}>
+                <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>{% trans "Vault" %}
+              </a>
+              <a class="nav-link" href="{% url 'settings' %}"{% if current_url == 'settings' %} aria-current="page"{% endif %}>
+                <svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="4"/></svg>{% trans "Settings" %}
+              </a>
             </li>
             {% endif %}
           {% endif %}
-          {% if request.user.role == 'superadmin' %}
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'settings' %}">&#9881; {% trans "Settings" %}</a>
-            </li>
-          {% endif %}
         {% endif %}
       </ul>
+      {% endwith %}
 
       <div class="d-flex align-items-center gap-3 flex-wrap">
       <form action="{% url 'set_language' %}" method="post" class="d-inline">
@@ -77,7 +91,7 @@
 
       {% if request.user.is_authenticated %}
         <span class="admin-user-chip">
-          {{ request.user.username }}{% if request.user.role %} ({{ request.user.role }}){% endif %}
+          <span class="admin-user-chip__name">{{ request.user.username }}</span>{% if request.user.role %}<span class="admin-user-chip__role">{{ request.user.role }}</span>{% endif %}
         </span>
         <form method="post" action="{% url 'logout' %}" class="d-inline">
           {% csrf_token %}
@@ -125,22 +139,23 @@
 {% block public_footer %}{% endblock %}
 
 <footer class="admin-footer">
-  <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center flex-wrap">
-      <div>
-        <small>{% trans "All rights reserved© Registrar Co-operative Societies." %} |
+  <div class="admin-footer__inner">
+    <div class="admin-footer__legal">
+      <strong>{% trans "Registrar Co-operative Societies, Maharashtra" %}</strong>
+      <small>{% trans "All rights reserved." %}</small>
+      <nav aria-label="{% trans 'Legal links' %}">
           <a href="{% url 'privacy' %}">{% trans "Privacy" %}</a> |
           <a href="{% url 'terms' %}">{% trans "Terms" %}</a> |
           <a href="{% url 'data_policy' %}">{% trans "Data Policy" %}</a> |
           <a href="{% url 'cookie_policy' %}">{% trans "Cookies" %}</a> |
           <a href="{% url 'disclaimer' %}">{% trans "Disclaimer" %}</a>
-        </small>
-      </div>
-      <div class="d-flex gap-3">
+      </nav>
+    </div>
+    <div class="admin-footer__credit">
+      <small>{% trans "Technology partner" %}</small>
         <a href="https://nimble-esolutions.com/" target="_blank" rel="noopener noreferrer">
           <img src="{% static 'main/images/footer-logo-nimble.jpg' %}" alt="{% trans 'Nimble eSolutions' %}" height="40">
         </a>
-      </div>
     </div>
   </div>
 </footer>
