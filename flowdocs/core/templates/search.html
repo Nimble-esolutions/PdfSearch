@@ -133,11 +133,6 @@
 </div>
 
 <header class="public-search-header">
-  <picture>
-    <source media="(max-width: 768px)" srcset="{% static 'main/images/banner-mobile-1.jpg' %}">
-    <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}" alt="{% trans 'Registrar Co-operative Societies, Maharashtra — official banner' %}" class="public-search-header__image">
-  </picture>
-
   <div class="public-search-header__title">
     <div class="public-search-identity">
       <img src="{% static 'main/images/registrar-seal.webp' %}" alt="{% trans 'Registrar Co-operative Societies seal' %}">
@@ -150,14 +145,17 @@
     <span>{% trans "Public document service" %}</span>
     <h1>{% trans "Sahakar AI Search" %}</h1>
     <p>{% trans "Search Maharashtra co-operative society acts, rules, and official documents." %}</p>
+    <button type="button" class="about-trigger" data-about-open aria-controls="aboutDialog">
+      <span aria-hidden="true">i</span>{% trans "About this service" %}
+    </button>
   </div>
 </header>
 {% endblock %}
 
 {% block page_content %}
 {% block content %}
-<div class="container-fluid p-0">
-  <div class="chat-container" aria-labelledby="search-page-heading">
+<main class="search-app" aria-labelledby="search-page-heading">
+  <div class="chat-container">
 
       <div class="public-search-intro">
         <p class="public-search-kicker">{% trans "Official document search" %}</p>
@@ -165,15 +163,20 @@
         <p>{% trans "Search by section number, Act or Rule name, society type, topic, or phrase in English or Marathi." %}</p>
       </div>
 
-      <div class="chat-input">
+      <div id="chatMain" aria-live="polite" aria-label="{% trans 'Search answers' %}" aria-busy="false">
+      </div>
+
+      <form class="chat-input" id="searchComposer" novalidate>
          <img src="{% static 'main/images/Option-1 BOT.png' %}" alt="" class="chat-input__avatar" aria-hidden="true">
           <div class="chat-query-field">
             <label class="visually-hidden" for="userQuery">{% trans "Ask your question" %}</label>
-            <input type="text" id="userQuery" placeholder="{% trans 'Ask your question...' %}" autocomplete="off" maxlength="240">
+            <input type="text" id="userQuery" placeholder="{% trans 'Ask your question...' %}" autocomplete="off" maxlength="240" enterkeyhint="search">
             <small id="wordCounter" class="word-counter" aria-live="polite">0/30</small>
           </div>
-          <button id="sendBtn" type="button">{% trans "Search" %}</button>
+          <button id="sendBtn" type="submit">{% trans "Search" %}</button>
+      </form>
 
+      <div class="chat-support-links" aria-label="{% trans 'Support links' %}">
 <a href="https://wa.me/{{ whatsapp_number|default:"919421200000" }}" target="_blank" rel="noopener noreferrer" class="whatsapp-link" aria-label="{% trans 'Contact support on WhatsApp' %}">
   <picture>
     <source media="(max-width: 768px)" srcset="{% static 'main/images/wh-btn-mobile.jpg' %}">
@@ -189,10 +192,6 @@
   </picture>
   <span>{% trans "Feedback" %}</span>
 </a>
-
-      </div>
-
-      <div id="chatMain" aria-live="polite" aria-label="{% trans 'Search answers' %}" aria-busy="false">
       </div>
 
       <div class="search-disclaimer">
@@ -204,12 +203,20 @@
       </div>
 
   </div>
-</div>
+</main>
 {% endblock %}
 
-<section class="seo-static-content" aria-label="{% trans 'About this service' %}">
-  <details class="seo-support">
-    <summary>{% trans "About Sahakar AI and common questions" %}</summary>
+<dialog class="about-dialog" id="aboutDialog" aria-labelledby="aboutDialogTitle">
+  <div class="about-dialog__surface">
+    <div class="about-dialog__header">
+      <div>
+        <p class="public-search-kicker">{% trans "Public document service" %}</p>
+        <h2 id="aboutDialogTitle">{% trans "About Sahakar AI and common questions" %}</h2>
+      </div>
+      <button type="button" class="about-dialog__close" data-about-close aria-label="{% trans 'Close' %}">×</button>
+    </div>
+    <section class="seo-static-content" aria-label="{% trans 'About this service' %}">
+      <details class="seo-support" open>
   <div class="container py-4 seo-support__content">
     <h2 class="h5">{% trans "What is Sahakar AI?" %}</h2>
     <p class="text-muted">
@@ -245,8 +252,10 @@
       </p>
     {% endif %}
   </div>
-  </details>
-</section>
+      </details>
+    </section>
+  </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
@@ -257,6 +266,9 @@
 {{ welcome_prompts|json_script:"welcome-prompts" }}
 {{ search_loading_stages|json_script:"search-loading-stages" }}
 {{ retry_label|json_script:"retry-label" }}
+{{ about_close_label|json_script:"about-close-label" }}
+{{ source_documents_label|json_script:"source-documents-label" }}
+{{ search_messages|json_script:"search-messages" }}
 <script>
 window.PdfSearch = {
   viewPdfUrlTemplate: "{% url 'view_pdf' 0 %}",

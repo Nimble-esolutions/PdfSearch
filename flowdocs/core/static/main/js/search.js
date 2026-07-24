@@ -7,6 +7,13 @@ const welcomePromptLabel = JSON.parse(document.getElementById("welcome-prompt-la
 const welcomePrompts = JSON.parse(document.getElementById("welcome-prompts").textContent);
 const searchLoadingStages = JSON.parse(document.getElementById("search-loading-stages").textContent);
 const retryLabel = JSON.parse(document.getElementById("retry-label").textContent);
+const sourceDocumentsLabel = JSON.parse(document.getElementById("source-documents-label").textContent);
+const searchMessages = JSON.parse(document.getElementById("search-messages").textContent);
+const searchComposer = document.getElementById("searchComposer");
+const aboutDialog = document.getElementById("aboutDialog");
+const aboutOpen = document.querySelector("[data-about-open]");
+const aboutClose = document.querySelector("[data-about-close]");
+let aboutReturnFocus = null;
 let requestPending = false;
 let activeController = null;
 let requestTimeout = null;
@@ -19,8 +26,38 @@ window.addEventListener("DOMContentLoaded", function(){
     if(welcome) appendWelcomeMessage(welcome, helpUrl, helpLabel);
 });
 
-sendBtn.addEventListener('click', sendMessage);
-userQuery.addEventListener('keypress', e => { if(e.key === 'Enter') sendMessage(); });
+searchComposer.addEventListener("submit", event => {
+    event.preventDefault();
+    sendMessage();
+});
+
+function closeAbout() {
+    if (!aboutDialog) return;
+    if (typeof aboutDialog.close === "function") {
+        aboutDialog.close();
+    } else {
+        aboutDialog.removeAttribute("open");
+    }
+    if (aboutReturnFocus) aboutReturnFocus.focus();
+}
+
+aboutOpen?.addEventListener("click", () => {
+    aboutReturnFocus = aboutOpen;
+    if (typeof aboutDialog.showModal === "function") {
+        aboutDialog.showModal();
+    } else {
+        aboutDialog.setAttribute("open", "");
+    }
+    aboutClose?.focus();
+});
+aboutClose?.addEventListener("click", closeAbout);
+aboutDialog?.addEventListener("cancel", event => {
+    event.preventDefault();
+    closeAbout();
+});
+aboutDialog?.addEventListener("click", event => {
+    if (event.target === aboutDialog) closeAbout();
+});
 
 async function sendMessage(){
     if(requestPending) return;
@@ -29,7 +66,7 @@ async function sendMessage(){
 
     const wordCount = query.split(/\s+/).length;
     if(wordCount > 30){
-        appendErrorMessage("Question is too long", "Please keep it within 30 words.", query);
+        appendErrorMessage(searchMessages.question_too_long, searchMessages.question_too_long_detail, query);
         return;
     }
 
@@ -86,15 +123,15 @@ async function sendMessage(){
         if (!response.ok) {
             typingDiv.remove();
             const errorMessages = {
-                401: "Please sign in to search.",
-                403: "The request could not be secured. Refresh the page and try again.",
-                400: "Your question cannot exceed 30 words.",
-                500: "The search request could not be completed. Please try again later.",
-                503: "The search service is temporarily unavailable. Please try again later.",
-                429: "Please wait a moment before starting another search.",
+                401: searchMessages.sign_in,
+                403: searchMessages.security,
+                400: searchMessages.limit,
+                500: searchMessages.request_failed,
+                503: searchMessages.unavailable,
+                429: searchMessages.rate_limited,
             };
             appendErrorMessage(
-                errorMessages[response.status] || "The search request could not be completed.",
+                errorMessages[response.status] || searchMessages.request_failed,
                 data.detail,
                 query,
             );
@@ -104,14 +141,14 @@ async function sendMessage(){
         if(data.answer){
             typeEffect(data.answer, data.references || []);
         } else if(data.error){
-            appendErrorMessage("Search unavailable", data.detail || "Please try again later.", query);
+            appendErrorMessage(searchMessages.search_unavailable, searchMessages.try_later, query);
         }
     } catch(err) {
         typingDiv.remove();
         if (err.name === "AbortError") {
-            appendErrorMessage("Search is taking longer than expected", "Please try again.", query);
+            appendErrorMessage(searchMessages.timeout, searchMessages.try_again, query);
         } else {
-            appendErrorMessage("Something went wrong", "Please try again later.", query);
+            appendErrorMessage(searchMessages.unexpected, searchMessages.try_later, query);
             console.error(err);
         }
     } finally {
@@ -242,7 +279,7 @@ function typeEffect(text, references = []) {
                 const refDiv = document.createElement('div');
                 refDiv.className = "references";
                 const heading = document.createElement("strong");
-                heading.textContent = "Source documents";
+                heading.textContent = sourceDocumentsLabel;
                 refDiv.appendChild(heading);
                 references.forEach(ref => {
                     const card = document.createElement('div');
