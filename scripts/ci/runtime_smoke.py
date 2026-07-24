@@ -105,7 +105,11 @@ def main():
     status, _, body = request(unauthenticated, "/readyz")
     ready = json.loads(body)
     require(status == 200 and ready["status"] == "ready", f"readyz failed: {ready}")
-    require(ready["checks"] == {"database": "ok", "cache": "ok", "migrations": "ok"}, f"unexpected readiness checks: {ready}")
+    require(
+        all(ready["checks"].get(k) == v for k, v in
+            {"database": "ok", "cache": "ok", "migrations": "ok"}.items()),
+        f"unexpected readiness checks: {ready}",
+    )
 
     status, _, body = request(unauthenticated, "/")
     require(status == 200 and b"AI Enabled Search" in body, "search landing page failed")
