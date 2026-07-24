@@ -141,6 +141,13 @@ Lifecycle transitions are role-gated (superadmin for deprecate/archive).
 - `/health/metrics/` exposes Prometheus metrics (`core/metrics.py`).
 - Do not route Traefik traffic to a container that is only HTTP-200 on `/`.
 
+### Deployment Identity Rules (2026-07-24)
+
+- **Stage identity**: The `sahakar-ai-sahakar-frontend-2026-prod-ruhj6z` Compose project IS the stage deployment. Its Traefik labels route `2026.ai-sahakar.net`. The "prod" in the name is historical — this is stage.
+- **Production identity**: `ai-sahakar.net` is routed via static Traefik config (`/etc/dokploy/traefik/dynamic/sahakar-dev-frontend-dockerfile-1cubi5.yml`). Production deployment requires a separate Compose project or static config update.
+- **Never change stage Traefik labels** to claim production domains. This would silently redirect production users to unverified code.
+- **/readyz 503 ≠ container failure**: Stage containers with degraded data (ratio-based readiness) return HTTP 503 from /readyz. This is a readiness signal, not a health failure. Use /livez for Docker health checks.
+
 ## Deployment
 
 - Back up before schema, volume, or image changes.

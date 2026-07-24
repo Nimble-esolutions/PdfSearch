@@ -16,6 +16,35 @@ itself, use this file plus `docs/AGENT_RULE_AUTHORITY.md`.
 7. Historical Kilo/OpenCode adapters, only when they do not conflict with the
    sources above.
 
+## Deployment Architecture (2026-07-24)
+
+### Stage vs Production
+
+| Environment | Domain | Deployment | When |
+|-------------|--------|------------|------|
+| Stage | `2026.ai-sahakar.net` | Auto-deployed by Dokploy on every GitHub image release | After CI publishes `:latest` tag |
+| Production | `ai-sahakar.net`, `www.ai-sahakar.net` | Manual, stable releases only | After stage verification |
+
+### Critical Rules
+
+- **NEVER modify the production Traefik config** (`/etc/dokploy/traefik/dynamic/` static files or labels for production domain). Production routing is managed separately from stage.
+- **The `sahakar-ai-sahakar-frontend-2026-prod-ruhj6z` Compose project is STAGE**, not production. Despite "prod" in the name, it deploys to `2026.ai-sahakar.net`.
+- **Do not change the Traefik Host labels** on the stage container to include `ai-sahakar.net` — this would route production traffic to stage.
+- **Production domain `ai-sahakar.net`** is routed via a separate static Traefik config. The current config routes to a dev service that needs migration to a dedicated production service.
+- **Stage container health checks** may show "unhealthy" when `/readyz` returns 503 due to degraded data (ratio-based check). This is expected for stage. Use `/livez` for health checks.
+
+### Traefik Routing Map
+
+```
+2026.ai-sahakar.net  →  Compose: sahakar-ai-sahakar-frontend-2026-prod-ruhj6z (Docker labels)
+ai-sahakar.net       →  Static: sahakar-dev-frontend-dockerfile-1cubi5.yml (needs migration)
+www.ai-sahakar.net   →  Same static config as ai-sahakar.net
+```
+
+### Historical / Known Issues
+- The production domain was historically served by the `sahakar-dev-frontend-dockerfile-1cubi5` Swarm service during initial development. This was never migrated to a dedicated production service.
+- The stage Compose project name includes "prod" for historical reasons (it was created as a preview/verification host before proper staging was set up).
+
 ## Repository Rules
 
 - **MANDATORY:** Follow `~/.agent-workflow-rules.md` for every code-changing
