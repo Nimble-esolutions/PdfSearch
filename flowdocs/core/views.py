@@ -1337,6 +1337,9 @@ def search_query(request):
                 ),
                 "welcome_help_label": gettext("Click Here"),
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
+                "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
+                "indexed_count": PDFFile.objects.filter(lifecycle__in=("ready", "processing")).count(),
+                "total_count": PDFFile.objects.count(),
             },
         )
 
