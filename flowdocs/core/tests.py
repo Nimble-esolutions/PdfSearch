@@ -2352,3 +2352,131 @@ class CompatibilityTests(TestCase):
                 "embedding_index": {"model": "text-embedding-3-small"},
             })
         self.assertTrue(report.compatible)
+
+
+from django.core.cache import cache as django_cache
+
+
+class LegalPageTests(TestCase):
+    """All legal/policy pages are publicly accessible and contain required content."""
+
+    def setUp(self):
+        super().setUp()
+        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
+
+    LEGAL_ROUTES = [
+        ("privacy", "Privacy Policy"),
+        ("terms", "Terms of Service"),
+        ("data_policy", "Data Policy"),
+        ("cookie_policy", "Cookie Policy"),
+        ("disclaimer", "Disclaimer"),
+    ]
+
+    def test_all_legal_pages_return_200(self):
+        for name, _ in self.LEGAL_ROUTES:
+            with self.subTest(page=name):
+                response = self.client.get(reverse(name))
+                self.assertEqual(response.status_code, 200)
+
+    def test_all_legal_pages_have_last_updated(self):
+        for name, _ in self.LEGAL_ROUTES:
+            with self.subTest(page=name):
+                response = self.client.get(reverse(name))
+                self.assertContains(response, "Last updated:")
+
+    def test_privacy_policy_contains_dpda_references(self):
+        response = self.client.get(reverse("privacy"))
+        self.assertContains(response, "Data Fiduciary")
+        self.assertContains(response, "Digital Personal Data Protection Act, 2023")
+        self.assertContains(response, "Data Protection Board of India")
+        self.assertContains(response, "Grievance Officer")
+        self.assertContains(response, "openai.com/policies")
+
+    def test_terms_of_service_distinguishes_user_types(self):
+        response = self.client.get(reverse("terms"))
+        self.assertContains(response, "Public Users")
+        self.assertContains(response, "Authorized Officials")
+        self.assertNotContains(response, "provide accurate and complete registration information")
+
+    def test_terms_has_indian_jurisdiction(self):
+        response = self.client.get(reverse("terms"))
+        self.assertContains(response, "Pune, Maharashtra")
+
+    def test_data_policy_has_retention_table(self):
+        response = self.client.get(reverse("data_policy"))
+        self.assertContains(response, "Data Classification")
+        self.assertContains(response, "Retention Periods")
+        self.assertContains(response, "Data Deletion Lifecycle")
+
+    def test_cookie_policy_has_table_and_browser_links(self):
+        response = self.client.get(reverse("cookie_policy"))
+        self.assertContains(response, "Cookies We Set")
+        self.assertContains(response, "sessionid")
+        self.assertContains(response, "csrftoken")
+        self.assertContains(response, "support.google.com/chrome")
+
+    def test_cookie_policy_declares_no_tracking(self):
+        response = self.client.get(reverse("cookie_policy"))
+        self.assertContains(response, "do not use</strong>")
+        self.assertContains(response, "tracking cookies")
+
+    def test_disclaimer_has_ai_warning(self):
+        response = self.client.get(reverse("disclaimer"))
+        self.assertContains(response, "not legal advice")
+        self.assertContains(response, "AI may produce incomplete or incorrect results")
+
+    def test_disclaimer_has_official_source_precedence(self):
+        response = self.client.get(reverse("disclaimer"))
+        self.assertContains(response, "official records and gazette publications shall prevail")
+
+    def test_homepage_has_legal_links(self):
+        response = self.client.get(reverse("home"))
+        for name, _ in self.LEGAL_ROUTES:
+            url = reverse(name)
+            self.assertContains(response, url)
+
+    def test_footer_has_all_legal_links(self):
+        response = self.client.get(reverse("privacy"))
+        for name, _ in self.LEGAL_ROUTES:
+            url = reverse(name)
+            self.assertContains(response, url)
+
+    def test_robots_txt_allows_all_legal_pages(self):
+        response = self.client.get("/robots.txt")
+        content = response.content.decode()
+        for slug in ["privacy", "terms", "data-policy", "cookies", "disclaimer"]:
+            with self.subTest(slug=slug):
+                self.assertIn(f"Allow: /{slug}/", content)
+
+    def test_sitemap_xml_includes_all_legal_pages(self):
+        response = self.client.get("/sitemap.xml")
+        content = response.content.decode()
+        for slug in ["privacy", "terms", "data-policy", "cookies", "disclaimer"]:
+            with self.subTest(slug=slug):
+                self.assertIn(f"https://ai-sahakar.net/{slug}/", content)
+
+    def test_cookie_banner_has_proper_links(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "essential cookies")
+        self.assertContains(response, reverse("cookie_policy"))
+        self.assertContains(response, reverse("privacy"))
+
+    def test_legal_pages_extend_base_template(self):
+        for name, _ in self.LEGAL_ROUTES:
+            with self.subTest(page=name):
+                response = self.client.get(reverse(name))
+                self.assertContains(response, "Registrar Co-operative Societies")
+
+    def test_enhanced_theme_not_active_by_default(self):
+        response = self.client.get(reverse("home"))
+        self.assertNotContains(response, "public-search enhanced")
+        self.assertNotContains(response, "search_enhanced.css")
+        self.assertNotContains(response, "chip-btn")
+
+    def test_footer_has_compact_legal_line(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "All rights reserved")
+        content = response.content.decode()
+        self.assertIn("Privacy", content)
+        self.assertIn("Terms", content)
+        self.assertNotIn('class="footer-links"', content)

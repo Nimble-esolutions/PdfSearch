@@ -28,6 +28,8 @@ urlpatterns = [
     path("privacy/", views.privacy_view, name="privacy"),
     path("terms/", views.terms_view, name="terms"),
     path("data-policy/", views.data_policy_view, name="data_policy"),
+    path("cookies/", views.cookie_policy_view, name="cookie_policy"),
+    path("disclaimer/", views.disclaimer_view, name="disclaimer"),
 
     # ---------------- Authentication ----------------
     path("register/", views.register_view, name="register"),

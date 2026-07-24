@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4 mb-5">
+  <h1>Cookie Policy</h1>
+  <p class="text-muted">Last updated: {{ legal_last_updated }}</p>
+
+  <h2>1. What Are Cookies</h2>
+  <p>Cookies are small text files placed on your device (computer, tablet, or mobile phone) when you visit a website. They are widely used to make websites work efficiently, provide security features, and remember user preferences.</p>
+
+  <h2>2. How This Platform Uses Cookies</h2>
+  <p>The Sahakar AI platform uses only <strong>essential cookies</strong> — cookies that are strictly necessary for the Platform to function and to provide security. We <strong>do not use</strong> any of the following:</p>
+  <ul>
+    <li>Advertising or targeting cookies</li>
+    <li>Third-party tracking cookies</li>
+    <li>Analytics or performance cookies</li>
+    <li>Social media cookies</li>
+    <li>Cookies for behavioural profiling or user tracking</li>
+  </ul>
+
+  <h2>3. Cookies We Set</h2>
+
+  <table class="table table-bordered">
+    <thead>
+      <tr>
+        <th>Cookie Name</th>
+        <th>Purpose</th>
+        <th>Duration</th>
+        <th>Essential</th>
+        <th>Contains Personal Data?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>sessionid</code></td>
+        <td>Maintains the authenticated session for registered admin users. Enables secure access to the admin dashboard. Not set for public (unregistered) users.</td>
+        <td>2 weeks of inactivity, or until logout</td>
+        <td>Yes</td>
+        <td>No — contains a random session identifier only</td>
+      </tr>
+      <tr>
+        <td><code>csrftoken</code></td>
+        <td>Cross-Site Request Forgery protection token. Prevents malicious websites from making unauthorized requests on behalf of authenticated users. Set for all users for security.</td>
+        <td>Session (deleted when browser is closed)</td>
+        <td>Yes</td>
+        <td>No — contains a random security token only</td>
+      </tr>
+      <tr>
+        <td><code>django_language</code></td>
+        <td>Remembers your preferred interface language (English or Marathi) for a consistent browsing experience.</td>
+        <td>Session, or until manually cleared</td>
+        <td>No</td>
+        <td>No — stores language code only (e.g., <code>en</code> or <code>mr</code>)</td>
+      </tr>
+      <tr>
+        <td><code>cookieConsent</code></td>
+        <td>Stored in your browser's localStorage (not a cookie) to remember that you have acknowledged our cookie notice, so the banner is not shown repeatedly.</td>
+        <td>Persistent (until manually cleared)</td>
+        <td>No</td>
+        <td>No — stores only the string "accepted"</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Legal Basis for Cookies</h2>
+  <p>Under the Digital Personal Data Protection Act, 2023 (DPDA) and the Information Technology Act, 2000:</p>
+  <ul>
+    <li><strong>Essential cookies</strong> (session and CSRF tokens) are necessary for the technical operation and security of the Platform. They are set on the basis of our legitimate interest in maintaining a secure and functional service.</li>
+    <li><strong>Preference cookies</strong> (language) are set only after you make a language selection. By selecting a language and continuing to use the Platform, you consent to the storage of this preference.</li>
+  </ul>
+
+  <h2>5. Managing Cookies</h2>
+  <p>You can control and manage cookies through your browser settings. Most browsers allow you to:</p>
+  <ul>
+    <li>View the cookies stored on your device.</li>
+    <li>Delete individual cookies or all cookies.</li>
+    <li>Block cookies from being set (entirely or from specific websites).</li>
+    <li>Configure the browser to alert you when a website attempts to set a cookie.</li>
+  </ul>
+  <p>Guides for managing cookies in common browsers:</p>
+  <ul>
+    <li><a href="https://support.google.com/chrome/answer/95647" target="_blank" rel="noopener noreferrer">Google Chrome</a></li>
+    <li><a href="https://support.mozilla.org/en-US/kb/clear-cookies-and-site-data-firefox" target="_blank" rel="noopener noreferrer">Mozilla Firefox</a></li>
+    <li><a href="https://support.apple.com/guide/safari/manage-cookies-sfri11471/mac" target="_blank" rel="noopener noreferrer">Apple Safari</a></li>
+    <li><a href="https://support.microsoft.com/en-us/windows/manage-cookies-in-microsoft-edge-view-allow-block-delete-and-use-168dab11-0753-043d-7c16-ede5947fc64d" target="_blank" rel="noopener noreferrer">Microsoft Edge</a></li>
+  </ul>
+
+  <h2>6. Effect of Disabling Cookies</h2>
+  <p>If you choose to disable cookies entirely, the following functionality may be affected:</p>
+  <ul>
+    <li><strong>Admin users:</strong> You will not be able to log in or access the admin dashboard, as session and CSRF cookies are required for authentication and security.</li>
+    <li><strong>Public users:</strong> The public search interface should remain functional. However, your language preference will not be remembered between visits, and you will see the cookie consent notice on each visit.</li>
+  </ul>
+
+  <h2>7. Changes to This Cookie Policy</h2>
+  <p>We may update this Cookie Policy from time to time. Changes will be posted on this page with an updated "Last updated" date. We encourage you to review this Policy periodically.</p>
+
+  <h2>8. Contact</h2>
+  <p>For questions about this Cookie Policy or our data practices, contact:</p>
+  <p>
+    <strong>Grievance Officer</strong><br>
+    Email: grievance@ai-sahakar.net
+  </p>
+  <p>For full details on how we handle personal data, see our <a href="{% url 'privacy' %}">Privacy Policy</a>.</p>
+
+</div>
+{% endblock %}

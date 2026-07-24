@@ -146,7 +146,14 @@
                 <form method="post" action="{% url 'save_settings' %}" class="d-flex gap-2 align-items-center">
                   {% csrf_token %}
                   <input type="hidden" name="key" value="{{ key }}">
+                  {% if key == "PUBLIC_UI_THEME" %}
+                  <select name="value" class="form-select form-select-sm" style="max-width: 160px;">
+                    <option value="default" {% if info.current == "default" %}selected{% endif %}>Default</option>
+                    <option value="enhanced" {% if info.current == "enhanced" %}selected{% endif %}>Enhanced (Maroon + Gold)</option>
+                  </select>
+                  {% else %}
                   <input type="text" name="value" value="{{ info.current }}" class="form-control form-control-sm" style="max-width: 140px;">
+                  {% endif %}
                   <button type="submit" class="btn btn-primary btn-sm">{% trans "Save" %}</button>
                 </form>
               </td>

@@ -861,6 +861,12 @@ def terms_view(request):
 def data_policy_view(request):
     return render(request, "data_policy.html", {"title": "Data Policy"})
 
+def cookie_policy_view(request):
+    return render(request, "cookie_policy.html", {"title": "Cookie Policy"})
+
+def disclaimer_view(request):
+    return render(request, "disclaimer.html", {"title": "Disclaimer"})
+
 
 # -------------- Dashboard upload: call precompute on upload --------------
 @login_required
@@ -1282,6 +1288,11 @@ def robots_txt(request):
         "User-agent: *",
         "Allow: /",
         "Allow: /search/",
+        "Allow: /privacy/",
+        "Allow: /terms/",
+        "Allow: /data-policy/",
+        "Allow: /cookies/",
+        "Allow: /disclaimer/",
         "Allow: /livez",
         "Allow: /readyz",
         "Disallow: /dashboard/",
@@ -1305,6 +1316,11 @@ def sitemap_xml(request):
     urls = [
         {"loc": f"{base_url}/", "changefreq": "weekly", "priority": "1.0"},
         {"loc": f"{base_url}/search/", "changefreq": "weekly", "priority": "0.9"},
+        {"loc": f"{base_url}/privacy/", "changefreq": "monthly", "priority": "0.5"},
+        {"loc": f"{base_url}/terms/", "changefreq": "monthly", "priority": "0.5"},
+        {"loc": f"{base_url}/data-policy/", "changefreq": "monthly", "priority": "0.5"},
+        {"loc": f"{base_url}/cookies/", "changefreq": "monthly", "priority": "0.5"},
+        {"loc": f"{base_url}/disclaimer/", "changefreq": "monthly", "priority": "0.5"},
         {"loc": f"{base_url}/livez", "changefreq": "daily", "priority": "0.3"},
         {"loc": f"{base_url}/readyz", "changefreq": "daily", "priority": "0.3"},
     ]
@@ -1337,6 +1353,7 @@ def search_query(request):
                 ),
                 "welcome_help_label": gettext("Click Here"),
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
+                "public_ui_theme": get_setting("PUBLIC_UI_THEME", "default"),
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
                 "indexed_count": PDFFile.objects.filter(lifecycle__in=("ready", "processing")).count(),
                 "total_count": PDFFile.objects.count(),
@@ -1719,6 +1736,7 @@ ALLOWED_SETTING_KEYS = {
     "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
     "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
     "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE",
+    "PUBLIC_UI_THEME",
 }
 
 
@@ -1750,6 +1768,7 @@ def settings_view(request):
         "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
         "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
         "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE",
+        "PUBLIC_UI_THEME",
     ):
         db_value = get_setting(key)
         env_value = os.environ.get(key, "")
