@@ -1,0 +1,30 @@
+{
+  "name": "pdfsearch",
+  "version": "1.0.0",
+  "description": "Status: Active Audience: Developer Owner: FlowDocs maintainers Last verified: 2026-07-22 Canonical source: README.md Supersedes: None",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nimble-esolutions/PdfSearch.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Nimble-esolutions/PdfSearch/issues"
+  },
+  "homepage": "https://github.com/Nimble-esolutions/PdfSearch#readme",
+  "dependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
+    "axe-core": "^4.12.1",
+    "playwright": "^1.61.1"
+  }
+}
