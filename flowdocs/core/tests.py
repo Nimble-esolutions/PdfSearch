@@ -72,6 +72,9 @@ class LanguageAndPublicUiTests(TestCase):
             "I am Sahakar AI. Learn how to ask better questions and get more useful answers.",
         )
         self.assertEqual(response.context["welcome_help_label"], "Click Here")
+        self.assertEqual(response.context["welcome_prompt_label"], "Try asking")
+        self.assertEqual(len(response.context["welcome_prompts"]), 3)
+        self.assertEqual(len(response.context["search_loading_stages"]), 3)
         self.assertContains(response, "Registrar Co-operative Societies, Maharashtra")
         self.assertContains(response, 'name="language" value="mr"')
         self.assertContains(response, '<html lang="en">')

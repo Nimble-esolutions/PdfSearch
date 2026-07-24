@@ -1460,6 +1460,42 @@ msgstr ""
 msgid "Click Here"
 msgstr ""
 
+#: core/views.py:1368
+msgid "I am Sahakar AI. Learn how to ask better questions and get more useful answers."
+msgstr ""
+
+#: core/views.py:1378
+msgid "Try asking"
+msgstr ""
+
+#: core/views.py:1380
+msgid "Housing society audit procedure"
+msgstr ""
+
+#: core/views.py:1381
+msgid "Co-operative member rights"
+msgstr ""
+
+#: core/views.py:1382
+msgid "Agricultural credit society rules"
+msgstr ""
+
+#: core/views.py:1385
+msgid "Searching documents"
+msgstr ""
+
+#: core/views.py:1386
+msgid "Reviewing sources"
+msgstr ""
+
+#: core/views.py:1387
+msgid "Preparing answer"
+msgstr ""
+
+#: core/views.py:1389
+msgid "Try again"
+msgstr ""
+
 #: core/views.py:1250
 msgid ""
 "I am Sahakar AI. Click here to learn how to questions to get correct answers."

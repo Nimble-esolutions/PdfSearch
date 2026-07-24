@@ -1372,6 +1372,18 @@ def search_query(request):
                     "edit?usp=sharing"
                 ),
                 "welcome_help_label": gettext("Click Here"),
+                "welcome_prompt_label": gettext("Try asking"),
+                "welcome_prompts": [
+                    gettext("Housing society audit procedure"),
+                    gettext("Co-operative member rights"),
+                    gettext("Agricultural credit society rules"),
+                ],
+                "search_loading_stages": [
+                    gettext("Searching documents"),
+                    gettext("Reviewing sources"),
+                    gettext("Preparing answer"),
+                ],
+                "retry_label": gettext("Try again"),
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
                 "indexed_count": PDFFile.objects.filter(lifecycle__in=("ready", "processing")).count(),
