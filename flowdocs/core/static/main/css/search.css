@@ -100,13 +100,25 @@ body.public-search {
     color: var(--search-maroon);
 }
 .public-search-identity > img {
-    width: 32px;
-    height: 42px;
+    width: 48px;
+    height: 56px;
     object-fit: contain;
 }
 .public-search-identity__wordmark {
-    width: min(100%, 390px);
-    height: auto;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: .1rem;
+    color: var(--search-maroon);
+}
+.public-search-identity__wordmark strong {
+    font-size: clamp(1rem, 1.8vw, 1.55rem);
+    line-height: 1.1;
+}
+.public-search-identity__wordmark small {
+    font-size: .78rem;
+    letter-spacing: .08em;
+    line-height: 1.1;
 }
 .public-search-header__title > span,
 .public-search-kicker {
@@ -165,6 +177,12 @@ body.public-search {
     gap: .75rem;
     padding: .25rem;
     scroll-behavior: smooth;
+}
+#chatMain:has(.gpt-msg--welcome:only-child) {
+    justify-content: center;
+}
+.gpt-msg--welcome {
+    max-width: min(72ch, 88%);
 }
 .user-msg,
 .gpt-msg {
@@ -407,4 +425,198 @@ body.public-search {
     .public-search-header__image { display: none; }
     .public-search .chat-container { width: 100%; margin: 0; border: 0; box-shadow: none; }
     #chatMain { max-height: none; overflow: visible; }
+}
+
+/* Theme previews share the same search contract; only visual composition changes. */
+.public-search-theme-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin-left: .35rem;
+    color: #f4e8d6;
+    font-size: .72rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+.public-search-theme-picker a {
+    min-width: 1.45rem;
+    padding: .18rem .3rem !important;
+    border: 1px solid rgba(255,255,255,.45);
+    border-radius: 3px;
+    text-align: center;
+}
+.public-search-theme-picker a[aria-current="page"] {
+    color: var(--search-maroon-strong);
+    background: var(--search-gold);
+    border-color: var(--search-gold);
+}
+.public-search-identity__india {
+    width: 38px !important;
+    height: 52px !important;
+    margin-left: auto;
+    object-fit: contain !important;
+    mix-blend-mode: multiply;
+}
+.public-search .chat-container {
+    width: min(1440px, calc(100% - 2rem));
+    height: min(700px, calc(100svh - 190px));
+    min-height: 520px;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+.public-search-intro { flex: 0 0 auto; }
+.chat-input {
+    order: 1;
+    margin-top: 0;
+    margin-bottom: .6rem;
+    padding-top: 0;
+    padding-bottom: .8rem;
+    border-top: 0;
+    border-bottom: 1px solid var(--search-border);
+}
+#chatMain {
+    order: 2;
+    min-height: 100px;
+}
+.word-counter { order: 3; }
+.search-disclaimer { order: 4; }
+.search-index-count { order: 5; }
+.seo-static-content { content-visibility: auto; }
+
+/* Option A: Search Desk. Compact institution bar, widest working surface. */
+.search-theme-a .public-search-header {
+    height: 104px;
+    border-bottom-width: 3px;
+    background: var(--search-surface);
+}
+.search-theme-a .public-search-header picture { display: none; }
+.search-theme-a .public-search-header__title {
+    position: static;
+    width: min(1440px, calc(100% - 2rem));
+    height: 100%;
+    margin: 0 auto;
+    padding: .7rem 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-content: center;
+    background: transparent;
+    border-left: 0;
+}
+.search-theme-a .public-search-identity { grid-row: 1 / span 2; margin: 0; }
+.search-theme-a .public-search-header__title > span,
+.search-theme-a .public-search-header__title h1,
+.search-theme-a .public-search-header__title p { grid-column: 2; }
+.search-theme-a .public-search-header__title > span { align-self: end; margin-bottom: 0; }
+.search-theme-a .public-search-header__title h1 { font-size: 1.35rem; }
+.search-theme-a .public-search-header__title p { margin-top: .15rem; font-size: .82rem; }
+.search-theme-a .public-search-identity__wordmark { width: min(100%, 500px); }
+.search-theme-a .chat-container { border-radius: 6px; }
+
+/* Option B: Official Search Kiosk. Single visual focus and maximum query prominence. */
+.search-theme-b {
+    --search-paper: #f7f4ed;
+    --search-surface: #fff;
+    --search-maroon: #6c101c;
+}
+.search-theme-b .public-search-header {
+    height: 148px;
+    background: var(--search-surface);
+}
+.search-theme-b .public-search-header picture { display: none; }
+.search-theme-b .public-search-header__title {
+    position: static;
+    width: min(980px, calc(100% - 2rem));
+    height: 100%;
+    margin: 0 auto;
+    padding: 1rem 0;
+    align-items: center;
+    text-align: center;
+    background: transparent;
+    border-left: 0;
+}
+.search-theme-b .public-search-identity { justify-content: center; margin-bottom: .35rem; }
+.search-theme-b .public-search-identity__wordmark { width: min(100%, 500px); }
+.search-theme-b .public-search-identity__india { margin-left: .5rem; }
+.search-theme-b .public-search-header__title > span,
+.search-theme-b .public-search-header__title p { display: none; }
+.search-theme-b .public-search-header__title h1 { font-size: 1.65rem; }
+.search-theme-b .chat-container {
+    width: min(1240px, calc(100% - 2rem));
+    border: 2px solid var(--search-maroon);
+    border-top-width: 6px;
+    border-radius: 12px;
+    box-shadow: 0 14px 32px rgba(66, 10, 19, .12);
+}
+.search-theme-b .public-search-intro { text-align: center; }
+.search-theme-b .chat-input {
+    grid-template-columns: 52px minmax(0, 1fr) auto auto auto;
+    padding: .8rem;
+    border: 1px solid var(--search-border);
+    border-radius: 8px;
+    background: #fffaf2;
+}
+.search-theme-b .chat-input__avatar { width: 52px; height: 52px; }
+
+/* Option C: Hallmark Reading Room. Warm editorial framing with a calmer work area. */
+.search-theme-c {
+    --search-paper: #e8e4dc;
+    --search-surface: #fffdf7;
+    --search-maroon: #4f111a;
+    --search-gold: #b17a22;
+}
+.search-theme-c .public-search-header {
+    height: 166px;
+    background: #d9e8e5;
+}
+.search-theme-c .public-search-header__image { object-position: center 42%; }
+.search-theme-c .public-search-header__title {
+    width: min(600px, 58%);
+    background: rgba(255,253,247,.95);
+    border-left-width: 6px;
+}
+.search-theme-c .public-search-identity__wordmark { width: min(100%, 440px); }
+.search-theme-c .chat-container {
+    width: min(1120px, calc(100% - 2rem));
+    border-top-width: 8px;
+    box-shadow: 0 16px 36px rgba(35,31,32,.12);
+}
+.search-theme-c .public-search-intro { max-width: 70ch; }
+.search-theme-c .gpt-msg { background: #f1ede4; }
+
+@media (max-width: 768px) {
+    .public-search-theme-picker { margin-left: 0; }
+    .public-search .chat-container {
+        width: calc(100% - 1rem);
+        height: auto;
+        min-height: calc(100svh - 190px);
+    }
+    .public-search-identity__india { width: 28px !important; height: 40px !important; }
+    .search-theme-a .public-search-header { height: 92px; }
+    .search-theme-a .public-search-header__title {
+        width: calc(100% - 1rem);
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: .55rem 0;
+    }
+    .search-theme-a .public-search-identity__wordmark { width: min(100%, 320px); }
+    .search-theme-a .public-search-header__title h1 { font-size: 1rem; }
+    .search-theme-a .public-search-header__title p { font-size: .68rem; }
+    .search-theme-b .public-search-header { height: 126px; }
+    .search-theme-b .public-search-header__title { width: calc(100% - 1rem); }
+    .search-theme-b .public-search-header__title h1 { font-size: 1.2rem; }
+    .search-theme-c .public-search-header { height: 146px; }
+    .search-theme-c .public-search-header__title { inset: .75rem; width: auto; }
+}
+
+@media (max-width: 430px) {
+    .public-search .chat-container { min-height: calc(100svh - 170px); }
+    .public-search-theme-picker span:first-child { display: none; }
+    .search-theme-a .public-search-header__title p { display: none; }
+    .search-theme-a .public-search-identity > img { width: 34px !important; height: 40px !important; }
+    .search-theme-a .public-search-identity__wordmark { width: min(100%, 245px); }
+    .public-search-identity__wordmark strong { font-size: .78rem; }
+    .public-search-identity__wordmark small { font-size: .55rem; }
+    .search-theme-b .public-search-header { height: 110px; }
+    .search-theme-b .public-search-header__title h1 { font-size: 1.05rem; }
+    .search-theme-c .public-search-header { height: 132px; }
 }
