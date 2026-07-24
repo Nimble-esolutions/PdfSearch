@@ -1,7 +1,7 @@
 Status: Active
 Audience: Recovery
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/OPERATIONS_RUNBOOK.md
 Supersedes: None
 
@@ -69,6 +69,55 @@ identified by `repo@sha256:<digest>` for promotion, effective
 read-only when present, and no mount at `/app/flowdocs`. Retain the command
 output with the incident record after redacting hostnames or other sensitive
 operational details as required.
+
+## New Evidence Commands (2026-07-24)
+
+### Environment Identity
+
+```bash
+docker compose -f docker-compose.yml exec -T web python manage.py config_inspect
+```
+
+Reports `APP_ENV`, `DATA_MODE`, `BACKUP_ROLE`, `EXTERNAL_SIDE_EFFECTS_MODE`,
+`PRODUCTION_SOURCE_ID`, `AUTHORITATIVE_DATASET_ID`, `DATASET_ID`, and instance
+identity. Use this to confirm the running container's environment posture
+before any deployment or recovery action.
+
+### Object Store Capabilities
+
+```bash
+docker compose -f docker-compose.yml exec -T web python manage.py verify_object_store_capabilities
+```
+
+Probes the configured S3/RustFS endpoint for conditional operation support
+(If-None-Match, If-Match). Fails if the object store does not support the
+required operations for global writer fencing.
+
+### Health Endpoints
+
+```bash
+curl -fsS https://<configured-domain>/health/data/
+curl -fsS https://<configured-domain>/health/lease/
+curl -fsS https://<configured-domain>/health/metrics/
+```
+
+- `/health/data/` — SQLite integrity, media count, FAISS index count, Chroma
+  collection count.
+- `/health/lease/` — current writer lease owner, TTL, renewal status.
+- `/health/metrics/` — Prometheus-format metrics including request counts,
+  search latency, index sizes, and lease state.
+
+### Management Commands
+
+```bash
+docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
+docker compose -f docker-compose.yml exec -T web python manage.py validate_data_release
+```
+
+- `inventory_artifacts` — lists all generations, their validation status, and
+  retention state.
+- `validate_data_release` — runs the full compatibility check suite (schema,
+  embedding dimensions, FAISS format) against the current data root.
 
 ## Incident Card: Unhealthy Containers
 
@@ -453,13 +502,311 @@ passes and a separately approved promotion is completed.
 Keep backup reference, isolated volume name, image digest, integrity output,
 restore logs, media/index/search checks, and the decision not to promote.
 
-## Incident Card: Legacy/Active Data Reconciliation
+## Incident Card: Environment Identity Failure
+
+### Symptoms
+
+Startup fails with an environment identity validation error, the web container
+exits before migrations run, or `/readyz` never becomes reachable.
+
+### Read-only evidence
+
+```bash
+docker compose -f docker-compose.yml logs --tail=100 web
+docker compose -f docker-compose.yml exec -T web python manage.py config_inspect
+```
+
+### Expected evidence
+
+`config_inspect` reports valid `APP_ENV`, `DATA_MODE`, `BACKUP_ROLE`, and
+`EXTERNAL_SIDE_EFFECTS_MODE`. Production requires `APP_ENV=production`,
+`DATA_MODE=live`, and a non-empty `PRODUCTION_SOURCE_ID`.
+
+### Stop conditions
+
+Stop if any required identity variable is missing, invalid, or mismatched for
+the deployment environment. Do not bypass the validation by setting
+`ALLOW_INSECURE_DEFAULTS=1` in production.
+
+### Recovery
+
+Correct the environment variables in Dokploy and redeploy. The container will
+pass startup validation and proceed to migrations.
+
+### Retained evidence
+
+Keep `config_inspect` output, startup logs, and the corrected Dokploy
+environment configuration (keys only, no values).
+
+## Incident Card: Side-Effect Policy Violation
+
+### Symptoms
+
+Email notifications are not sent, OpenAI calls fail, payment webhooks are
+not received, or the application logs show side-effect policy blocks.
+
+### Read-only evidence
+
+```bash
+docker compose -f docker-compose.yml exec -T web python manage.py config_inspect
+docker compose -f docker-compose.yml logs --tail=200 web | grep -i "side_effect"
+```
+
+### Expected evidence
+
+Production must show `EXTERNAL_SIDE_EFFECTS_MODE=live`. Staging/training may
+use `sandbox`. Dev uses `disabled`.
+
+### Stop conditions
+
+Stop if production is running in `sandbox` or `disabled` mode — external
+integrations are silently blocked. Do not change the mode without a reviewed
+deployment record.
+
+### Recovery
+
+Set `EXTERNAL_SIDE_EFFECTS_MODE=live` in Dokploy and redeploy. Verify email,
+OpenAI, and webhook functionality after the change.
+
+### Retained evidence
+
+Keep `config_inspect` output, side-effect policy logs, and the deployment
+record for the mode change.
+
+## Incident Card: Global Writer Conflict
+
+### Symptoms
+
+Write operations fail with a conflict error, data changes are rejected, or
+the application logs show "writer conflict" or "lease held by another instance."
+
+### Read-only evidence
+
+```bash
+curl -fsS https://<configured-domain>/health/lease/
+docker compose -f docker-compose.yml logs --tail=200 web | grep -i "writer\|lease\|conflict"
+```
+
+### Expected evidence
+
+The health endpoint shows the current lease owner. Only one instance should
+hold the writer lease. The lease TTL should be within the configured window.
+
+### Stop conditions
+
+Stop if two instances claim the writer lease, if the lease is held by a
+stale/dead instance, or if the lease TTL is expired without renewal. Do not
+force-release a lease without confirming the holder is dead.
+
+### Recovery
+
+Identify the conflicting instance. If it is dead, wait for lease expiry or
+use the management command to release it. If it is alive, investigate why
+two instances are writing to the same dataset.
+
+### Retained evidence
+
+Keep `/health/lease/` output, writer conflict logs, instance identities of
+both holders, and the resolution decision.
+
+## Incident Card: Dataset Registration Failure
+
+### Symptoms
+
+The application rejects writes with "dataset not registered," or startup logs
+show a registration failure.
+
+### Read-only evidence
+
+```bash
+docker compose -f docker-compose.yml exec -T web python manage.py config_inspect
+docker compose -f docker-compose.yml logs --tail=100 web | grep -i "registration\|dataset"
+```
+
+### Expected evidence
+
+`DATASET_ID` and `AUTHORITATIVE_DATASET_ID` are set and the dataset is
+registered in the object store. The instance identity matches the registered
+writer.
+
+### Stop conditions
+
+Stop if the dataset is not registered, if `DATASET_ID` conflicts with another
+instance, or if the registration was created with a different instance identity.
+
+### Recovery
+
+Register the dataset using the management command or correct the
+`AUTHORITATIVE_DATASET_ID` / `DATASET_ID` in Dokploy. If the dataset already
+exists with a different instance, resolve the conflict before re-registering.
+
+### Retained evidence
+
+Keep `config_inspect` output, registration logs, and the resolution.
+
+## Incident Card: Restore Pipeline Failure
+
+### Symptoms
+
+A restore job fails at any stage (download, validate, sanitize, rehearse,
+activate), or the workspace state machine is stuck in an intermediate state.
+
+### Read-only evidence
+
+```bash
+docker compose -f docker-compose.yml logs --tail=300 web | grep -i "restore\|workspace"
+docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
+ls -la /app/data/restore_workspaces/
+```
+
+### Expected evidence
+
+The restore workspace shows a clean state machine progression:
+`pending` → `downloading` → `validating` → `sanitizing` → `rehearsing` →
+`activating` → `completed`. Each stage produces a checkpoint.
+
+### Stop conditions
+
+Stop if the workspace is stuck in an intermediate state, if validation or
+rehearsal failed, or if the target generation is incompatible with the
+current schema/embeddings/FAISS format. Do not manually advance the state
+machine.
+
+### Recovery
+
+Inspect the failed stage logs. For download failures, verify object store
+connectivity and credentials. For validation failures, check checksums. For
+rehearsal failures, review compatibility report. Discard the failed workspace
+and retry with a corrected configuration.
+
+### Retained evidence
+
+Keep restore logs, workspace state, compatibility report, and the failed
+generation reference.
+
+## Incident Card: Activation Failure
+
+### Symptoms
+
+A generation activation fails, the symlink swap is incomplete, or the
+application serves stale data after a reported activation.
+
+### Read-only evidence
+
+```bash
+docker compose -f docker-compose.yml logs --tail=200 web | grep -i "activate\|activation"
+ls -la /app/data/current /app/data/generations/
+docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
+```
+
+### Expected evidence
+
+`/app/data/current` is a symlink to the active generation directory. The
+activation journal shows a completed heartbeat sequence. The active generation
+matches the expected one from `inventory_artifacts`.
+
+### Stop conditions
+
+Stop if the symlink points to a non-existent target, if the activation journal
+shows an incomplete heartbeat sequence, or if the active generation does not
+match the expected one. Do not manually fix the symlink.
+
+### Recovery
+
+If the activation journal shows a crash during activation, the crash recovery
+will roll back to the last known-good state on next startup. If activation
+failed cleanly (validation or rehearsal), fix the underlying issue and retry.
+If the symlink is broken, run the activation recovery management command.
+
+### Retained evidence
+
+Keep activation logs, journal state, symlink target, `inventory_artifacts`
+output, and the recovery action.
+
+## Incident Card: Activation Crash Recovery
+
+### Symptoms
+
+After an unexpected restart, the application fails to start or serves data
+from an unexpected generation. The activation journal shows a partial
+heartbeat sequence.
+
+### Read-only evidence
+
+```bash
+docker compose -f docker-compose.yml logs --tail=200 web | grep -i "crash\|recovery\|journal"
+cat /app/data/.activation_journal
+ls -la /app/data/current /app/data/generations/
+```
+
+### Expected evidence
+
+The activation journal shows either a completed heartbeat sequence (clean
+activation) or a rollback marker (crash recovered). The symlink points to a
+valid generation directory.
+
+### Stop conditions
+
+Stop if the journal is corrupted, if the rollback target is also invalid, or
+if manual intervention has modified the symlink or journal. Do not delete the
+journal file.
+
+### Recovery
+
+The crash recovery runs automatically on startup. If it fails, inspect the
+journal for the last completed heartbeat and manually verify that generation.
+If both the attempted and rollback generations are corrupt, restore from the
+last known-good backup.
+
+### Retained evidence
+
+Keep the activation journal, startup logs, symlink state, and any manual
+recovery steps.
+
+## Incident Card: Object Store Capability Failure
+
+### Symptoms
+
+Object store operations fail with "operation not supported," conditional
+writes are rejected, or `verify_object_store_capabilities` reports missing
+features.
+
+### Read-only evidence
+
+```bash
+docker compose -f docker-compose.yml exec -T web python manage.py verify_object_store_capabilities
+docker compose -f docker-compose.yml logs --tail=100 web | grep -i "object_store\|s3\|rustfs"
+```
+
+### Expected evidence
+
+The capabilities probe reports support for `PutIfNoneMatch`, `PutIfMatch`,
+`GetIfNoneMatch`, and `GetIfMatch`. All conditional operations are available.
+
+### Stop conditions
+
+Stop if any conditional operation is not supported — global writer fencing
+and CAS-based operations will not work correctly. Do not bypass the capability
+check.
+
+### Recovery
+
+Verify the S3/RustFS endpoint supports conditional operations. If using
+RustFS, ensure the version supports If-None-Match and If-Match headers. If
+the endpoint cannot be upgraded, disable artifact vault features until the
+endpoint is compatible.
+
+### Retained evidence
+
+Keep `verify_object_store_capabilities` output, object store logs, and the
+endpoint version/configuration.
 
 ### Verified baseline
 
-Legacy has 242 PDFs and 45 FAISS files. Active has 17 PDF rows, 0 PDFs, and 11
-FAISS files. Only 6 PDF paths overlap, and the SQLite databases diverge. RustFS
-bucket `ai-sahakar-prod-flowdocs-data-volume` holds timestamped active/legacy
+Post-reconciliation (2026-07-24): 253 PDF rows, 242 recovered PDF files, 53
+folders, 8 users, 51 FAISS indexes, 8,753 vectors. Eleven target-only PDF rows
+remain preserved but unrecovered. RustFS bucket
+`ai-sahakar-prod-flowdocs-data-volume` holds timestamped active/legacy
 snapshots and checksums but is isolated from the application network.
 
 ### Recovery
@@ -471,12 +818,147 @@ snapshots and checksums but is isolated from the application network.
 5. Validate SQLite, PDF count, FAISS fingerprints, index loading, and search.
 6. Promote only after an operator records the selected source and decision.
 
-Direct legacy-to-active copying and silent merging are prohibited. Application
-S3 integration, automatic cross-environment synchronization, generated artifact
-manifests, and FAISS recovery automation are not current capabilities.
+Direct legacy-to-active copying and silent merging are prohibited. The application
+now supports namespace-scoped S3 keys, conditional operations, immutable
+generation manifests, CAS-based writer fencing, staged restore with rehearsal,
+and atomic symlink-based activation with crash recovery.
 
 ### Required gates
 
 Pass link/path scan, Mermaid validation, Compose config, `/livez`, `/readyz`,
 PDF count, FAISS count, and representative search before promotion. Retain
 failed isolated targets and all evidence until the incident is closed.
+
+## Backup Policy Operations
+
+Backups are governed by `core/backup_policy.py` with dirty-state tracking,
+fingerprinting, and debouncing.
+
+### Check backup state
+
+```bash
+docker compose -f docker-compose.yml exec -T web python manage.py config_inspect
+curl -fsS https://<configured-domain>/health/data/
+```
+
+The data health endpoint reports whether a backup is needed (dirty state) and
+the last backup fingerprint.
+
+### Trigger a manual backup
+
+```bash
+docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
+```
+
+Use the artifact inventory to identify the current generation, then queue a
+backup through the Dokploy backup mechanism or the explicit management command.
+Never skip the dirty-state check — redundant backups waste storage and I/O.
+
+### Verify backup integrity
+
+After a backup completes, verify:
+- SQLite integrity (`PRAGMA integrity_check` returns `ok`)
+- Media file count matches the source
+- FAISS index count matches the source
+- Backup fingerprint matches the source fingerprint
+
+## Writer Lease Operations
+
+Writer leases are managed by `core/lease.py` with Redis primary and SQLite
+fallback.
+
+### Check lease state
+
+```bash
+curl -fsS https://<configured-domain>/health/lease/
+```
+
+Reports the current lease owner, TTL, renewal status, and backend (Redis or
+SQLite).
+
+### Release a stale lease
+
+If a lease is held by a dead instance, wait for TTL expiry (automatic release)
+or use the management command to force-release. Never force-release a lease
+without confirming the holder is dead — check the instance identity and
+container state first.
+
+### Lease renewal
+
+Leases auto-renew as long as the holder is alive. If renewal fails (Redis
+unavailable), the lease falls back to SQLite. Monitor `/health/lease/` for
+renewal failures — they indicate Redis connectivity issues.
+
+## Restore Pipeline Operations
+
+The restore pipeline (`core/restore_pipeline.py`) runs a strict sequence:
+download → validate → sanitize → rehearse → activate.
+
+### Initiate a restore
+
+Restores are queued as maintenance jobs through the dashboard or management
+command. Each restore creates an isolated workspace in
+`/app/data/restore_workspaces/`.
+
+### Monitor restore progress
+
+```bash
+docker compose -f docker-compose.yml logs --tail=100 web | grep -i "restore\|workspace"
+docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
+```
+
+The workspace state machine progresses through each stage. Each stage produces
+a checkpoint. If a stage fails, the workspace is paused at that stage for
+inspection.
+
+### Cancel a restore
+
+Cancel the maintenance job through the dashboard. The workspace is preserved
+for inspection. Discard it manually after evidence retention.
+
+### Clean up failed workspaces
+
+Failed workspaces in `/app/data/restore_workspaces/` are not auto-cleaned.
+Remove them after evidence retention to free disk space. Never delete a
+workspace that is still referenced by an active or pending maintenance job.
+
+## Activation Operations
+
+Generation activation uses atomic symlink swap (`core/activate.py`) with
+heartbeat-based crash recovery (`core/activation_journal.py`).
+
+### Verify active generation
+
+```bash
+ls -la /app/data/current
+docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
+```
+
+`/app/data/current` must be a symlink to the active generation directory.
+`inventory_artifacts` shows which generation is marked active.
+
+### Check activation journal
+
+```bash
+cat /app/data/.activation_journal
+```
+
+The journal records heartbeat entries during activation. A complete sequence
+ends with a `committed` marker. An incomplete sequence (missing `committed`)
+indicates a crash during activation — the recovery will roll back on next
+startup.
+
+### Manual activation recovery
+
+If automatic crash recovery fails, use the management command to inspect the
+journal and manually complete or roll back the activation. Never manually
+modify the symlink or journal file.
+
+## Management Commands Reference
+
+| Command | Purpose |
+|---------|---------|
+| `config_inspect` | Report environment identity, data mode, side-effect policy |
+| `verify_object_store_capabilities` | Probe S3/RustFS for conditional operation support |
+| `inventory_artifacts` | List all generations, validation status, retention state |
+| `validate_data_release` | Run full compatibility check suite |

@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-23
+Last verified: 2026-07-24
 Canonical source: docs/ENVIRONMENT_CONTRACT.md
 Supersedes: env.minimal, env.template
 
@@ -34,6 +34,134 @@ CREATE_SUPERUSER=0
 
 `PDFSEARCH_IMAGE` must be an immutable GHCR digest tied to the approved Git SHA.
 Tags such as `latest` or `dev` are compatibility aliases, not release identity.
+
+## Environment Identity (New — 2026-07-24)
+
+The `EnvironmentIdentity` system (`core/environment.py`) enforces fail-closed
+startup validation. Every deployment must set these:
+
+```text
+APP_ENV=production|staging|training|togo|togolive|hs|dev
+PRODUCTION_SOURCE_ID=<unique-source-identifier>
+AUTHORITATIVE_DATASET_ID=<canonical-dataset-id>
+DATASET_ID=<this-instance-dataset-id>
+BACKUP_ROLE=primary|replica|none
+EXTERNAL_SIDE_EFFECTS_MODE=live|sandbox|disabled
+DATA_MODE=live|sanitized|empty
+```
+
+### AppEnv Enum
+
+| Value | Description |
+|-------|-------------|
+| `production` | Live production deployment |
+| `staging` | Pre-production staging |
+| `training` | Training environment |
+| `togo` | Togo demo |
+| `togolive` | Togo live |
+| `hs` | HS demo |
+| `dev` | Local development |
+
+### DataMode Enum
+
+| Value | Description |
+|-------|-------------|
+| `live` | Real production data |
+| `sanitized` | PII-sanitized copy (non-prod) |
+| `empty` | No data, fresh start |
+
+### BackupRole Enum
+
+| Value | Description |
+|-------|-------------|
+| `primary` | Authoritative backup source |
+| `replica` | Read-only backup replica |
+| `none` | No backup role |
+
+### Side-Effect Policy (`core/side_effects.py`)
+
+`EXTERNAL_SIDE_EFFECTS_MODE` gates all external calls:
+
+| Mode | Email | OpenAI | Payments | Webhooks |
+|------|-------|--------|----------|----------|
+| `live` | Allowed | Allowed | Allowed | Allowed |
+| `sandbox` | Allowed | Allowed | Blocked | Blocked |
+| `disabled` | Blocked | Blocked | Blocked | Blocked |
+
+### AI Guard (`core/ai_guard.py`)
+
+OpenAI client containment with three modes: `enabled`, `sandbox` (returns
+deterministic mock embeddings), and `disabled` (raises on any call). The guard
+is enforced at the client-construction level; no call site can bypass it.
+
+### Startup Validation (Fail-Closed)
+
+On startup, `EnvironmentIdentity` validates:
+- `APP_ENV` is a recognized value
+- `DATA_MODE` is valid for the given `APP_ENV` (production requires `live`)
+- `BACKUP_ROLE` is valid
+- `EXTERNAL_SIDE_EFFECTS_MODE` is valid
+- `PRODUCTION_SOURCE_ID` is set when `APP_ENV=production`
+- `AUTHORITATIVE_DATASET_ID` and `DATASET_ID` are set
+
+Any validation failure exits the process before migrations run. The web
+container will not reach readiness with an invalid identity.
+
+### Instance Identity
+
+Each instance writes a unique `instance_id` (UUID) to `/app/data/.instance_id`
+on first startup. This identity is used for global writer fencing and lease
+ownership. Never delete or rotate this file on a live instance.
+
+### Build Identity
+
+The OCI image carries build identity through:
+- OCI labels: `org.opencontainers.image.revision` (Git SHA), `created`,
+  `version`
+- `/app/flowdocs/.release` file: Git SHA, build timestamp, CI run URL
+- `PDFSEARCH_IMAGE` env var: the deployed digest
+
+All three must agree for a release to be accepted.
+
+## Artifact Vault Configuration
+
+```text
+ARTIFACT_VAULT_ENDPOINT=<S3-compatible-endpoint>
+ARTIFACT_VAULT_ACCESS_KEY=<access-key>
+ARTIFACT_VAULT_SECRET_KEY=<secret-key>
+ARTIFACT_VAULT_BUCKET=ai-sahakar-prod-flowdocs-data-volume
+ARTIFACT_VAULT_REGION=us-east-1
+ARTIFACT_VAULT_AUTO_SYNC=0
+ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY=0
+ARTIFACT_VAULT_BOOTSTRAP_GENERATION=
+ARTIFACT_VAULT_RETENTION_COUNT=5
+```
+
+The vault uses S3-compatible storage (RustFS). Object store capabilities are
+probed at startup via `core/object_store_capabilities.py` — conditional
+operations (If-None-Match, If-Match) are verified before any write path is
+enabled. Namespace-scoped keys are built by `core/namespace.py` using the
+`DATASET_ID`.
+
+## Restore Configuration
+
+```text
+RESTORE_WORKSPACE_ROOT=/app/data/restore_workspaces
+RESTORE_STAGE_TIMEOUT_SECONDS=3600
+RESTORE_REHEARSAL_ENABLED=1
+RESTORE_SANITIZE_ENABLED=0
+RESTORE_COMPATIBILITY_CHECK_ENABLED=1
+```
+
+The restore pipeline (`core/restore_pipeline.py`) runs:
+download → validate → sanitize → rehearse → activate
+
+Each stage is tracked by `core/restore_workspace.py` with a state machine.
+Activation uses atomic symlink swap (`core/activate.py`) with heartbeat-based
+crash recovery (`core/activation_journal.py`). Migration rehearsal
+(`core/rehearsal.py`) runs against an isolated copy before activation.
+Compatibility checks (`core/compatibility.py`) verify schema, embedding
+dimensions, and FAISS index format before promotion.
 
 ## Runtime Data
 

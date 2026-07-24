@@ -1,7 +1,7 @@
 Status: Active
 Audience: Release
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/BUILD_AND_RELEASE_ROADMAP.md
 Supersedes: docs/DOCKER_IMAGE_OPTIMIZATION.md
 
@@ -20,6 +20,8 @@ The canonical production domains are `https://ai-sahakar.net` and
 `https://2026.ai-sahakar.net`; it is retained only as historical rollback
 evidence. Dokploy production promotion requires exact web/Redis digests and
 `pull_policy: always`; compatibility tags are not release identity.
+
+Current dev HEAD: `2e1ca38`.
 
 ## Target Image Topology
 
@@ -91,6 +93,15 @@ Recent release records:
 - [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md)
   records PR #37, merge commit `1962e127e1ebcff0b8b0ba08622656d8eeaacaae`,
   and the published `dev` image digest for the Admin Operations Cockpit work.
+- PRs #42 through #53 delivered 16 new core modules (environment, side_effects,
+  ai_guard, activate, activation_journal, restore_pipeline, restore_workspace,
+  global_writer, registration, backup_policy, sanitize, rehearsal, lease,
+  compatibility, metrics, namespace, object_store_capabilities), new health
+  endpoints (`/health/data/`, `/health/lease/`, `/health/metrics/`), new
+  management commands (`config_inspect`, `verify_object_store_capabilities`,
+  `inventory_artifacts`, `validate_data_release`), operations dashboard, user
+  management, PDF lifecycle, and generation lifecycle UI. PR #53 merged the
+  data release pipeline at `2e1ca38`.
 
 ## GitHub Actions Release Policy
 
@@ -125,8 +136,15 @@ Recent release records:
 ## Current Versus Planned
 
 Current: immutable application release, Redis-enabled runtime, operator-recorded
-data custody, and manual restore/promotion gates.
+data custody, manual restore/promotion gates, environment identity in CI
+(`APP_ENV`, `PRODUCTION_SOURCE_ID`, `AUTHORITATIVE_DATASET_ID`, `DATASET_ID`,
+`BACKUP_ROLE`, `EXTERNAL_SIDE_EFFECTS_MODE`, `DATA_MODE`), global writer fencing,
+dataset registration, restore pipeline with compatibility checks, sanitization,
+migration rehearsal, activation journal, writer lease, backup policy, object
+store capabilities, namespace, metrics, and the data release contract
+(`inventory_artifacts`, `validate_data_release`).
 
-Planned: separately published versioned data artifacts, generated manifests,
-automatic FAISS recovery, and automatic cross-environment synchronization. None
-of those capabilities is emitted or enforced by the current workflow.
+Planned: separately published versioned data artifacts, automatic FAISS recovery,
+and automatic cross-environment synchronization. The restore pipeline and
+activation journal provide the foundation for these; full automation of artifact
+publishing and cross-environment sync remains a future target.

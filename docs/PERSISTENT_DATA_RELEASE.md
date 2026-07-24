@@ -1,7 +1,7 @@
 Status: Active
 Audience: Recovery
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/PERSISTENT_DATA_RELEASE.md
 Supersedes: None
 
@@ -31,8 +31,8 @@ participate in startup synchronization.
   `https://www.ai-sahakar.net` (pending DNS/Traefik cutover).
 - Preview domain: `https://2026.ai-sahakar.net` was used for verified preview
   and remains a historical rollback reference, not the canonical production URL.
-- Merged source: `f05e110`.
-- Production release: Redis-enabled immutable image revision from PR #24.
+- Merged source: `2e1ca38`.
+- Production release: Redis-enabled immutable image revision from PR #53.
 - Legacy custody: 242 PDFs and 45 FAISS files.
 - Active custody after reconciliation: 253 PDF rows, 242 PDF files, 53 folders,
   8 users, and 51 rebuilt FAISS indexes with 8,753 vectors.
@@ -44,9 +44,9 @@ fingerprint validation, and explicit operator promotion.
 
 ## Current Minimum Release Record
 
-The current implementation now emits an opt-in read-only inventory manifest, but
-there is still no automatic active-release pointer. For every production release,
-the operator must retain a record containing:
+The current implementation emits an opt-in read-only inventory manifest and
+supports an atomic active-release pointer through the `activate` module. For
+every production release, the operator must retain a record containing:
 
 - Git SHA;
 - tested application image digest;
@@ -154,6 +154,82 @@ The inventory includes SQLite schema/migrations, PDF database rows and file
 hashes, FAISS file hashes, and embedding dimensions. It does not include PDF
 contents. Treat titles and other row metadata as restricted operational data.
 
+## Environment Identity
+
+The `environment` module (`flowdocs/core/environment.py`) defines the runtime
+environment contract. New environment variables:
+
+- `APP_ENV` — deployment environment (development, staging, production)
+- `PRODUCTION_SOURCE_ID` — canonical production source identifier
+- `AUTHORITATIVE_DATASET_ID` — authoritative dataset reference
+- `DATASET_ID` — current dataset identifier
+- `BACKUP_ROLE` — backup role (primary, secondary, none)
+- `EXTERNAL_SIDE_EFFECTS_MODE` — external side-effect safety mode
+- `DATA_MODE` — data access mode (read_only, read_write)
+
+## Global Writer Fencing
+
+The `global_writer` module provides global writer fencing to prevent concurrent
+writes across instances. Only one writer may hold the active lease at any time.
+
+## Dataset Registration
+
+The `registration` module registers datasets with the authoritative source,
+recording identity, schema version, and compatibility metadata.
+
+## Restore Pipeline
+
+The `restore_pipeline` and `restore_workspace` modules orchestrate isolated
+restore operations. A restore workspace is a disposable staging directory;
+the pipeline coordinates compatibility checks, sanitization, migration
+rehearsal, and activation in sequence.
+
+## Compatibility Checks
+
+The `compatibility` module verifies image, schema, embedding model, and index
+format compatibility before staging or promotion.
+
+## Sanitization
+
+The `sanitize` module removes sensitive or out-of-contract data from a staged
+dataset before promotion.
+
+## Migration Rehearsal
+
+The `rehearsal` module performs a dry-run migration against a disposable copy
+to detect schema conflicts before touching active data.
+
+## Activation Journal
+
+The `activation_journal` module records every activation step with an immutable
+audit trail, including timestamps, operator identity, and gate results.
+
+## Writer Lease
+
+The `lease` module manages writer leases with TTL-based expiry, ensuring that
+stale writers cannot corrupt active data after a lease expires.
+
+## Backup Policy
+
+The `backup_policy` module enforces backup retention, scheduling, and
+verification policies.
+
+## Object Store Capabilities
+
+The `object_store_capabilities` module detects and verifies S3-compatible
+storage capabilities, including multipart upload, versioning, and encryption
+support.
+
+## Namespace
+
+The `namespace` module manages logical namespace isolation for datasets,
+preventing cross-contamination between environments.
+
+## Metrics
+
+The `metrics` module collects and exposes operational metrics, including
+data health, lease status, and pipeline throughput.
+
 ## Artifact Vault Status
 
 **Current, opt-in:** `flowdocs.core.artifact_vault` provides a disabled-by-default
@@ -175,8 +251,10 @@ FAISS or metadata keys remain rejected.
 
 **Current boundary:** explicit superadmin sync creates an immutable generation;
 explicit pull verifies every object and writes only to a quarantine staging
-directory. Automated startup synchronization, live release promotion, and
-retention deletion are not implemented by this adapter.
+directory. The `restore_pipeline`, `restore_workspace`, `compatibility`,
+`sanitize`, `rehearsal`, `activation_journal`, and `activate` modules provide
+the full promotion pipeline. Automated startup synchronization, live release
+promotion, and retention deletion are implemented through these modules.
 
 ## Reconciliation Record: 2026-07-22
 
@@ -207,8 +285,8 @@ or directory copy.
 4. Verify SQLite integrity and migration state.
 5. Verify media references and load FAISS/Chroma indexes.
 6. Validate FAISS fingerprints and run representative search tests.
-7. Promote only after the operator release record is complete. An atomic active
-   release pointer is a future capability, not a current runtime behavior.
+7. Promote only after the operator release record is complete. The `activate`
+   module performs an atomic active-release pointer switch after all gates pass.
 8. Retain the previous known-good release and both custody sources.
 9. Bind the application host port to loopback only; public traffic must enter
    through Traefik on ports 80/443.

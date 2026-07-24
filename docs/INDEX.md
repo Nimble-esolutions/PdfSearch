@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/INDEX.md
 Supersedes: None
 
@@ -19,6 +19,21 @@ source, and supersession relationship.
 - [`docker-compose.dev.yml`](../docker-compose.dev.yml) — local services and isolated named volumes
 - [`.env.example`](../.env.example) — canonical non-secret environment example
 - [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md) — runtime env variable contract and stale-template supersession
+- [`environment`](../flowdocs/core/environment.py) — APP_ENV, PRODUCTION_SOURCE_ID, AUTHORITATIVE_DATASET_ID, DATASET_ID, BACKUP_ROLE, EXTERNAL_SIDE_EFFECTS_MODE, DATA_MODE
+- [`side_effects`](../flowdocs/core/side_effects.py) — external side-effect safety gating
+- [`ai_guard`](../flowdocs/core/ai_guard.py) — AI operation authorization
+- [`activate`](../flowdocs/core/activate.py) — activation entry point
+- [`activation_journal`](../flowdocs/core/activation_journal.py) — activation audit trail
+- [`global_writer`](../flowdocs/core/global_writer.py) — global writer fencing
+- [`registration`](../flowdocs/core/registration.py) — dataset registration
+- [`backup_policy`](../flowdocs/core/backup_policy.py) — backup policy enforcement
+- [`sanitize`](../flowdocs/core/sanitize.py) — data sanitization pipeline
+- [`rehearsal`](../flowdocs/core/rehearsal.py) — migration rehearsal
+- [`lease`](../flowdocs/core/lease.py) — writer lease management
+- [`compatibility`](../flowdocs/core/compatibility.py) — compatibility checks
+- [`metrics`](../flowdocs/core/metrics.py) — metrics collection
+- [`namespace`](../flowdocs/core/namespace.py) — namespace management
+- [`object_store_capabilities`](../flowdocs/core/object_store_capabilities.py) — object store capability detection
 
 ## Dokploy Deployment
 
@@ -33,6 +48,7 @@ source, and supersession relationship.
 
 - [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) — current workflow guarantees and future targets
 - [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md) — Admin Operations Cockpit merge, image digest, and dev-release evidence
+- [`releases/2026-07-24-data-release-pipeline.md`](releases/2026-07-24-data-release-pipeline.md) — data release pipeline merge through PR #53
 - [`SECURITY_SCAN.md`](SECURITY_SCAN.md) — Trivy behavior, root cause, remediation, and verification
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — current release record and proposed artifact manifest
 - [`UI_DATA_INTEGRATION_PLAN.md`](UI_DATA_INTEGRATION_PLAN.md) — historical UI, init-data, FAISS, bootstrap, and blue-green integration plan
@@ -47,16 +63,32 @@ source, and supersession relationship.
 - [`FAISS_COMPATIBILITY.md`](FAISS_COMPATIBILITY.md) — index fingerprint validation
 - [`OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md) — backup evidence, restore isolation, and failed-restore response
 - [`ROOT_CAUSE_ANALYSIS.md`](ROOT_CAUSE_ANALYSIS.md) — historical migration incident context
+- [`restore_pipeline`](../flowdocs/core/restore_pipeline.py) — restore pipeline orchestration
+- [`restore_workspace`](../flowdocs/core/restore_workspace.py) — isolated restore workspace management
 
 ## Incident Response
 
 - [`OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md) — executable incident cards for container, digest, volume, migration, Dokploy, Redis, readiness, and restore failures
 - [`PRODUCTION_OPERATING_RULES.md`](PRODUCTION_OPERATING_RULES.md) — non-negotiable operating rules
 - [`CODEX_OPERATIONS_GUIDE.md`](CODEX_OPERATIONS_GUIDE.md) — Codex-friendly adapter for local PR, release, and operations workflows
+- `/health/data/` — data health endpoint
+- `/health/lease/` — writer lease health endpoint
+- `/health/metrics/` — metrics health endpoint
 
 ## Client Usage
 
 - [`CLIENT_USER_MANUAL.md`](CLIENT_USER_MANUAL.md) — sign-in, upload, search, permissions, and support guidance
+- `/dashboard/operations/` — operations dashboard
+- `/dashboard/users/` — user management dashboard
+- PDF lifecycle — PDF upload, processing, indexing, and archival lifecycle
+- Generation lifecycle — data generation creation, validation, and promotion lifecycle
+
+## Management Commands
+
+- `config_inspect` — inspect runtime configuration
+- `verify_object_store_capabilities` — verify object store capabilities
+- `inventory_artifacts` — inventory data artifacts with checksums
+- `validate_data_release` — validate a data release manifest
 
 ## Historical Context
 
@@ -84,9 +116,11 @@ Historical documents remain for context and are not deployment instructions:
 - `Client-facing` is reserved for content intended for end users.
 
 Current-versus-planned labels are mandatory for recovery, storage, artifact, and
-automation claims. RustFS is current as an operator recovery vault; application
+automation claims. RustFS is current as an operator recovery vault with explicit
+superadmin generation sync, staged pull, and quarantine staging. Application
 S3 integration, automatic cross-environment sync, generated artifact manifests,
-and FAISS recovery automation are planned or absent, not current capabilities.
+and FAISS recovery automation are implemented through the object store
+capabilities, restore pipeline, and activation journal modules.
 
 When a document is superseded, retain the old file only when its historical
 context is useful, change its status to `Historical`, and add a prominent link

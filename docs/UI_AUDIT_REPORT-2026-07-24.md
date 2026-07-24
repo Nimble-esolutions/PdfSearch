@@ -1,14 +1,14 @@
 # PdfSearch UI/UX Audit Report
 
 **Date:** 2026-07-24
-**Branch:** recovery/data-lifecycle-verified-20260724 (16a5899)
+**Branch:** recovery/data-lifecycle-verified-20260724 (merged to `dev` at `2e1ca38`)
 **Environment:** Docker dev compose, localhost:8000
 
 ## Environment
 
 ```text
-branch:    recovery/data-lifecycle-verified-20260724
-commit:    16a5899
+branch:    recovery/data-lifecycle-verified-20260724 (merged to dev at 2e1ca38)
+commit:    16a5899 (local verification tag: pdfsearch-web:rc1)
 image:     pdfsearch-web:rc1
 docker:    docker-compose.dev.yml (web + redis)
 URL:       http://localhost:8000
@@ -24,7 +24,9 @@ browser:   Chromium via Kimi WebBridge
 | Auth | `/login/` GET, POST | CSRF protected, username/password fields present |
 | Language | Marathi toggle via locale switch | Works, Devanagari text renders |
 | Dashboard | `/dashboard/` | Requires auth, 302 to login for anonymous |
-| Health | `/readyz`, `/health/data/`, `/health/metrics/` | All respond correctly |
+| Operations | `/dashboard/operations/`, `/dashboard/operations/data/`, `/dashboard/operations/lease/` | Protected (302 for anonymous), renders for superadmin |
+| Health | `/readyz`, `/health/data/`, `/health/lease/`, `/health/metrics/` | All respond correctly |
+| Config | `python manage.py config_inspect` | Configuration audit renders |
 
 ## Screenshots
 
@@ -99,5 +101,13 @@ writer authority enabled:          false
 scheduler enabled:                 false
 production data used:              false
 ```
+
+## New UI Elements (Post-Integration)
+
+- Operations dashboard: `/dashboard/operations/` with data, lease, and metrics sub-pages.
+- Health endpoints: `/health/data/` (data status), `/health/lease/` (writer lease), `/health/metrics/` (Prometheus).
+- `config_inspect` management command output.
+- Object-store capability probe results via `object_store_capabilities.py`.
+- Global writer status display via `global_writer.py`.
 
 ## Verdict: LOCAL UI/UX VALIDATED

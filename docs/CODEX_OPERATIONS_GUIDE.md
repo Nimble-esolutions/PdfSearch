@@ -1,7 +1,7 @@
 Status: Active
 Audience: Codex agents and maintainers
 Source conversion: workspace `.kilo` and `.opencode` rules
-Last updated: 2026-07-22
+Last updated: 2026-07-24
 
 # Codex Operations Guide
 
@@ -175,7 +175,8 @@ local-shell interpolation.
 5. Docker disk usage.
 6. Traefik routes and Docker labels.
 7. Recent container death events.
-8. PdfSearch `/livez`, `/readyz`, Redis `PONG`, static asset, PDF listing, and
+8. PdfSearch `/livez`, `/readyz`, `/health/data/`, `/health/lease/`,
+   `/health/metrics/`, Redis `PONG`, static asset, PDF listing, and
    representative search.
 9. GitHub branch HEAD, Dokploy checkout HEAD, OCI revision/digest, rendered
    Compose image, and Dokploy deployment ID.
@@ -191,7 +192,8 @@ Backups use read-only volume mounts and must include manifests, checksums,
 service specs, rendered Compose evidence, and route evidence.
 
 For PdfSearch, record SQLite size, PDF count, FAISS count, Chroma presence,
-image digest, Compose hash, and RustFS snapshot/checksum references.
+image digest, Compose hash, RustFS snapshot/checksum references, writer lease
+status, activation journal entries, and backup policy compliance.
 
 Rollback is two-dimensional:
 
@@ -217,6 +219,82 @@ production.
 - `.kilo/command/rollback.md`: rollback runbook.
 - `.opencode/skill/sahakar-server/SKILL.md`: older duplicate skill, superseded
   when dates or facts conflict with `AGENTS.md`.
+- `flowdocs/core/environment.py`: environment identity (APP_ENV,
+  PRODUCTION_SOURCE_ID, AUTHORITATIVE_DATASET_ID, DATASET_ID, BACKUP_ROLE,
+  EXTERNAL_SIDE_EFFECTS_MODE, DATA_MODE).
+- `flowdocs/core/side_effects.py`: external side-effect safety gating.
+- `flowdocs/core/ai_guard.py`: AI operation authorization.
+- `flowdocs/core/activate.py`: atomic active-release pointer switch.
+- `flowdocs/core/activation_journal.py`: activation audit trail.
+- `flowdocs/core/restore_pipeline.py`: restore pipeline orchestration.
+- `flowdocs/core/restore_workspace.py`: isolated restore workspace.
+- `flowdocs/core/global_writer.py`: global writer fencing.
+- `flowdocs/core/registration.py`: dataset registration.
+- `flowdocs/core/backup_policy.py`: backup policy enforcement.
+- `flowdocs/core/sanitize.py`: data sanitization pipeline.
+- `flowdocs/core/rehearsal.py`: migration rehearsal.
+- `flowdocs/core/lease.py`: writer lease management.
+- `flowdocs/core/compatibility.py`: compatibility checks.
+- `flowdocs/core/metrics.py`: metrics collection.
+- `flowdocs/core/namespace.py`: namespace management.
+- `flowdocs/core/object_store_capabilities.py`: object store capability detection.
+
+## Environment Identity
+
+The `environment` module defines the runtime contract. Key variables:
+
+- `APP_ENV` — deployment environment (development, staging, production)
+- `PRODUCTION_SOURCE_ID` — canonical production source identifier
+- `AUTHORITATIVE_DATASET_ID` — authoritative dataset reference
+- `DATASET_ID` — current dataset identifier
+- `BACKUP_ROLE` — backup role (primary, secondary, none)
+- `EXTERNAL_SIDE_EFFECTS_MODE` — external side-effect safety mode
+- `DATA_MODE` — data access mode (read_only, read_write)
+
+## Side-Effect Safety
+
+The `side_effects` module gates external side effects. Set
+`EXTERNAL_SIDE_EFFECTS_MODE` to control whether external calls (email, webhooks,
+API notifications) are permitted. The `ai_guard` module authorizes AI-driven
+operations.
+
+## Restore Pipeline
+
+The `restore_pipeline` and `restore_workspace` modules orchestrate isolated
+restore operations. A restore workspace is a disposable staging directory.
+The pipeline runs compatibility checks, sanitization, migration rehearsal,
+and activation in sequence. The `activate` module performs an atomic
+active-release pointer switch. The `activation_journal` records every step
+with an immutable audit trail.
+
+## Generation Lifecycle
+
+Data generations are created through explicit superadmin sync, validated
+through `validate_data_release`, and promoted through the restore pipeline.
+Each generation is immutable and content-addressed. The `global_writer`
+module fences concurrent writers; the `lease` module manages TTL-based
+writer leases.
+
+## PDF Lifecycle
+
+PDFs follow a lifecycle: upload → processing → indexing → archival. Bulk
+operations queue durable maintenance jobs through the Admin UI. The
+`compatibility` module verifies embedding model and index format
+compatibility before indexing.
+
+## User Management
+
+User management is available at `/dashboard/users/`. Only authenticated
+`admin` and `superadmin` users may access it. `/register/` is never public.
+
+## Management Commands
+
+```bash
+python manage.py config_inspect
+python manage.py verify_object_store_capabilities
+python manage.py inventory_artifacts --data-root /app/data --output /app/data/backups/inventory.json
+python manage.py validate_data_release --manifest /app/data/backups/inventory.json --data-root /app/data
+```
 
 ## Drift Handling
 
@@ -236,3 +314,16 @@ Known examples to guard against:
 - Treating `2026.ai-sahakar.net` as the production host.
 - Suggesting normal production deploys by editing Dokploy server checkout files.
 - Copying legacy SQLite/PDF/FAISS artifacts directly into active production.
+- Treating the atomic active-release pointer as a future capability — it is
+  implemented through the `activate` module.
+- Assuming RustFS is read-only and not application-accessible — the
+  `object_store_capabilities`, `restore_pipeline`, and `restore_workspace`
+  modules provide explicit, gated access.
+- Skipping compatibility checks before staging — the `compatibility` module
+  must pass before promotion.
+- Running migrations without rehearsal — the `rehearsal` module provides
+  dry-run migration against a disposable copy.
+- Ignoring writer lease expiry — the `lease` module enforces TTL-based
+  fencing; stale writers are rejected.
+- Omitting the activation journal — every activation step must be recorded
+  for auditability.

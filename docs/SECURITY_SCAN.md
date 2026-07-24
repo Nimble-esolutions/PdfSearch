@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer, Release
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-24
 Canonical source: docs/SECURITY_SCAN.md
 Supersedes: None
 
@@ -20,7 +20,7 @@ explicitly accepted by the security owner, or documented as not applicable with
 evidence. Do not suppress a finding only to make CI green.
 
 The current production baseline is the Redis-enabled immutable image revision
-from PR #24 at merged source `f05e110`. Promotion still requires the exact
+from PR #53 at merged source `2e1ca38`. Promotion still requires the exact
 published digest, not a tag or stale local image, plus the Compose, health, data
 count, FAISS count, and representative-search gates.
 
@@ -71,3 +71,42 @@ scan because it scans the pushed immutable digest with the release scanner.
 3. Review the Trivy job summary for HIGH and CRITICAL findings.
 4. Update the base image or locked dependency when a finding remains.
 5. Record the finding, fix version, image digest, and review decision before production.
+
+## Environment Identity Security
+
+`environment.py` enforces fail-closed environment identity at startup. The
+`APP_ENV` variable must be set to `production`, `staging`, or `development`.
+An unknown or missing value causes the application to refuse startup. This
+prevents production credentials from being used in a misconfigured environment.
+
+## Side-Effect Safety
+
+`side_effects.py` gates all external calls (email, AI embeddings, AI chat)
+through `EXTERNAL_SIDE_EFFECTS_MODE`. In `disabled` mode, all external calls
+are no-ops. In `dry_run` mode, calls are logged but not executed. Only
+`enabled` mode permits real external communication. The email backend in
+`settings.py` is also gated by environment identity.
+
+## AI Call Guarding
+
+`ai_guard.py` wraps all OpenAI API calls (embeddings and chat completions).
+Before any call, it checks `EXTERNAL_SIDE_EFFECTS_MODE` and the environment
+identity. In non-production environments with side effects disabled, AI calls
+return safe defaults instead of contacting OpenAI. This prevents accidental
+API usage and billing in development and staging.
+
+## Data Sanitization
+
+`sanitize.py` provides a sanitization pipeline for production data before it
+enters non-production environments. It strips PII, resets passwords, anonymizes
+user identities, and replaces production file references with placeholder
+values. Sanitized data is suitable for development, staging, and CI
+environments.
+
+## Global Writer Fencing
+
+`global_writer.py` implements CAS-based mutual exclusion for the global writer
+role. Only one instance may hold the writer lease at any time. The writer
+record is stored as a CAS-guarded object in the artifact vault. Writer
+handover requires an explicit epoch increment and takeover ceremony with a
+recorded reason. This prevents split-brain publication races.

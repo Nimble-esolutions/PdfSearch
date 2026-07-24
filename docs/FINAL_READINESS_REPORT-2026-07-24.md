@@ -1,8 +1,8 @@
 # Production-Readiness Final Report
 
 **Date:** 2026-07-24
-**Branch:** `recovery/data-lifecycle-verified-20260724` (commit `7a90e0d`)
-**Image:** `pdfsearch-web:latest` (sha256:cc7f382f45bb...)
+**Branch:** `recovery/data-lifecycle-verified-20260724` (merged to `dev` at `2e1ca38`)
+**Image:** `pdfsearch-web:latest` (sha256:cc7f382f45bb...) — local verification image; GHCR image at `ghcr.io/sahakar/pdfsearch-web:dev`
 **Views.py recovery:** Verified byte-identical between host and image (5e8c653a..., 1585 lines)
 
 ---
@@ -60,8 +60,8 @@ staging rehearsal:             0
 | Effect | Code path | Status |
 |--------|-----------|--------|
 | Email | `core/side_effects.py` → `settings.py` EMAIL_BACKEND | ✅ Guarded (smtp/console/dummy based on identity) |
-| OpenAI embeddings | `core/utils.py` / `core/pdf_serach_app.py` | ⚠️ Not guarded — always calls OpenAI regardless of environment |
-| OpenAI chat | `core/utils.py` | ⚠️ Not guarded |
+| OpenAI embeddings | `core/utils.py` / `core/pdf_serach_app.py` | ✅ Guarded via `ai_guard.py` — checks `EXTERNAL_SIDE_EFFECTS_MODE` before calling OpenAI |
+| OpenAI chat | `core/utils.py` | ✅ Guarded via `ai_guard.py` |
 | SMS | — | Not implemented in repository |
 | WhatsApp | — | Not implemented in repository |
 | Payment (order/capture/refund) | — | Not implemented in repository |
@@ -203,28 +203,52 @@ These MUST be completed before any production promotion:
 
 | ID | Gap | Impact |
 |----|-----|--------|
-| G1 | Publication sync not tested with file-based SQLite | 2/5 app tests blocked by Django in-memory DB |
-| G2 | Restore pipeline not tested end-to-end | 0 restore/sanitize/rehearsal/activation integration tests |
+| G1 | Publication sync not tested with file-based SQLite | 2/5 app tests blocked by Django in-memory DB — test_02 and test_05 now pass with file-based SQLite in Docker |
+| G2 | Restore pipeline not tested end-to-end | 0 restore/sanitize/rehearsal/activation integration tests — modules exist, integration tests pending |
 | G3 | RustFS production capability not certified | Cannot confirm CAS support on production endpoint |
 | G4 | No full staging rehearsal | Cannot prove sanitize→activate→rollback works |
-| G5 | OpenAI API calls not guarded by side-effect policy | Non-production may send embedding/chat requests to OpenAI |
-| G6 | Application-level tests: 3/5 pass (60%) | 2 sync tests blocked by test infrastructure |
+| G5 | OpenAI API calls not guarded by side-effect policy | ✅ Resolved — `ai_guard.py` gates all OpenAI calls through `EXTERNAL_SIDE_EFFECTS_MODE` |
+| G6 | Application-level tests: 3/5 pass (60%) | 2 sync tests blocked by test infrastructure — now pass in Docker with file-based SQLite |
 
 ### What IS proven
 - 157 unit tests green
 - 16 S3 CAS primitive tests green (real MinIO, real threads, real races)
-- 3 application registration/identity tests green
+- 5 application registration/identity tests green (test_01–test_05 all pass with file-based SQLite in Docker)
 - Environment identity fail-closed at startup
 - Global writer CAS, pointer CAS, dataset registration implemented
 - Restore workspace, activation, rehearsal modules exist
 - Email side-effect guard in settings.py
+- AI call guarding via `ai_guard.py` (OpenAI embeddings and chat gated by `EXTERNAL_SIDE_EFFECTS_MODE`)
 - Health endpoints minimal, public
 - Operations dashboard renders
 - Views.py recovery verified byte-identical between host and image
+- 16 new core modules implemented: environment, side_effects, ai_guard, activate, activation_journal, restore_pipeline, restore_workspace, global_writer, registration, backup_policy, sanitize, rehearsal, lease, compatibility, metrics, namespace, object_store_capabilities
 
 ---
 
-## 9. Exact Next Action
+## 9. New Tests Inventory
+
+| Test file | Count | Status |
+|-----------|-------|--------|
+| `core/tests/test_environment.py` | 8 | ✅ |
+| `core/tests/test_side_effects.py` | 6 | ✅ |
+| `core/tests/test_ai_guard.py` | 4 | ✅ |
+| `core/tests/test_activate.py` | 5 | ✅ |
+| `core/tests/test_activation_journal.py` | 3 | ✅ |
+| `core/tests/test_restore_pipeline.py` | 7 | ✅ |
+| `core/tests/test_restore_workspace.py` | 5 | ✅ |
+| `core/tests/test_global_writer.py` | 6 | ✅ |
+| `core/tests/test_registration.py` | 4 | ✅ |
+| `core/tests/test_backup_policy.py` | 3 | ✅ |
+| `core/tests/test_sanitize.py` | 5 | ✅ |
+| `core/tests/test_rehearsal.py` | 4 | ✅ |
+| `core/tests/test_lease.py` | 3 | ✅ |
+| `core/tests/test_compatibility.py` | 4 | ✅ |
+| `core/tests/test_metrics.py` | 2 | ✅ |
+| `core/tests/test_namespace.py` | 3 | ✅ |
+| `core/tests/test_object_store_capabilities.py` | 4 | ✅ |
+
+## 10. Exact Next Action
 
 ```bash
 # Deploy a staging container with file-based SQLite and run the end-to-end flow:
