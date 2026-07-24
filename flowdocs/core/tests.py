@@ -716,6 +716,17 @@ class SearchAndAuthenticationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_public_search_uses_hallmark_accessible_shell(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, 'class="public-search-topbar"')
+        self.assertContains(response, 'class="public-search-header"')
+        self.assertContains(response, 'aria-label="Public service links"')
+        self.assertContains(response, 'id="search-page-heading"')
+        self.assertContains(response, 'aria-label="Search answers"')
+        self.assertContains(response, 'aria-label="Contact support on WhatsApp"')
+        self.assertContains(response, 'aria-label="Send feedback"')
+        self.assertNotContains(response, "⚠️")
+
     def test_search_rejects_queries_over_server_word_limit(self):
         self.client.force_login(self.user)
 

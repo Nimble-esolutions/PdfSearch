@@ -93,46 +93,47 @@
 {% endblock %}
 
 {% block public_header %}
-<div class="bg-dark text-white small px-3 py-1">
-  <div class="container d-flex justify-content-end align-items-center">
-    <div class="text-end">
+<div class="public-search-topbar">
+  <div class="public-search-topbar__inner">
+    <nav aria-label="{% trans 'Public service links' %}">
       {% if user.is_authenticated %}
-      <a href="{% url 'dashboard' %}" class="text-white text-decoration-none me-2">{% trans "Dashboard" %}</a> |
-      <span class="text-white-50 me-2">{{ user.username }}</span>
+      <a href="{% url 'dashboard' %}">{% trans "Dashboard" %}</a>
+      <span class="public-search-topbar__identity">{{ user.username }}</span>
       <form method="post" action="{% url 'logout' %}" class="d-inline">
         {% csrf_token %}
-        <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0">{% trans "Logout" %}</button>
-      </form> |
+        <button type="submit">{% trans "Logout" %}</button>
+      </form>
       {% else %}
-      <a href="{% url 'login' %}" class="text-white text-decoration-none me-2">{% trans "Admin Login" %}</a> |
+      <a href="{% url 'login' %}">{% trans "Admin Login" %}</a>
       {% endif %}
-      <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" class="text-white text-decoration-none me-2">{% trans "Home" %}</a> |
-      <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6" class="text-white text-decoration-none me-2">{% trans "Locate Us" %}</a> |
+      <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx">{% trans "Official site" %}</a>
+      <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6">{% trans "Locate us" %}</a>
 
       <form action="{% url 'set_language' %}" method="post" class="d-inline">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ request.path }}">
         {% if request.LANGUAGE_CODE == 'en' %}
           <input type="hidden" name="language" value="mr">
-          <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0">मराठी</button>
+          <button type="submit">मराठी</button>
         {% else %}
           <input type="hidden" name="language" value="en">
-          <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0">English</button>
+          <button type="submit">English</button>
         {% endif %}
       </form>
-    </div>
+    </nav>
   </div>
 </div>
 
-<header class="banner-header">
+<header class="public-search-header">
   <picture>
     <source media="(max-width: 768px)" srcset="{% static 'main/images/banner-mobile-1.jpg' %}">
-    <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}" alt="{% trans 'Registrar Co-operative Societies, Maharashtra — official banner' %}" class="banner-img">
+    <img src="{% static 'main/images/banner-opt-2-wotxt.png' %}" alt="{% trans 'Registrar Co-operative Societies, Maharashtra — official banner' %}" class="public-search-header__image">
   </picture>
 
-  <div class="banner-text">
-    <h5>{% trans "AI Enabled Search" %}</h5>
-    <h6>{% trans "Registrar Co-operative Societies" %}</h6>
+  <div class="public-search-header__title">
+    <span>{% trans "Public document service" %}</span>
+    <h1>{% trans "Sahakar AI Search" %}</h1>
+    <p>{% trans "Search Maharashtra co-operative society acts, rules, and official documents." %}</p>
   </div>
 </header>
 {% endblock %}
@@ -140,42 +141,49 @@
 {% block page_content %}
 {% block content %}
 <div class="container-fluid p-0">
-  <div class="chat-container">
+  <div class="chat-container" aria-labelledby="search-page-heading">
 
-      <div id="chatMain">
+      <div class="public-search-intro">
+        <p class="public-search-kicker">{% trans "Official document search" %}</p>
+        <h2 id="search-page-heading">{% trans "Ask a question about co-operative society law" %}</h2>
+        <p>{% trans "Use a section number, act name, subject, or phrase in English or Marathi." %}</p>
+      </div>
+
+      <div id="chatMain" aria-live="polite" aria-label="{% trans 'Search answers' %}" aria-busy="false">
       </div>
 
       <div class="chat-input">
-         <img src="{% static 'main/images/Option-1 BOT.png' %}" alt="Ask Icon" style="height:50px;">
-          <input type="text" id="userQuery" placeholder="💬 {% trans 'Ask your question...' %}">
-          <button id="sendBtn">{% trans "Search" %}</button>
+         <img src="{% static 'main/images/Option-1 BOT.png' %}" alt="" class="chat-input__avatar" aria-hidden="true">
+          <label class="visually-hidden" for="userQuery">{% trans "Ask your question" %}</label>
+          <input type="text" id="userQuery" placeholder="{% trans 'Ask your question...' %}" autocomplete="off" maxlength="240">
+          <button id="sendBtn" type="button">{% trans "Search" %}</button>
 
-<a href="https://wa.me/{{ whatsapp_number|default:"919421200000" }}" target="_blank" rel="noopener noreferrer" class="whatsapp-link">
+<a href="https://wa.me/{{ whatsapp_number|default:"919421200000" }}" target="_blank" rel="noopener noreferrer" class="whatsapp-link" aria-label="{% trans 'Contact support on WhatsApp' %}">
   <picture>
     <source media="(max-width: 768px)" srcset="{% static 'main/images/wh-btn-mobile.jpg' %}">
-    <img src="{% static 'main/images/wh-btn.jpg' %}" alt="WhatsApp" style="height:40px; cursor:pointer;">
+    <img src="{% static 'main/images/wh-btn.jpg' %}" alt="" aria-hidden="true">
   </picture>
 </a>
 
-<a href="https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform" target="_blank" rel="noopener noreferrer" class="feedback-link">
+<a href="https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform" target="_blank" rel="noopener noreferrer" class="feedback-link" aria-label="{% trans 'Send feedback' %}">
   <picture>
     <source media="(max-width: 768px)" srcset="{% static 'main/images/fd-btn-mobile.jpg' %}">
-    <img src="{% static 'main/images/fd-btn.jpg' %}" alt="Feedback" style="height:40px; cursor:pointer;">
+    <img src="{% static 'main/images/fd-btn.jpg' %}" alt="" aria-hidden="true">
   </picture>
 </a>
 
       </div>
 
-      <small id="wordCounter" style="color: gray; font-size: 12px; display: block; margin-left: 10px; margin-top: 2px;">
+      <small id="wordCounter" class="word-counter" aria-live="polite">
         0/30 words
       </small>
 
 
-      <div class="text-center" style="font-size: 13px; color: #666;">
-          {% trans "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}
+      <div class="search-disclaimer">
+          {% trans "AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}
       </div>
 
-      <div class="text-center" style="font-size: 12px; color: #999; margin-top: 5px;">
+      <div class="search-index-count">
         {{ indexed_count }}/{{ total_count }} {% trans "documents indexed" %}
       </div>
 

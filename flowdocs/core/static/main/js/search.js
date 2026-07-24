@@ -4,6 +4,9 @@ const userQuery = document.getElementById('userQuery');
 const wordCounter = document.getElementById("wordCounter");
 const viewPdfUrlTemplate = window.PdfSearch.viewPdfUrlTemplate;
 let requestPending = false;
+let activeController = null;
+let requestTimeout = null;
+let stageTimer = null;
 
 window.addEventListener("DOMContentLoaded", function(){
     const welcome = JSON.parse(document.getElementById("welcome-message").textContent);
@@ -22,7 +25,7 @@ async function sendMessage(){
 
     const wordCount = query.split(/\s+/).length;
     if(wordCount > 30){
-        appendMessage("⚠️ Your query is too long (max 30 words). Please shorten it.", "gpt");
+        appendMessage("Your query is too long (maximum 30 words). Please shorten it.", "gpt");
         return;
     }
 
@@ -31,9 +34,12 @@ async function sendMessage(){
     sendBtn.disabled = true;
     requestPending = true;
     sendBtn.setAttribute("aria-busy", "true");
+    chatMain.setAttribute("aria-busy", "true");
 
     const typingDiv = appendMessage('', 'gpt', true);
     typingDiv.classList.add('typing');
+    typingDiv.setAttribute("role", "status");
+    typingDiv.setAttribute("aria-live", "polite");
 
     const stages = [" Searching", " Analyzing", " Composing"];
     let stageIndex = 0;
@@ -50,7 +56,7 @@ async function sendMessage(){
         });
         stageIndex++;
         if(stageIndex < stages.length) {
-            setTimeout(showStage, 2000);
+            stageTimer = setTimeout(showStage, 2000);
         }
     }
     showStage();
@@ -58,27 +64,30 @@ async function sendMessage(){
     const formData = new FormData();
     formData.append('query', query);
     formData.append('language', document.documentElement.lang === 'mr' ? 'mr' : 'en');
+    activeController = new AbortController();
+    requestTimeout = setTimeout(() => activeController.abort(), 30000);
 
     try {
         const response = await fetch(window.PdfSearch.searchQueryUrl, {
             method: "POST",
             headers: {'X-CSRFToken': window.PdfSearch.csrfToken},
             body: formData,
-            credentials: "same-origin"
+            credentials: "same-origin",
+            signal: activeController.signal,
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
             typingDiv.remove();
             const errorMessages = {
-                401: "🔐 कृपया शोधण्यासाठी आधी Admin Login करा.",
-                403: "⚠️ विनंती सुरक्षित करता आली नाही. कृपया पृष्ठ रिफ्रेश करून पुन्हा प्रयत्न करा.",
-                400: "⚠️ प्रश्न 30 शब्दांपेक्षा मोठा असू शकत नाही.",
-                500: "⚠️ शोध विनंती पूर्ण करता आली नाही. कृपया नंतर पुन्हा प्रयत्न करा.",
-                503: "⚠️ शोध सेवा तात्पुरती अनुपलब्ध आहे. कृपया नंतर पुन्हा प्रयत्न करा.",
-                429: "⚠️ कृपया पुढील शोधासाठी थोडा वेळ थांबा.",
+                401: "Please sign in to search.",
+                403: "The request could not be secured. Refresh the page and try again.",
+                400: "Your question cannot exceed 30 words.",
+                500: "The search request could not be completed. Please try again later.",
+                503: "The search service is temporarily unavailable. Please try again later.",
+                429: "Please wait a moment before starting another search.",
             };
             appendMessage(
-                errorMessages[response.status] || data.detail || "⚠️ शोध विनंती पूर्ण करता आली नाही.",
+                errorMessages[response.status] || data.detail || "The search request could not be completed.",
                 "gpt",
             );
             return;
@@ -87,15 +96,25 @@ async function sendMessage(){
         if(data.answer){
             typeEffect(data.answer, data.references || []);
         } else if(data.error){
-            appendMessage('⚠️ Error: ' + data.error, 'gpt');
+            appendMessage('Search error: ' + data.error, 'gpt');
         }
     } catch(err) {
         typingDiv.remove();
-        appendMessage('⚠️ Something went wrong. Please try again later.', 'gpt');
-        console.error(err);
+        if (err.name === "AbortError") {
+            appendMessage('The search is taking too long. Please try again.', 'gpt');
+        } else {
+            appendMessage('Something went wrong. Please try again later.', 'gpt');
+            console.error(err);
+        }
     } finally {
+        clearTimeout(requestTimeout);
+        clearTimeout(stageTimer);
+        requestTimeout = null;
+        stageTimer = null;
+        activeController = null;
         requestPending = false;
         sendBtn.removeAttribute("aria-busy");
+        chatMain.setAttribute("aria-busy", "false");
         updateSendButton();
     }
 }
@@ -157,7 +176,8 @@ function typeEffect(text, references = []) {
             }
             chatMain.scrollTop = chatMain.scrollHeight;
             i++;
-            setTimeout(typing, 20);
+            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            setTimeout(typing, reduceMotion ? 0 : 8);
         } else {
             cursor.remove();
 
@@ -165,7 +185,7 @@ function typeEffect(text, references = []) {
                 const refDiv = document.createElement('div');
                 refDiv.className = "references";
                 const heading = document.createElement("strong");
-                heading.textContent = "📚 Reference Docs:";
+                heading.textContent = "Source documents";
                 refDiv.appendChild(heading);
                 references.forEach(ref => {
                     const card = document.createElement('div');
