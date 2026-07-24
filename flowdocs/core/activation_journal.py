@@ -9,11 +9,14 @@ of timeout-only cleanup.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 JOURNAL_DIR = "/app/data-control/activation-journals"
 LOCK_FILE = "/app/data-control/activation.lock"
@@ -123,17 +126,40 @@ def acquire_activation_lock(
             )
 
         existing_age = now - existing.get("acquired_at", 0)
-        if existing_age < timeout_seconds:
+
+        # Primary: Redis heartbeat — must be dead to consider stealing
+        heartbeat_alive = _redis_heartbeat_active(
+            existing.get("activation_id", ""), timeout_seconds=300
+        )
+        if heartbeat_alive:
             raise ActivationLockStolen(
-                f"Activation lock held by PID {existing.get('pid')} "
+                f"Activation lock held with active Redis heartbeat "
                 f"(age: {existing_age:.0f}s, activation: {existing.get('activation_id')})"
             )
 
-        if _process_alive(existing.get("pid", 0)):
-            raise ActivationLockStolen(
-                f"Lock owner PID {existing.get('pid')} is still alive "
-                f"(lock age: {existing_age:.0f}s)"
+        # Advisory: PID check — logged but does not gate lock stealing
+        pid_alive = _process_alive(existing.get("pid", 0))
+        if pid_alive:
+            logger.warning(
+                "Activation lock PID %s appears alive but Redis heartbeat is dead "
+                "for %s. PID namespace mismatch likely in containerized env. "
+                "Proceeding with staleness check.",
+                existing.get("pid"), existing.get("activation_id"),
             )
+
+        # Hard cap: refuse to steal locks younger than 10 minutes
+        if existing_age < 600:
+            raise ActivationLockStolen(
+                f"Activation lock held by PID {existing.get('pid')} "
+                f"(age: {existing_age:.0f}s, below 600s absolute maximum, "
+                f"activation: {existing.get('activation_id')})"
+            )
+
+        logger.warning(
+            "Stealing expired activation lock (%s) — "
+            "age=%.0fs pid_alive=%s heartbeat_alive=%s",
+            existing.get("activation_id"), existing_age, pid_alive, heartbeat_alive,
+        )
 
         lock_path.unlink()
         return acquire_activation_lock(
@@ -248,7 +274,10 @@ def reconcile_incomplete_activations() -> list[dict]:
         if Path(LOCK_FILE).exists():
             lock_data = _read_lock_data()
             if lock_data and lock_data.get("pid"):
-                if _process_alive(lock_data.get("pid", 0)):
+                heartbeat_alive = _redis_heartbeat_active(
+                    lock_data.get("activation_id", ""), timeout_seconds=300
+                )
+                if heartbeat_alive or _process_alive(lock_data.get("pid", 0)):
                     action["action_taken"] = "skipped_live_lock"
                     actions.append(action)
                     continue
@@ -326,11 +355,12 @@ def _verify_lock_ownership(token: str) -> bool:
 
 
 def _process_alive(pid: int) -> bool:
-    """Check process liveness. PID-based check is a LOCAL SUPPLEMENT only.
+    """Check process liveness — ADVISORY ONLY.
 
     In containerized environments with isolated PID namespaces, this check
     is only meaningful for processes on the same host in the same namespace.
-    It must never be the sole liveness authority for cross-container decisions.
+    Always prefer _redis_heartbeat_active() as the primary liveness authority.
+    This function is logged but never gates lock-stealing decisions.
     """
     try:
         os.kill(pid, 0)
@@ -343,25 +373,30 @@ def _heartbeat_key(activation_id: str) -> str:
     return f"activation:heartbeat:{activation_id}"
 
 
-def _redis_heartbeat_active(activation_id: str, expected_token: str) -> bool:
-    """Check if a Redis-based activation heartbeat is still active."""
+def _redis_heartbeat_active(activation_id: str, timeout_seconds: int = 300) -> bool:
+    """Check if activation heartbeat is still active via time-based expiry.
+
+    Stores a floating-point timestamp in the cache key and compares
+    elapsed time against timeout_seconds.  Fail-open: returns True
+    on Redis errors to avoid deadlocking.
+    """
     try:
         from django.core.cache import cache
         stored = cache.get(_heartbeat_key(activation_id))
         if stored is None:
             return False
-        if isinstance(stored, dict):
-            return stored.get("token") == expected_token
-        return stored == expected_token
+        last_beat = float(stored)
+        elapsed = time.time() - last_beat
+        return elapsed < timeout_seconds
     except Exception:
         return True
 
 
-def _set_redis_heartbeat(activation_id: str, token: str, ttl: int = 60) -> None:
-    """Set a Redis-backed activation heartbeat."""
+def _set_redis_heartbeat(activation_id: str, token: str = "", ttl: int = 60) -> None:
+    """Set a Redis-backed activation heartbeat timestamp."""
     try:
         from django.core.cache import cache
-        cache.set(_heartbeat_key(activation_id), token, timeout=ttl)
+        cache.set(_heartbeat_key(activation_id), time.time(), timeout=ttl)
     except Exception:
         pass
 
