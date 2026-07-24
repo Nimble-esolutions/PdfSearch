@@ -73,7 +73,17 @@
           <h2>{% trans "Category Yard" %}</h2>
           <p>{% trans "Each category is a loading bay: open it to inspect PDFs, readiness, and upload state." %}</p>
         </div>
+        <form method="get" class="admin-row-actions" role="search" aria-label="{% trans 'Filter categories' %}">
+          <label class="visually-hidden" for="category-filter">{% trans "Find category" %}</label>
+          <input id="category-filter" name="category_q" value="{{ category_query }}" class="form-control form-control-sm" type="search" maxlength="100" placeholder="{% trans 'Find category' %}">
+          <button type="submit" class="btn btn-outline-primary btn-sm">{% trans "Filter" %}</button>
+          {% if category_query %}<a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-sm">{% trans "Clear" %}</a>{% endif %}
+        </form>
       </div>
+
+      {% if category_query %}
+        <p class="admin-meta-strip" role="status">{% blocktrans with query=category_query count counter=cockpit.folder_count %}Showing {{ counter }} category matching &quot;{{ query }}&quot;.{% plural %}Showing {{ counter }} categories matching &quot;{{ query }}&quot;.{% endblocktrans %}</p>
+      {% endif %}
 
       {% if role == 'superadmin' %}
         <div class="admin-panel admin-panel--inset mb-3">

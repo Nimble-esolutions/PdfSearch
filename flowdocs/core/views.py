@@ -175,7 +175,7 @@ def searchable_folders(user, *, public=False):
     ).distinct()
 
 
-def admin_cockpit_context(user):
+def admin_cockpit_context(user, category_query=""):
     folders = searchable_folders(user).annotate(
         pdf_count=Count("files", distinct=True),
         indexed_count=Count("files", filter=Q(files__indexed=True), distinct=True),
@@ -186,6 +186,8 @@ def admin_cockpit_context(user):
         ),
         latest_upload=Max("files__uploaded_at"),
     ).order_by("name")
+    if category_query:
+        folders = folders.filter(name__icontains=category_query)
     pdfs = visible_pdfs(user).select_related("folder", "uploaded_by")
     total_pdfs = pdfs.count()
     indexed_pdfs = pdfs.filter(indexed=True).count()
@@ -960,7 +962,8 @@ def dashboard(request, folder_id=None):
         )
 
     # else: folders list
-    folders, cockpit = admin_cockpit_context(request.user)
+    category_query = (request.GET.get("category_q") or "").strip()[:100]
+    folders, cockpit = admin_cockpit_context(request.user, category_query=category_query)
     cockpit["maintenance_jobs"] = list(
         MaintenanceJob.objects.select_related("requested_by").order_by("-created_at")[:8]
     ) if is_superadmin_user(request.user) else []
@@ -982,6 +985,7 @@ def dashboard(request, folder_id=None):
             "folders": folders,
             "cockpit": cockpit,
             "role": role,
+            "category_query": category_query,
             "breadcrumb_items": [
                 {"label": gettext("Dashboard"), "url": None},
             ],
