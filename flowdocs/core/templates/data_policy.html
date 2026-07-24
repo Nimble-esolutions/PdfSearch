@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h1>Data Policy</h1>
+  <p class="text-muted">Last updated: 24 July 2026</p>
+
+  <h2>1. Data Classification</h2>
+  <p>Data within the Sahakar AI platform is classified into the following categories:</p>
+  <ul>
+    <li><strong>Public Data:</strong> Government circulars, acts, and regulations that are publicly available and indexed for search.</li>
+    <li><strong>Operational Data:</strong> User accounts, search logs (transient), and system configuration.</li>
+    <li><strong>Derived Data:</strong> FAISS indexes, embeddings, and chunked document representations generated from uploaded PDFs.</li>
+    <li><strong>Artifact Data:</strong> Immutable backup generations stored in the S3-compatible artifact vault.</li>
+  </ul>
+
+  <h2>2. Data Retention Periods</h2>
+  <table class="table table-bordered mt-3">
+    <thead>
+      <tr><th>Data Type</th><th>Retention Period</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>User accounts</td><td>Until deletion</td><td>Accounts are retained until an administrator deletes them.</td></tr>
+      <tr><td>Search queries</td><td>Transient (not permanently stored)</td><td>Queries are processed in-memory and not logged to persistent storage.</td></tr>
+      <tr><td>Uploaded PDFs</td><td>Until removal or deprecation</td><td>Documents remain indexed until explicitly removed, deprecated, or archived by an administrator.</td></tr>
+      <tr><td>FAISS indexes</td><td>Synchronized with active PDFs</td><td>Regenerated when documents are added, removed, or reindexed.</td></tr>
+      <tr><td>Artifact generations</td><td>Per retention policy (default: 7 generations)</td><td>Expired generations are purged automatically or on demand.</td></tr>
+      <tr><td>System logs</td><td>Rotated per deployment config</td><td>Docker container logs follow the host's log rotation policy.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3. Backup Policy</h2>
+  <p>The platform maintains a multi-generational backup system through its artifact vault:</p>
+  <ul>
+    <li><strong>Generations:</strong> Each backup creates an immutable generation containing PDF files, database state, FAISS indexes, and metadata manifests.</li>
+    <li><strong>Storage:</strong> Artifacts are stored in an S3-compatible object store (RustFS), isolated from the application network.</li>
+    <li><strong>Retention:</strong> A configurable number of recent generations is retained. Older generations are purged automatically.</li>
+    <li><strong>Validation:</strong> Each generation is validated for integrity (checksum verification, PDF count, index coherence) before being marked as available for restore.</li>
+    <li><strong>Promotion:</strong> A validated generation can be promoted to active, superseding the current active dataset.</li>
+    <li><strong>Rollback:</strong> Any non-active generation can be restored to staging and promoted if needed.</li>
+  </ul>
+
+  <h2>4. S3 Artifact Vault</h2>
+  <p>The artifact vault is an S3-compatible object storage system (RustFS) that stores immutable snapshots of the platform's data. Key properties:</p>
+  <ul>
+    <li>Isolated from the application network — vault operations require explicit, authenticated commands.</li>
+    <li>Each generation includes: SQLite database dump, PDF file archive, FAISS index files, and a signed manifest.</li>
+    <li>Manifests include generation ID, creation timestamp, PDF count, checksums, and source environment identity.</li>
+    <li>Vault access is restricted to superadmin-level maintenance operations.</li>
+  </ul>
+
+  <h2>5. Data Deletion Procedures</h2>
+  <p>Data deletion follows a structured lifecycle:</p>
+  <ol>
+    <li><strong>Deprecation:</strong> A PDF is marked as deprecated — it is hidden from search results but preserved in the database and vault generations.</li>
+    <li><strong>Archival:</strong> A PDF is marked as archived — it is hidden from search and dashboard lists but retained in the database.</li>
+    <li><strong>Deletion:</strong> A PDF is removed from storage and database. Prior vault generations that include the file are not retroactively purged.</li>
+    <li><strong>Account Deletion:</strong> A user account may be deleted only after all owned documents and folders have been transferred or removed.</li>
+    <li><strong>Generation Purge:</strong> Expired artifact generations are purged from the vault, removing all associated files and metadata.</li>
+  </ol>
+
+  <h2>6. Data Subject Rights</h2>
+  <p>Under the DPDA 2023, data subjects (users) have the right to:</p>
+  <ul>
+    <li>Request confirmation of whether their personal data is being processed.</li>
+    <li>Access their personal data held by the platform.</li>
+    <li>Request correction of inaccurate or incomplete personal data.</li>
+    <li>Request erasure of their personal data, subject to legal retention requirements.</li>
+    <li>File a grievance with the Grievance Officer at grievance@ai-sahakar.net.</li>
+  </ul>
+
+  <h2>7. Contact</h2>
+  <p>For questions about this Data Policy or to exercise your data rights, contact:</p>
+  <p>Grievance Officer<br>
+  Email: grievance@ai-sahakar.net<br>
+  Nimble eSolutions — Technology Partner<br>
+  Website: ai-sahakar.net</p>
+</div>
+{% endblock %}
