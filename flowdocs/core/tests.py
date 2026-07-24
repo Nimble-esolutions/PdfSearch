@@ -2507,3 +2507,21 @@ class LegalPageTests(TestCase):
         response = self.client.get(reverse("settings"))
         self.assertContains(response, "Feature Flags")
         self.assertNotContains(response, "PUBLIC_UI_THEME")
+
+    def test_settings_page_shows_safe_configuration_inventory(self):
+        user = get_user_model().objects.create_superuser("settingsinventory", "inventory@t.com", "Test@123", role="superadmin")
+        self.client.force_login(user)
+        response = self.client.get(reverse("settings"))
+        self.assertContains(response, "Configuration Inventory")
+        self.assertContains(response, "PUBLIC_SEARCH_MAX_WORDS")
+        self.assertContains(response, "Django secret key")
+        self.assertContains(response, "Not configured")
+        self.assertNotContains(response, os.environ.get("SECRET_KEY", "__secret_not_present__"))
+
+    @patch.dict(os.environ, {"SETTINGS_EDIT_ENABLED": "1"})
+    def test_settings_form_persists_named_runtime_setting(self):
+        user = get_user_model().objects.create_superuser("settingswriter", "writer@t.com", "Test@123", role="superadmin")
+        self.client.force_login(user)
+        response = self.client.post(reverse("save_settings"), {"PUBLIC_SEARCH_ENABLED": "0"})
+        self.assertRedirects(response, reverse("settings"))
+        self.assertEqual(SiteSetting.objects.get(key="PUBLIC_SEARCH_ENABLED").value, "0")
