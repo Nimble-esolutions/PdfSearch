@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import time as time_module
+from pathlib import Path
+
 from django.conf import settings
 from django.http import HttpResponse
 
 from .models import ArtifactGeneration, MaintenanceJob, PDFFile
+from django.utils import timezone as django_timezone
 
 
 def metrics_view(request):
@@ -55,6 +59,60 @@ def metrics_view(request):
               MaintenanceJob.objects.filter(status__in=("queued", "running")).count())
     except Exception:
         gauge("pdfsearch_maintenance_queue_depth", 0)
+
+    try:
+        failures = MaintenanceJob.objects.filter(
+            kind="sync_generation", status="failed",
+            updated_at__gte=django_timezone.now() - django_timezone.timedelta(hours=24),
+        )
+        gauge("pdfsearch_backup_failure_count",
+              len(failures),
+              "Number of failed sync_generation maintenance jobs in last 24h")
+        if failures:
+            gauge("pdfsearch_backup_last_failure_timestamp",
+                  int(failures.latest("updated_at").updated_at.timestamp()),
+                  "Unix timestamp of most recent failed sync_generation job")
+        else:
+            gauge("pdfsearch_backup_last_failure_timestamp", 0)
+    except Exception:
+        gauge("pdfsearch_backup_failure_count", 0)
+        gauge("pdfsearch_backup_last_failure_timestamp", 0)
+
+    try:
+        heartbeat_file = Path("/tmp/worker_heartbeat")
+        if heartbeat_file.is_file():
+            gauge("pdfsearch_worker_heartbeat_age_seconds",
+                  time_module.time() - heartbeat_file.stat().st_mtime,
+                  "Age of the maintenance worker heartbeat file in seconds")
+        else:
+            gauge("pdfsearch_worker_heartbeat_age_seconds", -1)
+    except Exception:
+        gauge("pdfsearch_worker_heartbeat_age_seconds", -1)
+
+    try:
+        all_generations = ArtifactGeneration.objects.filter(
+            status__in=("active", "validated", "superseded")
+        )
+        gauge("pdfsearch_vault_generation_count",
+              len(all_generations),
+              "Total number of generations in S3 artifact vault")
+        if all_generations:
+            gauge("pdfsearch_vault_last_sync_timestamp",
+                  int(all_generations.latest("created_at").created_at.timestamp()),
+                  "Unix timestamp of last successful S3 vault sync")
+        else:
+            gauge("pdfsearch_vault_last_sync_timestamp", 0)
+        sync_failures = ArtifactGeneration.objects.filter(
+            status="failed",
+            updated_at__gte=django_timezone.now() - django_timezone.timedelta(hours=24),
+        )
+        gauge("pdfsearch_vault_sync_failure_count",
+              len(sync_failures),
+              "Number of failed S3 vault operations in last 24h")
+    except Exception:
+        gauge("pdfsearch_vault_generation_count", 0)
+        gauge("pdfsearch_vault_last_sync_timestamp", 0)
+        gauge("pdfsearch_vault_sync_failure_count", 0)
 
     if env_identity:
         gauge("pdfsearch_backup_role", 1 if env_identity.is_backup_writer else 0)

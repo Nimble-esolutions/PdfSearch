@@ -66,16 +66,34 @@ def _recover_orphaned_jobs():
     return orphaned.count()
 
 
+_scheduler_logged_reason = False
+
 def _should_evaluate_scheduler() -> bool:
+    global _scheduler_logged_reason
     env_identity = getattr(settings, "ENV_IDENTITY", None)
     if env_identity is None:
+        if not _scheduler_logged_reason:
+            print("[scheduler] Disabled: ENV_IDENTITY not available")
+            _scheduler_logged_reason = True
         return False
     if not env_identity.maintenance_scheduler_enabled:
+        if not _scheduler_logged_reason:
+            print("[scheduler] Disabled: MAINTENANCE_SCHEDULER_ENABLED is not set")
+            _scheduler_logged_reason = True
         return False
     if not env_identity.is_backup_writer:
+        if not _scheduler_logged_reason:
+            print("[scheduler] Disabled: BACKUP_ROLE is not writer")
+            _scheduler_logged_reason = True
         return False
     if env_identity.backup_sync_mode.value == "manual":
+        if not _scheduler_logged_reason:
+            print("[scheduler] Disabled: BACKUP_SYNC_MODE is manual")
+            _scheduler_logged_reason = True
         return False
+    if not _scheduler_logged_reason:
+        print("[scheduler] Enabled")
+        _scheduler_logged_reason = True
     return True
 
 

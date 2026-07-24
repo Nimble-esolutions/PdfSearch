@@ -1,4 +1,6 @@
 #!/bin/bash
+BACKUP_ROLE="${BACKUP_ROLE:-disabled}"
+echo "[worker] BACKUP_ROLE=$BACKUP_ROLE MAINTENANCE_SCHEDULER=${MAINTENANCE_SCHEDULER_ENABLED:-0}"
 set -euo pipefail
 
 DATA_ROOT="${DATA_ROOT:-/app/data}"

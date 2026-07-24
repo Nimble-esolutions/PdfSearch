@@ -36,6 +36,10 @@ services:
       APP_ENV: development
       DATA_BOOTSTRAP_MODE: empty
       DATA_MODE: local
+      # Writer-specific env vars (PRODUCTION_SOURCE_ID, AUTHORITATIVE_DATASET_ID) are
+      # intentionally omitted because BACKUP_ROLE=disabled in CI. These are only
+      # required when BACKUP_ROLE=writer. A separate CI profile with mock S3 should
+      # be created for end-to-end writer-mode testing (see docker-compose.integration.yml).
       BACKUP_ROLE: disabled
       EXTERNAL_SIDE_EFFECTS_MODE: sandbox
       ALLOWED_HOSTS: localhost,127.0.0.1
