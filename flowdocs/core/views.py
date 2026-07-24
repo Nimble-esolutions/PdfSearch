@@ -317,7 +317,7 @@ def readyz(request):
     except Exception:
         checks["backup"] = "error"
 
-    ready = all(value in ("ok", "not_configured") for value in checks.values())
+    ready = all(value in ("ok", "not_configured", "empty") for value in checks.values())
     return JsonResponse({"status": "ready" if ready else "not_ready", "checks": checks}, status=200 if ready else 503)
 
 
