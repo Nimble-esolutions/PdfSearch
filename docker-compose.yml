@@ -74,8 +74,10 @@ services:
       - APP_ENV=${APP_ENV:-production}
       - DEPLOYMENT_ID=${DEPLOYMENT_ID:-prod-mum-01}
       - DATASET_ID=${DATASET_ID:-ai-sahakar-prod}
+      - PRODUCTION_SOURCE_ID=${PRODUCTION_SOURCE_ID:-mum-01}
+      - AUTHORITATIVE_DATASET_ID=${AUTHORITATIVE_DATASET_ID:-ai-sahakar-prod}
       - DATA_MODE=${DATA_MODE:-local}
-      - BACKUP_ROLE=${BACKUP_ROLE:-writer}
+      - BACKUP_ROLE=${BACKUP_ROLE:-disabled}
       - BACKUP_SYNC_MODE=${BACKUP_SYNC_MODE:-manual}
       - EXTERNAL_SIDE_EFFECTS_MODE=${EXTERNAL_SIDE_EFFECTS_MODE:-enabled}
       - APP_IMAGE_DIGEST=${PDFSEARCH_IMAGE:-}
@@ -164,7 +166,13 @@ services:
       REDIS_URL: redis://redis:6379/1
       ALLOW_INSECURE_DEFAULTS: ${ALLOW_INSECURE_DEFAULTS:-0}
       APP_ENV: production
-      BACKUP_ROLE: writer
+      DEPLOYMENT_ID: ${DEPLOYMENT_ID:-prod-mum-01}
+      DATASET_ID: ${DATASET_ID:-ai-sahakar-prod}
+      PRODUCTION_SOURCE_ID: ${PRODUCTION_SOURCE_ID:-mum-01}
+      AUTHORITATIVE_DATASET_ID: ${AUTHORITATIVE_DATASET_ID:-ai-sahakar-prod}
+      BACKUP_ROLE: ${BACKUP_ROLE:-disabled}
+      EXTERNAL_SIDE_EFFECTS_MODE: ${EXTERNAL_SIDE_EFFECTS_MODE:-enabled}
+      DATA_MODE: ${DATA_MODE:-local}
     depends_on:
       redis:
         condition: service_healthy
