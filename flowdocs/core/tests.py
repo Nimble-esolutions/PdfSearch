@@ -25,7 +25,7 @@ from .forms import UploadForm
 from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
-from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation
+from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation, SiteSetting
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat, HEARTBEAT_FILE
 from .views import _parse_bulk_filters
@@ -35,6 +35,7 @@ from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
 from .environment import EnvironmentIdentity, AppEnv, BackupRole, DataMode, ExternalSideEffectsMode, EnvironmentIdentityError
 from .side_effects import SideEffectPolicy, resolve_email_backend
 from .compatibility import check_generation_compatibility
+from .artifact_vault import ArtifactVault, VaultConfig
 
 
 class StaticFilesConfigurationTests(TestCase):
@@ -147,6 +148,54 @@ class UploadValidationTests(TestCase):
         uploaded = SimpleUploadedFile('document.pdf', b'%PDF-1.7\ncontent', content_type='application/pdf')
         form = UploadForm(data={'title': 'Document'}, files={'file': uploaded})
         self.assertTrue(form.is_valid(), form.errors)
+
+
+class ArtifactVaultHealthTests(SimpleTestCase):
+    def _vault(self, client):
+        config = VaultConfig(
+            enabled=True,
+            endpoint="https://vault.example",
+            bucket="artifacts",
+            region="us-east-1",
+            access_key="access",
+            secret_key="secret",
+        )
+        return ArtifactVault(config=config, client=client)
+
+    def test_health_check_reports_success_only_after_bucket_probe(self):
+        class Client:
+            def head_bucket(self, **kwargs):
+                return {}
+
+        health = self._vault(Client()).health_check()
+        self.assertTrue(health.reachable)
+        self.assertTrue(health.bucket_exists)
+        self.assertTrue(health.healthy)
+
+    def test_health_check_distinguishes_forbidden_from_missing_bucket(self):
+        class Forbidden(Exception):
+            def __init__(self):
+                self.response = {"Error": {"Code": "AccessDenied"}}
+
+        class Missing(Exception):
+            def __init__(self):
+                self.response = {"Error": {"Code": "NoSuchBucket"}}
+
+        class Client:
+            def __init__(self, error):
+                self.error = error
+
+            def head_bucket(self, **kwargs):
+                raise self.error()
+
+        forbidden = self._vault(Client(Forbidden)).health_check()
+        missing = self._vault(Client(Missing)).health_check()
+        self.assertTrue(forbidden.reachable)
+        self.assertIsNone(forbidden.bucket_exists)
+        self.assertFalse(forbidden.healthy)
+        self.assertTrue(missing.reachable)
+        self.assertFalse(missing.bucket_exists)
+        self.assertFalse(missing.healthy)
 
 
 class RegistrationSecurityTests(TestCase):

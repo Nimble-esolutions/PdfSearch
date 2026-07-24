@@ -92,6 +92,21 @@ class ArtifactMetadata:
     etag: str | None = None
 
 
+@dataclass(frozen=True)
+class VaultHealth:
+    """Safe capability state for operator-facing vault status."""
+
+    enabled: bool
+    configured: bool
+    reachable: bool
+    bucket_exists: bool | None
+    error_code: str = ""
+
+    @property
+    def healthy(self) -> bool:
+        return self.enabled and self.configured and self.reachable and self.bucket_exists is True
+
+
 class ArtifactVault:
     """Small fail-closed API around an S3-compatible object store."""
 
@@ -122,6 +137,23 @@ class ArtifactVault:
                 aws_secret_access_key=self.config.secret_key,
             )
         return self._client
+
+    def health_check(self) -> VaultHealth:
+        """Probe the configured bucket and return redacted capability state."""
+        if not self.config.enabled:
+            return VaultHealth(False, False, False, False)
+        try:
+            self.client.head_bucket(Bucket=self.config.bucket)
+        except Exception as exc:
+            response = getattr(exc, "response", {}) or {}
+            error = response.get("Error", {}) or {}
+            code = str(error.get("Code", ""))
+            if code in {"403", "AccessDenied"}:
+                return VaultHealth(True, True, True, None, code)
+            if code in {"404", "NoSuchBucket", "NotFound"}:
+                return VaultHealth(True, True, True, False, code)
+            return VaultHealth(True, True, False, None, code or "probe_failed")
+        return VaultHealth(True, True, True, True)
 
     def put(
         self,

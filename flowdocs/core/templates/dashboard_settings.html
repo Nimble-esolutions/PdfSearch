@@ -110,7 +110,7 @@
               <dd class="col-sm-7"><span class="badge {% if vault_status.reachable %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.reachable|yesno:_("Yes,No") }}</span></dd>
 
               <dt class="col-sm-5">{% trans "Bucket Exists" %}</dt>
-              <dd class="col-sm-7"><span class="badge {% if vault_status.bucket_exists %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.bucket_exists|yesno:_("Yes,No") }}</span></dd>
+              <dd class="col-sm-7"><span class="badge {% if vault_status.bucket_exists is True %}bg-success{% elif vault_status.bucket_exists is False %}bg-danger{% else %}bg-warning text-dark{% endif %}">{% if vault_status.bucket_exists is True %}{% trans "Yes" %}{% elif vault_status.bucket_exists is False %}{% trans "No" %}{% else %}{% trans "Unknown" %}{% endif %}</span></dd>
 
               {% if vault_status.error %}
               <dt class="col-sm-5">{% trans "Error" %}</dt>
