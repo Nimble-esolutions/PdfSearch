@@ -160,10 +160,17 @@
   </div>
 </footer>
 
-<div id="cookieConsent" class="cookie-consent d-none">
-  <div class="container-fluid d-flex justify-content-between align-items-center flex-wrap">
-    <small>This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used. By continuing, you agree to our use of cookies. <a href="{% url 'cookie_policy' %}">Cookie Policy</a> | <a href="{% url 'privacy' %}">Privacy Policy</a></small>
-    <button class="btn btn-sm btn-light ms-3" onclick="document.getElementById('cookieConsent').classList.add('d-none');localStorage.setItem('cookieConsent','accepted')">Accept</button>
+<div id="cookieConsent" class="cookie-consent d-none" role="region" aria-label="{% trans 'Cookie notice' %}">
+  <div class="cookie-consent__inner">
+    <div class="cookie-consent__copy">
+      <strong>{% trans "Essential cookies" %}</strong>
+      <p>{% trans "This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used." %}</p>
+    </div>
+    <div class="cookie-consent__actions">
+      <a href="{% url 'cookie_policy' %}">{% trans "Cookie Policy" %}</a>
+      <a href="{% url 'privacy' %}">{% trans "Privacy Policy" %}</a>
+      <button type="button" class="cookie-consent__accept" onclick="document.getElementById('cookieConsent').classList.add('d-none');localStorage.setItem('cookieConsent','accepted')">{% trans "Accept" %}</button>
+    </div>
   </div>
 </div>
 <script>

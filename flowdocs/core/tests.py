@@ -2547,6 +2547,12 @@ class LegalPageTests(TestCase):
         self.assertContains(response, reverse("cookie_policy"))
         self.assertContains(response, reverse("privacy"))
 
+    def test_cookie_banner_uses_accessible_hallmark_region(self):
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, 'role="region"')
+        self.assertContains(response, 'aria-label="Cookie notice"')
+        self.assertContains(response, "cookie-consent__accept")
+
     def test_legal_pages_extend_base_template(self):
         for name, _ in self.LEGAL_ROUTES:
             with self.subTest(page=name):
