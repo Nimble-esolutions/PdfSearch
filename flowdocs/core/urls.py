@@ -23,6 +23,11 @@ urlpatterns = [
     path('', views.search_query, name='home'),
     path('search/', views.search_query, name='search_query'),
 
+    # ---------------- Legal / DPDA Compliance ----------------
+    path("privacy/", views.privacy_view, name="privacy"),
+    path("terms/", views.terms_view, name="terms"),
+    path("data-policy/", views.data_policy_view, name="data_policy"),
+
     # ---------------- Authentication ----------------
     path("register/", views.register_view, name="register"),
     path("login/", views.login_view, name="login"),

@@ -97,7 +97,16 @@
 <div class="bg-dark text-white small px-3 py-1">
   <div class="container d-flex justify-content-end align-items-center">
     <div class="text-end">
+      {% if user.is_authenticated %}
+      <a href="{% url 'dashboard' %}" class="text-white text-decoration-none me-2">{% trans "Dashboard" %}</a> |
+      <span class="text-white-50 me-2">{{ user.username }}</span>
+      <form method="post" action="{% url 'logout' %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-link btn-sm text-white p-0 m-0">{% trans "Logout" %}</button>
+      </form> |
+      {% else %}
       <a href="{% url 'login' %}" class="text-white text-decoration-none me-2">{% trans "Admin Login" %}</a> |
+      {% endif %}
       <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" class="text-white text-decoration-none me-2">{% trans "Home" %}</a> |
       <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6" class="text-white text-decoration-none me-2">{% trans "Locate Us" %}</a> |
       
@@ -144,7 +153,7 @@
 
           <!-- Original chat icons (desktop) -->
           <!-- WhatsApp button -->
-<a href="https://wa.me/919421200000" target="_blank" rel="noopener noreferrer" class="whatsapp-link">
+<a href="https://wa.me/{{ whatsapp_number|default:"919421200000" }}" target="_blank" rel="noopener noreferrer" class="whatsapp-link">
   <picture>
     <source media="(max-width: 768px)" srcset="{% static 'main/images/wh-btn-mobile.jpg' %}">
     <img src="{% static 'main/images/wh-btn.jpg' %}" alt="WhatsApp" style="height:40px; cursor:pointer;">
@@ -170,7 +179,11 @@
           {% trans "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}
       </div>
 
-      
+      <div class="text-center" style="font-size: 12px; color: #999; margin-top: 5px;">
+        {{ indexed_count }}/{{ total_count }} {% trans "documents indexed" %} • 
+        <a href="{% url 'privacy' %}">{% trans "Privacy" %}</a> • 
+        <a href="{% url 'terms' %}">{% trans "Terms" %}</a>
+      </div>
 
   </div>
 </div>
