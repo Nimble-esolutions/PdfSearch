@@ -862,20 +862,29 @@ def folder_operations(request, folder_id):
     return redirect("dashboard_folder", folder_id=folder.pk)
 
 # ---------------- DPDA / Legal Pages ----------------
+LEGAL_NAVIGATION = (
+    ("privacy", gettext("Privacy Policy")),
+    ("terms", gettext("Terms of Service")),
+    ("data_policy", gettext("Data Policy")),
+    ("cookie_policy", gettext("Cookie Policy")),
+    ("disclaimer", gettext("Disclaimer")),
+)
+
+
 def privacy_view(request):
-    return render(request, "privacy.html", {"title": "Privacy Policy"})
+    return render(request, "privacy.html", {"title": "Privacy Policy", "legal_navigation": LEGAL_NAVIGATION})
 
 def terms_view(request):
-    return render(request, "terms.html", {"title": "Terms of Service"})
+    return render(request, "terms.html", {"title": "Terms of Service", "legal_navigation": LEGAL_NAVIGATION})
 
 def data_policy_view(request):
-    return render(request, "data_policy.html", {"title": "Data Policy"})
+    return render(request, "data_policy.html", {"title": "Data Policy", "legal_navigation": LEGAL_NAVIGATION})
 
 def cookie_policy_view(request):
-    return render(request, "cookie_policy.html", {"title": "Cookie Policy"})
+    return render(request, "cookie_policy.html", {"title": "Cookie Policy", "legal_navigation": LEGAL_NAVIGATION})
 
 def disclaimer_view(request):
-    return render(request, "disclaimer.html", {"title": "Disclaimer"})
+    return render(request, "disclaimer.html", {"title": "Disclaimer", "legal_navigation": LEGAL_NAVIGATION})
 
 
 # -------------- Dashboard upload: call precompute on upload --------------

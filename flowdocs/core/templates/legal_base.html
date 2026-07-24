@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} - CC & RCS Maharashtra{% endblock %}
+{% block body_class %}admin-shell legal-shell{% endblock %}
+{% block admin_shell %}{% endblock %}
+
+{% block public_header %}
+<header class="legal-header">
+  <div class="legal-header__inner">
+    <a class="legal-header__mark" href="{% url 'home' %}" aria-label="{% trans 'Open Sahakar AI search' %}">CC</a>
+    <div class="legal-header__identity">
+      <p>{% trans "Registrar Co-operative Societies" %}</p>
+      <span>{% trans "Commissioner for Cooperation, Maharashtra" %}</span>
+    </div>
+    <a class="legal-header__return" href="{% url 'home' %}">{% trans "Return to search" %}</a>
+  </div>
+</header>
+<nav class="legal-nav" aria-label="{% trans 'Legal navigation' %}">
+  <div class="legal-nav__inner">
+    <span class="legal-nav__label">{% trans "Policies and notices" %}</span>
+    <div class="legal-nav__links">
+      {% for route, label in legal_navigation %}
+        <a href="{% url route %}"{% if request.resolver_match.url_name == route %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </div>
+    <form action="{% url 'set_language' %}" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      {% if request.LANGUAGE_CODE == 'mr' %}
+        <input type="hidden" name="language" value="en">
+        <button type="submit">{% trans "English" %}</button>
+      {% else %}
+        <input type="hidden" name="language" value="mr">
+        <button type="submit">{% trans "मराठी" %}</button>
+      {% endif %}
+    </form>
+  </div>
+</nav>
+{% endblock %}
+
+{% block breadcrumbs %}{% endblock %}
