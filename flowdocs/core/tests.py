@@ -210,6 +210,31 @@ class RegistrationSecurityTests(TestCase):
         self.assertContains(response, "Select a valid choice")
         self.assertFalse(get_user_model().objects.filter(username="created-admin").exists())
 
+    def test_admin_registration_has_shared_breadcrumb(self):
+        admin = get_user_model().objects.create_user(
+            username="breadcrumb-admin",
+            password="test-password",
+            role="admin",
+        )
+        self.client.force_login(admin)
+        response = self.client.get(reverse("register"))
+        self.assertContains(response, 'aria-label="breadcrumb"')
+        self.assertContains(response, 'href="/dashboard/"')
+        self.assertContains(response, "Create user")
+
+    def test_vault_page_has_shared_breadcrumb(self):
+        superadmin = get_user_model().objects.create_user(
+            username="breadcrumb-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        self.client.force_login(superadmin)
+        response = self.client.get(reverse("vault_operations"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-label="breadcrumb"')
+        self.assertContains(response, 'href="/dashboard/operations/"')
+        self.assertContains(response, "Artifact Vault")
+
     def test_superadmin_registration_can_grant_superadmin(self):
         superadmin = get_user_model().objects.create_user(
             username="superadmin-creator",
