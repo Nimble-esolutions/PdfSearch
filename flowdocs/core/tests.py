@@ -1709,7 +1709,7 @@ class GenerationLifecycleTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Data Generations")
-        self.assertContains(response, "vault_operations")
+        self.assertContains(response, reverse("vault_operations"))
 
         # Verify generations render on the dedicated vault page
         vault_response = self.client.get(reverse("vault_operations"))
@@ -1809,7 +1809,7 @@ class BulkFilterTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bulk Operations")
-        self.assertContains(response, "vault_operations")
+        self.assertContains(response, reverse("vault_operations"))
 
 
 class JobDrawerTests(TestCase):
