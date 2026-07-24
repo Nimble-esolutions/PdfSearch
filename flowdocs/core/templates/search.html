@@ -2,7 +2,7 @@
 {% load static i18n %}
 
 {% block title %}{% trans "Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search" %}{% endblock %}
-{% block body_class %}public-search{% if request.GET.theme == 'b' %} search-theme-b{% elif request.GET.theme == 'c' %} search-theme-c{% else %} search-theme-a{% endif %}{% endblock %}
+{% block body_class %}public-search{% endblock %}
 
 {% block admin_shell %}{% endblock %}
 
@@ -128,14 +128,6 @@
           <button type="submit">English</button>
         {% endif %}
       </form>
-      {% if request.GET.preview == '1' %}
-      <span class="public-search-theme-picker" aria-label="{% trans 'Search theme previews' %}">
-        <span>{% trans "Preview" %}</span>
-        <a href="?preview=1&amp;theme=a"{% if request.GET.theme != 'b' and request.GET.theme != 'c' %} aria-current="page"{% endif %}>A</a>
-        <a href="?preview=1&amp;theme=b"{% if request.GET.theme == 'b' %} aria-current="page"{% endif %}>B</a>
-        <a href="?preview=1&amp;theme=c"{% if request.GET.theme == 'c' %} aria-current="page"{% endif %}>C</a>
-      </span>
-      {% endif %}
     </nav>
   </div>
 </div>
@@ -153,7 +145,7 @@
         <strong>{% trans "Registrar Co-operative Societies" %}</strong>
         <small>{% trans "MAHARASHTRA STATE" %}</small>
       </span>
-      <img class="public-search-identity__india" src="{% static 'main/images/logoIndia1.jpg' %}" alt="{% trans 'Government of India emblem' %}">
+      <img class="public-search-identity__india" src="{% static 'main/images/national-emblem.svg' %}" alt="{% trans 'State Emblem of India' %}">
     </div>
     <span>{% trans "Public document service" %}</span>
     <h1>{% trans "Sahakar AI Search" %}</h1>
@@ -184,6 +176,7 @@
     <source media="(max-width: 768px)" srcset="{% static 'main/images/wh-btn-mobile.jpg' %}">
     <img src="{% static 'main/images/wh-btn.jpg' %}" alt="" aria-hidden="true">
   </picture>
+  <span>{% trans "WhatsApp" %}</span>
 </a>
 
 <a href="https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform" target="_blank" rel="noopener noreferrer" class="feedback-link" aria-label="{% trans 'Send feedback' %}">
@@ -191,6 +184,7 @@
     <source media="(max-width: 768px)" srcset="{% static 'main/images/fd-btn-mobile.jpg' %}">
     <img src="{% static 'main/images/fd-btn.jpg' %}" alt="" aria-hidden="true">
   </picture>
+  <span>{% trans "Feedback" %}</span>
 </a>
 
       </div>
