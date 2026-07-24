@@ -1698,12 +1698,15 @@ def s3_operations_view(request):
     active_gen = generations.filter(status="active").first()
 
     vault_healthy = False
+    vault_reachable = False
+    vault_bucket_exists = False
     vault_error = ""
     vault_manifests = []
     vault_config = {}
     try:
         vault = ArtifactVault()
         if vault.enabled:
+            vault_reachable = True
             vault_config = {
                 "endpoint": vault.config.endpoint,
                 "bucket": vault.config.bucket,
@@ -1713,9 +1716,13 @@ def s3_operations_view(request):
                 {"key": m.key, "sha256": m.sha256[:16], "size": m.size}
                 for m in vault.list_manifests()
             ]
-            vault_healthy = True
+            vault_bucket_exists = True
+            vault_healthy = vault_reachable and vault_bucket_exists
     except Exception as exc:
         vault_error = str(exc)[:200]
+        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+        if str(error_code) in {"403", "AccessDenied"}:
+            vault_reachable = True
 
     env_identity = getattr(settings, "ENV_IDENTITY", None)
 
@@ -1724,6 +1731,8 @@ def s3_operations_view(request):
         "generations": generations,
         "active_generation": active_gen,
         "vault_healthy": vault_healthy,
+        "vault_reachable": vault_reachable,
+        "vault_bucket_exists": vault_bucket_exists,
         "vault_error": vault_error,
         "vault_manifests": vault_manifests,
         "vault_config": vault_config,
@@ -1782,14 +1791,18 @@ def settings_view(request):
 
     vault_status = {"enabled": False, "reachable": False, "bucket_exists": False, "error": ""}
     try:
-        env_identity = getattr(settings, "ENV_IDENTITY", None)
-        if env_identity and env_identity.is_backup_writer:
-            vault_status["enabled"] = True
+        vault = ArtifactVault()
+        vault_status["enabled"] = vault.enabled
+        if vault.enabled:
             try:
+                vault.client.head_bucket(Bucket=vault.config.bucket)
                 vault_status["reachable"] = True
                 vault_status["bucket_exists"] = True
-            except Exception as e:
-                vault_status["error"] = str(e)[:200]
+            except Exception as exc:
+                error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+                if str(error_code) in {"403", "AccessDenied"}:
+                    vault_status["reachable"] = True
+                vault_status["error"] = str(exc)[:200]
     except Exception:
         pass
 
