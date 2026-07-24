@@ -1339,12 +1339,10 @@ def sitemap_xml(request):
 
 # -------------- New logic for folder search --------------
 def search_query(request):
-    theme = get_setting("PUBLIC_UI_THEME", "default")
-    template = "search_v2.html" if theme == "sahakar2" else "search.html"
     if request.method in {"GET", "HEAD"}:
         return render(
             request,
-            template,
+            "search.html",
             {
                 "welcome_message": gettext(
                     "I am Sahakar AI. Click here to learn how to questions to get correct answers."
@@ -1355,7 +1353,6 @@ def search_query(request):
                 ),
                 "welcome_help_label": gettext("Click Here"),
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
-                "public_ui_theme": get_setting("PUBLIC_UI_THEME", "default"),
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
                 "indexed_count": PDFFile.objects.filter(lifecycle__in=("ready", "processing")).count(),
                 "total_count": PDFFile.objects.count(),
@@ -1738,7 +1735,6 @@ ALLOWED_SETTING_KEYS = {
     "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
     "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
     "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE",
-    "PUBLIC_UI_THEME",
 }
 
 
@@ -1770,7 +1766,6 @@ def settings_view(request):
         "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
         "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
         "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE",
-        "PUBLIC_UI_THEME",
     ):
         db_value = get_setting(key)
         env_value = os.environ.get(key, "")
