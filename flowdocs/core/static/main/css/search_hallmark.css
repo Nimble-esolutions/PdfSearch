@@ -25,13 +25,180 @@
 }
 
 /* ── Base Reset Within Hallmark Scope ── */
+/* search.css line 4 uses !important on font-family/size/line-height — we must match */
+.public-search.hallmark,
+.public-search.hallmark body,
+.public-search.hallmark input,
+.public-search.hallmark button,
+.public-search.hallmark .gpt-msg,
+.public-search.hallmark .user-msg,
+.public-search.hallmark .banner-text,
+.public-search.hallmark .chat-input input,
+.public-search.hallmark .chat-input button,
+.public-search.hallmark .chat-input input[type="text"] {
+    font-family: 'Noto Sans Devanagari', 'Segoe UI', sans-serif !important;
+    font-size: 16px !important;
+}
+
 .public-search.hallmark {
-    background: var(--hm-wall);
-    font-family: 'Noto Sans Devanagari', 'Segoe UI', sans-serif;
+    background: var(--hm-wall) !important;
     color: var(--hm-ink);
-    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+/* Chat messages — smaller body text */
+.public-search.hallmark .user-msg {
+    font-size: 15px !important;
+    line-height: 1.55 !important;
+}
+
+.public-search.hallmark .gpt-msg {
+    font-size: 15px !important;
+    line-height: 1.65 !important;
+}
+
+/* Notice board typography */
+.public-search.hallmark .notice-board-heading {
+    font-size: 12px !important;
+}
+
+.public-search.hallmark .notice-board-body {
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+}
+
+.public-search.hallmark .notice-board-label {
+    font-size: 11px !important;
+}
+
+.public-search.hallmark .notice-card-title {
+    font-size: 13px !important;
+}
+
+.public-search.hallmark .notice-card-desc {
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+}
+
+/* Input and button sizing */
+.public-search.hallmark .chat-input input[type="text"] {
+    font-size: 15px !important;
+}
+
+.public-search.hallmark .chat-input button {
+    font-size: 15px !important;
+}
+
+/* Docket typography */
+.public-search.hallmark .docket-title {
+    font-size: 15px !important;
+    line-height: 1.4 !important;
+}
+
+.public-search.hallmark .docket-subtitle {
+    font-size: 13px !important;
+}
+
+.public-search.hallmark .docket-meta {
+    font-size: 11px !important;
+}
+
+.public-search.hallmark .docket-cta {
+    font-size: 13px !important;
+}
+
+.public-search.hallmark .docket-header {
+    font-size: 11px !important;
+}
+
+/* Reference card typography */
+.public-search.hallmark .ref-card {
+    font-size: 13px !important;
+}
+
+.public-search.hallmark .ref-card small {
+    font-size: 10px !important;
+}
+
+/* Shimmer loader */
+.public-search.hallmark .shimmer-label {
+    font-size: 13px !important;
+}
+
+/* Error / rate limit notices */
+.public-search.hallmark .error-notice-header,
+.public-search.hallmark .rate-limit-notice-header {
+    font-size: 11px !important;
+}
+
+.public-search.hallmark .error-notice-body,
+.public-search.hallmark .rate-limit-notice-body {
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+}
+
+/* Word counter */
+.public-search.hallmark #wordCounter {
+    font-size: 11px !important;
+}
+
+/* Disclaimer text */
+.public-search.hallmark .text-center[style*="color: #666"],
+.public-search.hallmark .text-center[style*="color: #999"] {
+    font-size: 12px !important;
+}
+
+/* Example chips */
+.public-search.hallmark .chip-btn {
+    font-size: 12px !important;
+}
+
+.public-search.hallmark,
+.public-search.hallmark body,
+.public-search.hallmark input,
+.public-search.hallmark button,
+.public-search.hallmark .gpt-msg,
+.public-search.hallmark .user-msg,
+.public-search.hallmark .banner-text,
+.public-search.hallmark .chat-input input,
+.public-search.hallmark .chat-input button {
+    font-family: 'Noto Sans Devanagari', 'Segoe UI', sans-serif !important;
+    font-size: 16px !important;
+}
+
+.public-search.hallmark .user-msg,
+.public-search.hallmark .gpt-msg {
+    font-size: 15px !important;
+    line-height: 1.65 !important;
+}
+
+.public-search.hallmark .notice-board-heading {
+    font-size: 12px !important;
+}
+
+.public-search.hallmark .notice-board-body {
+    font-size: 14px !important;
+}
+
+.public-search.hallmark .notice-board-label {
+    font-size: 11px !important;
+}
+
+.public-search.hallmark .notice-card-title {
+    font-size: 13px !important;
+}
+
+.public-search.hallmark .notice-card-desc {
+    font-size: 11px !important;
+}
+
+.public-search.hallmark .chat-input input[type="text"] {
+    font-size: 15px !important;
+}
+
+.public-search.hallmark .chat-input button {
+    font-size: 15px !important;
 }
 
 /* ── Banner as Hero ── */
