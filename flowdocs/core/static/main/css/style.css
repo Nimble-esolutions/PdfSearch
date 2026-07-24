@@ -152,6 +152,68 @@ body {
   border-left: 1px solid rgba(244, 237, 227, 0.22);
 }
 
+/* Keep route context visually connected to the Hallmark navigation. */
+.breadcrumb-nav {
+  width: 100%;
+  background: var(--admin-surface);
+  border-bottom: 1px solid var(--admin-border);
+  box-shadow: 0 1px 2px rgba(28, 27, 26, 0.04);
+}
+
+.breadcrumb-nav .breadcrumb {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 0.62rem 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  color: var(--admin-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.breadcrumb-nav .breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.breadcrumb-nav .breadcrumb-item + .breadcrumb-item {
+  padding-left: 0;
+}
+
+.breadcrumb-nav .breadcrumb-item + .breadcrumb-item::before {
+  float: none;
+  padding-right: 0.5rem;
+  color: var(--admin-gold);
+  content: "/";
+  font-weight: 700;
+}
+
+.breadcrumb-nav a {
+  color: var(--admin-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.breadcrumb-nav a:hover,
+.breadcrumb-nav a:focus-visible {
+  color: var(--admin-primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.breadcrumb-nav .breadcrumb-item.active {
+  color: var(--admin-text);
+  font-weight: 700;
+}
+
+.breadcrumb-nav [aria-current="page"] {
+  overflow-wrap: anywhere;
+}
+
 .admin-user-chip {
   display: inline-flex;
   align-items: center;
@@ -749,6 +811,11 @@ body {
   .admin-main {
     width: min(100% - 1rem, 1180px);
     margin-top: 0.75rem;
+  }
+
+  .breadcrumb-nav .breadcrumb {
+    width: min(100% - 1rem, 1180px);
+    padding: 0.55rem 0;
   }
 
   .admin-panel {
