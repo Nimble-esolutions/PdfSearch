@@ -21,6 +21,14 @@
       {% for field in form %}{% if field.name == 'password1' or field.name == 'password2' %}<label>{{ field.label_tag }}{{ field }}{% if field.help_text %}<small class="form-text">{{ field.help_text|safe }}</small>{% endif %}{% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</label>{% endif %}{% endfor %}
     </div>
     {% if form.non_field_errors %}<div class="invalid-feedback d-block">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="form-section">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="privacyConsent" required>
+        <label class="form-check-label" for="privacyConsent">
+          <small>I agree to the <a href="{% url 'privacy' %}" target="_blank">Privacy Policy</a> and <a href="{% url 'terms' %}" target="_blank">Terms of Service</a></small>
+        </label>
+      </div>
+    </div>
     <div class="access-form-actions"><a href="{% url 'user_list' %}" class="btn btn-outline-secondary">{% trans "Cancel" %}</a><button type="submit" class="btn btn-primary">{% trans "Create account" %}</button></div>
   </form>
 </section>

@@ -839,11 +839,15 @@ def folder_operations(request, folder_id):
     messages.error(request, "Unknown folder maintenance action.")
     return redirect("dashboard_folder", folder_id=folder.pk)
 
-# ---------------- Home View ----------------
-def home_view(request):
-    return render(request, 'home.html')
+# ---------------- DPDA / Legal Pages ----------------
+def privacy_view(request):
+    return render(request, "privacy.html", {"title": "Privacy Policy"})
 
+def terms_view(request):
+    return render(request, "terms.html", {"title": "Terms of Service"})
 
+def data_policy_view(request):
+    return render(request, "data_policy.html", {"title": "Data Policy"})
 
 
 # -------------- Dashboard upload: call precompute on upload --------------
