@@ -1708,11 +1708,17 @@ class GenerationLifecycleTests(TestCase):
         self.client.force_login(self.superadmin)
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Generation Lifecycle")
-        self.assertContains(response, "gen-visible-001")
-        self.assertContains(response, "gen-visible-002")
-        self.assertContains(response, "Promote")
-        self.assertContains(response, "Purge Expired")
+        self.assertContains(response, "Data Generations")
+        self.assertContains(response, "vault_operations")
+
+        # Verify generations render on the dedicated vault page
+        vault_response = self.client.get(reverse("vault_operations"))
+        self.assertEqual(vault_response.status_code, 200)
+        self.assertContains(vault_response, "Generation Lifecycle")
+        self.assertContains(vault_response, "gen-visible-001")
+        self.assertContains(vault_response, "gen-visible-002")
+        self.assertContains(vault_response, "Promote")
+        self.assertContains(vault_response, "Purge Expired")
 class BulkFilterTests(TestCase):
     def setUp(self):
         self.superadmin = get_user_model().objects.create_user(
@@ -1802,9 +1808,8 @@ class BulkFilterTests(TestCase):
         self.client.force_login(self.superadmin)
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Filter Documents")
-        self.assertContains(response, "filter_category")
-        self.assertContains(response, "Preview Count")
+        self.assertContains(response, "Bulk Operations")
+        self.assertContains(response, "vault_operations")
 
 
 class JobDrawerTests(TestCase):
