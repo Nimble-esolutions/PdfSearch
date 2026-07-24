@@ -1590,6 +1590,50 @@ def operations_panel(request):
     except Exception:
         pass
     return render(request, "dashboard_operations.html", ctx)
+
+
+@superadmin_required
+def s3_operations_view(request):
+    """Dedicated S3 artifact vault and bulk operations page."""
+    generations = ArtifactGeneration.objects.all().order_by("-created_at")
+    active_gen = generations.filter(status="active").first()
+
+    vault_healthy = False
+    vault_error = ""
+    vault_manifests = []
+    vault_config = {}
+    try:
+        vault = ArtifactVault()
+        if vault.enabled:
+            vault_config = {
+                "endpoint": vault.config.endpoint,
+                "bucket": vault.config.bucket,
+                "region": vault.config.region,
+            }
+            vault_manifests = [
+                {"key": m.key, "sha256": m.sha256[:16], "size": m.size}
+                for m in vault.list_manifests()
+            ]
+            vault_healthy = True
+    except Exception as exc:
+        vault_error = str(exc)[:200]
+
+    env_identity = getattr(settings, "ENV_IDENTITY", None)
+
+    context = {
+        "title": "S3 Artifact Vault & Operations",
+        "generations": generations,
+        "active_generation": active_gen,
+        "vault_healthy": vault_healthy,
+        "vault_error": vault_error,
+        "vault_manifests": vault_manifests,
+        "vault_config": vault_config,
+        "backup_role": env_identity.backup_role.value if env_identity else "unknown",
+        "vault_enabled": getattr(env_identity, "is_backup_writer", False),
+    }
+    return render(request, "dashboard_s3ops.html", context)
+
+
 def health_data(request):
     """Public: return coarse data readiness status only."""
     return JsonResponse({"status": _data_readiness_check()})

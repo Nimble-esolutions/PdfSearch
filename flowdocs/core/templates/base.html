@@ -44,6 +44,11 @@
             <li class="nav-item">
               <a class="nav-link" href="{% url 'user_list' %}">{% trans "Users" %}</a>
             </li>
+            {% if request.user.role == 'superadmin' %}
+            <li class="nav-item">
+              <a class="nav-link" href="{% url 'vault_operations' %}">📦 {% trans "Vault" %}</a>
+            </li>
+            {% endif %}
           {% endif %}
           {% if request.user.role == 'superadmin' %}
             <li class="nav-item">
