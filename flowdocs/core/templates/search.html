@@ -2,7 +2,7 @@
 {% load static i18n %}
 
 {% block title %}{% trans "Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search" %}{% endblock %}
-{% block body_class %}public-search{% endblock %}
+{% block body_class %}public-search{% if request.GET.theme == 'b' %} search-theme-b{% elif request.GET.theme == 'c' %} search-theme-c{% else %} search-theme-a{% endif %}{% endblock %}
 
 {% block admin_shell %}{% endblock %}
 
@@ -128,6 +128,14 @@
           <button type="submit">English</button>
         {% endif %}
       </form>
+      {% if request.GET.preview == '1' %}
+      <span class="public-search-theme-picker" aria-label="{% trans 'Search theme previews' %}">
+        <span>{% trans "Preview" %}</span>
+        <a href="?preview=1&amp;theme=a"{% if request.GET.theme != 'b' and request.GET.theme != 'c' %} aria-current="page"{% endif %}>A</a>
+        <a href="?preview=1&amp;theme=b"{% if request.GET.theme == 'b' %} aria-current="page"{% endif %}>B</a>
+        <a href="?preview=1&amp;theme=c"{% if request.GET.theme == 'c' %} aria-current="page"{% endif %}>C</a>
+      </span>
+      {% endif %}
     </nav>
   </div>
 </div>
@@ -140,14 +148,12 @@
 
   <div class="public-search-header__title">
     <div class="public-search-identity">
-      <img src="{% static 'main/images/logo1.png' %}" alt="" aria-hidden="true">
-      <svg class="public-search-identity__wordmark" viewBox="0 0 430 58" role="img" aria-labelledby="registrar-lockup-title">
-        <title id="registrar-lockup-title">{% trans "Registrar Co-operative Societies, Maharashtra" %}</title>
-        <circle cx="28" cy="29" r="23" fill="none" stroke="currentColor" stroke-width="3" />
-        <path d="M17 37V21h8c7 0 10 3 10 8s-3 8-10 8h-8Zm7-5h1c3 0 4-1 4-3s-1-3-4-3h-1v6Z" fill="currentColor" />
-        <text x="66" y="24" fill="currentColor" font-size="17" font-weight="700">Registrar Co-operative Societies</text>
-        <text x="66" y="45" fill="currentColor" font-size="13" letter-spacing=".5">MAHARASHTRA STATE</text>
-      </svg>
+      <img src="{% static 'main/images/registrar-seal.webp' %}" alt="{% trans 'Registrar Co-operative Societies seal' %}">
+      <span class="public-search-identity__wordmark">
+        <strong>{% trans "Registrar Co-operative Societies" %}</strong>
+        <small>{% trans "MAHARASHTRA STATE" %}</small>
+      </span>
+      <img class="public-search-identity__india" src="{% static 'main/images/logoIndia1.jpg' %}" alt="{% trans 'Government of India emblem' %}">
     </div>
     <span>{% trans "Public document service" %}</span>
     <h1>{% trans "Sahakar AI Search" %}</h1>
@@ -165,9 +171,6 @@
         <p class="public-search-kicker">{% trans "Official document search" %}</p>
         <h2 id="search-page-heading">{% trans "Ask a question about co-operative society law" %}</h2>
         <p>{% trans "Search by section number, Act or Rule name, society type, topic, or phrase in English or Marathi." %}</p>
-      </div>
-
-      <div id="chatMain" aria-live="polite" aria-label="{% trans 'Search answers' %}" aria-busy="false">
       </div>
 
       <div class="chat-input">
@@ -190,6 +193,9 @@
   </picture>
 </a>
 
+      </div>
+
+      <div id="chatMain" aria-live="polite" aria-label="{% trans 'Search answers' %}" aria-busy="false">
       </div>
 
       <small id="wordCounter" class="word-counter" aria-live="polite">

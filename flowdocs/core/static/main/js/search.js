@@ -140,6 +140,7 @@ function appendMessage(text, sender, isLoading=false){
 
 function appendWelcomeMessage(text, href, label) {
     const div = appendMessage('', 'gpt');
+    div.classList.add('gpt-msg--welcome');
     div.appendChild(document.createTextNode(text + ' '));
     const link = document.createElement('a');
     link.href = href;
