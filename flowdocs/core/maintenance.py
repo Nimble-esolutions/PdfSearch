@@ -57,17 +57,25 @@ def _apply_retention_expiry(generation):
 
 def promote_active_generation(generation_id, *, requested_by=None):
     """Atomically promote a validated generation to active, superseding the prior active."""
-    from django.db import transaction
-    try:
-        generation = ArtifactGeneration.objects.get(generation_id=generation_id)
-    except ArtifactGeneration.DoesNotExist:
-        raise SearchDataIntegrityError(f"Generation {generation_id} does not exist")
-    if generation.status not in ("validated", "active"):
-        raise SearchDataIntegrityError(
-            f"Generation {generation_id} must be validated before promotion (current: {generation.status})"
-        )
     with transaction.atomic():
-        prior = ArtifactGeneration.objects.filter(status="active").exclude(pk=generation.pk).first()
+        generation = (
+            ArtifactGeneration.objects.select_for_update()
+            .filter(generation_id=generation_id)
+            .first()
+        )
+        if generation is None:
+            raise SearchDataIntegrityError(f"Generation {generation_id} does not exist")
+        if generation.status not in ("validated", "active"):
+            raise SearchDataIntegrityError(
+                f"Generation {generation_id} must be validated before promotion (current: {generation.status})"
+            )
+        prior = (
+            ArtifactGeneration.objects.select_for_update()
+            .filter(status="active")
+            .exclude(pk=generation.pk)
+            .order_by("-promoted_at", "-pk")
+            .first()
+        )
         if prior is not None:
             prior.status = "superseded"
             prior.superseded_by = generation

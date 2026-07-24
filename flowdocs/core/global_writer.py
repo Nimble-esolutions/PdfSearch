@@ -193,15 +193,27 @@ def release_global_writer(
     *,
     writer_record: dict[str, Any],
 ) -> None:
-    """Release global writer authority."""
+    """Release global writer authority only when the caller still owns it."""
     key = _writer_key(dataset_id)
+    expected_etag = writer_record.get("_etag", "")
+    token = writer_record.get("_token", "")
+    current = _read_writer_record(vault, key)
+    if current is None:
+        return
+    if expected_etag and current.get("_etag") != expected_etag:
+        raise GlobalWriterConflict("Global writer changed before release")
+    if token and current.get("owner_token_hash") != _token_hash(token):
+        raise GlobalWriterConflict("Global writer ownership token does not match")
     try:
         vault.client.delete_object(
             Bucket=vault.config.bucket,
             Key=key,
+            IfMatch=expected_etag or current.get("_etag", ""),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        raise GlobalWriterConflict(
+            f"Cannot release global writer for {dataset_id}: {exc}"
+        ) from exc
 
 
 def get_global_writer(

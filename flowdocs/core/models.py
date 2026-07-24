@@ -148,6 +148,13 @@ class ArtifactGeneration(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["status"],
+                condition=models.Q(status="active"),
+                name="single_active_artifact_generation",
+            ),
+        ]
 
 
 class MaintenanceJob(models.Model):
