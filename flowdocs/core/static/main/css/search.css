@@ -443,6 +443,7 @@ body.public-search {
 }
 .public-search[data-motion-mode="full"] .search-loading__label {
     transition: opacity var(--motion-micro) ease, transform var(--motion-micro) var(--motion-ease);
+    animation: search-label-enter var(--motion-micro) var(--motion-ease) both;
 }
 .public-search[data-motion-mode="full"] .ref-card { animation-duration: var(--motion-micro); }
 .search-loading__dot { will-change: opacity, transform; }
@@ -456,6 +457,10 @@ body.public-search {
 @keyframes search-answer-complete {
     from { opacity: .72; }
     to { opacity: 1; }
+}
+@keyframes search-label-enter {
+    from { opacity: 0; transform: translateY(3px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .public-search[data-motion-mode="light"] .prompt-chip,
