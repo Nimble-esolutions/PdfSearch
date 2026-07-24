@@ -14,6 +14,8 @@ urlpatterns = [
     path('dashboard/operations/', views.operations_panel, name='operations_panel'),
     path('dashboard/operations/data/', views.operations_data, name='operations_data'),
     path('dashboard/operations/lease/', views.operations_lease, name='operations_lease'),
+    path('dashboard/settings/', views.settings_view, name='settings'),
+    path('dashboard/settings/save/', views.save_settings, name='save_settings'),
     path('robots.txt', views.robots_txt, name='robots_txt'),
     path('sitemap.xml', views.sitemap_xml, name='sitemap_xml'),
 

@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Settings & Configuration - CC & RCS Maharashtra" %}{% endblock %}
+
+{% block content %}
+<section class="container-fluid py-4">
+  <div class="admin-page-heading mb-4">
+    <p class="admin-kicker">{% trans "Superadmin" %}</p>
+    <h2>{% trans "Settings & Configuration" %}</h2>
+    <p>{% trans "Environment identity, artifact vault status, and runtime feature flags." %}</p>
+  </div>
+
+  {% if env_fields %}
+  <div class="mb-4">
+    <h4 class="border-bottom pb-2 mb-3">{% trans "Environment Identity" %}</h4>
+    <div class="row g-3">
+      <div class="col-md-6 col-lg-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-primary text-white"><strong>{% trans "Environment" %}</strong></div>
+          <div class="card-body">
+            <dl class="row small mb-0">
+              <dt class="col-sm-5">{% trans "APP_ENV" %}</dt>
+              <dd class="col-sm-7"><span class="badge {% if env_fields.app_env == 'production' %}bg-success{% elif env_fields.app_env == 'staging' %}bg-warning{% else %}bg-secondary{% endif %}">{{ env_fields.app_env }}</span></dd>
+
+              <dt class="col-sm-5">{% trans "Dataset" %}</dt>
+              <dd class="col-sm-7 font-monospace small">{{ env_fields.dataset_id|default:"—" }}</dd>
+
+              <dt class="col-sm-5">{% trans "Authoritative" %}</dt>
+              <dd class="col-sm-7 font-monospace small">{{ env_fields.authoritative_dataset_id|default:"—" }}</dd>
+
+              <dt class="col-sm-5">{% trans "Restore Source" %}</dt>
+              <dd class="col-sm-7 font-monospace small">{{ env_fields.restore_source_dataset_id|default:"—" }}</dd>
+
+              <dt class="col-sm-5">{% trans "Production Source" %}</dt>
+              <dd class="col-sm-7 font-monospace small">{{ env_fields.production_source_id|default:"—" }}</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-info text-white"><strong>{% trans "Deployment" %}</strong></div>
+          <div class="card-body">
+            <dl class="row small mb-0">
+              <dt class="col-sm-5">{% trans "Deployment ID" %}</dt>
+              <dd class="col-sm-7 font-monospace small">{{ env_fields.deployment_id|default:"—" }}</dd>
+
+              <dt class="col-sm-5">{% trans "Instance ID" %}</dt>
+              <dd class="col-sm-7 font-monospace small">{{ env_fields.instance_id|default:"—" }}</dd>
+
+              <dt class="col-sm-5">{% trans "Build Digest" %}</dt>
+              <dd class="col-sm-7 font-monospace small">{{ env_fields.build_digest|default:"—" }}</dd>
+
+              <dt class="col-sm-5">{% trans "Release" %}</dt>
+              <dd class="col-sm-7 font-monospace small">{{ env_fields.app_release|default:"—" }}</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-dark text-white"><strong>{% trans "Backup & Data" %}</strong></div>
+          <div class="card-body">
+            <dl class="row small mb-0">
+              <dt class="col-sm-5">{% trans "Backup Role" %}</dt>
+              <dd class="col-sm-7"><span class="badge {% if env_fields.backup_role == 'writer' %}bg-success{% elif env_fields.backup_role == 'reader' %}bg-info{% else %}bg-secondary{% endif %}">{{ env_fields.backup_role }}</span></dd>
+
+              <dt class="col-sm-5">{% trans "Sync Mode" %}</dt>
+              <dd class="col-sm-7">{{ env_fields.backup_sync_mode }}</dd>
+
+              <dt class="col-sm-5">{% trans "Data Mode" %}</dt>
+              <dd class="col-sm-7">{{ env_fields.data_mode }}</dd>
+
+              <dt class="col-sm-5">{% trans "Side Effects" %}</dt>
+              <dd class="col-sm-7"><span class="badge {% if env_fields.side_effects == 'enabled' %}bg-success{% elif env_fields.side_effects == 'sandbox' %}bg-warning{% else %}bg-danger{% endif %}">{{ env_fields.side_effects }}</span></dd>
+
+              <dt class="col-sm-5">{% trans "Scheduler" %}</dt>
+              <dd class="col-sm-7">{% if env_fields.scheduler_enabled %}<span class="badge bg-success">{% trans "Active" %}</span>{% else %}<span class="badge bg-secondary">{% trans "Disabled" %}</span>{% endif %}</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="mb-4">
+    <h4 class="border-bottom pb-2 mb-3">{% trans "S3 Artifact Vault Status" %}</h4>
+    <div class="row">
+      <div class="col-md-6 col-lg-4">
+        <div class="card shadow-sm">
+          <div class="card-header bg-secondary text-white"><strong>{% trans "Vault Connectivity" %}</strong></div>
+          <div class="card-body">
+            <dl class="row small mb-0">
+              <dt class="col-sm-5">{% trans "Vault Enabled" %}</dt>
+              <dd class="col-sm-7"><span class="badge {% if vault_status.enabled %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.enabled|yesno:_("Enabled,Disabled") }}</span></dd>
+
+              <dt class="col-sm-5">{% trans "Endpoint Reachable" %}</dt>
+              <dd class="col-sm-7"><span class="badge {% if vault_status.reachable %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.reachable|yesno:_("Yes,No") }}</span></dd>
+
+              <dt class="col-sm-5">{% trans "Bucket Exists" %}</dt>
+              <dd class="col-sm-7"><span class="badge {% if vault_status.bucket_exists %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.bucket_exists|yesno:_("Yes,No") }}</span></dd>
+
+              {% if vault_status.error %}
+              <dt class="col-sm-5">{% trans "Error" %}</dt>
+              <dd class="col-sm-7"><span class="text-danger font-monospace small">{{ vault_status.error }}</span></dd>
+              {% endif %}
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <h4 class="border-bottom pb-2 mb-3">{% trans "Feature Flags" %}</h4>
+
+    {% if not settings_edit_enabled %}
+    <div class="alert alert-info">
+      {% trans "Settings edit is disabled. Set SETTINGS_EDIT_ENABLED=1 to modify." %}
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>{% trans "Flag Name" %}</th>
+              <th>{% trans "Current Value" %}</th>
+              <th>{% trans "Source" %}</th>
+              {% if settings_edit_enabled %}<th>{% trans "Action" %}</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for key, info in feature_flags.items %}
+            <tr>
+              <td class="font-monospace small">{{ key }}</td>
+              <td><code>{{ info.current|default:"(empty)" }}</code></td>
+              <td><span class="badge {% if info.source == 'database' %}bg-primary{% else %}bg-secondary{% endif %}">{{ info.source }}</span></td>
+              {% if settings_edit_enabled %}
+              <td>
+                <form method="post" action="{% url 'save_settings' %}" class="d-flex gap-2 align-items-center">
+                  {% csrf_token %}
+                  <input type="hidden" name="key" value="{{ key }}">
+                  <input type="text" name="value" value="{{ info.current }}" class="form-control form-control-sm" style="max-width: 140px;">
+                  <button type="submit" class="btn btn-primary btn-sm">{% trans "Save" %}</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

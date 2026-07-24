@@ -318,6 +318,17 @@
     {% if role == 'superadmin' %}
       <section class="admin-panel">
         <div class="admin-page-heading">
+          <h2>{% trans "Configuration" %}</h2>
+          <p>{% trans "Feature flags and runtime settings." %}</p>
+        </div>
+        <div class="d-grid">
+          <a href="{% url 'settings' %}" class="btn btn-outline-primary btn-sm">&#9881; {% trans "Site Settings" %}</a>
+        </div>
+      </section>
+    {% endif %}
+    {% if role == 'superadmin' %}
+      <section class="admin-panel">
+        <div class="admin-page-heading">
           <h2>{% trans "Maintenance Jobs" %}</h2>
           <p>{% trans "Queued and recent background work." %}</p>
         </div>
