@@ -1,0 +1,1484 @@
+# English (Indian) translations for PdfSearch Admin UI
+# Copyright (C) 2026 Sahakar AI
+# This file is distributed under the same license as the PdfSearch package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PdfSearch Admin UI\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-24 08:51+0000\n"
+"PO-Revision-Date: 2026-07-24 14:56+0530\n"
+"Last-Translator: Sahakar AI Team\n"
+"Language-Team: English (Indian)\n"
+"Language: en_IN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: core/templates/base.html:8 core/templates/home.html:8
+msgid ""
+"Commissioner for Cooperation and Registrar, Cooperative Societies, "
+"Maharashtra State, Pune"
+msgstr ""
+
+#: core/templates/base.html:17
+msgid "Registrar Co-operative Societies banner"
+msgstr ""
+
+#: core/templates/base.html:20 core/templates/search.html:129
+msgid "Registrar Co-operative Societies"
+msgstr ""
+
+#: core/templates/base.html:26
+msgid "Admin"
+msgstr ""
+
+#: core/templates/base.html:27
+msgid "Toggle navigation"
+msgstr ""
+
+#: core/templates/base.html:35
+msgid "Dashboard"
+msgstr ""
+
+#: core/templates/base.html:38 core/templates/search.html:143
+msgid "Search"
+msgstr ""
+
+#: core/templates/base.html:42
+msgid "Add User"
+msgstr ""
+
+#: core/templates/base.html:45 core/templates/dashboard.html:60
+msgid "Users"
+msgstr ""
+
+#: core/templates/base.html:57
+msgid "English"
+msgstr ""
+
+#: core/templates/base.html:70
+msgid "Logout"
+msgstr ""
+
+#: core/templates/base.html:73 core/templates/home.html:23
+#: core/templates/login.html:9 core/templates/login.html:35
+msgid "Login"
+msgstr ""
+
+#: core/templates/base.html:86 core/templates/dashboard.html:15
+#: core/templates/dashboard.html:424 core/templates/dashboard.html:449
+#: core/templates/dashboard_pdfs.html:284
+#: core/templates/dashboard_pdfs.html:310
+#: core/templates/dashboard_pdfs.html:337
+msgid "Close"
+msgstr ""
+
+#: core/templates/base.html:98 core/templates/search.html:203
+msgid "All rights reserved© Registrar Co-operative Societies."
+msgstr ""
+
+#: core/templates/base.html:102
+msgid "Nimble eSolutions"
+msgstr ""
+
+#: core/templates/dashboard.html:4
+msgid "Operations Cockpit - CC & RCS Maharashtra"
+msgstr ""
+
+#: core/templates/dashboard.html:8
+msgid "Active jobs"
+msgstr ""
+
+#: core/templates/dashboard.html:12
+msgid "Active maintenance jobs"
+msgstr ""
+
+#: core/templates/dashboard.html:14
+msgid "Active Jobs"
+msgstr ""
+
+#: core/templates/dashboard.html:18
+msgid "Loading..."
+msgstr ""
+
+#: core/templates/dashboard.html:25
+msgid "Document operations"
+msgstr ""
+
+#: core/templates/dashboard.html:26
+msgid "Operations Cockpit"
+msgstr ""
+
+#: core/templates/dashboard.html:27
+msgid ""
+"Triage categories, document readiness, uploads, and access work from one "
+"screen."
+msgstr ""
+
+#: core/templates/dashboard.html:32 core/templates/dashboard.html:448
+msgid "Add Category"
+msgstr ""
+
+#: core/templates/dashboard.html:37
+msgid "Operations summary"
+msgstr ""
+
+#: core/templates/dashboard.html:39
+msgid "Categories"
+msgstr ""
+
+#: core/templates/dashboard.html:41
+#, python-format
+msgid "%(counter)s empty"
+msgid_plural "%(counter)s empty"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/dashboard.html:44 core/templates/dashboard_pdfs.html:29
+msgid "PDF rows"
+msgstr ""
+
+#: core/templates/dashboard.html:46
+msgid "visible to this role"
+msgstr ""
+
+#: core/templates/dashboard.html:49
+msgid "Search readiness"
+msgstr ""
+
+#: core/templates/dashboard.html:51
+msgid "indexed PDFs"
+msgstr ""
+
+#: core/templates/dashboard.html:54
+msgid "Provenance"
+msgstr ""
+
+#: core/templates/dashboard.html:56 core/templates/dashboard_pdfs.html:41
+msgid "unknown uploaders"
+msgstr ""
+
+#: core/templates/dashboard.html:62
+msgid "active accounts"
+msgstr ""
+
+#: core/templates/dashboard.html:73
+msgid "Category Yard"
+msgstr ""
+
+#: core/templates/dashboard.html:74
+msgid ""
+"Each category is a loading bay: open it to inspect PDFs, readiness, and "
+"upload state."
+msgstr ""
+
+#: core/templates/dashboard.html:82
+msgid "Bulk Data Operations"
+msgstr ""
+
+#: core/templates/dashboard.html:83
+msgid ""
+"Select categories, then queue a resumable operation. Work is processed by "
+"the maintenance worker."
+msgstr ""
+
+#: core/templates/dashboard.html:86
+msgid "Reindex Needed"
+msgstr ""
+
+#: core/templates/dashboard.html:87
+msgid "Reindex Selected"
+msgstr ""
+
+#: core/templates/dashboard.html:88
+msgid "Repair Indexes"
+msgstr ""
+
+#: core/templates/dashboard.html:89
+msgid "Validate Files"
+msgstr ""
+
+#: core/templates/dashboard.html:90
+msgid "Sync Active Data to S3"
+msgstr ""
+
+#: core/templates/dashboard.html:93
+msgid ""
+"Only superadmins can queue bulk maintenance. Existing successful items "
+"remain intact when another item fails."
+msgstr ""
+
+#: core/templates/dashboard.html:96
+msgid "Filter Documents"
+msgstr ""
+
+#: core/templates/dashboard.html:99
+msgid "Category"
+msgstr ""
+
+#: core/templates/dashboard.html:100
+msgid "acts / rules / bylaws"
+msgstr ""
+
+#: core/templates/dashboard.html:103
+msgid "Subject"
+msgstr ""
+
+#: core/templates/dashboard.html:104
+msgid "housing / audit / agriculture"
+msgstr ""
+
+#: core/templates/dashboard.html:107 core/templates/dashboard.html:110
+#: core/templates/dashboard.html:240 core/templates/dashboard.html:304
+#: core/templates/dashboard_pdfs.html:126
+msgid "Indexed"
+msgstr ""
+
+#: core/templates/dashboard.html:109
+msgid "Any"
+msgstr ""
+
+#: core/templates/dashboard.html:111
+msgid "Not indexed"
+msgstr ""
+
+#: core/templates/dashboard.html:115
+msgid "Keywords (comma-separated)"
+msgstr ""
+
+#: core/templates/dashboard.html:116
+msgid "cooperative, society, act"
+msgstr ""
+
+#: core/templates/dashboard.html:119
+msgid "Uploaded after"
+msgstr ""
+
+#: core/templates/dashboard.html:123
+msgid "Uploaded before"
+msgstr ""
+
+#: core/templates/dashboard.html:127
+msgid "Preview Count"
+msgstr ""
+
+#: core/templates/dashboard.html:131
+msgid ""
+"Filters apply to reindex and validate operations. Select categories above, "
+"then set filters to narrow the scope."
+msgstr ""
+
+#: core/templates/dashboard.html:135
+msgid "Available generation"
+msgstr ""
+
+#: core/templates/dashboard.html:136
+msgid "Choose a generation or enter one below"
+msgstr ""
+
+#: core/templates/dashboard.html:144
+msgid "Pull Generation to Staging"
+msgstr ""
+
+#: core/templates/dashboard.html:146
+msgid "Or enter an immutable generation id"
+msgstr ""
+
+#: core/templates/dashboard.html:150
+msgid "Generation Lifecycle"
+msgstr ""
+
+#: core/templates/dashboard.html:155
+#: core/templates/dashboard_operations.html:94
+msgid "Generation"
+msgstr ""
+
+#: core/templates/dashboard.html:156 core/templates/user_list.html:38
+#: core/templates/user_list.html:57
+msgid "Status"
+msgstr ""
+
+#: core/templates/dashboard.html:157
+msgid "Retention"
+msgstr ""
+
+#: core/templates/dashboard.html:158 core/templates/dashboard_pdfs.html:111
+#: core/templates/user_list.html:57
+msgid "Actions"
+msgstr ""
+
+#: core/templates/dashboard.html:167
+#: core/templates/dashboard_operations.html:83 core/templates/user_list.html:19
+#: core/templates/user_list.html:40 core/templates/user_list.html:64
+msgid "Active"
+msgstr ""
+
+#: core/templates/dashboard.html:169
+msgid "Validated"
+msgstr ""
+
+#: core/templates/dashboard.html:171
+msgid "Superseded"
+msgstr ""
+
+#: core/templates/dashboard.html:173
+msgid "Purged"
+msgstr ""
+
+#: core/templates/dashboard.html:175
+msgid "Failed"
+msgstr ""
+
+#: core/templates/dashboard.html:177
+msgid "Staged"
+msgstr ""
+
+#: core/templates/dashboard.html:189
+msgid ""
+"Promote this generation to active? The current active will be superseded."
+msgstr ""
+
+#: core/templates/dashboard.html:189
+msgid "Promote"
+msgstr ""
+
+#: core/templates/dashboard.html:195
+msgid "Roll back to this generation? This will supersede the current active."
+msgstr ""
+
+#: core/templates/dashboard.html:195
+msgid "Rollback"
+msgstr ""
+
+#: core/templates/dashboard.html:201
+msgid ""
+"Purge this generation? This marks it purged and removes it from active "
+"rotation."
+msgstr ""
+
+#: core/templates/dashboard.html:201
+msgid "Purge"
+msgstr ""
+
+#: core/templates/dashboard.html:213
+msgid "Purge Expired"
+msgstr ""
+
+#: core/templates/dashboard.html:225
+msgid "Select category"
+msgstr ""
+
+#: core/templates/dashboard.html:231
+#, python-format
+msgid "%(counter)s PDF"
+msgid_plural "%(counter)s PDFs"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/dashboard.html:236
+msgid "Empty"
+msgstr ""
+
+#: core/templates/dashboard.html:238 core/templates/dashboard.html:383
+msgid "Index review"
+msgstr ""
+
+#: core/templates/dashboard.html:243
+msgid "Unknown owner"
+msgstr ""
+
+#: core/templates/dashboard.html:248
+msgid "Category actions"
+msgstr ""
+
+#: core/templates/dashboard.html:253
+msgid "Rename category"
+msgstr ""
+
+#: core/templates/dashboard.html:254 core/templates/dashboard.html:433
+#: core/templates/dashboard_pdfs.html:165
+#: core/templates/dashboard_pdfs.html:318
+msgid "Rename"
+msgstr ""
+
+#: core/templates/dashboard.html:260
+msgid "Delete category"
+msgstr ""
+
+#: core/templates/dashboard.html:261
+msgid ""
+"Delete this category and all PDFs inside it? This cannot be undone. Confirm "
+"backup and rollback evidence first."
+msgstr ""
+
+#: core/templates/dashboard.html:262 core/templates/dashboard_pdfs.html:196
+#: core/templates/user_list.html:69
+msgid "Delete"
+msgstr ""
+
+#: core/templates/dashboard.html:270
+msgid "No categories yet"
+msgstr ""
+
+#: core/templates/dashboard.html:271
+msgid "Create a category before uploading PDFs."
+msgstr ""
+
+#: core/templates/dashboard.html:293
+msgid "Recent Intake"
+msgstr ""
+
+#: core/templates/dashboard.html:294
+msgid "Newest PDF rows visible to this operator."
+msgstr ""
+
+#: core/templates/dashboard.html:301
+msgid "No category"
+msgstr ""
+
+#: core/templates/dashboard.html:304 core/templates/dashboard_pdfs.html:128
+msgid "Needs index"
+msgstr ""
+
+#: core/templates/dashboard.html:309
+msgid "No recent PDFs"
+msgstr ""
+
+#: core/templates/dashboard.html:310
+msgid "Uploads will appear here after documents are received."
+msgstr ""
+
+#: core/templates/dashboard.html:321
+msgid "Maintenance Jobs"
+msgstr ""
+
+#: core/templates/dashboard.html:322
+msgid "Queued and recent background work."
+msgstr ""
+
+#: core/templates/dashboard.html:336 core/templates/dashboard.html:432
+#: core/templates/dashboard.html:463 core/templates/dashboard.html:563
+#: core/templates/dashboard_pdfs.html:292
+#: core/templates/dashboard_pdfs.html:317
+#: core/templates/dashboard_pdfs.html:350 core/templates/register.html:24
+#: core/templates/user_edit.html:16
+msgid "Cancel"
+msgstr ""
+
+#: core/templates/dashboard.html:341
+msgid "Retry"
+msgstr ""
+
+#: core/templates/dashboard.html:347
+msgid "No maintenance jobs have been queued."
+msgstr ""
+
+#: core/templates/dashboard.html:354
+msgid "Dispatch Board"
+msgstr ""
+
+#: core/templates/dashboard.html:355
+msgid "Manual work queues derived from current data."
+msgstr ""
+
+#: core/templates/dashboard.html:360
+msgid "PDFs need index review"
+msgstr ""
+
+#: core/templates/dashboard.html:364
+msgid "PDFs need owner review"
+msgstr ""
+
+#: core/templates/dashboard.html:368
+msgid "empty category bays"
+msgstr ""
+
+#: core/templates/dashboard.html:375
+msgid "Index Debt Queue"
+msgstr ""
+
+#: core/templates/dashboard.html:376
+msgid "Open the category that needs the next operator action."
+msgstr ""
+
+#: core/templates/dashboard.html:392 core/templates/dashboard_pdfs.html:140
+msgid "Owner review"
+msgstr ""
+
+#: core/templates/dashboard.html:401
+msgid "Empty bay"
+msgstr ""
+
+#: core/templates/dashboard.html:408
+msgid "No category-level index, owner, or intake debt is visible right now."
+msgstr ""
+
+#: core/templates/dashboard.html:423
+msgid "Rename Category"
+msgstr ""
+
+#: core/templates/dashboard.html:427
+msgid "New Name"
+msgstr ""
+
+#: core/templates/dashboard.html:453
+msgid "Category Name"
+msgstr ""
+
+#: core/templates/dashboard.html:457 core/templates/dashboard_pdfs.html:287
+msgid "Keywords"
+msgstr ""
+
+#: core/templates/dashboard.html:458
+msgid "act, law, rule"
+msgstr ""
+
+#: core/templates/dashboard.html:459 core/templates/dashboard_pdfs.html:289
+msgid "Use comma-separated terms that help route searches to this category."
+msgstr ""
+
+#: core/templates/dashboard.html:464
+msgid "Add"
+msgstr ""
+
+#: core/templates/dashboard.html:507
+msgid "Select at least one category to preview."
+msgstr ""
+
+#: core/templates/dashboard.html:520
+msgid "Counting..."
+msgstr ""
+
+#: core/templates/dashboard.html:524
+msgid "PDFs in"
+msgstr ""
+
+#: core/templates/dashboard.html:524
+msgid "categories"
+msgstr ""
+
+#: core/templates/dashboard.html:524 core/templates/dashboard_pdfs.html:36
+msgid "indexed"
+msgstr ""
+
+#: core/templates/dashboard.html:524
+msgid "need index"
+msgstr ""
+
+#: core/templates/dashboard.html:527
+msgid "Preview failed."
+msgstr ""
+
+#: core/templates/dashboard.html:549
+msgid "No active jobs."
+msgstr ""
+
+#: core/templates/dashboard.html:567
+msgid "Items"
+msgstr ""
+
+#: core/templates/dashboard.html:579
+msgid "items"
+msgstr ""
+
+#: core/templates/dashboard.html:591
+msgid "Failed to load jobs."
+msgstr ""
+
+#: core/templates/dashboard_operations.html:4
+msgid "Operations — Data Lifecycle - CC & RCS Maharashtra"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:9
+msgid "Environment & Data Lifecycle"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:10
+msgid "Operations"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:11
+msgid ""
+"Dataset identity, writer authority, generation status, and restore workspace "
+"state."
+msgstr ""
+
+#: core/templates/dashboard_operations.html:17
+msgid "Environment"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:20
+msgid "APP_ENV"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:23
+msgid "Dataset"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:26
+msgid "Authoritative"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:29
+msgid "Restore Source"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:32
+msgid "Production Source"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:41
+msgid "Deployment"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:44
+msgid "Deployment ID"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:47
+msgid "Instance ID"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:50
+msgid "Build Digest"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:53
+msgid "Release"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:58
+msgid "Digest mismatch"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:67
+msgid "Backup & Data"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:70
+msgid "Backup Role"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:73
+msgid "Sync Mode"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:76
+msgid "Data Mode"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:79
+msgid "Side Effects"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:82
+msgid "Scheduler"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:83
+msgid "Disabled"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:91
+msgid "Local Generation"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:97
+msgid "Age"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:107
+msgid "Activation Journal"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:110
+msgid "Lock Held"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:111
+msgid "Yes,No"
+msgstr ""
+
+#: core/templates/dashboard_operations.html:112
+msgid "Incomplete"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:4
+msgid "Document Workbench"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:10
+msgid "Category workbench"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:12
+msgid ""
+"Receive PDFs, inspect search readiness, and stage high-risk actions with "
+"context."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:18
+msgid "Edit Keywords"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:22
+msgid "Back to Dashboard"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:27
+msgid "Category manifest"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:31
+msgid "in this category"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:34
+msgid "Index readiness"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:39
+msgid "Ownership"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:44
+msgid "Latest intake"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:46
+msgid "most recent upload"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:55
+msgid "Routing keywords"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:63
+msgid "Receiving Dock"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:64
+msgid ""
+"Uploads are accepted only after PDF validation and preprocessing complete."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:74
+msgid "PDF Title"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:81
+msgid "PDF File"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:88
+msgid "Receive"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:97
+msgid "PDF Workbench"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:98
+msgid "Each row shows ownership, search readiness, and available actions."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:105
+msgid "Document"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:106
+#: core/templates/dashboard_pdfs.html:341
+msgid "Owner"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:107
+msgid "Received"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:108
+msgid "Readiness"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:109
+#: core/templates/dashboard_pdfs.html:145
+msgid "View"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:122
+msgid "Unknown"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:131
+msgid "Deprecated"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:133
+msgid "Archived"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:135
+msgid "Processing"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:137
+msgid "Ready"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:156
+msgid "Assign owner"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:157
+#: core/templates/dashboard_pdfs.html:336
+msgid "Assign Owner"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:164
+#: core/templates/dashboard_pdfs.html:309
+msgid "Rename PDF"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:171
+msgid "Deprecate this document? It will be hidden from search results."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:172
+msgid "Deprecate"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:178
+msgid "Archive this document? It will be hidden from search and lists."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:179
+msgid "Archive"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:186
+msgid "Restore"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:194
+msgid "Delete PDF"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:195
+msgid "Delete this PDF? Confirm backup and index impact before continuing."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:206
+msgid "No PDFs available in this category."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:219
+msgid "Blast Radius"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:220
+msgid "Use this before renaming, deleting, or moving documents."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:225
+msgid "PDF rows affected by category-level changes"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:229
+msgid "documents may need index repair"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:233
+msgid "documents need owner review"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:236
+msgid "Index operations"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:238
+msgid "Index Operations"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:239
+msgid "Scoped to this category only."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:246
+msgid "Repair Stored Index"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:253
+msgid "Reprocess Needed"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:262
+msgid ""
+"Reprocess every PDF in this category? This may call the embedding service "
+"and overwrite stored chunks."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:263
+msgid "Reprocess All"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:268
+msgid "Superadmin access is required for reindexing and reprocessing controls."
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:283
+msgid "Manage Category Keywords"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:288
+msgid "agriculture, loan, act"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:293
+msgid "Save Changes"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:313
+msgid "New Title"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:343
+msgid "Choose active user"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html:351
+msgid "Save Owner"
+msgstr ""
+
+#: core/templates/home.html:6
+msgid "Home - CC & RCS Maharashtra"
+msgstr ""
+
+#: core/templates/home.html:18
+msgid "येथे शोधा"
+msgstr ""
+
+#: core/templates/home.html:24 core/templates/search.html:101
+msgid "Home"
+msgstr ""
+
+#: core/templates/home.html:25
+msgid "Contact Us"
+msgstr ""
+
+#: core/templates/home.html:26
+msgid "Skip to Navigation"
+msgstr ""
+
+#: core/templates/home.html:27
+msgid "Skip to Main Content"
+msgstr ""
+
+#: core/templates/home.html:28
+msgid "A--"
+msgstr ""
+
+#: core/templates/home.html:29
+msgid "A-"
+msgstr ""
+
+#: core/templates/home.html:30
+msgid "A"
+msgstr ""
+
+#: core/templates/home.html:31
+msgid "A+"
+msgstr ""
+
+#: core/templates/home.html:32
+msgid "A++"
+msgstr ""
+
+#: core/templates/home.html:37
+msgid "मराठी"
+msgstr ""
+
+#: core/templates/home.html:48
+msgid "Left Logo"
+msgstr ""
+
+#: core/templates/home.html:51
+msgid "Commissioner for Cooperation and Registrar,"
+msgstr ""
+
+#: core/templates/home.html:52
+msgid "Cooperative Societies (CC and RCS), Maharashtra State, Pune"
+msgstr ""
+
+#: core/templates/home.html:55
+msgid "Right Logo"
+msgstr ""
+
+#: core/templates/home.html:64 core/templates/home.html:73
+msgid "Search With AI"
+msgstr ""
+
+#: core/templates/home.html:67
+msgid "About CC and RCS"
+msgstr ""
+
+#: core/templates/home.html:68
+msgid "Downloads"
+msgstr ""
+
+#: core/templates/home.html:69
+msgid "RTS Act"
+msgstr ""
+
+#: core/templates/home.html:70
+msgid "FAQs"
+msgstr ""
+
+#: core/templates/home.html:71
+msgid "Tender Notices"
+msgstr ""
+
+#: core/templates/home.html:86
+msgid "Update"
+msgstr ""
+
+#: core/templates/home.html:89
+msgid "National Cooperation Policy 2025"
+msgstr ""
+
+#: core/templates/home.html:90
+msgid "E-Tender Notice"
+msgstr ""
+
+#: core/templates/home.html:91
+msgid "Urban Cooperative Scheme"
+msgstr ""
+
+#: core/templates/home.html:92
+msgid "Digital Registration Scheme"
+msgstr ""
+
+#: core/templates/home.html:93
+msgid "State Cooperative Awards"
+msgstr ""
+
+#: core/templates/home.html:96
+msgid "More News"
+msgstr ""
+
+#: core/templates/home.html:98
+msgid "Quick Links"
+msgstr ""
+
+#: core/templates/home.html:100
+msgid "Deemed Conveyance - Pratyay MahaBhumi"
+msgstr ""
+
+#: core/templates/home.html:101
+msgid "Amended Acts & Rules"
+msgstr ""
+
+#: core/templates/home.html:102
+msgid "District Wise Societies"
+msgstr ""
+
+#: core/templates/home.html:103
+msgid "Complaint Status"
+msgstr ""
+
+#: core/templates/home.html:104
+msgid "Digital Registration Dashboard"
+msgstr ""
+
+#: core/templates/home.html:105
+msgid "Online Services Portal"
+msgstr ""
+
+#: core/templates/home.html:106
+msgid "Audit Reports & Insights"
+msgstr ""
+
+#: core/templates/home.html:115
+msgid "Slide 1"
+msgstr ""
+
+#: core/templates/home.html:118
+msgid "Slide 2"
+msgstr ""
+
+#: core/templates/home.html:132
+msgid "Key Person"
+msgstr ""
+
+#: core/templates/home.html:135
+msgid "Shri. Devendra Fadnavis"
+msgstr ""
+
+#: core/templates/home.html:139
+msgid "Shri. Eknath Shinde"
+msgstr ""
+
+#: core/templates/home.html:143
+msgid "Shri. Ajit Pawar"
+msgstr ""
+
+#: core/templates/home.html:151
+msgid "Important Links"
+msgstr ""
+
+#: core/templates/home.html:158
+msgid "Related Links"
+msgstr ""
+
+#: core/templates/home.html:168
+msgid "Government of Maharashtra"
+msgstr ""
+
+#: core/templates/login.html:4
+msgid "Login - CC & RCS Maharashtra"
+msgstr ""
+
+#: core/templates/login.html:10
+msgid "Sign in to manage documents, users, and categories."
+msgstr ""
+
+#: core/templates/login.html:16 core/templates/user_edit.html:14
+msgid "Username"
+msgstr ""
+
+#: core/templates/login.html:18
+msgid "Enter username"
+msgstr ""
+
+#: core/templates/login.html:21
+msgid "Password"
+msgstr ""
+
+#: core/templates/login.html:24
+msgid "Enter password"
+msgstr ""
+
+#: core/templates/login.html:30 core/templates/login.html:50
+msgid "Show"
+msgstr ""
+
+#: core/templates/login.html:50
+msgid "Hide"
+msgstr ""
+
+#: core/templates/register.html:4
+msgid "Create user - CC & RCS Maharashtra"
+msgstr ""
+
+#: core/templates/register.html:9 core/templates/user_edit.html:9
+#: core/templates/user_list.html:11
+msgid "Users & Access"
+msgstr ""
+
+#: core/templates/register.html:10
+msgid "Create user account"
+msgstr ""
+
+#: core/templates/register.html:11
+msgid "Create an operator account and assign its current access level."
+msgstr ""
+
+#: core/templates/register.html:14 core/templates/user_edit.html:14
+msgid "Identity"
+msgstr ""
+
+#: core/templates/register.html:14
+msgid "Use a recognizable username and a monitored email address."
+msgstr ""
+
+#: core/templates/register.html:17 core/templates/user_edit.html:15
+msgid "Access assignment"
+msgstr ""
+
+#: core/templates/register.html:17
+msgid ""
+"Superadmin access is limited to superadmins. Department-scoped permissions "
+"are planned for phase 2."
+msgstr ""
+
+#: core/templates/register.html:20
+msgid "Account password"
+msgstr ""
+
+#: core/templates/register.html:20
+msgid "Use a unique password and deliver it through a secure channel."
+msgstr ""
+
+#: core/templates/register.html:24
+msgid "Create account"
+msgstr ""
+
+#: core/templates/search.html:6 core/templates/search.html:15
+#: core/templates/search.html:22
+msgid "Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra"
+msgstr ""
+
+#: core/templates/search.html:8
+msgid ""
+"Search Maharashtra cooperative society acts, rules, and bylaws with AI "
+"assistance. Sahakar AI provides instant answers from official government "
+"documents."
+msgstr ""
+
+#: core/templates/search.html:16 core/templates/search.html:23
+msgid ""
+"Search Maharashtra cooperative society acts, rules, and bylaws with AI "
+"assistance."
+msgstr ""
+
+#: core/templates/search.html:100
+msgid "Admin Login"
+msgstr ""
+
+#: core/templates/search.html:102
+msgid "Locate Us"
+msgstr ""
+
+#: core/templates/search.html:124
+msgid "Registrar Co-operative Societies, Maharashtra — official banner"
+msgstr ""
+
+#: core/templates/search.html:128
+msgid "AI Enabled Search"
+msgstr ""
+
+#: core/templates/search.html:142
+msgid "Ask your question..."
+msgstr ""
+
+#: core/templates/search.html:170
+msgid ""
+"⚠️ AI-generated answers should not be used for legal purposes. The AI may "
+"provide incomplete or incorrect responses. Please contact the main office "
+"for further information."
+msgstr ""
+
+#: core/templates/search.html:179
+msgid "About this service"
+msgstr ""
+
+#: core/templates/search.html:181
+msgid "What is Sahakar AI?"
+msgstr ""
+
+#: core/templates/search.html:183
+msgid ""
+"Sahakar AI is an AI-powered search tool for Maharashtra cooperative society "
+"laws, acts, rules, and bylaws. It helps you find relevant information from "
+"official government documents quickly, with answers generated in English and "
+"Marathi."
+msgstr ""
+
+#: core/templates/search.html:185
+msgid "How to ask better questions"
+msgstr ""
+
+#: core/templates/search.html:187
+msgid ""
+"Use specific terms like act names, section numbers, or subject areas (e.g., "
+"housing, audit, agriculture)."
+msgstr ""
+
+#: core/templates/search.html:188
+msgid "Ask in English or Marathi — both are supported."
+msgstr ""
+
+#: core/templates/search.html:189
+msgid ""
+"Review the source references provided with each answer before making "
+"official decisions."
+msgstr ""
+
+#: core/templates/search.html:191
+msgid "Important disclaimer"
+msgstr ""
+
+#: core/templates/search.html:193
+msgid ""
+"Answers are AI-generated assistance, not legal advice. The AI may provide "
+"incomplete or incorrect responses. Always verify with the source documents "
+"and contact the Registrar's office for official guidance."
+msgstr ""
+
+#: core/templates/search.html:206
+msgid "Nimble eSolutions — technology partner"
+msgstr ""
+
+#: core/templates/user_edit.html:4
+msgid "Edit user access"
+msgstr ""
+
+#: core/templates/user_edit.html:10
+msgid "Edit access details"
+msgstr ""
+
+#: core/templates/user_edit.html:11
+#, python-format
+msgid "Update access details for %(username)s."
+msgstr ""
+
+#: core/templates/user_edit.html:14
+msgid "Username is fixed after account creation."
+msgstr ""
+
+#: core/templates/user_edit.html:15
+msgid "Department-scoped permissions will be added in phase 2."
+msgstr ""
+
+#: core/templates/user_edit.html:16
+msgid "Save changes"
+msgstr ""
+
+#: core/templates/user_list.html:4
+msgid "Users and Access - CC & RCS Maharashtra"
+msgstr ""
+
+#: core/templates/user_list.html:10
+msgid "Administration"
+msgstr ""
+
+#: core/templates/user_list.html:12
+msgid ""
+"Review account status and access assignments from one operational workspace."
+msgstr ""
+
+#: core/templates/user_list.html:14
+msgid "Create user"
+msgstr ""
+
+#: core/templates/user_list.html:17
+msgid "User account summary"
+msgstr ""
+
+#: core/templates/user_list.html:18
+msgid "Total users"
+msgstr ""
+
+#: core/templates/user_list.html:20
+msgid "Admins"
+msgstr ""
+
+#: core/templates/user_list.html:21
+msgid "Departments"
+msgstr ""
+
+#: core/templates/user_list.html:27
+msgid "Search users"
+msgstr ""
+
+#: core/templates/user_list.html:28
+msgid "Username or email"
+msgstr ""
+
+#: core/templates/user_list.html:30 core/templates/user_list.html:57
+msgid "Role"
+msgstr ""
+
+#: core/templates/user_list.html:31
+msgid "All roles"
+msgstr ""
+
+#: core/templates/user_list.html:34 core/templates/user_list.html:57
+msgid "Department"
+msgstr ""
+
+#: core/templates/user_list.html:35
+msgid "All departments"
+msgstr ""
+
+#: core/templates/user_list.html:39
+msgid "All statuses"
+msgstr ""
+
+#: core/templates/user_list.html:41 core/templates/user_list.html:64
+msgid "Inactive"
+msgstr ""
+
+#: core/templates/user_list.html:44
+msgid "Apply"
+msgstr ""
+
+#: core/templates/user_list.html:45
+msgid "Clear"
+msgstr ""
+
+#: core/templates/user_list.html:52
+msgid "Account directory"
+msgstr ""
+
+#: core/templates/user_list.html:52
+#, python-format
+msgid "%(count)s matching account(s)"
+msgstr ""
+
+#: core/templates/user_list.html:53
+msgid "Department-scoped permissions are planned for phase 2."
+msgstr ""
+
+#: core/templates/user_list.html:57 core/templates/user_list.html:62
+msgid "User"
+msgstr ""
+
+#: core/templates/user_list.html:61
+msgid "No email"
+msgstr ""
+
+#: core/templates/user_list.html:63
+msgid "Unassigned"
+msgstr ""
+
+#: core/templates/user_list.html:66
+msgid "Current user"
+msgstr ""
+
+#: core/templates/user_list.html:67
+msgid "Edit"
+msgstr ""
+
+#: core/templates/user_list.html:68
+msgid "Deactivate"
+msgstr ""
+
+#: core/templates/user_list.html:68
+msgid "Activate"
+msgstr ""
+
+#: core/templates/user_list.html:69
+msgid "Delete this account? Owned content must be transferred first."
+msgstr ""
+
+#: core/templates/user_list.html:73
+msgid "No accounts match these filters."
+msgstr ""
+
+#: core/tests.py:96 core/views.py:1256
+msgid "Click Here"
+msgstr ""
+
+#: core/views.py:1250
+msgid ""
+"I am Sahakar AI. Click here to learn how to questions to get correct answers."
+msgstr ""
+
+#: core/views.py:1300
+msgid "Please ask your question 🙏"
+msgstr ""
+
+#: core/views.py:1309
+msgid "Hello! How can I help you?"
+msgstr ""
+
+#: core/views.py:1442
+msgid ""
+"Sorry, information related to this topic is not available in this section."
+msgstr ""
+
+#: core/views.py:1480
+msgid ""
+"Sorry, the requested information was not found in the available documents."
+msgstr ""
