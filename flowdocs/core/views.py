@@ -148,7 +148,9 @@ def can_access_pdf(user, pdf):
 def visible_pdfs(user, queryset=None, *, public=False):
     queryset = queryset if queryset is not None else PDFFile.objects.all()
     if public:
-        queryset = queryset.exclude(lifecycle__in=("deprecated", "archived"))
+        queryset = queryset.filter(is_public=True).exclude(
+            lifecycle__in=("deprecated", "archived")
+        )
     if public:
         return queryset.filter(
             folder__in=searchable_folders(user, public=True),
@@ -283,8 +285,15 @@ def _safe_login_destination(request):
 
 
 def _public_search_rate_limited(request):
-    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    client_address = forwarded_for.split(",", 1)[0].strip() or request.META.get("REMOTE_ADDR", "unknown")
+    client_address = request.META.get("REMOTE_ADDR", "unknown")
+    if settings.TRUSTED_PROXY_COUNT:
+        forwarded_for = [
+            value.strip()
+            for value in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")
+            if value.strip()
+        ]
+        if len(forwarded_for) > settings.TRUSTED_PROXY_COUNT:
+            client_address = forwarded_for[-settings.TRUSTED_PROXY_COUNT - 1]
     client_hash = hashlib.sha256(client_address.encode("utf-8")).hexdigest()[:16]
     bucket = int(time.time()) // settings.PUBLIC_SEARCH_RATE_WINDOW
     key = f"public-search:{client_hash}:{bucket}"
@@ -423,9 +432,8 @@ def public_view_pdf(request, pdf_id):
         raise Http404("PDF file is unavailable")
 
     pdf = get_object_or_404(
-        PDFFile.objects.filter(
+        visible_pdfs(request.user, public=True).filter(
             pk=pdf_id,
-            folder__in=searchable_folders(request.user, public=True),
         )
     )
     if not pdf.file:

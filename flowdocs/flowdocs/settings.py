@@ -29,6 +29,17 @@ def _env_positive_int(name, default):
     return value
 
 
+def _env_nonnegative_int(name, default):
+    raw_value = os.getenv(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f'{name} must be an integer') from exc
+    if value < 0:
+        raise ImproperlyConfigured(f'{name} must be zero or a positive integer')
+    return value
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -201,10 +212,10 @@ REDIS_URL = validate_redis_url(
     allow_loopback=_allow_insecure_defaults,
 )
 
-PUBLIC_SEARCH_ENABLED = os.getenv('PUBLIC_SEARCH_ENABLED', '1').lower() in {'1', 'true', 'yes'}
+PUBLIC_SEARCH_ENABLED = os.getenv('PUBLIC_SEARCH_ENABLED', '0').lower() in {'1', 'true', 'yes'}
 DISPLAY_SERVICE_FOOTER = os.getenv('DISPLAY_SERVICE_FOOTER', '0').lower() in {'1', 'true', 'yes'}
 _public_search_folder_ids = os.getenv('PUBLIC_SEARCH_FOLDER_IDS', '').strip().lower()
-PUBLIC_SEARCH_ALL_FOLDERS = _public_search_folder_ids in {'', 'all'}
+PUBLIC_SEARCH_ALL_FOLDERS = _public_search_folder_ids == 'all'
 try:
     PUBLIC_SEARCH_FOLDER_IDS = frozenset(
         int(value.strip())
@@ -224,6 +235,7 @@ if PUBLIC_SEARCH_ENABLED and not PUBLIC_SEARCH_ALL_FOLDERS and not PUBLIC_SEARCH
 PUBLIC_SEARCH_MAX_WORDS = _env_positive_int('PUBLIC_SEARCH_MAX_WORDS', 30)
 PUBLIC_SEARCH_RATE_LIMIT = _env_positive_int('PUBLIC_SEARCH_RATE_LIMIT', 30)
 PUBLIC_SEARCH_RATE_WINDOW = _env_positive_int('PUBLIC_SEARCH_RATE_WINDOW', 60)
+TRUSTED_PROXY_COUNT = _env_nonnegative_int('TRUSTED_PROXY_COUNT', 0)
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache' if REDIS_URL else 'django.core.cache.backends.locmem.LocMemCache',

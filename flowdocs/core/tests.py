@@ -570,10 +570,15 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertEqual(payload["answer"], "<b>unsafe</b>\nमराठी")
 
     def test_anonymous_search_post_is_allowed_without_document_content(self):
-        response = self.client.post(
-            reverse("search_query"),
-            {"query": "private policy question"},
-        )
+        with override_settings(
+            PUBLIC_SEARCH_ENABLED=True,
+            PUBLIC_SEARCH_ALL_FOLDERS=True,
+            PUBLIC_SEARCH_FOLDER_IDS=frozenset(),
+        ):
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "private policy question"},
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("private", response.content.decode())
@@ -586,6 +591,7 @@ class SearchAndAuthenticationTests(TestCase):
             folder=folder,
             uploaded_by=self.user,
             indexed=True,
+            is_public=True,
             page_chunks=["Public rule content"],
         )
 
@@ -1937,6 +1943,25 @@ class DocumentLifecycleTests(TestCase):
         from .views import visible_pdfs
         visible = visible_pdfs(self.admin, public=True)
         self.assertFalse(visible.filter(pk=self.pdf.pk).exists())
+
+    def test_archived_pdf_cannot_be_downloaded_from_public_endpoint(self):
+        archive_pdf(self.pdf, requested_by=self.admin)
+        with override_settings(
+            PUBLIC_SEARCH_ENABLED=True,
+            PUBLIC_SEARCH_ALL_FOLDERS=True,
+            PUBLIC_SEARCH_FOLDER_IDS=frozenset(),
+        ):
+            response = self.client.get(reverse("public_view_pdf", args=[self.pdf.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_non_public_pdf_cannot_be_downloaded_from_public_endpoint(self):
+        with override_settings(
+            PUBLIC_SEARCH_ENABLED=True,
+            PUBLIC_SEARCH_ALL_FOLDERS=True,
+            PUBLIC_SEARCH_FOLDER_IDS=frozenset(),
+        ):
+            response = self.client.get(reverse("public_view_pdf", args=[self.pdf.pk]))
+        self.assertEqual(response.status_code, 404)
 
     def test_deprecate_endpoint_requires_admin(self):
         ordinary = get_user_model().objects.create_user(

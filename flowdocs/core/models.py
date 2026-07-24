@@ -80,6 +80,10 @@ class PDFFile(models.Model):
         default="uploaded",
         help_text="Document lifecycle state for search and visibility control",
     )
+    is_public = models.BooleanField(
+        default=False,
+        help_text="Explicitly allow this document in anonymous public search and viewing",
+    )
     subject = models.CharField(
         max_length=50,
         blank=True,
