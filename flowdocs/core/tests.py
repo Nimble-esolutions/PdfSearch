@@ -2362,7 +2362,6 @@ class LegalPageTests(TestCase):
 
     def setUp(self):
         super().setUp()
-        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
 
     LEGAL_ROUTES = [
         ("privacy", "Privacy Policy"),
@@ -2467,12 +2466,6 @@ class LegalPageTests(TestCase):
                 response = self.client.get(reverse(name))
                 self.assertContains(response, "Registrar Co-operative Societies")
 
-    def test_enhanced_theme_not_active_by_default(self):
-        response = self.client.get(reverse("home"))
-        self.assertNotContains(response, "public-search enhanced")
-        self.assertNotContains(response, "search_enhanced.css")
-        self.assertNotContains(response, "chip-btn")
-
     def test_footer_has_compact_legal_line(self):
         response = self.client.get(reverse("home"))
         self.assertContains(response, "All rights reserved")
@@ -2481,175 +2474,11 @@ class LegalPageTests(TestCase):
         self.assertIn("Terms", content)
         self.assertNotIn('class="footer-links"', content)
 
-    def test_hallmark_theme_not_active_by_default(self):
-        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
-        response = self.client.get(reverse("home"))
-        self.assertNotContains(response, "public-search hallmark")
-        self.assertNotContains(response, "search_hallmark.css")
-        self.assertNotContains(response, "notice-board")
-
-    def test_hallmark_theme_has_notice_board(self):
-        from core.models import SiteSetting
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "notice-board")
-        self.assertContains(response, "notice-board-heading")
-        self.assertContains(response, "Common Inquiries")
-        self.assertContains(response, "notice-card-stripe")
-
-    def test_hallmark_theme_has_docket_css(self):
-        from core.models import SiteSetting
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "search_hallmark.css")
-        self.assertContains(response, "notice-board")
-
-    def test_hallmark_css_file_has_all_state_classes(self):
-        response = self.client.get("/static/main/css/search_hallmark.css")
-        self.assertEqual(response.status_code, 200)
-        content = b"".join(response.streaming_content).decode()
-        for cls in ["docket-card", "shimmer-loader", "error-notice", "rate-limit-notice", "notice-board", "notice-card"]:
-            self.assertIn(f".{cls}", content)
-
-    def test_hallmark_loads_serif_font(self):
-        from core.models import SiteSetting
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "Noto+Serif+Devanagari")
-
-    def test_enhanced_does_not_load_hallmark(self):
-        from core.models import SiteSetting
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "enhanced"})
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "search_enhanced.css")
-        self.assertNotContains(response, "search_hallmark.css")
-        self.assertNotContains(response, "notice-board")
-
-    def test_hallmark_has_mobile_breakpoints_in_css(self):
-        response = self.client.get("/static/main/css/search_hallmark.css")
-        self.assertEqual(response.status_code, 200)
-        content = b"".join(response.streaming_content).decode()
-        self.assertIn("@media (max-width: 768px)", content)
-        self.assertIn("@media (max-width: 390px)", content)
-        self.assertIn("@media (prefers-reduced-motion: reduce)", content)
-
-    def test_hallmark_has_focus_visible(self):
-        response = self.client.get("/static/main/css/search_hallmark.css")
-        content = b"".join(response.streaming_content).decode()
-        self.assertIn("focus-visible", content)
-
-    def test_hallmark_settings_table_shows_theme_value(self):
-        from core.models import SiteSetting
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        user = User.objects.create_superuser("hallmarktest2", "t2@t.com", "Test@123", role="superadmin")
-        self.client.force_login(user)
-        response = self.client.get(reverse("settings"))
-        self.assertContains(response, "PUBLIC_UI_THEME")
-        self.assertContains(response, "hallmark")
-
     def test_settings_page_shows_feature_flags_table(self):
-        from core.models import SiteSetting
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
         from django.contrib.auth import get_user_model
         User = get_user_model()
-        user = User.objects.create_superuser("hmtable", "h@t.com", "Test@123", role="superadmin")
+        user = User.objects.create_superuser("settingstable", "settings@t.com", "Test@123", role="superadmin")
         self.client.force_login(user)
         response = self.client.get(reverse("settings"))
         self.assertContains(response, "Feature Flags")
-        self.assertContains(response, "hallmark")
-
-
-class Sahakar2ThemeTests(TestCase):
-    """SAHAKAR 2.0 theme — standalone no-Bootstrap design system."""
-
-    def setUp(self):
-        super().setUp()
-        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
-        from core.models import SiteSetting
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "sahakar2"})
-        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
-
-    def tearDown(self):
-        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
-        super().tearDown()
-
-    def test_renders_v2_template(self):
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "sahakar2-banner")
-        self.assertContains(response, "sahakar2-chat")
-        self.assertContains(response, "sahakar2-notice")
-        self.assertContains(response, "sahakar2-input")
-
-    def test_no_bootstrap_loaded(self):
-        response = self.client.get(reverse("home"))
-        self.assertNotContains(response, "bootstrap.min.css")
-        self.assertNotContains(response, "bootstrap.bundle")
-
-    def test_has_notice_board_empty_state(self):
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "noticeBoard")
-        self.assertContains(response, "notice-card-stripe")
-        self.assertContains(response, "सामान्य विषय")
-
-    def test_has_cm_helpline(self):
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "1800")
-
-    def test_has_marathi_labels(self):
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "गोपनीयता")
-        self.assertContains(response, "अस्वीकरण")
-        self.assertContains(response, "कुकीज")
-        self.assertContains(response, "डेटा धोरण")
-        self.assertContains(response, "अटी")
-
-    def test_has_government_ownership_footer(self):
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "मालकी")
-
-    def test_css_file_loads(self):
-        response = self.client.get("/static/main/css/sahakar2.css")
-        self.assertEqual(response.status_code, 200)
-        content = b"".join(response.streaming_content).decode()
-        self.assertIn("@layer reset", content)
-        self.assertIn("@layer tokens", content)
-        self.assertIn("@layer base", content)
-        self.assertIn("@layer components", content)
-        self.assertIn("@layer responsive", content)
-        self.assertIn("@media (max-width: 768px)", content)
-        self.assertIn("@media (max-width: 390px)", content)
-        self.assertIn("prefers-reduced-motion", content)
-        self.assertIn(":focus-visible", content)
-
-    def test_theme_isolation_default_does_not_load(self):
-        from core.models import SiteSetting
-        # Completely reset: delete DB record first, then flush cache
-        SiteSetting.objects.filter(key="PUBLIC_UI_THEME").delete()
-        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
-        # Render page BEFORE recreating sahakar2 setting
-        response = self.client.get(reverse("home"))
-        self.assertNotContains(response, "sahakar2.css")
-        self.assertNotContains(response, "sahakar2-banner")
-        # Restore for other tests in this class
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "sahakar2"})
-        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
-
-    def test_cookie_consent_present(self):
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "मान्य")
-
-    def test_doc_count_present(self):
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, "documents indexed")
-
-    def test_hallmark_settings_table_shows_theme_value(self):
-        from core.models import SiteSetting
-        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        user = User.objects.create_superuser("hallmarktest2", "t2@t.com", "Test@123", role="superadmin")
-        self.client.force_login(user)
-        response = self.client.get(reverse("settings"))
-        self.assertContains(response, "hallmark")
+        self.assertNotContains(response, "PUBLIC_UI_THEME")
