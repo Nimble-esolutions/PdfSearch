@@ -55,6 +55,7 @@ fi
 
 # Run admin UI smoke tests
 echo "=== Running admin UI smoke tests ==="
+"${compose[@]}" exec --no-TTY --user appuser web sh -lc "echo 'ci-only-password-not-for-production' > /tmp/codex-admin-password.txt"
 "${compose[@]}" exec --no-TTY --user appuser web python /app/scripts/ci/admin_ui_smoke.py
 "${compose[@]}" exec --no-TTY --user appuser web python -m pip check
 
