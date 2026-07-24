@@ -720,6 +720,7 @@ class SearchAndAuthenticationTests(TestCase):
         response = self.client.get(reverse("home"))
         self.assertContains(response, 'class="public-search-topbar"')
         self.assertContains(response, 'class="public-search-header"')
+        self.assertContains(response, 'class="public-search-identity__wordmark"')
         self.assertContains(response, 'aria-label="Public service links"')
         self.assertContains(response, 'id="search-page-heading"')
         self.assertContains(response, 'aria-label="Search answers"')
@@ -2134,6 +2135,7 @@ class SeoAeoTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "What is Sahakar AI?")
         self.assertContains(response, "Common questions")
+        self.assertContains(response, "seo-support")
 
     def test_extended_service_description_can_be_disabled(self):
         with self.settings(DISPLAY_SERVICE_FOOTER=False):

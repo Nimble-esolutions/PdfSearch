@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static i18n %}
 
-{% block title %}{% trans "Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra" %}{% endblock %}
+{% block title %}{% trans "Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search" %}{% endblock %}
 {% block body_class %}public-search{% endblock %}
 
 {% block admin_shell %}{% endblock %}
@@ -11,20 +11,20 @@
 {% endblock %}
 
 {% block seo %}
-  <meta name="description" content="{% trans 'Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance. Sahakar AI provides instant answers from official government documents.' %}">
+  <meta name="description" content="{% trans 'Search the Maharashtra Cooperative Societies Act, 1960, Rules, 1961, bylaws, amendments, and related official documents in English or Marathi.' %}">
   <link rel="canonical" href="https://ai-sahakar.net/">
   {# Stable locale URLs will be added with genuinely translated page variants. #}
 
   <meta property="og:type" content="website">
-  <meta property="og:title" content="{% trans 'Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra' %}">
-  <meta property="og:description" content="{% trans 'Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance.' %}">
+  <meta property="og:title" content="{% trans 'Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search' %}">
+  <meta property="og:description" content="{% trans 'Search Maharashtra cooperative society laws, rules, bylaws, amendments, and related official documents in English or Marathi.' %}">
   <meta property="og:url" content="https://ai-sahakar.net/">
   <meta property="og:site_name" content="Sahakar AI">
   <meta property="og:locale" content="{{ request.LANGUAGE_CODE|default:'en' }}">
 
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="{% trans 'Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra' %}">
-  <meta name="twitter:description" content="{% trans 'Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance.' %}">
+  <meta name="twitter:title" content="{% trans 'Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search' %}">
+  <meta name="twitter:description" content="{% trans 'Search Maharashtra cooperative society laws, rules, bylaws, amendments, and related official documents in English or Marathi.' %}">
 
   <meta name="robots" content="index, follow">
 
@@ -39,7 +39,7 @@
     "@id": "https://ai-sahakar.net/#website",
     "name": "Sahakar AI",
     "url": "https://ai-sahakar.net/",
-    "description": "Search Maharashtra cooperative society acts, rules, and bylaws with AI assistance.",
+    "description": "Search the Maharashtra Cooperative Societies Act, 1960, Rules, 1961, bylaws, amendments, and related official documents in English and Marathi.",
     "inLanguage": ["en", "mr"],
     "publisher": {
       "@type": "Organization",
@@ -76,7 +76,7 @@
         "name": "What documents can I search on Sahakar AI?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "You can search Maharashtra cooperative society acts, rules, bylaws, and related government documents."
+          "text": "The available collection includes Maharashtra cooperative society acts, rules, bylaws, amendments, and related government documents."
         }
       },
       {
@@ -84,7 +84,7 @@
         "name": "Are the answers from Sahakar AI official legal advice?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "No. Answers are AI-generated assistance based on available documents. They should not be used for legal purposes. Always review the source references before making official decisions."
+          "text": "No. Sahakar AI provides informational assistance, not legal advice. Review the cited source documents before making an official decision."
         }
       },
       {
@@ -92,7 +92,7 @@
         "name": "Does Sahakar AI support Marathi?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Sahakar AI supports both English and Marathi. Use the language toggle to switch between them."
+          "text": "Yes. You can ask questions in English or Marathi using the language switch."
         }
       }
     ]
@@ -139,6 +139,16 @@
   </picture>
 
   <div class="public-search-header__title">
+    <div class="public-search-identity">
+      <img src="{% static 'main/images/logo1.png' %}" alt="" aria-hidden="true">
+      <svg class="public-search-identity__wordmark" viewBox="0 0 430 58" role="img" aria-labelledby="registrar-lockup-title">
+        <title id="registrar-lockup-title">{% trans "Registrar Co-operative Societies, Maharashtra" %}</title>
+        <circle cx="28" cy="29" r="23" fill="none" stroke="currentColor" stroke-width="3" />
+        <path d="M17 37V21h8c7 0 10 3 10 8s-3 8-10 8h-8Zm7-5h1c3 0 4-1 4-3s-1-3-4-3h-1v6Z" fill="currentColor" />
+        <text x="66" y="24" fill="currentColor" font-size="17" font-weight="700">Registrar Co-operative Societies</text>
+        <text x="66" y="45" fill="currentColor" font-size="13" letter-spacing=".5">MAHARASHTRA STATE</text>
+      </svg>
+    </div>
     <span>{% trans "Public document service" %}</span>
     <h1>{% trans "Sahakar AI Search" %}</h1>
     <p>{% trans "Search Maharashtra co-operative society acts, rules, and official documents." %}</p>
@@ -154,7 +164,7 @@
       <div class="public-search-intro">
         <p class="public-search-kicker">{% trans "Official document search" %}</p>
         <h2 id="search-page-heading">{% trans "Ask a question about co-operative society law" %}</h2>
-        <p>{% trans "Use a section number, act name, subject, or phrase in English or Marathi." %}</p>
+        <p>{% trans "Search by section number, Act or Rule name, society type, topic, or phrase in English or Marathi." %}</p>
       </div>
 
       <div id="chatMain" aria-live="polite" aria-label="{% trans 'Search answers' %}" aria-busy="false">
@@ -200,23 +210,25 @@
 {% endblock %}
 
 <section class="seo-static-content" aria-label="{% trans 'About this service' %}">
-  <div class="container py-4">
+  <details class="seo-support">
+    <summary>{% trans "About Sahakar AI and common questions" %}</summary>
+  <div class="container py-4 seo-support__content">
     <h2 class="h5">{% trans "What is Sahakar AI?" %}</h2>
     <p class="text-muted">
-      {% trans "Sahakar AI is an AI-powered search tool for Maharashtra cooperative society laws, acts, rules, and bylaws. It helps you find relevant information from official government documents quickly, with answers generated in English and Marathi." %}
+      {% trans "Sahakar AI helps society members, office-bearers, auditors, researchers, and public officials find information in Maharashtra cooperative-society laws and related documents. Ask in English or Marathi and review the cited source document with every answer." %}
     </p>
     <p class="small">
-      {% trans "The service covers topics such as registration, member rights, management, audit, inspection, disputes, liquidation, offences, penalties, appeals, and revisions." %}
-      <a href="https://mahasahakar.maharashtra.gov.in/en/commissioner-cooperation-and-rcs/" target="_blank" rel="noopener noreferrer">{% trans "Learn about the Commissionerate and Registrar" %}</a>.
+      {% trans "Topics include society registration, member rights, management, audit, inspection, elections, disputes, liquidation, offences, penalties, appeals, and revisions." %}
+      <a href="https://mahasahakar.maharashtra.gov.in/en/commissioner-cooperation-and-rcs/" target="_blank" rel="noopener noreferrer">{% trans "Read about the Commissionerate and Registrar" %}</a>.
     </p>
     <h3 class="h6 mt-3">{% trans "Common questions" %}</h3>
     <details>
       <summary>{% trans "What documents can I search?" %}</summary>
-      <p>{% trans "You can search Maharashtra cooperative society acts, rules, bylaws, and related government documents." %}</p>
+      <p>{% trans "The available collection includes Maharashtra cooperative society acts, rules, bylaws, amendments, and related government documents." %}</p>
     </details>
     <details>
       <summary>{% trans "Are the answers legal advice?" %}</summary>
-      <p>{% trans "No. Answers are AI-generated assistance and should be checked against official source documents before an official decision." %}</p>
+      <p>{% trans "No. Sahakar AI provides informational assistance, not legal advice. Review the cited source documents before making an official decision." %}</p>
     </details>
     <details>
       <summary>{% trans "Does the service support Marathi?" %}</summary>
@@ -225,15 +237,17 @@
     {% if display_service_footer %}
       <h3 class="h6 mt-3">{% trans "How to ask better questions" %}</h3>
       <ul class="text-muted small">
-        <li>{% trans "Use specific terms like act names, section numbers, or subject areas such as housing, audit, or agriculture." %}</li>
-        <li>{% trans "Review the source references provided with each answer before making official decisions." %}</li>
+        <li>{% trans "Try a question such as: What does Section 10 cover, or What rules apply to cooperative housing society elections?" %}</li>
+        <li>{% trans "Include the Act, Rule, section number, society type, or subject when you know it." %}</li>
+        <li>{% trans "Review the cited source document before making an official decision." %}</li>
       </ul>
       <h3 class="h6 mt-3">{% trans "Important disclaimer" %}</h3>
       <p class="text-muted small">
-        {% trans "Answers are AI-generated assistance, not legal advice. The AI may provide incomplete or incorrect responses. Always verify with the source documents and contact the Registrar's office for official guidance." %}
+        {% trans "Answers are AI-generated informational assistance, not legal advice. They may be incomplete or incorrect. Verify the source document and contact the Registrar's office for official guidance." %}
       </p>
     {% endif %}
   </div>
+  </details>
 </section>
 {% endblock %}
 
