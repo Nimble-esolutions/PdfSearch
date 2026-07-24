@@ -10,6 +10,9 @@ body.public-search {
     --search-gold: #c7913b;
     --search-border: #d8cec1;
     --search-success: #236b4a;
+    --motion-micro: 140ms;
+    --motion-surface: 210ms;
+    --motion-ease: cubic-bezier(.2, .65, .3, 1);
     margin: 0;
     background: var(--search-paper);
     color: var(--search-ink);
@@ -410,6 +413,69 @@ body.public-search {
 }
 .ref-card a { text-decoration: none; }
 .ref-card small { display: block; margin-top: .15rem; color: var(--search-muted); font-size: .76rem; }
+
+/* Motion is limited to state and focus changes. Layout dimensions remain
+   static so a slow connection cannot move the composer or scroll target. */
+.public-search[data-motion-mode="full"] .chat-container,
+.public-search[data-motion-mode="full"] .gpt-msg--welcome,
+.public-search[data-motion-mode="full"] .prompt-chip,
+.public-search[data-motion-mode="full"] .chat-input,
+.public-search[data-motion-mode="full"] .ref-card,
+.public-search[data-motion-mode="full"] .search-error {
+    animation: search-enter var(--motion-surface) var(--motion-ease) both;
+}
+.public-search[data-motion-mode="full"] .prompt-chip:nth-child(2) { animation-delay: 35ms; }
+.public-search[data-motion-mode="full"] .prompt-chip:nth-child(3) { animation-delay: 70ms; }
+.public-search[data-motion-mode="full"] .prompt-chip:hover,
+.public-search[data-motion-mode="full"] .prompt-chip:focus-visible,
+.public-search[data-motion-mode="full"] .chat-input:focus-within {
+    transition: background-color var(--motion-micro) ease,
+        border-color var(--motion-micro) ease,
+        transform var(--motion-micro) var(--motion-ease),
+        box-shadow var(--motion-micro) ease;
+}
+.public-search[data-motion-mode="full"] .prompt-chip:hover,
+.public-search[data-motion-mode="full"] .prompt-chip:focus-visible {
+    transform: translateY(-1px);
+}
+.public-search[data-motion-mode="full"] .chat-input:focus-within {
+    box-shadow: 0 0 0 3px rgba(199, 145, 59, .14);
+}
+.public-search[data-motion-mode="full"] .search-loading__label {
+    transition: opacity var(--motion-micro) ease, transform var(--motion-micro) var(--motion-ease);
+}
+.public-search[data-motion-mode="full"] .ref-card { animation-duration: var(--motion-micro); }
+.search-loading__dot { will-change: opacity, transform; }
+.search-loading--complete .search-loading__dot { animation: none; opacity: .55; }
+.answer-complete { animation: search-answer-complete var(--motion-surface) var(--motion-ease) both; }
+
+@keyframes search-enter {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes search-answer-complete {
+    from { opacity: .72; }
+    to { opacity: 1; }
+}
+
+.public-search[data-motion-mode="light"] .prompt-chip,
+.public-search[data-motion-mode="reduced"] .prompt-chip,
+.public-search[data-motion-mode="light"] .chat-container,
+.public-search[data-motion-mode="reduced"] .chat-container,
+.public-search[data-motion-mode="light"] .gpt-msg--welcome,
+.public-search[data-motion-mode="reduced"] .gpt-msg--welcome,
+.public-search[data-motion-mode="light"] .chat-input,
+.public-search[data-motion-mode="reduced"] .chat-input,
+.public-search[data-motion-mode="light"] .ref-card,
+.public-search[data-motion-mode="reduced"] .ref-card,
+.public-search[data-motion-mode="light"] .search-error,
+.public-search[data-motion-mode="reduced"] .search-error {
+    animation: none;
+    transition: none;
+}
+.public-search[data-motion-mode="light"] .search-loading__dot { animation-duration: 1.8s !important; }
+.public-search[data-motion-mode="reduced"] .search-loading__dot,
+.public-search[data-motion-mode="reduced"] .cursor { animation: none !important; opacity: .7; }
 .seo-static-content {
     padding: 1rem 0 2rem;
     background: #ebe5dc;
