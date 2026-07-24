@@ -1027,6 +1027,19 @@ class DashboardTests(TestCase):
         self.assertContains(response, 'aria-label="Close"', count=26)
         self.assertContains(response, "Delete this category and all PDFs inside it")
 
+    def test_dashboard_filters_categories_server_side(self):
+        self.client.force_login(self.user)
+        Folder.objects.create(name="Audit records", created_by=self.user)
+        Folder.objects.create(name="Housing records", created_by=self.user)
+
+        response = self.client.get(reverse("dashboard"), {"category_q": "audit"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Audit records")
+        self.assertNotContains(response, "Housing records")
+        self.assertContains(response, "Showing 1 category matching")
+        self.assertContains(response, 'value="audit"')
+
     def test_dashboard_index_debt_queue_links_actionable_categories(self):
         self.client.force_login(self.user)
         index_folder = Folder.objects.create(name="Needs index lane", created_by=self.user)
