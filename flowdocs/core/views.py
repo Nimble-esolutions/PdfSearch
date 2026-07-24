@@ -58,7 +58,7 @@ from django.utils import timezone
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent, SiteSetting, SiteSetting
 from .configuration_registry import build_configuration_groups
-from .artifact_vault import ArtifactVault, ArtifactVaultError
+from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultConfigurationError
 from .metrics import metrics_view
 from .maintenance import (
     archive_pdf,
@@ -1702,25 +1702,34 @@ def s3_operations_view(request):
     generations = ArtifactGeneration.objects.all().order_by("-created_at")
     active_gen = generations.filter(status="active").first()
 
-    vault_healthy = False
-    vault_error = ""
+    vault_health = {"enabled": False, "configured": False, "reachable": False, "bucket_exists": False, "healthy": False, "error_code": ""}
     vault_manifests = []
     vault_config = {}
     try:
         vault = ArtifactVault()
-        if vault.enabled:
-            vault_config = {
-                "endpoint": vault.config.endpoint,
-                "bucket": vault.config.bucket,
-                "region": vault.config.region,
-            }
+        health = vault.health_check()
+        vault_health = {
+            "enabled": health.enabled,
+            "configured": health.configured,
+            "reachable": health.reachable,
+            "bucket_exists": health.bucket_exists,
+            "healthy": health.healthy,
+            "error_code": health.error_code,
+        }
+        vault_config = {
+            "endpoint": vault.config.endpoint,
+            "bucket": vault.config.bucket,
+            "region": vault.config.region,
+        }
+        if health.healthy:
             vault_manifests = [
                 {"key": m.key, "sha256": m.sha256[:16], "size": m.size}
                 for m in vault.list_manifests()
             ]
-            vault_healthy = True
-    except Exception as exc:
-        vault_error = str(exc)[:200]
+    except ArtifactVaultConfigurationError:
+        vault_health["error_code"] = "configuration_invalid"
+    except Exception:
+        vault_health["error_code"] = "probe_failed"
 
     env_identity = getattr(settings, "ENV_IDENTITY", None)
 
@@ -1728,8 +1737,11 @@ def s3_operations_view(request):
         "title": "S3 Artifact Vault & Operations",
         "generations": generations,
         "active_generation": active_gen,
-        "vault_healthy": vault_healthy,
-        "vault_error": vault_error,
+        "vault_health": vault_health,
+        "vault_healthy": vault_health["healthy"],
+        "vault_reachable": vault_health["reachable"],
+        "vault_bucket_exists": vault_health["bucket_exists"],
+        "vault_error": vault_health["error_code"],
         "vault_manifests": vault_manifests,
         "vault_config": vault_config,
         "backup_role": env_identity.backup_role.value if env_identity else "unknown",
@@ -1791,18 +1803,21 @@ def settings_view(request):
         }
         setting_values[key] = db_value
 
-    vault_status = {"enabled": False, "reachable": False, "bucket_exists": False, "error": ""}
+    vault_status = {"enabled": False, "configured": False, "reachable": False, "bucket_exists": False, "healthy": False, "error": ""}
     try:
-        env_identity = getattr(settings, "ENV_IDENTITY", None)
-        if env_identity and env_identity.is_backup_writer:
-            vault_status["enabled"] = True
-            try:
-                vault_status["reachable"] = True
-                vault_status["bucket_exists"] = True
-            except Exception as e:
-                vault_status["error"] = str(e)[:200]
+        health = ArtifactVault().health_check()
+        vault_status.update({
+            "enabled": health.enabled,
+            "configured": health.configured,
+            "reachable": health.reachable,
+            "bucket_exists": health.bucket_exists,
+            "healthy": health.healthy,
+            "error": health.error_code,
+        })
+    except ArtifactVaultConfigurationError:
+        vault_status["error"] = "configuration_invalid"
     except Exception:
-        pass
+        vault_status["error"] = "probe_failed"
 
     env_fields = {}
     try:

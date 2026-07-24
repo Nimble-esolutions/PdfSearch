@@ -9,8 +9,8 @@
     <p class="admin-kicker">{% trans "S3 Artifact Vault & Data Lifecycle" %}</p>
     <h2>{% trans "S3 Artifact Vault & Operations" %}</h2>
     <p>{% trans "Sync, restore, and manage data generations." %}</p>
-    <span class="badge {% if vault_healthy %}bg-success{% else %}bg-danger{% endif %} fs-6">
-      {% if vault_healthy %}{% trans "Connected" %}{% else %}{% trans "Error" %}{% endif %}
+    <span class="badge {% if vault_health.healthy %}bg-success{% elif vault_health.reachable %}bg-warning text-dark{% else %}bg-danger{% endif %} fs-6">
+      {% if vault_health.healthy %}{% trans "Connected" %}{% elif vault_health.reachable %}{% trans "Reachable, needs attention" %}{% else %}{% trans "Unavailable" %}{% endif %}
     </span>
   </div>
 
@@ -48,15 +48,15 @@
           <dl class="row small mb-0">
             <dt class="col-sm-4">{% trans "Reachable" %}</dt>
             <dd class="col-sm-8">
-              <span class="badge {% if vault_healthy %}bg-success{% else %}bg-danger{% endif %}">
-                {{ vault_healthy|yesno:_("Yes,No") }}
+              <span class="badge {% if vault_reachable %}bg-success{% else %}bg-danger{% endif %}">
+                {{ vault_reachable|yesno:_("Yes,No") }}
               </span>
             </dd>
 
             <dt class="col-sm-4">{% trans "Bucket Exists" %}</dt>
             <dd class="col-sm-8">
-              <span class="badge {% if vault_healthy %}bg-success{% else %}bg-danger{% endif %}">
-                {{ vault_healthy|yesno:_("Yes,No") }}
+              <span class="badge {% if vault_bucket_exists is True %}bg-success{% elif vault_bucket_exists is False %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                {% if vault_bucket_exists is True %}{% trans "Yes" %}{% elif vault_bucket_exists is False %}{% trans "No" %}{% else %}{% trans "Unknown" %}{% endif %}
               </span>
             </dd>
 
