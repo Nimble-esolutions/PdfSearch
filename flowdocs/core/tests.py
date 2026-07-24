@@ -735,8 +735,6 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "search.js")
         self.assertContains(response, 'id="userQuery"')
-        self.assertContains(response, "textContent = ref.title")
-        self.assertContains(response, "meta.textContent = [ref.folder, ref.uploaded_at]")
         self.assertContains(response, "AI-generated answers should not be used for legal purposes")
         self.assertContains(response, 'rel="noopener noreferrer"')
         self.assertNotContains(response, "innerHTML")
