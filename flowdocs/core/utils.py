@@ -149,8 +149,10 @@ def create_embeddings_for_texts(texts: List[str], batch_size: int = 16) -> List[
     """Call OpenAI embeddings in batches. Returns list of lists (embeddings)."""
     if _test_embeddings_enabled():
         return _deterministic_embeddings(texts)
-    resp = _get_client().embeddings.create(model=OPENAI_EMBED_MODEL, input=batch)
-        # depending on SDK, resp.data may be iterable
+    embeddings = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        resp = _get_client().embeddings.create(model=OPENAI_EMBED_MODEL, input=batch)
         for d in resp.data:
             embeddings.append(list(d.embedding))
     return embeddings
