@@ -128,12 +128,13 @@
   <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center flex-wrap">
       <div>
-        <small>{% trans "All rights reserved© Registrar Co-operative Societies." %}</small>
-        <div class="footer-links mt-1">
-          <a href="{% url 'privacy' %}">Privacy Policy</a> |
-          <a href="{% url 'terms' %}">Terms of Service</a> |
-          <a href="{% url 'data_policy' %}">Data Policy</a>
-        </div>
+        <small>{% trans "All rights reserved© Registrar Co-operative Societies." %} |
+          <a href="{% url 'privacy' %}">{% trans "Privacy" %}</a> |
+          <a href="{% url 'terms' %}">{% trans "Terms" %}</a> |
+          <a href="{% url 'data_policy' %}">{% trans "Data Policy" %}</a> |
+          <a href="{% url 'cookie_policy' %}">{% trans "Cookies" %}</a> |
+          <a href="{% url 'disclaimer' %}">{% trans "Disclaimer" %}</a>
+        </small>
       </div>
       <div class="d-flex gap-3">
         <a href="https://nimble-esolutions.com/" target="_blank" rel="noopener noreferrer">
@@ -145,8 +146,8 @@
 </footer>
 
 <div id="cookieConsent" class="cookie-consent d-none">
-  <div class="container-fluid d-flex justify-content-between align-items-center">
-    <small>This site uses cookies for authentication and security. By continuing, you agree to our <a href="{% url 'privacy' %}">Privacy Policy</a>.</small>
+  <div class="container-fluid d-flex justify-content-between align-items-center flex-wrap">
+    <small>This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used. By continuing, you agree to our use of cookies. <a href="{% url 'cookie_policy' %}">Cookie Policy</a> | <a href="{% url 'privacy' %}">Privacy Policy</a></small>
     <button class="btn btn-sm btn-light ms-3" onclick="document.getElementById('cookieConsent').classList.add('d-none');localStorage.setItem('cookieConsent','accepted')">Accept</button>
   </div>
 </div>

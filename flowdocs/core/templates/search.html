@@ -2,12 +2,15 @@
 {% load static i18n %}
 
 {% block title %}{% trans "Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra" %}{% endblock %}
-{% block body_class %}public-search{% endblock %}
+{% block body_class %}public-search{% if public_ui_theme == "enhanced" %} enhanced{% endif %}{% endblock %}
 
 {% block admin_shell %}{% endblock %}
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'main/css/search.css' %}">
+  {% if public_ui_theme == "enhanced" %}
+  <link rel="stylesheet" href="{% static 'main/css/search_enhanced.css' %}">
+  {% endif %}
 {% endblock %}
 
 {% block seo %}
@@ -169,14 +172,22 @@
         0/30 words
       </small>
 
+      {% if public_ui_theme == "enhanced" %}
+      <div class="example-chips mt-2" style="padding: 0 10px;">
+        <span style="font-size: 12px; color: #888;">{% trans "Try asking:" %}</span>
+        <button type="button" class="chip-btn btn btn-sm btn-outline-secondary ms-1 mb-1" onclick="document.getElementById('userQuery').value='{% trans "What is the Maharashtra Cooperative Societies Act?" %}';document.getElementById('userQuery').focus();">{% trans "Cooperative Societies Act" %}</button>
+        <button type="button" class="chip-btn btn btn-sm btn-outline-secondary ms-1 mb-1" onclick="document.getElementById('userQuery').value='{% trans "How to register a housing society?" %}';document.getElementById('userQuery').focus();">{% trans "Housing society registration" %}</button>
+        <button type="button" class="chip-btn btn btn-sm btn-outline-secondary ms-1 mb-1" onclick="document.getElementById('userQuery').value='{% trans "Audit requirements for cooperative societies" %}';document.getElementById('userQuery').focus();">{% trans "Audit requirements" %}</button>
+        <button type="button" class="chip-btn btn btn-sm btn-outline-secondary ms-1 mb-1" onclick="document.getElementById('userQuery').value='{% trans "Rights of members in cooperative society" %}';document.getElementById('userQuery').focus();">{% trans "Member rights" %}</button>
+      </div>
+      {% endif %}
+
       <div class="text-center" style="font-size: 13px; color: #666;">
           {% trans "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}
       </div>
 
       <div class="text-center" style="font-size: 12px; color: #999; margin-top: 5px;">
-        {{ indexed_count }}/{{ total_count }} {% trans "documents indexed" %} • 
-        <a href="{% url 'privacy' %}">{% trans "Privacy" %}</a> • 
-        <a href="{% url 'terms' %}">{% trans "Terms" %}</a>
+        {{ indexed_count }}/{{ total_count }} {% trans "documents indexed" %}
       </div>
 
   </div>

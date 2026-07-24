@@ -1,78 +1,140 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-4 mb-5">
   <h1>Data Policy</h1>
-  <p class="text-muted">Last updated: 24 July 2026</p>
+  <p class="text-muted">Last updated: {{ legal_last_updated }}</p>
 
-  <h2>1. Data Classification</h2>
-  <p>Data within the Sahakar AI platform is classified into the following categories:</p>
-  <ul>
-    <li><strong>Public Data:</strong> Government circulars, acts, and regulations that are publicly available and indexed for search.</li>
-    <li><strong>Operational Data:</strong> User accounts, search logs (transient), and system configuration.</li>
-    <li><strong>Derived Data:</strong> FAISS indexes, embeddings, and chunked document representations generated from uploaded PDFs.</li>
-    <li><strong>Artifact Data:</strong> Immutable backup generations stored in the S3-compatible artifact vault.</li>
-  </ul>
+  <h2>1. Purpose and Scope</h2>
+  <p>This Data Policy explains how data within the Sahakar AI platform is classified, stored, retained, backed up, and deleted. It supplements our <a href="{% url 'privacy' %}">Privacy Policy</a> and is published in alignment with the data protection obligations under the Digital Personal Data Protection Act, 2023 (DPDA) and the Information Technology Act, 2000.</p>
 
-  <h2>2. Data Retention Periods</h2>
-  <table class="table table-bordered mt-3">
+  <h2>2. Data Classification</h2>
+  <p>Data within the Platform is classified into the following categories:</p>
+  <table class="table table-bordered">
+    <thead>
+      <tr><th>Category</th><th>Description</th><th>Examples</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Public Data</strong></td>
+        <td>Government documents that are publicly available and indexed for search by all users.</td>
+        <td>Cooperative society acts, rules, circulars, government resolutions, notifications, and bylaws.</td>
+      </tr>
+      <tr>
+        <td><strong>Operational Data</strong></td>
+        <td>Data necessary for the functioning of the Platform, including user account information and system configuration.</td>
+        <td>Admin user accounts (username, email, role, department), system settings, rate-limit counters.</td>
+      </tr>
+      <tr>
+        <td><strong>Derived Data</strong></td>
+        <td>Data generated through the processing of uploaded documents for search functionality.</td>
+        <td>FAISS vector indexes, text embeddings, chunked document representations, OCR output.</td>
+      </tr>
+      <tr>
+        <td><strong>Artifact Data</strong></td>
+        <td>Immutable backup snapshots stored for disaster recovery and data integrity purposes.</td>
+        <td>Generation snapshots containing database dumps, PDF archives, FAISS indexes, and signed manifests.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. Data Retention Periods</h2>
+  <p>In accordance with the principle of storage limitation under the DPDA 2023, data is retained only for as long as necessary for the specified purpose:</p>
+  <table class="table table-bordered">
     <thead>
       <tr><th>Data Type</th><th>Retention Period</th><th>Notes</th></tr>
     </thead>
     <tbody>
-      <tr><td>User accounts</td><td>Until deletion</td><td>Accounts are retained until an administrator deletes them.</td></tr>
-      <tr><td>Search queries</td><td>Transient (not permanently stored)</td><td>Queries are processed in-memory and not logged to persistent storage.</td></tr>
-      <tr><td>Uploaded PDFs</td><td>Until removal or deprecation</td><td>Documents remain indexed until explicitly removed, deprecated, or archived by an administrator.</td></tr>
-      <tr><td>FAISS indexes</td><td>Synchronized with active PDFs</td><td>Regenerated when documents are added, removed, or reindexed.</td></tr>
-      <tr><td>Artifact generations</td><td>Per retention policy (default: 7 generations)</td><td>Expired generations are purged automatically or on demand.</td></tr>
-      <tr><td>System logs</td><td>Rotated per deployment config</td><td>Docker container logs follow the host's log rotation policy.</td></tr>
+      <tr>
+        <td>Admin user accounts</td>
+        <td>Until account deletion by an authorized administrator</td>
+        <td>Accounts are deleted only after all associated documents and folders have been transferred or removed.</td>
+      </tr>
+      <tr>
+        <td>Public search queries</td>
+        <td>Transient (processed in-memory; not persisted to storage)</td>
+        <td>Queries are not logged to any permanent data store. They exist only for the duration of processing.</td>
+      </tr>
+      <tr>
+        <td>Hashed IP addresses</td>
+        <td>60 seconds (rate-limit window only)</td>
+        <td>Used exclusively for rate-limit enforcement. Hashed inline and discarded when the window expires.</td>
+      </tr>
+      <tr>
+        <td>Uploaded PDF documents</td>
+        <td>Until removal, deprecation, or archival by an authorized administrator</td>
+        <td>Documents remain indexed and searchable until an administrator explicitly removes, deprecates, or archives them.</td>
+      </tr>
+      <tr>
+        <td>FAISS indexes and embeddings</td>
+        <td>Synchronized with active PDFs</td>
+        <td>Regenerated incrementally or in full when documents are added, removed, deprecated, or reindexed.</td>
+      </tr>
+      <tr>
+        <td>Artifact (backup) generations</td>
+        <td>Configurable retention count (default: 7 most recent generations)</td>
+        <td>Older generations beyond the retention count are purged automatically or on demand.</td>
+      </tr>
+      <tr>
+        <td>Admin activity and audit logs</td>
+        <td>Rotated per deployment configuration</td>
+        <td>Docker container logs follow the host environment's log rotation policy. Not retained indefinitely.</td>
+      </tr>
     </tbody>
   </table>
 
-  <h2>3. Backup Policy</h2>
-  <p>The platform maintains a multi-generational backup system through its artifact vault:</p>
+  <h2>4. Backup Policy</h2>
+  <p>The Platform maintains a multi-generational backup system through its artifact vault:</p>
   <ul>
-    <li><strong>Generations:</strong> Each backup creates an immutable generation containing PDF files, database state, FAISS indexes, and metadata manifests.</li>
-    <li><strong>Storage:</strong> Artifacts are stored in an S3-compatible object store (RustFS), isolated from the application network.</li>
-    <li><strong>Retention:</strong> A configurable number of recent generations is retained. Older generations are purged automatically.</li>
-    <li><strong>Validation:</strong> Each generation is validated for integrity (checksum verification, PDF count, index coherence) before being marked as available for restore.</li>
-    <li><strong>Promotion:</strong> A validated generation can be promoted to active, superseding the current active dataset.</li>
-    <li><strong>Rollback:</strong> Any non-active generation can be restored to staging and promoted if needed.</li>
+    <li><strong>Generations:</strong> Each backup creates an immutable generation containing: SQLite database dump, PDF file archive, FAISS index files, embeddings, and a signed metadata manifest.</li>
+    <li><strong>Storage:</strong> Artifacts are stored in an S3-compatible object store (RustFS), isolated from the application network. Vault operations require explicit, authenticated commands.</li>
+    <li><strong>Retention:</strong> A configurable number of recent generations is retained. Generations beyond the retention count are purged automatically, removing all associated files and metadata.</li>
+    <li><strong>Validation:</strong> Each generation is validated for integrity (checksum verification, PDF count consistency, index coherence) before being marked as available for restore.</li>
+    <li><strong>Promotion:</strong> A validated generation can be promoted to active status, superseding the current active dataset.</li>
+    <li><strong>Rollback:</strong> Any non-active generation can be restored to a staging environment and promoted to production if needed.</li>
+    <li><strong>Access Control:</strong> Vault access is restricted to superadmin-level maintenance operations only.</li>
   </ul>
 
-  <h2>4. S3 Artifact Vault</h2>
-  <p>The artifact vault is an S3-compatible object storage system (RustFS) that stores immutable snapshots of the platform's data. Key properties:</p>
-  <ul>
-    <li>Isolated from the application network — vault operations require explicit, authenticated commands.</li>
-    <li>Each generation includes: SQLite database dump, PDF file archive, FAISS index files, and a signed manifest.</li>
-    <li>Manifests include generation ID, creation timestamp, PDF count, checksums, and source environment identity.</li>
-    <li>Vault access is restricted to superadmin-level maintenance operations.</li>
-  </ul>
-
-  <h2>5. Data Deletion Procedures</h2>
-  <p>Data deletion follows a structured lifecycle:</p>
+  <h2>5. Data Deletion Lifecycle</h2>
+  <p>Data deletion follows a structured lifecycle designed to prevent accidental data loss while ensuring compliance with deletion obligations:</p>
   <ol>
-    <li><strong>Deprecation:</strong> A PDF is marked as deprecated — it is hidden from search results but preserved in the database and vault generations.</li>
-    <li><strong>Archival:</strong> A PDF is marked as archived — it is hidden from search and dashboard lists but retained in the database.</li>
-    <li><strong>Deletion:</strong> A PDF is removed from storage and database. Prior vault generations that include the file are not retroactively purged.</li>
-    <li><strong>Account Deletion:</strong> A user account may be deleted only after all owned documents and folders have been transferred or removed.</li>
-    <li><strong>Generation Purge:</strong> Expired artifact generations are purged from the vault, removing all associated files and metadata.</li>
+    <li><strong>Deprecation:</strong> A PDF is marked as deprecated — it is hidden from search results but preserved in the database and existing vault generations. Users can no longer discover the document through search.</li>
+    <li><strong>Archival:</strong> A PDF is marked as archived — it is hidden from both search results and dashboard lists but retained in the database. Archived documents remain restorable.</li>
+    <li><strong>Deletion:</strong> A PDF's file and database record are permanently removed. Note: prior vault generations that include the file are <strong>not retroactively purged</strong> — they remain as immutable historical snapshots until their generation expires under the retention policy.</li>
+    <li><strong>Account Deletion:</strong> Admin user accounts may be deleted only after all documents and folders owned by the account have been transferred to another authorized user or removed.</li>
+    <li><strong>Generation Purge:</strong> Expired artifact generations are purged from the vault, permanently removing all associated files, database dumps, indexes, and manifests.</li>
+    <li><strong>Search Query Data:</strong> Public search queries are transient and never persisted. No deletion action is required.</li>
   </ol>
 
-  <h2>6. Data Subject Rights</h2>
-  <p>Under the DPDA 2023, data subjects (users) have the right to:</p>
+  <h2>6. Data Subject Rights under DPDA 2023</h2>
+  <p>Data Principals (users) have the following rights under the DPDA 2023:</p>
   <ul>
-    <li>Request confirmation of whether their personal data is being processed.</li>
-    <li>Access their personal data held by the platform.</li>
-    <li>Request correction of inaccurate or incomplete personal data.</li>
-    <li>Request erasure of their personal data, subject to legal retention requirements.</li>
-    <li>File a grievance with the Grievance Officer at grievance@ai-sahakar.net.</li>
+    <li><strong>Right to Access (Section 11):</strong> Request confirmation of processing and a summary of personal data held.</li>
+    <li><strong>Right to Correction and Erasure (Section 12):</strong> Request correction of inaccurate data or erasure of personal data, subject to legal retention obligations.</li>
+    <li><strong>Right of Grievance Redressal (Section 13):</strong> File a grievance with our Grievance Officer regarding any data-related matter.</li>
+    <li><strong>Right to Nominate (Section 14):</strong> Nominate an individual to exercise rights on your behalf.</li>
+  </ul>
+  <p>To exercise any of these rights, contact: <strong>grievance@ai-sahakar.net</strong>.</p>
+
+  <h2>7. Data Security Measures</h2>
+  <p>In compliance with Section 8(5) of the DPDA 2023 and the SPDI Rules, we maintain reasonable security safeguards including:</p>
+  <ul>
+    <li>Encryption of data in transit using HTTPS/TLS.</li>
+    <li>Password storage using salted cryptographic hashing algorithms.</li>
+    <li>Role-based access controls throughout the Platform.</li>
+    <li>Network isolation of internal services from public internet exposure.</li>
+    <li>CSRF protection on all state-changing operations.</li>
+    <li>Session security with HttpOnly and Secure cookie flags.</li>
+    <li>Rate limiting on public endpoints to prevent abuse.</li>
   </ul>
 
-  <h2>7. Contact</h2>
-  <p>For questions about this Data Policy or to exercise your data rights, contact:</p>
-  <p>Grievance Officer<br>
-  Email: grievance@ai-sahakar.net<br>
-  Nimble eSolutions — Technology Partner<br>
-  Website: ai-sahakar.net</p>
+  <h2>8. Contact</h2>
+  <p>For questions about this Data Policy, to exercise your data rights, or to report a concern:</p>
+  <p>
+    <strong>Grievance Officer</strong><br>
+    Sahakar AI Platform<br>
+    Email: grievance@ai-sahakar.net
+  </p>
+  <p><strong>Nimble eSolutions</strong> — Technology Partner</p>
+
 </div>
 {% endblock %}
