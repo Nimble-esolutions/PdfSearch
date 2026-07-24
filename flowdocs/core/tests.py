@@ -69,7 +69,7 @@ class LanguageAndPublicUiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.context["welcome_message"],
-            "I am Sahakar AI. Click here to learn how to questions to get correct answers.",
+            "I am Sahakar AI. Learn how to ask better questions and get more useful answers.",
         )
         self.assertEqual(response.context["welcome_help_label"], "Click Here")
         self.assertContains(response, "Registrar Co-operative Societies, Maharashtra")
@@ -726,6 +726,12 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertContains(response, 'aria-label="Search answers"')
         self.assertContains(response, 'aria-label="Contact support on WhatsApp"')
         self.assertContains(response, 'aria-label="Send feedback"')
+        self.assertContains(response, "national-emblem.svg")
+        self.assertContains(response, "WhatsApp")
+        self.assertContains(response, "Feedback")
+        self.assertNotContains(response, "search-theme-b")
+        self.assertNotContains(response, "search-theme-c")
+        self.assertNotContains(response, "public-search-theme-picker")
         self.assertNotContains(response, "⚠️")
 
     def test_search_rejects_queries_over_server_word_limit(self):
