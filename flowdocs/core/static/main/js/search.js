@@ -18,6 +18,45 @@ let requestPending = false;
 let activeController = null;
 let requestTimeout = null;
 let stageTimer = null;
+const ANSWER_REVEAL_LIMIT = 900;
+
+function detectPerformanceProfile() {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const slowConnection = Boolean(connection && ["slow-2g", "2g"].includes(connection.effectiveType));
+    const unknownConnection = Boolean(connection && !connection.effectiveType);
+    const lowMemory = typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 2;
+    const lowCpu = typeof navigator.hardwareConcurrency === "number" && navigator.hardwareConcurrency <= 4;
+    const saveData = connection?.saveData === true;
+    let mode = "full";
+    if (reducedMotion) mode = "reduced";
+    else if (saveData || slowConnection || unknownConnection || lowMemory || lowCpu) mode = "light";
+
+    return {
+        mode,
+        reducedMotion,
+        saveData,
+        slowConnection,
+        lowMemory,
+        lowCpu,
+        connectionType: connection?.effectiveType || "unknown",
+    };
+}
+
+function applyPerformanceProfile() {
+    const profile = detectPerformanceProfile();
+    document.body.dataset.motionMode = profile.mode;
+    window.PdfSearch.performanceProfile = profile;
+    const optionalFont = document.getElementById("optional-deva-font");
+    if (optionalFont) optionalFont.media = profile.mode === "full" ? "all" : "not all";
+    return profile;
+}
+
+let performanceProfile = applyPerformanceProfile();
+const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+connection?.addEventListener?.("change", () => {
+    performanceProfile = applyPerformanceProfile();
+});
 
 window.addEventListener("DOMContentLoaded", function(){
     const welcome = JSON.parse(document.getElementById("welcome-message").textContent);
@@ -93,6 +132,7 @@ async function sendMessage(){
         stage.textContent = stages[stageIndex];
         [0, 1, 2].forEach(index => {
             const dot = document.createElement("span");
+            dot.setAttribute("aria-hidden", "true");
             dot.className = "search-loading__dot";
             dot.style.animationDelay = `${index * 0.18}s`;
             typingDiv.appendChild(dot);
@@ -137,6 +177,8 @@ async function sendMessage(){
             );
             return;
         }
+        typingDiv.classList.add("search-loading--complete");
+        typingDiv.setAttribute("aria-label", stages[stages.length - 1]);
         typingDiv.remove();
         if(data.answer){
             typeEffect(data.answer, data.references || []);
@@ -206,11 +248,7 @@ function appendWelcomeMessage(text, href, label) {
         button.type = 'button';
         button.className = 'prompt-chip';
         button.textContent = prompt;
-        button.addEventListener('click', () => {
-            userQuery.value = prompt;
-            userQuery.dispatchEvent(new Event('input', {bubbles: true}));
-            userQuery.focus();
-        });
+        button.dataset.prompt = prompt;
         promptWrap.appendChild(button);
     });
     div.appendChild(promptWrap);
@@ -231,11 +269,7 @@ function appendErrorMessage(title, detail, retryQuery) {
     retry.type = 'button';
     retry.className = 'search-error__retry';
     retry.textContent = retryLabel;
-    retry.addEventListener('click', () => {
-        userQuery.value = retryQuery || '';
-        userQuery.dispatchEvent(new Event('input', {bubbles: true}));
-        sendMessage();
-    });
+    retry.dataset.retryQuery = retryQuery || '';
     content.appendChild(retry);
     box.appendChild(content);
     chatMain.appendChild(box);
@@ -247,7 +281,26 @@ function appendErrorMessage(title, detail, retryQuery) {
 function typeEffect(text, references = []) {
     const div = document.createElement('div');
     div.className = 'gpt-msg';
+    div.setAttribute("aria-live", "off");
     chatMain.appendChild(div);
+
+    const finish = () => {
+        div.classList.add("answer-complete");
+        appendReferences(div, references);
+        const announcement = document.createElement("span");
+        announcement.className = "visually-hidden";
+        announcement.setAttribute("role", "status");
+        announcement.setAttribute("aria-live", "polite");
+        announcement.textContent = text;
+        div.appendChild(announcement);
+    };
+
+    const renderImmediately = performanceProfile.mode !== "full" || text.length > ANSWER_REVEAL_LIMIT;
+    if (renderImmediately) {
+        appendPlainText(div, text);
+        finish();
+        return div;
+    }
 
     let cursor = document.createElement("span");
     cursor.className = "cursor";
@@ -270,39 +323,64 @@ function typeEffect(text, references = []) {
             }
             chatMain.scrollTop = chatMain.scrollHeight;
             i++;
-            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-            setTimeout(typing, reduceMotion ? 0 : 8);
+            setTimeout(typing, 8);
         } else {
             cursor.remove();
-
-            if (references.length > 0) {
-                const refDiv = document.createElement('div');
-                refDiv.className = "references";
-                const heading = document.createElement("strong");
-                heading.textContent = sourceDocumentsLabel;
-                refDiv.appendChild(heading);
-                references.forEach(ref => {
-                    const card = document.createElement('div');
-                    card.className = "ref-card";
-                    const link = document.createElement("a");
-                    link.href = safeReferenceUrl(ref);
-                    link.target = "_blank";
-                    link.rel = "noopener noreferrer";
-                    link.textContent = ref.title || "Document";
-                    card.appendChild(link);
-                    const meta = document.createElement("small");
-                    meta.textContent = [ref.folder, ref.uploaded_at]
-                        .filter(Boolean)
-                        .join(" • ");
-                    if (meta.textContent) card.appendChild(meta);
-                    refDiv.appendChild(card);
-                });
-                div.appendChild(refDiv);
-            }
+            finish();
         }
     }
     typing();
+    return div;
 }
+
+function appendPlainText(parent, text) {
+    text.split("\n").forEach((line, idx) => {
+        if (idx > 0) parent.appendChild(document.createElement("br"));
+        parent.appendChild(document.createTextNode(line));
+    });
+}
+
+function appendReferences(parent, references) {
+    if (!references.length) return;
+    const refDiv = document.createElement("div");
+    refDiv.className = "references";
+    const heading = document.createElement("strong");
+    heading.textContent = sourceDocumentsLabel;
+    refDiv.appendChild(heading);
+    references.forEach(ref => {
+        const card = document.createElement("div");
+        card.className = "ref-card";
+        const link = document.createElement("a");
+        link.href = safeReferenceUrl(ref);
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = ref.title || sourceDocumentsLabel;
+        card.appendChild(link);
+        const meta = document.createElement("small");
+        meta.textContent = [ref.folder, ref.uploaded_at].filter(Boolean).join(" • ");
+        if (meta.textContent) card.appendChild(meta);
+        refDiv.appendChild(card);
+    });
+    parent.appendChild(refDiv);
+}
+
+function appendPromptOrRetry(event) {
+    const prompt = event.target.closest("[data-prompt]");
+    if (prompt) {
+        userQuery.value = prompt.dataset.prompt;
+        userQuery.dispatchEvent(new Event("input", {bubbles: true}));
+        userQuery.focus();
+        return;
+    }
+    const retry = event.target.closest("[data-retry-query]");
+    if (retry) {
+        userQuery.value = retry.dataset.retryQuery;
+        userQuery.dispatchEvent(new Event("input", {bubbles: true}));
+        sendMessage();
+    }
+}
+
+chatMain.addEventListener("click", appendPromptOrRetry);
 
 
 function protectedPdfUrl(pdfId) {
