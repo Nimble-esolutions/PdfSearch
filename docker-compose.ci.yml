@@ -33,6 +33,11 @@ services:
       DEBUG: "False"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be provided}
       ALLOW_INSECURE_DEFAULTS: "1"
+      APP_ENV: development
+      DATA_BOOTSTRAP_MODE: empty
+      DATA_MODE: local
+      BACKUP_ROLE: disabled
+      EXTERNAL_SIDE_EFFECTS_MODE: disabled
       ALLOWED_HOSTS: localhost,127.0.0.1
       DJANGO_SETTINGS_MODULE: flowdocs.settings
       OPENAI_API_KEY: ""
