@@ -2480,3 +2480,92 @@ class LegalPageTests(TestCase):
         self.assertIn("Privacy", content)
         self.assertIn("Terms", content)
         self.assertNotIn('class="footer-links"', content)
+
+    def test_hallmark_theme_not_active_by_default(self):
+        django_cache.delete("sitesetting:PUBLIC_UI_THEME")
+        response = self.client.get(reverse("home"))
+        self.assertNotContains(response, "public-search hallmark")
+        self.assertNotContains(response, "search_hallmark.css")
+        self.assertNotContains(response, "notice-board")
+
+    def test_hallmark_theme_has_notice_board(self):
+        from core.models import SiteSetting
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "notice-board")
+        self.assertContains(response, "notice-board-heading")
+        self.assertContains(response, "Common Inquiries")
+        self.assertContains(response, "notice-card-stripe")
+
+    def test_hallmark_theme_has_docket_css(self):
+        from core.models import SiteSetting
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "search_hallmark.css")
+        self.assertContains(response, "notice-board")
+
+    def test_hallmark_css_file_has_all_state_classes(self):
+        response = self.client.get("/static/main/css/search_hallmark.css")
+        self.assertEqual(response.status_code, 200)
+        content = b"".join(response.streaming_content).decode()
+        for cls in ["docket-card", "shimmer-loader", "error-notice", "rate-limit-notice", "notice-board", "notice-card"]:
+            self.assertIn(f".{cls}", content)
+
+    def test_hallmark_loads_serif_font(self):
+        from core.models import SiteSetting
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "Noto+Serif+Devanagari")
+
+    def test_enhanced_does_not_load_hallmark(self):
+        from core.models import SiteSetting
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "enhanced"})
+        response = self.client.get(reverse("home"))
+        self.assertContains(response, "search_enhanced.css")
+        self.assertNotContains(response, "search_hallmark.css")
+        self.assertNotContains(response, "notice-board")
+
+    def test_hallmark_has_mobile_breakpoints_in_css(self):
+        response = self.client.get("/static/main/css/search_hallmark.css")
+        self.assertEqual(response.status_code, 200)
+        content = b"".join(response.streaming_content).decode()
+        self.assertIn("@media (max-width: 768px)", content)
+        self.assertIn("@media (max-width: 390px)", content)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", content)
+
+    def test_hallmark_has_focus_visible(self):
+        response = self.client.get("/static/main/css/search_hallmark.css")
+        content = b"".join(response.streaming_content).decode()
+        self.assertIn("focus-visible", content)
+
+    def test_hallmark_settings_table_shows_theme_value(self):
+        from core.models import SiteSetting
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.create_superuser("hallmarktest2", "t2@t.com", "Test@123", role="superadmin")
+        self.client.force_login(user)
+        response = self.client.get(reverse("settings"))
+        self.assertContains(response, "PUBLIC_UI_THEME")
+        self.assertContains(response, "hallmark")
+
+    def test_settings_page_shows_feature_flags_table(self):
+        from core.models import SiteSetting
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.create_superuser("hmtable", "h@t.com", "Test@123", role="superadmin")
+        self.client.force_login(user)
+        response = self.client.get(reverse("settings"))
+        self.assertContains(response, "Feature Flags")
+        self.assertContains(response, "hallmark")
+
+    def test_hallmark_settings_table_shows_theme_value(self):
+        from core.models import SiteSetting
+        SiteSetting.objects.update_or_create(key="PUBLIC_UI_THEME", defaults={"value": "hallmark"})
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.create_superuser("hallmarktest2", "t2@t.com", "Test@123", role="superadmin")
+        self.client.force_login(user)
+        response = self.client.get(reverse("settings"))
+        self.assertContains(response, "hallmark")

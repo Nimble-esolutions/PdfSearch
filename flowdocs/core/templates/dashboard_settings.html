@@ -147,9 +147,10 @@
                   {% csrf_token %}
                   <input type="hidden" name="key" value="{{ key }}">
                   {% if key == "PUBLIC_UI_THEME" %}
-                  <select name="value" class="form-select form-select-sm" style="max-width: 160px;">
+                  <select name="value" class="form-select form-select-sm" style="max-width: 200px;">
                     <option value="default" {% if info.current == "default" %}selected{% endif %}>Default</option>
                     <option value="enhanced" {% if info.current == "enhanced" %}selected{% endif %}>Enhanced (Maroon + Gold)</option>
+                    <option value="hallmark" {% if info.current == "hallmark" %}selected{% endif %}>Hallmark (Reading Room)</option>
                   </select>
                   {% else %}
                   <input type="text" name="value" value="{{ info.current }}" class="form-control form-control-sm" style="max-width: 140px;">

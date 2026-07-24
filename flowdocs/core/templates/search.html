@@ -2,7 +2,7 @@
 {% load static i18n %}
 
 {% block title %}{% trans "Sahakar AI — Search Cooperative Society Laws & Acts, Maharashtra" %}{% endblock %}
-{% block body_class %}public-search{% if public_ui_theme == "enhanced" %} enhanced{% endif %}{% endblock %}
+{% block body_class %}public-search{% if public_ui_theme == "enhanced" %} enhanced{% endif %}{% if public_ui_theme == "hallmark" %} hallmark{% endif %}{% endblock %}
 
 {% block admin_shell %}{% endblock %}
 
@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="{% static 'main/css/search.css' %}">
   {% if public_ui_theme == "enhanced" %}
   <link rel="stylesheet" href="{% static 'main/css/search_enhanced.css' %}">
+  {% endif %}
+  {% if public_ui_theme == "hallmark" %}
+  <link rel="stylesheet" href="{% static 'main/css/search_hallmark.css' %}">
   {% endif %}
 {% endblock %}
 
@@ -36,6 +39,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari&display=block" rel="stylesheet">
+  {% if public_ui_theme == "hallmark" %}
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Devanagari:wght@600&display=swap" rel="stylesheet">
+  {% endif %}
 
   <script type="application/ld+json">
   {
@@ -145,7 +151,49 @@
 <div class="container-fluid p-0">
   <div class="chat-container">
 
-      <div id="chatMain"></div>
+      <div id="chatMain">
+        {% if public_ui_theme == "hallmark" %}
+        <div class="notice-board" id="noticeBoard">
+          <p class="notice-board-heading">{% trans "Office of the Registrar" %}</p>
+          <p class="notice-board-body">{% trans "Welcome to Sahakar AI. Search cooperative laws, acts, rules, and government circulars using natural language in English or Marathi. AI-generated answers include references to official source documents." %}</p>
+          <p class="notice-board-label">{% trans "Common Inquiries" %}</p>
+          <div class="notice-cards-row">
+            <div class="notice-card" onclick="document.getElementById('userQuery').value='{% trans "Housing society audit rules" %}';document.getElementById('userQuery').focus();">
+              <div class="notice-card-stripe"></div>
+              <div class="notice-card-body">
+                <span class="notice-card-emoji">🏠</span>
+                <p class="notice-card-title">{% trans "Housing Society" %}</p>
+                <p class="notice-card-desc">{% trans "Audit, elections, maintenance" %}</p>
+              </div>
+            </div>
+            <div class="notice-card" onclick="document.getElementById('userQuery').value='{% trans "Credit cooperative society loan rules" %}';document.getElementById('userQuery').focus();">
+              <div class="notice-card-stripe"></div>
+              <div class="notice-card-body">
+                <span class="notice-card-emoji">💰</span>
+                <p class="notice-card-title">{% trans "Credit Co-op" %}</p>
+                <p class="notice-card-desc">{% trans "Loans, deposits, NPA rules" %}</p>
+              </div>
+            </div>
+            <div class="notice-card" onclick="document.getElementById('userQuery').value='{% trans "Audit requirements for cooperative societies" %}';document.getElementById('userQuery').focus();">
+              <div class="notice-card-stripe"></div>
+              <div class="notice-card-body">
+                <span class="notice-card-emoji">📋</span>
+                <p class="notice-card-title">{% trans "Audit Rules" %}</p>
+                <p class="notice-card-desc">{% trans "Annual audit, Class A/B/C" %}</p>
+              </div>
+            </div>
+            <div class="notice-card" onclick="document.getElementById('userQuery').value='{% trans "Agricultural credit cooperative society rules" %}';document.getElementById('userQuery').focus();">
+              <div class="notice-card-stripe"></div>
+              <div class="notice-card-body">
+                <span class="notice-card-emoji">🌾</span>
+                <p class="notice-card-title">{% trans "Agriculture" %}</p>
+                <p class="notice-card-desc">{% trans "Credit, marketing, farming" %}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
 
       <div class="chat-input">
          <img src="{% static 'main/images/Option-1 BOT.png' %}" alt="Ask Icon" style="height:50px;">

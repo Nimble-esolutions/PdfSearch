@@ -1,0 +1,818 @@
+/*
+ * Sahakar AI — Hallmark "Reading Room" Theme
+ * Activated via: PUBLIC_UI_THEME = "hallmark"
+ * Design thesis: The AI interprets. The document is the authority.
+ * Every answer carries its source like an official file.
+ */
+
+/* ── Design Tokens ── */
+:root {
+    --hm-wall:     #EDE7E0;
+    --hm-paper:    #FFFDF7;
+    --hm-surface:  #FFFFFF;
+    --hm-ink:      #1C1B1A;
+    --hm-ink-sub:  #5D5048;
+    --hm-seal:     #B71C1C;
+    --hm-gold:     #C7913B;
+    --hm-olive:    #33691E;
+    --hm-crimson:  #C62828;
+    --hm-border:   #D6CEC4;
+    --hm-hairline: #E5DFD7;
+    --hm-amber-bg: #FFF8E1;
+    --hm-amber-border: #FFE082;
+    --hm-error-bg: #FFF5F5;
+    --hm-error-border: #FECACA;
+}
+
+/* ── Base Reset Within Hallmark Scope ── */
+.public-search.hallmark {
+    background: var(--hm-wall);
+    font-family: 'Noto Sans Devanagari', 'Segoe UI', sans-serif;
+    color: var(--hm-ink);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Banner as Hero ── */
+.public-search.hallmark .banner-header {
+    position: relative;
+    height: 280px;
+    overflow: hidden;
+    background: var(--hm-ink);
+}
+
+.public-search.hallmark .banner-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.85;
+    filter: brightness(0.7) saturate(0.9);
+}
+
+.public-search.hallmark .banner-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 120px;
+    background: linear-gradient(to bottom, transparent, var(--hm-wall));
+    z-index: 2;
+    pointer-events: none;
+}
+
+.public-search.hallmark .banner-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 3;
+    padding: 20px 32px;
+    background: rgba(0, 0, 0, 0.50);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    max-width: 90%;
+}
+
+.public-search.hallmark .banner-text h5 {
+    color: #FFFFFF;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin: 0 0 4px 0;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.public-search.hallmark .banner-text h6 {
+    color: var(--hm-gold);
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    margin: 0;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Chat Container: The Reading Desk ── */
+.public-search.hallmark .chat-container {
+    background: var(--hm-wall);
+    height: auto;
+    min-height: 55vh;
+    max-width: 720px;
+    margin: -60px auto 0;
+    position: relative;
+    z-index: 4;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+    padding: 24px 20px 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Chat Messages ── */
+.public-search.hallmark #chatMain {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 4px 0;
+    scroll-behavior: smooth;
+}
+
+.public-search.hallmark .user-msg {
+    align-self: flex-end;
+    background: var(--hm-paper);
+    color: var(--hm-ink);
+    padding: 14px 18px;
+    border-radius: 16px 16px 4px 16px;
+    max-width: 72%;
+    word-wrap: break-word;
+    font-size: 15px;
+    line-height: 1.55;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--hm-hairline);
+}
+
+.public-search.hallmark .gpt-msg {
+    align-self: flex-start;
+    background: var(--hm-surface);
+    color: var(--hm-ink);
+    padding: 18px 22px;
+    border-radius: 2px 16px 16px 16px;
+    max-width: 88%;
+    word-wrap: break-word;
+    font-size: 15px;
+    line-height: 1.65;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--hm-hairline);
+    border-left: 3px solid var(--hm-seal);
+}
+
+/* ── Docket Cards: The Reference as Authority ── */
+.public-search.hallmark .docket-card {
+    background: var(--hm-surface);
+    border: 1px solid var(--hm-hairline);
+    border-radius: 6px;
+    margin-top: 14px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    animation: docketSlideUp 0.35s ease-out;
+}
+
+@keyframes docketSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.public-search.hallmark .docket-header {
+    background: var(--hm-seal);
+    color: #FFFFFF;
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
+
+.public-search.hallmark .docket-body {
+    padding: 14px 16px;
+}
+
+.public-search.hallmark .docket-title {
+    font-family: 'Noto Serif Devanagari', 'Georgia', serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--hm-ink);
+    margin: 0 0 4px 0;
+    line-height: 1.4;
+}
+
+.public-search.hallmark .docket-subtitle {
+    font-size: 13px;
+    color: var(--hm-ink-sub);
+    margin: 0 0 10px 0;
+    font-weight: 400;
+}
+
+.public-search.hallmark .docket-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 11px;
+    color: var(--hm-ink-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 14px;
+}
+
+.public-search.hallmark .docket-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.public-search.hallmark .docket-meta span::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--hm-gold);
+}
+
+.public-search.hallmark .docket-cta {
+    display: inline-block;
+    padding: 10px 24px;
+    background: var(--hm-ink);
+    color: #FFFFFF;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    text-decoration: none;
+    border-radius: 3px;
+    transition: background 0.2s, transform 0.15s;
+}
+
+.public-search.hallmark .docket-cta:hover {
+    background: var(--hm-seal);
+    color: #FFFFFF;
+    transform: translateY(-1px);
+}
+
+.public-search.hallmark .docket-cta::after {
+    content: ' →';
+    margin-left: 4px;
+}
+
+/* ── Retrofit existing .ref-card for Hallmark ── */
+.public-search.hallmark .ref-card {
+    border: none;
+    background: var(--hm-surface);
+    border-left: 3px solid var(--hm-gold);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-top: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    font-size: 13px;
+}
+
+.public-search.hallmark .ref-card a {
+    color: var(--hm-seal);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.public-search.hallmark .ref-card a:hover {
+    text-decoration: underline;
+}
+
+.public-search.hallmark .ref-card small {
+    color: var(--hm-ink-sub);
+    display: block;
+}
+
+/* ── Notice Board: Empty State ── */
+.public-search.hallmark .notice-board {
+    background: var(--hm-surface);
+    border: 1px solid var(--hm-hairline);
+    border-radius: 8px;
+    padding: 24px 20px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    margin: 0 auto;
+    width: 100%;
+}
+
+.public-search.hallmark .notice-board-heading {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--hm-seal);
+    margin: 0 0 8px 0;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--hm-hairline);
+}
+
+.public-search.hallmark .notice-board-body {
+    font-size: 14px;
+    color: var(--hm-ink-sub);
+    line-height: 1.6;
+    margin-bottom: 20px;
+}
+
+.public-search.hallmark .notice-board-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--hm-ink-sub);
+    margin: 20px 0 12px 0;
+}
+
+.public-search.hallmark .notice-cards-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+.public-search.hallmark .notice-card {
+    flex: 1 1 calc(25% - 10px);
+    min-width: 130px;
+    max-width: 200px;
+    background: var(--hm-surface);
+    border: 1px solid var(--hm-hairline);
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.public-search.hallmark .notice-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.public-search.hallmark .notice-card-stripe {
+    height: 4px;
+    background: var(--hm-seal);
+}
+
+.public-search.hallmark .notice-card-body {
+    padding: 14px 12px;
+}
+
+.public-search.hallmark .notice-card-emoji {
+    font-size: 1.5rem;
+    margin-bottom: 6px;
+    display: block;
+}
+
+.public-search.hallmark .notice-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--hm-ink);
+    margin: 0 0 4px 0;
+    line-height: 1.3;
+}
+
+.public-search.hallmark .notice-card-desc {
+    font-size: 11px;
+    color: var(--hm-ink-sub);
+    line-height: 1.4;
+}
+
+/* ── Loading: The Shimmer ── */
+.public-search.hallmark .shimmer-loader {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--hm-surface);
+    padding: 16px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--hm-hairline);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+    max-width: 340px;
+}
+
+.public-search.hallmark .shimmer-loader-icon {
+    font-size: 1.3rem;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.public-search.hallmark .shimmer-bar-wrap {
+    flex: 1;
+    height: 10px;
+    border-radius: 5px;
+    background: var(--hm-hairline);
+    overflow: hidden;
+    position: relative;
+}
+
+.public-search.hallmark .shimmer-bar-wrap::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, var(--hm-gold) 40%, var(--hm-seal) 60%, transparent);
+    animation: hmShimmer 1.6s infinite;
+    border-radius: 5px;
+}
+
+@keyframes hmShimmer {
+    100% { left: 100%; }
+}
+
+.public-search.hallmark .shimmer-label {
+    font-size: 13px;
+    color: var(--hm-ink-sub);
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: opacity 0.3s;
+}
+
+/* ── Typing Dots (fallback / old pattern override) ── */
+.public-search.hallmark .typing span {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--hm-gold);
+    margin: 0 2px;
+    animation: hmDotPulse 1.2s infinite;
+}
+
+.public-search.hallmark .typing span:nth-child(2) { animation-delay: 0.2s; }
+.public-search.hallmark .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes hmDotPulse {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); }
+}
+
+/* ── Error Notice ── */
+.public-search.hallmark .error-notice {
+    background: var(--hm-error-bg);
+    border: 1px solid var(--hm-error-border);
+    border-radius: 6px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.public-search.hallmark .error-notice-header {
+    background: var(--hm-crimson);
+    color: #FFFFFF;
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.public-search.hallmark .error-notice-body {
+    padding: 14px 16px;
+    font-size: 14px;
+    color: var(--hm-ink);
+    line-height: 1.5;
+}
+
+.public-search.hallmark .error-notice-body a {
+    color: var(--hm-crimson);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+/* ── Rate Limit Notice ── */
+.public-search.hallmark .rate-limit-notice {
+    background: var(--hm-amber-bg);
+    border: 1px solid var(--hm-amber-border);
+    border-radius: 6px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.public-search.hallmark .rate-limit-notice-header {
+    background: var(--hm-gold);
+    color: #FFFFFF;
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.public-search.hallmark .rate-limit-notice-body {
+    padding: 14px 16px;
+    font-size: 14px;
+    color: var(--hm-ink);
+    line-height: 1.5;
+}
+
+/* ── Input Area ── */
+.public-search.hallmark .chat-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 4px 4px;
+    background: var(--hm-wall);
+    border-top: 1px solid var(--hm-hairline);
+    margin-top: 12px;
+}
+
+.public-search.hallmark .chat-input input[type="text"] {
+    flex: 1;
+    border-radius: 24px;
+    padding: 14px 20px;
+    border: 2px solid var(--hm-border);
+    background: var(--hm-surface);
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--hm-ink);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.public-search.hallmark .chat-input input[type="text"]:focus {
+    border-color: var(--hm-ink);
+    box-shadow: 0 0 0 3px rgba(28, 27, 26, 0.08);
+}
+
+.public-search.hallmark .chat-input input[type="text"]::placeholder {
+    color: var(--hm-ink-sub);
+    opacity: 0.6;
+}
+
+.public-search.hallmark .chat-input button {
+    border-radius: 24px;
+    padding: 14px 28px;
+    background: var(--hm-ink);
+    color: #FFFFFF;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: background 0.2s, transform 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+}
+
+.public-search.hallmark .chat-input button:hover {
+    background: var(--hm-seal);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(183, 28, 28, 0.25);
+}
+
+.public-search.hallmark .chat-input button:active {
+    transform: translateY(0);
+}
+
+.public-search.hallmark .chat-input button:focus-visible {
+    outline: 2px solid var(--hm-seal);
+    outline-offset: 3px;
+}
+
+/* ── Icon in Input ── */
+.public-search.hallmark .chat-input img[alt="Ask Icon"] {
+    height: 42px;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1));
+}
+
+/* ── Word Counter ── */
+.public-search.hallmark #wordCounter {
+    display: block;
+    margin: 4px 0 0 12px;
+    font-size: 11px;
+    color: var(--hm-ink-sub);
+    opacity: 0.7;
+}
+
+/* ── Disclaimer Text ── */
+.public-search.hallmark .text-center[style*="color: #666"] {
+    font-size: 12px;
+    color: var(--hm-ink-sub) !important;
+    opacity: 0.75;
+}
+
+/* ── Document Count ── */
+.public-search.hallmark .text-center[style*="color: #999"] {
+    font-size: 11px;
+    color: var(--hm-ink-sub) !important;
+    opacity: 0.6;
+}
+
+/* ── WhatsApp / Feedback Buttons ── */
+.public-search.hallmark .whatsapp-link img,
+.public-search.hallmark .feedback-link img {
+    height: 36px;
+    border-radius: 6px;
+    transition: transform 0.15s;
+}
+
+.public-search.hallmark .whatsapp-link:hover img,
+.public-search.hallmark .feedback-link:hover img {
+    transform: scale(1.06);
+}
+
+/* ── Example Chips (hallmark override) ── */
+.public-search.hallmark .chip-btn {
+    border: 1px solid var(--hm-border);
+    background: var(--hm-surface);
+    color: var(--hm-ink);
+    border-radius: 18px;
+    padding: 6px 16px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.public-search.hallmark .chip-btn:hover {
+    background: var(--hm-ink);
+    color: #FFFFFF;
+    border-color: var(--hm-ink);
+    transform: translateY(-1px);
+}
+
+/* ── Top Utility Bar ── */
+.public-search.hallmark .bg-dark {
+    background: var(--hm-ink) !important;
+}
+
+.public-search.hallmark .bg-dark .text-white {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.public-search.hallmark .bg-dark a.text-white:hover {
+    color: var(--hm-gold) !important;
+}
+
+/* ── SEO Static Content ── */
+.public-search.hallmark .seo-static-content {
+    background: var(--hm-surface);
+    border-top: 1px solid var(--hm-hairline);
+    padding: 32px 0;
+}
+
+/* ── Focus Visible (Accessibility) ── */
+.public-search.hallmark a:focus-visible,
+.public-search.hallmark button:focus-visible,
+.public-search.hallmark input:focus-visible {
+    outline: 2px solid var(--hm-ink);
+    outline-offset: 2px;
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+    .public-search.hallmark .docket-card {
+        animation: none;
+    }
+
+    .public-search.hallmark .shimmer-bar-wrap::after {
+        animation: none;
+    }
+
+    .public-search.hallmark .chat-input button:hover,
+    .public-search.hallmark .notice-card:hover {
+        transform: none;
+    }
+
+    .public-search.hallmark #chatMain {
+        scroll-behavior: auto;
+    }
+}
+
+/* ── Mobile: ≤768px ── */
+@media (max-width: 768px) {
+    .public-search.hallmark .banner-header {
+        height: 180px;
+    }
+
+    .public-search.hallmark .banner-text {
+        padding: 12px 18px;
+        top: 45%;
+    }
+
+    .public-search.hallmark .banner-text h5 {
+        font-size: 1.1rem;
+        letter-spacing: 1px;
+    }
+
+    .public-search.hallmark .banner-text h6 {
+        font-size: 0.8rem;
+    }
+
+    .public-search.hallmark .chat-container {
+        margin: -40px auto 0;
+        max-width: 100%;
+        border-radius: 10px 10px 0 0;
+        padding: 18px 12px 12px;
+        min-height: 50vh;
+    }
+
+    .public-search.hallmark .user-msg {
+        max-width: 85%;
+        padding: 12px 14px;
+        font-size: 14px;
+    }
+
+    .public-search.hallmark .gpt-msg {
+        max-width: 94%;
+        padding: 14px 16px;
+        font-size: 14px;
+    }
+
+    .public-search.hallmark .chat-input {
+        padding: 10px 2px 2px;
+        gap: 6px;
+    }
+
+    .public-search.hallmark .chat-input input[type="text"] {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+
+    .public-search.hallmark .chat-input button {
+        padding: 12px 18px;
+        font-size: 13px;
+        letter-spacing: 0.3px;
+    }
+
+    .public-search.hallmark .chat-input img[alt="Ask Icon"] {
+        height: 34px;
+    }
+
+    .public-search.hallmark .whatsapp-link img,
+    .public-search.hallmark .feedback-link img {
+        height: 30px;
+    }
+
+    .public-search.hallmark .notice-cards-row {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+    }
+
+    .public-search.hallmark .notice-card {
+        flex: 0 0 140px;
+        min-width: 140px;
+        max-width: 180px;
+    }
+
+    .public-search.hallmark .docket-meta {
+        gap: 4px 10px;
+        font-size: 10px;
+    }
+
+    .public-search.hallmark .docket-cta {
+        display: block;
+        text-align: center;
+        padding: 12px;
+    }
+}
+
+/* ── Small Mobile: ≤390px ── */
+@media (max-width: 390px) {
+    .public-search.hallmark .banner-header {
+        height: 140px;
+    }
+
+    .public-search.hallmark .banner-text {
+        padding: 8px 12px;
+    }
+
+    .public-search.hallmark .banner-text h5 {
+        font-size: 0.9rem;
+    }
+
+    .public-search.hallmark .banner-text h6 {
+        font-size: 0.7rem;
+    }
+
+    .public-search.hallmark .chat-container {
+        margin: -30px auto 0;
+        border-radius: 8px 8px 0 0;
+        padding: 14px 8px 8px;
+    }
+
+    .public-search.hallmark .chat-input {
+        flex-wrap: wrap;
+    }
+
+    .public-search.hallmark .chat-input input[type="text"] {
+        flex: 1 1 100%;
+        order: 1;
+    }
+
+    .public-search.hallmark .chat-input button {
+        flex: 1 1 auto;
+        order: 2;
+    }
+
+    .public-search.hallmark .whatsapp-link,
+    .public-search.hallmark .feedback-link {
+        order: 3;
+    }
+
+    .public-search.hallmark .notice-card {
+        flex: 0 0 120px;
+        min-width: 120px;
+    }
+}
