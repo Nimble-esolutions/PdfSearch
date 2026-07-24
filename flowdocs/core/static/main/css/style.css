@@ -896,6 +896,72 @@ body {
   }
 }
 
+.legal-document {
+  max-width: 920px;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+  color: var(--admin-text);
+}
+
+.legal-document h1 {
+  margin-bottom: 0.35rem;
+  color: var(--admin-primary);
+  font-size: clamp(1.7rem, 3vw, 2.25rem);
+}
+
+.legal-document h2 {
+  margin-top: 2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--admin-border);
+  color: var(--admin-primary-strong);
+  font-size: 1.3rem;
+}
+
+.legal-document h3 {
+  margin-top: 1.35rem;
+  color: var(--admin-text);
+  font-size: 1.05rem;
+}
+
+.legal-document p,
+.legal-document li {
+  line-height: 1.65;
+}
+
+.legal-document .table {
+  margin: 1rem 0 1.4rem;
+  font-size: 0.92rem;
+}
+
+.legal-document .table th {
+  white-space: normal;
+}
+
+.legal-document a {
+  color: var(--admin-primary);
+}
+
+@media print {
+  .admin-header,
+  .admin-nav,
+  .admin-footer,
+  .admin-flash,
+  .job-drawer-toggle,
+  .job-drawer {
+    display: none !important;
+  }
+
+  .legal-document {
+    max-width: none;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+}
+
 .searchBG {
   font-size: 14px;
   padding: 5px 8px;
