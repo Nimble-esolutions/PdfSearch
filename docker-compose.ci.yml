@@ -37,7 +37,7 @@ services:
       DATA_BOOTSTRAP_MODE: empty
       DATA_MODE: local
       BACKUP_ROLE: disabled
-      EXTERNAL_SIDE_EFFECTS_MODE: disabled
+      EXTERNAL_SIDE_EFFECTS_MODE: sandbox
       ALLOWED_HOSTS: localhost,127.0.0.1
       DJANGO_SETTINGS_MODULE: flowdocs.settings
       OPENAI_API_KEY: ""
