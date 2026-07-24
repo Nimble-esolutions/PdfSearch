@@ -1339,10 +1339,12 @@ def sitemap_xml(request):
 
 # -------------- New logic for folder search --------------
 def search_query(request):
+    theme = get_setting("PUBLIC_UI_THEME", "default")
+    template = "search_v2.html" if theme == "sahakar2" else "search.html"
     if request.method in {"GET", "HEAD"}:
         return render(
             request,
-            "search.html",
+            template,
             {
                 "welcome_message": gettext(
                     "I am Sahakar AI. Click here to learn how to questions to get correct answers."
