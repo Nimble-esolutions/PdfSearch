@@ -106,6 +106,7 @@
   {% endif %}
 {% endblock %}
 
+{% block page_content %}
 <main class="admin-main">
   {% if messages %}
     <div id="flash-messages" class="admin-flash" aria-live="polite">
@@ -119,6 +120,7 @@
   {% endif %}
   {% block content %}{% endblock %}
 </main>
+{% endblock %}
 
 {% block public_footer %}{% endblock %}
 
