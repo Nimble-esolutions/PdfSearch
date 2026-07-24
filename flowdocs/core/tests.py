@@ -2553,6 +2553,15 @@ class LegalPageTests(TestCase):
                 response = self.client.get(reverse(name))
                 self.assertContains(response, "Registrar Co-operative Societies")
 
+    def test_legal_pages_use_public_legal_shell(self):
+        for name, _ in self.LEGAL_ROUTES:
+            with self.subTest(page=name):
+                response = self.client.get(reverse(name))
+                self.assertContains(response, 'class="legal-header"')
+                self.assertContains(response, 'aria-label="Legal navigation"')
+                self.assertNotContains(response, "Admin console")
+                self.assertNotContains(response, 'class="admin-nav"')
+
     def test_footer_has_compact_legal_line(self):
         response = self.client.get(reverse("home"))
         self.assertContains(response, "All rights reserved")
