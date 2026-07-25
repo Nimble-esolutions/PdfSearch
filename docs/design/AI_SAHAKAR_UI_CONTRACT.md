@@ -1,10 +1,10 @@
 # AI Sahakar UI Contract
 
-**Status:** Active and protected  
-**Audience:** Product, design, frontend, QA, and coding agents  
-**Owner:** FlowDocs maintainers  
-**Last verified:** 2026-07-25  
-**Canonical source:** This document  
+**Status:** Active and protected
+**Audience:** Product, design, frontend, QA, and coding agents
+**Owner:** FlowDocs maintainers
+**Last verified:** 2026-07-25
+**Canonical source:** This document
 **Supersedes:** Untracked visual proposals and active-looking historical UI plans
 
 ## Decision

@@ -1,8 +1,8 @@
 # AI Sahakar Admin User Guide
 
-**Status:** Active  
-**Audience:** Authorized administrators and superadmins  
-**Last verified:** 2026-07-25  
+**Status:** Active
+**Audience:** Authorized administrators and superadmins
+**Last verified:** 2026-07-25
 **Related:** [`CLIENT_USER_MANUAL.md`](CLIENT_USER_MANUAL.md), [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md)
 
 ## What the console is for
@@ -77,4 +77,3 @@ AI imagery described in the historical SRS.
 See the [operator workflow diagram](diagrams/admin-operator-workflow.mmd) and
 the [active UI contract](design/AI_SAHAKAR_UI_CONTRACT.md) for the protected
 visual and interaction rules.
-

@@ -1,8 +1,8 @@
 # AI Sahakar Developer Guide
 
-**Status:** Active  
-**Audience:** Developers, reviewers, and coding agents  
-**Last verified:** 2026-07-25  
+**Status:** Active
+**Audience:** Developers, reviewers, and coding agents
+**Last verified:** 2026-07-25
 **Canonical design:** [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md)
 
 ## Start with the contract
@@ -84,4 +84,3 @@ index gates. It is not a substitute for browser interaction checks.
 - [ ] Relevant tests and `git diff --check` pass.
 - [ ] Documentation updated for user-visible behavior.
 - [ ] Changes are committed logically and the PR targets `dev`.
-
