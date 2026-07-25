@@ -10,7 +10,7 @@
 - **Priority**: P1
 - **Effort**: L
 - **Risk**: HIGH
-- **Depends on**: none; Plan 006 release gates must be used
+- **Depends on**: Plan 011; Plan 006 release gates must be used
 - **Category**: migration
 - **Planned at**: commit `d3fc328`, 2026-07-26
 
@@ -20,9 +20,11 @@ The current application uses SQLite as the relational source of truth and a
 Docker named volume for the database, PDFs, extracted metadata, FAISS indexes,
 and backups. That is workable for one writer, but it couples data availability
 to one host and makes deploy, backup, concurrency, and scale harder to reason
-about. The target keeps Django as the application but moves relational state to
-PostgreSQL and binary/derived artifacts to versioned S3-compatible object
-storage, with checksums and explicit data-release manifests.
+about. The first target is custody separation: versioned S3-compatible object
+storage, checksums, and explicit data-release manifests. PostgreSQL is the
+preferred relational evolution when measured concurrency, recovery, or query
+requirements justify the migration cost; it is not a prerequisite for the
+first custody milestone.
 
 ## Current state
 
@@ -51,9 +53,26 @@ the migration manifest. The repository contains an older Chroma helper using a
 different embedding model; it must not be silently mixed with the active
 `utils.py` search path.
 
+## Decision gate: PostgreSQL now, or later?
+
+This plan must not turn a sound custody migration into an automatic database
+replacement. First separate recovery custody from query-engine choice, then
+choose the smallest data plane that meets measured requirements:
+
+| Observed requirement | Preferred first option |
+|---|---|
+| One writer, modest corpus, tight budget, low concurrency | SQLite write authority plus immutable evidence packs and read-only search snapshots |
+| Multiple writers, PITR, stronger RPO/RTO, concurrent admin work | PostgreSQL |
+| SQL-filtered vector search and enough memory for the corpus | PostgreSQL plus `pgvector`, after retrieval benchmarks |
+| Corpus or query load requires independent search scaling | External search engine only after a measured benchmark and operational owner |
+
+The first milestone is therefore object custody, immutable evidence packs, and
+reconciliation. PostgreSQL is the medium-term default only if the gate proves
+that concurrency, recovery, or queryability justify its operational cost.
+
 ## Target custody contract
 
-PostgreSQL owns transactional relational state:
+When the PostgreSQL gate is met, PostgreSQL owns transactional relational state:
 
 - users, roles, departments, and audit identity;
 - categories and category hierarchy;
@@ -63,7 +82,8 @@ PostgreSQL owns transactional relational state:
 - ingestion jobs, data generations, validations, and audit events;
 - site settings and release pointers.
 
-Object storage owns immutable blobs and rebuildable artifacts:
+Object storage owns immutable blobs and rebuildable artifacts in both the
+interim SQLite design and the PostgreSQL design:
 
 ```text
 datasets/{dataset_id}/documents/sha256/{sha256}.pdf
@@ -94,21 +114,22 @@ pointer names the active generation.
 **Verify**: the inventory validates, SQLite integrity and foreign keys pass,
 and every exception has an explicit disposition.
 
-### Step 2: Provision isolated PostgreSQL and object storage
+### Step 2: Provision isolated object storage; provision PostgreSQL only if the gate passes
 
-1. Create a database and role with least privilege; enable TLS, backups,
-   point-in-time recovery, connection limits, and a connection pooler where
-   needed.
-2. Create a dedicated bucket/prefix for the dataset. Enable versioning,
+1. Create a dedicated bucket/prefix for the dataset. Enable versioning,
    encryption, lifecycle policy, and restricted service credentials.
-3. Run the existing object-store capability probe. Stop if conditional writes,
+2. Run the existing object-store capability probe. Stop if conditional writes,
    checksums, or read-after-write behavior required by the release protocol are
    unavailable.
+3. If the PostgreSQL gate passes, create a database and least-privilege role;
+   enable TLS, backups, point-in-time recovery, connection limits, and a
+   connection pooler where needed.
 
-**Verify**: disposable credentials can create a transaction, upload/download a
-   checksum-pinned PDF, read the manifest, and cannot access another dataset.
+**Verify**: disposable credentials can upload/download a checksum-pinned PDF,
+read the manifest, and cannot access another dataset. If PostgreSQL is selected,
+also prove a transaction, restore point, and connection-limit policy.
 
-### Step 3: Introduce a migration-compatible schema
+### Step 3: Introduce a migration-compatible schema when PostgreSQL is selected
 
 Create additive Django migrations for PostgreSQL-compatible tables. Preserve
 source primary keys where safe so references and audit history remain traceable.
@@ -130,17 +151,22 @@ Separate document identity from versions:
   and compatibility metadata.
 
 Keep `ArtifactGeneration`, validation, maintenance job, and audit semantics;
-adapt them to point at PostgreSQL rows and object manifests.
+adapt them to point at PostgreSQL rows and object manifests. If PostgreSQL is
+deferred, add only the SQLite-compatible projection fields for evidence-pack
+roots, reconciliation state, and active data generation.
 
 **Verify**: `makemigrations --check`, PostgreSQL migrations on an empty
 database, and rollback rehearsal on a disposable clone all pass.
 
 ### Step 4: Bulk copy relational state
 
-Load users, folders/categories, PDFs, lifecycle values, audit records, and
-settings in dependency order. Preserve source IDs in explicit `legacy_id`
-columns if primary-key preservation is unsafe. Convert JSON fields to typed
-rows, not opaque JSON blobs. Use batched `COPY`/bulk inserts, transactions,
+When PostgreSQL is selected, load users, folders/categories, PDFs, lifecycle
+values, and audit records in dependency order. Preserve source primary keys
+where safe so references and audit history remain traceable. If it is deferred,
+keep the current relational projection and add pack-root/reconciliation
+references instead. Preserve source IDs in explicit `legacy_id` columns if
+primary-key preservation is unsafe. Convert JSON fields to typed rows, not
+opaque JSON blobs. Use batched `COPY`/bulk inserts, transactions,
 conflict reports, and an idempotency key per source row.
 
 **Verify**: row counts, foreign-key checks, lifecycle counts, category mapping,
@@ -194,7 +220,8 @@ results.
 2. Take a final SQLite snapshot and upload the final source manifest.
 3. Apply the final delta to PostgreSQL and object storage.
 4. Run all release validations and record the target release ID.
-5. Switch the application configuration to PostgreSQL and object storage.
+5. Switch the application configuration to object storage and the selected
+   relational backend (PostgreSQL only when the gate was approved).
 6. Start web/worker services against the target and verify health, login,
    search, source links, and admin workflows.
 7. Keep the old SQLite volume mounted nowhere but preserved read-only for the
@@ -211,7 +238,8 @@ restore drills, and an operator-signed custody record.
 ## Test plan
 
 - Unit tests for row mapping, object-key derivation, checksums, and idempotency.
-- Integration tests against disposable PostgreSQL, pgvector (if selected),
+- Integration tests against the selected relational backend, disposable
+  PostgreSQL/pgvector when selected,
   and S3-compatible storage.
 - Full manifest comparison before and after migration.
 - Migration rehearsal from the real sanitized snapshot.
@@ -245,3 +273,6 @@ previous release.
 - Cutover and rollback have each been executed successfully in rehearsal.
 - The active release is identified by PostgreSQL migration state, object
   manifest digest, image digest, and generation ID.
+- If PostgreSQL is deferred, the active release is instead identified by the
+  SQLite migration leaf, evidence-pack digest, object manifest digest, image
+  digest, and generation ID; no custody guarantee depends on a database swap.

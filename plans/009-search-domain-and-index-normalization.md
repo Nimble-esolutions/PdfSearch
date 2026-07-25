@@ -10,7 +10,7 @@
 - **Priority**: P1
 - **Effort**: L
 - **Risk**: HIGH
-- **Depends on**: Plan 008
+- **Depends on**: Plan 011, then Plan 008 when PostgreSQL is selected
 - **Category**: tech-debt / migration
 - **Planned at**: commit `d3fc328`, 2026-07-26
 
@@ -21,8 +21,27 @@ embedding matrix in JSON fields while a separate per-folder FAISS file stores
 the same vectors in an opaque derived representation. This creates large row
 updates, weak provenance, difficult partial reprocessing, and a model/index
 compatibility risk. The target makes document versions and chunks first-class,
-records embedding provenance, and uses PostgreSQL `pgvector` for the canonical
-retrieval dataset; FAISS becomes an optional generated cache during transition.
+records embedding provenance. PostgreSQL `pgvector` is one candidate canonical
+retrieval dataset; a global memory-mapped FAISS/SQLite snapshot may be safer and
+cheaper for the present corpus. FAISS becomes an optional generated cache or
+primary read-only search artifact only when its measured operating envelope is
+better.
+
+## Retrieval decision gate
+
+Benchmark these paths against the same sanitized query set and access rules:
+
+1. SQLite projection plus SQLite FTS/BM25 and one global memory-mapped FAISS
+   generation with category/visibility sidecars.
+2. PostgreSQL text search plus `pgvector`, with database-side filters and
+   reciprocal-rank fusion.
+3. An external search engine only if corpus size, query load, or independent
+   scaling makes its operational cost worthwhile.
+
+Record p50/p95 latency, memory, rebuild duration, English/Marathi recall,
+citation coverage, access-control equivalence, freshness, failure recovery, and
+monthly cost. Do not choose a provider from familiarity or a dependency that
+happens to be present in `requirements.txt`.
 
 ## Current state and risks
 
@@ -101,21 +120,38 @@ failed index build must not mark the document ready or expose partial results.
 **Verify**: retries, worker restart, duplicate upload, missing source object,
 and model outage leave one coherent state with a recoverable reason.
 
-### Step 4: Introduce pgvector retrieval behind the existing contract
+### Step 4: Introduce hybrid retrieval behind the existing contract
+
+Run lexical retrieval (SQLite FTS/BM25 or PostgreSQL text search) and semantic
+retrieval over the same verified chunks, then combine them with a documented
+rank-fusion policy. Exact acts, sections, dates, and Marathi terms must not be
+discarded by semantic ranking. The snapshot path uses one global index plus
+sidecar filters; the PostgreSQL path may use `pgvector` after the decision gate.
 
 Implement a provider interface returning the existing reference shape. Start
-with shadow reads: execute both pgvector and current FAISS retrieval, record
-top-k overlap and latency, but return the current result. Add a reviewed
-feature flag to switch by environment, not by user input.
+with shadow reads between the current provider and each candidate provider that
+is actually provisioned (for example SQLite snapshot versus PostgreSQL), record
+top-k overlap and latency, but return the current result. Add a reviewed feature
+flag to switch by environment, not by user input.
 
-Use cosine distance with normalized vectors, an HNSW index after measuring data
-size, and PostgreSQL filters for category/lifecycle/access scope. Keep a
-metadata index on document version, category, lifecycle, and visibility.
+For the PostgreSQL path, use cosine distance with normalized vectors, an HNSW
+index only after measuring data size, and PostgreSQL filters for
+category/lifecycle/access scope. Keep equivalent sidecar filters for the
+snapshot path.
 
 **Verify**: parity threshold, authorization equivalence, Marathi/English
 queries, no-result behavior, and p95 latency meet the release record.
 
-### Step 5: Demote FAISS to a rebuildable artifact
+### Step 5: Require evidence quorum before answer generation
+
+Before sending context to the answer model, independently check lexical and
+semantic agreement, category/lifecycle/access policy, evidence-pack root and
+document/page freshness, prompt-boundary limits, and complete source metadata.
+If the quorum fails, return the existing no-result/unavailable behavior or a
+reviewable refusal rather than inventing confidence. Evaluate false refusals
+and missed answers in shadow mode before making the policy user-visible.
+
+### Step 6: Demote or retain FAISS as a rebuildable search artifact
 
 If FAISS remains useful for offline or low-cost deployments, build it from the
 normalized source and upload it as an immutable `RetrievalGeneration` artifact.
@@ -125,7 +161,7 @@ rollback window and restore drill.
 **Verify**: deleting the FAISS artifact and rebuilding it produces the same
 generation checksum and retrieval evidence.
 
-### Step 6: Retire duplicate search paths
+### Step 7: Retire duplicate search paths
 
 After deployment usage is proven, either delete the legacy Chroma/console path
 or document it as a separately maintained tool with its own model/config
@@ -147,9 +183,11 @@ dataset.
 ## Stop conditions and boundaries
 
 Stop if the active embedding model cannot be identified, if current results
-cannot be reproduced from stored chunks, if pgvector is unavailable in the
-approved PostgreSQL service, or if authorization filtering differs between
-providers. Do not change the public answer JSON shape until a separate API
+cannot be reproduced from stored chunks, if the selected provider cannot meet
+the retrieval contract, or if authorization filtering differs between
+providers. If PostgreSQL/pgvector was selected, its unavailability is a stop
+condition; it is not a blocker when the SQLite snapshot path wins the decision
+gate. Do not change the public answer JSON shape until a separate API
 compatibility decision is approved.
 
 ## Done criteria
