@@ -7,11 +7,12 @@ application images and the normal authoritative sync job.
 
 ## Safety boundary
 
-The command is dry-run-first. A successful publish creates an immutable,
-dataset-scoped generation and its content-addressed blobs. It does **not**
-advance `control/authoritative.json`, change the running application, delete
-objects, or mutate the source volume. Dataset registration is an optional,
-explicit control-record operation.
+The command is dry-run-first. A successful `--publish` creates an immutable,
+dataset-scoped candidate generation and its content-addressed blobs. It does
+**not** advance `control/authoritative.json`, change the running application,
+delete objects, or mutate the source volume. First-time dataset registration
+requires the separate `--register-dataset` acknowledgement. Pointer promotion
+is a later, separately confirmed invocation.
 
 The source must be mounted read-only, or copied into a disposable workspace.
 Do not point the command at a writable live application directory. The stable
@@ -50,15 +51,23 @@ internal files or `.xl.meta` objects; use the application manifest contract.
 
 ## What is published
 
+The command first copies the selected source trees into a disposable local
+snapshot. It records file identity/size/timestamps before copying, uses
+no-follow regular-file reads, creates the SQLite copy through the online backup
+API, then repeats the complete source scan. Any added, removed or changed source
+entry fails with `consistent_snapshot_unproven` before an S3 client is opened.
+Only the stable local snapshot is hashed and uploaded.
+
 The command creates one manifest containing:
 
 - a consistent SQLite backup made with SQLite's backup API;
-- PDF files referenced by the database, stored as content-addressed blobs;
+- files under `media`, including PDFs stored as content-addressed PDF blobs;
 - FAISS files;
 - Chroma files, when present;
-- embedding/index metadata files, when present;
+- PDF-cache/index metadata files, when present;
 - source inventory, schema/migration information, counts, sizes and SHA-256
-  checksums.
+  checksums; and
+- deterministic snapshot evidence bound to the manifest.
 
 Static files are rebuildable and are excluded by default. Pass
 `--include-static` only when a specific deployment requires the captured
@@ -70,13 +79,15 @@ The generated object namespace is:
 ```text
 datasets/<dataset-id>/generations/<generation-id>/manifest.json
 datasets/<dataset-id>/generations/<generation-id>/database.sqlite3
-datasets/<dataset-id>/generations/<generation-id>/metadata/<relative-path>
 datasets/<dataset-id>/blobs/pdfs/sha256/<digest>.pdf
+datasets/<dataset-id>/blobs/files/<digest>
 ```
 
 The manifest is the restore contract. Each object is uploaded with conditional
 create semantics; an existing object is accepted only when its size and
-checksum match. A different object under the same immutable key fails.
+checksum metadata match. A different object under the same immutable key fails.
+After upload, every object is HEAD-verified and the manifest is re-read,
+schema-validated and digest-compared.
 
 ## Completed initial port
 
@@ -124,18 +135,55 @@ python scripts/ops/migrate_legacy_volume_to_vault.py \
   --dataset-id ai-sahakar-prod \
   --generation-id legacy-20260726T120000Z-a1b2c3d4 \
   --source-label sahakar-dev-frontend-dockerfile-1cubi5-prod-flowdocs \
+  --checkpoint /operator-state/legacy-20260726T120000Z-a1b2c3d4.json \
+  --register-dataset \
   --publish
 ```
 
-The command reports the immutable generation and upload/deduplication counts.
-It ends with an explicit statement that the authoritative pointer was not
-changed. Use a unique dataset namespace for a staging rehearsal when there is
+`--register-dataset` is required only when the reviewed destination has no
+registration. On later publications omit it: the existing registration must
+match dataset ID, application identity, production source identity and
+manifest-schema range exactly.
+
+The durable checkpoint contains no credentials or object bodies. It binds the
+generation ID, source root, creation time, manifest digest and per-object
+verification progress. Retry with the same generation and checkpoint reuses
+only digest/size-matching objects. A changed source produces
+`checkpoint_manifest_mismatch` before any new network writes.
+
+The command reports the immutable candidate and upload/deduplication counts and
+always reports `pointer_updated: false`. `--candidate-only` is retained as a
+deprecated compatibility no-op; candidate-only is now the only publication
+behavior. Use a unique dataset namespace for a staging rehearsal when there is
 any possibility of confusing production and staging data.
 
-Publishing creates the destination registration conditionally and updates the
-destination authoritative pointer with compare-and-swap semantics after all
-artifacts and the manifest succeed. Use `--candidate-only` when an operator
-wants to upload/register without moving the destination pointer.
+## Promote a verified candidate
+
+Promotion is never part of `--publish`. After independent review, run a new
+invocation without a source mount:
+
+```bash
+python scripts/ops/migrate_legacy_volume_to_vault.py \
+  --dataset-id ai-sahakar-prod \
+  --production-source-id ai-sahakar-prod \
+  --promote-generation legacy-20260726T120000Z-a1b2c3d4 \
+  --confirm-promotion ai-sahakar-prod:legacy-20260726T120000Z-a1b2c3d4
+```
+
+The promotion invocation:
+
+1. validates the immutable registration;
+2. re-reads and validates the candidate manifest and every referenced object;
+3. validates the current pointer→manifest digest chain, including the initial
+   legacy pointer shape used by the completed port;
+4. acquires a dataset-scoped writer record with conditional create/replace and
+   a new fencing epoch;
+5. revalidates registration and candidate after fencing;
+6. moves the pointer with exact ETag CAS; and
+7. conditionally expires only its own writer record.
+
+A CAS race leaves the candidate intact. Writer release never performs a blind
+delete and therefore cannot remove a successor's record.
 
 ## Restore into a fresh deployment
 
@@ -163,24 +211,28 @@ calling the fresh-deployment restore flow complete.
 ## Future refresh design
 
 The same agent-side tool can be run again against a later read-only snapshot.
-Each run should create a new generation, upload only missing content-addressed
-objects, write its manifest, and CAS-update the single `ai-sahakar-prod`
-authoritative pointer. A failed run leaves the previous pointer untouched.
-The latest application can then use the pointer for latest-compatible restore,
-or a pinned generation for rollback. A later in-app sync feature should call
-the same publication contract through the normal writer-fencing path rather
+Each publication creates a new candidate and uploads only missing
+content-addressed objects. A distinct reviewed promotion may then CAS-update
+the single `ai-sahakar-prod` authoritative pointer. A failed publication or
+promotion leaves the previous pointer untouched. The latest application can
+then use the pointer for latest-compatible restore, or a pinned generation for
+rollback. A later in-app sync feature should call the same separated
+publication/promotion contract through the normal writer-fencing path rather
 than duplicating this migration logic.
 
 ## Rollback and failure handling
 
 - Failed dry runs make no external changes.
 - A failed upload leaves only immutable candidate objects; retry with the same
-  generation is safe when checksums match.
+  generation and checkpoint is safe when manifest/object checksums match.
 - A checksum conflict is a stop condition; do not force overwrite or delete.
-- Candidate generations can be ignored or purged through the existing audited
-  retention workflow after confirming they are not referenced.
-- Because the authoritative pointer is unchanged, the running source service
-  continues using its existing local volume and active generation.
+- Candidate generations can be ignored or retired after confirming they are
+  not referenced. The current database-only “purge” label is not object
+  deletion and must not be described as such.
+- Publication leaves the authoritative pointer unchanged, so the running source
+  service continues using its existing local volume and active generation.
+- A completed promotion is immutable history. Reversal is a separately
+  confirmed CAS promotion of a previously verified generation.
 - If activation later fails, use the activation journal and previous pointer
   rollback procedure; do not restore by copying a legacy directory over an
   active volume.
