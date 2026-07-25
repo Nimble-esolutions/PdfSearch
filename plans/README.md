@@ -4,10 +4,12 @@ These plans are the durable implementation brief for future agents. They superse
 
 ## Baseline
 
-- Baseline commit: `0494528` (`feat(admin): polish settings and operations panels`)
-- Branch for this planning pass: `docs/admin-search-audit-plan`
-- Scope: improve existing behaviour and Hallmark shell; do not remove working workflows or reintroduce alternate themes.
-- Application code is unchanged by this planning pass.
+- Baseline commit: `d3fc328` (`docs(operations): define Dokploy data persistence contract`)
+- Branch for this planning pass: `docs/dokploy-data-persistence`
+- Scope: preserve the Civic Knowledge Workbench and operations contract while
+  planning durable data custody, retrieval normalization, and platform evolution.
+- Application code is unchanged by this planning pass; only planning documents
+  are added or updated.
 
 ## Delivery order
 
@@ -17,8 +19,17 @@ These plans are the durable implementation brief for future agents. They superse
 4. `004-breadcrumb-dashboard-category-workbench.md` — TODO, P1: route-aware navigation and dashboard/category workbench.
 5. `005-hallmark-public-search-redesign.md` — TODO, P1: preserve the Hallmark visual direction while rebuilding the search experience.
 6. `006-cross-surface-verification.md` — TODO, P1: automated and visual release gates.
+7. `007-search-reference-audit.md` — existing plan: source-reference parity and validation.
+8. `008-postgres-object-storage-migration.md` — TODO, P1: migrate SQLite/media/index custody through a rehearsed PostgreSQL and object-storage cutover.
+9. `009-search-domain-and-index-normalization.md` — TODO, P1: normalize documents/chunks/embeddings and introduce safe pgvector retrieval.
+10. `010-reliable-civic-ai-platform-architecture.md` — TODO, P2: evolve the modular monolith, worker, observability, security, and cost posture.
 
 Plans 002–004 should land as small cherry-pickable PRs. Plan 005 may proceed in parallel after the domain brief, but its backend/API contract must be agreed before visual work. Plan 006 gates merging.
+
+Plans 008–010 are future architecture work and must not be started as one
+large rewrite. Plan 008 establishes data custody first; Plan 009 depends on
+the target relational/object model; Plan 010 consolidates the resulting
+boundaries and operational evidence.
 
 ## Non-negotiable constraints
 
