@@ -107,8 +107,8 @@ All modules live under `flowdocs/core/`. Grouped by concern:
 - `empty` — no data, clean start
 - `seed` — bootstrap from declared seed database
 - `local` — use local volume data
-- `s3-restore` — restore latest compatible generation from S3 at startup
-- `s3-pinned` — restore a specific pinned generation
+- `s3-restore` — declare a latest-compatible restore source/policy
+- `s3-pinned` — declare a specific pinned restore source/policy
 - `sanitized-production` — restore and sanitize production data for non-prod use
 - `exact-production` — exact production data copy (requires explicit approval, forbidden in production)
 
@@ -117,6 +117,10 @@ All modules live under `flowdocs/core/`. Grouped by concern:
 **ExternalSideEffectsMode:** `enabled`, `disabled`, `sandbox`
 
 **RestorePolicy:** `disabled`, `manual`, `startup-latest`, `startup-pinned`
+
+The `startup-*` values are parsed and validated but are not consumed by either
+entrypoint. They describe the intended future orchestration, not current
+automatic startup behavior.
 
 ### Startup Validation Flow
 
@@ -201,6 +205,41 @@ activate_generation()
   └── on failure:
        └── rollback_to_previous()   # restore previous symlink
 ```
+
+### Current orchestration boundary
+
+The diagram above describes the tested library-level publication and full
+restore pipeline. It is not the current admin/worker call graph:
+
+```text
+admin Sync
+  -> maintenance job
+  -> sync_active_generation()
+  -> dataset-scoped generation manifest
+
+admin Pull to Staging
+  -> maintenance job
+  -> stage_generation()
+  -> legacy flat manifest lookup
+  -> checksum/SQLite staging only
+
+admin Promote/Rollback
+  -> ArtifactGeneration status update
+  -X-> activate_generation()
+```
+
+Consequences:
+
+- a generation created by current sync is not addressable through the legacy
+  admin staging lookup;
+- the admin path does not run compatibility, sanitization, rehearsal, or
+  byte-level activation;
+- database “active” status is not proof that `/app/data` switched generation;
+- the full `run_restore_pipeline()` path is currently reached by direct
+  integration tests/tooling, not startup or the maintenance job.
+
+Plan 003 owns reconciliation to one namespace and one activation-aware
+orchestrator.
 
 ### Activation Journal Crash Recovery
 
@@ -311,8 +350,8 @@ is rejected.
 |------|---------|-------------|
 | `docker-compose.ci.yml` | CI disposable stack | `APP_ENV=development`, `EXTERNAL_SIDE_EFFECTS_MODE=sandbox`, `DATA_BOOTSTRAP_MODE=empty`, `BACKUP_ROLE=disabled` |
 | `docker-compose.dev.yml` | Local development | `DEBUG=True`, `ALLOW_INSECURE_DEFAULTS=1`, build from local Dockerfile |
-| `docker-compose.integration.yml` | Integration tests with MinIO | 3 app instances (prod-a, prod-b, staging) + MinIO + 3 Redis + test-runner |
-| `docker-compose.yml` | Production template | `APP_ENV=production`, `BACKUP_ROLE=writer`, `pull_policy: always`, Traefik network |
+| `docker-compose.integration.yml` | Intended integration stack with MinIO | Currently not a reliable gate: runner command/label and network wiring require repair |
+| `docker-compose.yml` | Production template | `APP_ENV=production`, `BACKUP_ROLE=disabled` by default, `pull_policy: always`, Traefik network |
 
 ### CI Scripts
 
@@ -362,7 +401,7 @@ Dokploy-managed Compose stack
 | `APP_ENV` | `production` | Environment class |
 | `DEPLOYMENT_ID` | `prod-mum-01` | Deployment identifier |
 | `DATASET_ID` | `ai-sahakar-prod` | Dataset identity |
-| `BACKUP_ROLE` | `writer` | Backup role |
+| `BACKUP_ROLE` | `disabled` by default; `writer` only for approved publication | Backup role |
 | `EXTERNAL_SIDE_EFFECTS_MODE` | `enabled` | Side-effect policy |
 | `DATA_MODE` | `local` | Data mode |
 

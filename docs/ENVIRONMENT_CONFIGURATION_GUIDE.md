@@ -2,7 +2,7 @@
 
 **Status:** Active
 **Audience:** Developers, release operators, and reviewers
-**Last audited:** 2026-07-25
+**Last audited:** 2026-07-26
 **Canonical contract:** [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md)
 
 This guide explains the runtime effect of the environment variables. It does
@@ -119,18 +119,35 @@ examples.
 `ARTIFACT_VAULT_ENABLED`, `ARTIFACT_VAULT_ENDPOINT`, `ARTIFACT_VAULT_BUCKET`,
 `ARTIFACT_VAULT_REGION`, `ARTIFACT_VAULT_ACCESS_KEY`, and
 `ARTIFACT_VAULT_SECRET_KEY` control the RustFS/S3-compatible recovery vault.
-Automatic sync and pull remain disabled by default:
+Use explicit manual publication for the current production path:
 
 ```env
-ARTIFACT_VAULT_AUTO_SYNC=0
-ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY=0
+BACKUP_ROLE=writer
+BACKUP_SYNC_MODE=manual
+MAINTENANCE_SCHEDULER_ENABLED=0
+RESTORE_POLICY=disabled
 ```
 
-Restore variables (`RESTORE_SOURCE_DATASET_ID`, `RESTORE_WORKSPACE_ROOT`,
-`RESTORE_STAGE_TIMEOUT_SECONDS`, `RESTORE_REHEARSAL_ENABLED`,
-`RESTORE_SANITIZE_ENABLED`, and `RESTORE_COMPATIBILITY_CHECK_ENABLED`) apply
-only to explicit restore workflows. They do not belong in a routine local
-development configuration.
+The worker that executes publication must receive the vault credentials,
+writer identity, `APP_IMAGE_DIGEST`, and `APP_RELEASE_VERSION`. Production
+Compose currently maps the complete vault set to `web` but not explicitly to
+`maintenance`; do not assume Dokploy interpolation values appear inside the
+worker unless the effective Compose environment proves it.
+
+Restore identity uses `RESTORE_SOURCE_DATASET_ID`, `RESTORE_POLICY`, and, for
+`s3-pinned`, `DATA_PINNED_GENERATION`. These values currently validate policy;
+they do not trigger either entrypoint to restore. The full restore pipeline is
+available to controlled tooling and tests, while the admin maintenance action
+uses an older staging path.
+
+`ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`,
+`ARTIFACT_VAULT_BOOTSTRAP_GENERATION`, `ARTIFACT_VAULT_RETENTION_COUNT`,
+`RESTORE_WORKSPACE_ROOT`, `RESTORE_STAGE_TIMEOUT_SECONDS`,
+`RESTORE_REHEARSAL_ENABLED`, `RESTORE_SANITIZE_ENABLED`, and
+`RESTORE_COMPATIBILITY_CHECK_ENABLED` are not current runtime controls.
+
+See [`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) for the audited
+fresh-volume and accumulated-volume behavior.
 
 ## Edge-case playbook
 
@@ -142,8 +159,13 @@ development configuration.
   configuration; never enable them to mask a stage/production API failure.
 - **Restricted stage corpus:** set `PUBLIC_SEARCH_FOLDER_IDS` explicitly and
   verify anonymous search cannot access other folders.
-- **Sanitized stage restore:** use `DATA_MODE=s3-restore`, a different
-  `DATASET_ID`, `RESTORE_SOURCE_DATASET_ID`, disabled/sandbox effects, and a
-  reader/disabled backup role.
+- **Sanitized stage restore:** use a different `DATASET_ID`, explicit
+  `RESTORE_SOURCE_DATASET_ID`, disabled/sandbox effects, and a reader/disabled
+  backup role. Run the full pipeline in an isolated target; setting
+  `DATA_MODE=s3-restore` alone does not restore.
+- **Fresh volume:** fail the release if data was expected. Do not accept
+  successful migrations or an HTTP 200 as proof that the vault restored data.
+- **Accumulated volume:** compare the last immutable generation with current
+  database/PDF/FAISS counts. Vault health does not describe recovery-point age.
 - **Rollback:** restore the previous immutable image digest and matching data
   generation; do not roll back by retagging `latest`.

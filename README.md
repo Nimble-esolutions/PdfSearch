@@ -17,6 +17,7 @@ Use the route that matches the work:
 
 - Local development: [`docker-compose.dev.yml`](docker-compose.dev.yml) and [`docs/INDEX.md`](docs/INDEX.md#local-development)
 - Dokploy deployment: [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
+- Dokploy data persistence and safe redeploys: [`docs/DOKPLOY_DATA_PERSISTENCE.md`](docs/DOKPLOY_DATA_PERSISTENCE.md)
 - Release promotion: [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md)
 - Production baseline: [`docs/PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md)
 - Data custody and recovery: [`docs/DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md), [`docs/RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md), [`docs/INTERNAL_VAULT_MIGRATION.md`](docs/INTERNAL_VAULT_MIGRATION.md), and [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
@@ -135,6 +136,13 @@ The repository keeps tag defaults for compatibility, but production must set
 Tags such as `:latest` are never release identity and must not be reused from a
 stale local cache.
 
+Deploying a new image normally recreates the container while retaining the
+Compose-managed `/app/data` named volume. This is conditional on preserving the
+Dokploy project and volume mapping; deleting the project, changing the project
+or volume name, or using `down -v` can create an empty volume or delete data.
+Read [`DOKPLOY_DATA_PERSISTENCE.md`](docs/DOKPLOY_DATA_PERSISTENCE.md) before
+enabling autodeploy or pressing Deploy.
+
 ## Current Data-Custody Boundary
 
 Post-reconciliation (2026-07-22): 253 PDF rows, 242 recovered PDF files, 53 folders,
@@ -145,8 +153,15 @@ RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` contains timestamped active
 and legacy snapshots and checksums. Application-level S3 integration is implemented
 through the artifact vault adapter, dataset registration, global writer fencing,
 namespace-scoped keys, object store capability probing, and a full restore pipeline
-(download→validate→sanitize→rehearse→activate). The bucket remains an operator
-recovery vault; automatic cross-environment sync is planned but not yet automated.
+(download→validate→sanitize→rehearse→activate).
+
+The 2026-07-26 audit verified those primitives against disposable MinIO, but
+also confirmed that the normal admin/worker path and startup entrypoints are
+not yet connected to one end-to-end restore orchestrator. Scheduled backup is
+not currently reliable, and a fresh volume does not auto-pull from RustFS.
+Treat the bucket as an explicit operator recovery component and read
+[`RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md) before depending on
+it for a deploy, restore, or disaster-recovery decision.
 
 ## Verification Gates
 

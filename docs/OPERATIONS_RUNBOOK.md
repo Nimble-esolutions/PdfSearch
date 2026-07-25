@@ -520,7 +520,8 @@ docker compose -f docker-compose.yml exec -T web python manage.py config_inspect
 
 `config_inspect` reports valid `APP_ENV`, `DATA_MODE`, `BACKUP_ROLE`, and
 `EXTERNAL_SIDE_EFFECTS_MODE`. Production requires `APP_ENV=production`,
-`DATA_MODE=live`, and a non-empty `PRODUCTION_SOURCE_ID`.
+`DATA_MODE=local` for the current volume-backed deployment, and a non-empty
+`PRODUCTION_SOURCE_ID`.
 
 ### Stop conditions
 
@@ -554,8 +555,8 @@ docker compose -f docker-compose.yml logs --tail=200 web | grep -i "side_effect"
 
 ### Expected evidence
 
-Production must show `EXTERNAL_SIDE_EFFECTS_MODE=live`. Staging/training may
-use `sandbox`. Dev uses `disabled`.
+Production must show `EXTERNAL_SIDE_EFFECTS_MODE=enabled`. Staging, review,
+development, and test may use `sandbox` or `disabled` according to the test.
 
 ### Stop conditions
 
@@ -565,7 +566,7 @@ deployment record.
 
 ### Recovery
 
-Set `EXTERNAL_SIDE_EFFECTS_MODE=live` in Dokploy and redeploy. Verify email,
+Set `EXTERNAL_SIDE_EFFECTS_MODE=enabled` in Dokploy and redeploy. Verify email,
 OpenAI, and webhook functionality after the change.
 
 ### Retained evidence
@@ -823,6 +824,20 @@ now supports namespace-scoped S3 keys, conditional operations, immutable
 generation manifests, CAS-based writer fencing, staged restore with rehearsal,
 and atomic symlink-based activation with crash recovery.
 
+These capabilities are verified as library-level components. The current admin
+maintenance controls do not form one end-to-end recovery path:
+
+- sync publishes a dataset-scoped generation manifest;
+- admin staging reads the legacy flat manifest namespace;
+- admin promote/rollback changes generation records but does not call
+  byte-level activation;
+- startup restore policy is not invoked by either entrypoint.
+
+Do not use admin success messages or an `ArtifactGeneration.status=active` row
+as proof of a restored runtime. Use the full isolated restore pipeline and
+verify the active database/media/index bytes until Plan 003 reconciles the
+operator path.
+
 ### Required gates
 
 Pass link/path scan, Mermaid validation, Compose config, `/livez`, `/readyz`,
@@ -834,6 +849,13 @@ failed isolated targets and all evidence until the incident is closed.
 Backups are governed by `core/backup_policy.py` with dirty-state tracking,
 fingerprinting, and debouncing.
 
+Current limitation: scheduled/hybrid mode is not a production backup
+guarantee. `mark_data_dirty()` has no application mutation callers, so the
+scheduler normally sees no dirty state. The production maintenance service
+also needs explicit scheduler, sync-mode, vault, restore, and release-identity
+environment wiring. Keep publication manual and verify its immutable
+generation until these gaps are closed.
+
 ### Check backup state
 
 ```bash
@@ -841,8 +863,9 @@ docker compose -f docker-compose.yml exec -T web python manage.py config_inspect
 curl -fsS https://<configured-domain>/health/data/
 ```
 
-The data health endpoint reports whether a backup is needed (dirty state) and
-the last backup fingerprint.
+The data health endpoint reports the current dirty-state/fingerprint view. A
+clean result is not proof of a recent backup while mutation-to-dirty wiring is
+incomplete.
 
 ### Trigger a manual backup
 
@@ -850,9 +873,10 @@ the last backup fingerprint.
 docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
 ```
 
-Use the artifact inventory to identify the current generation, then queue a
-backup through the Dokploy backup mechanism or the explicit management command.
-Never skip the dirty-state check — redundant backups waste storage and I/O.
+Use the artifact inventory to identify the current data set, then queue an
+explicit vault generation sync from the approved operator path. Confirm the
+maintenance process has the complete vault and writer environment. The
+inventory command alone does not upload a generation.
 
 ### Verify backup integrity
 
@@ -894,33 +918,30 @@ renewal failures — they indicate Redis connectivity issues.
 The restore pipeline (`core/restore_pipeline.py`) runs a strict sequence:
 download → validate → sanitize → rehearse → activate.
 
-### Initiate a restore
+### Current operator limitation
 
-Restores are queued as maintenance jobs through the dashboard or management
-command. Each restore creates an isolated workspace in
-`/app/data/restore_workspaces/`.
+Do not initiate disaster recovery from the current dashboard. The maintenance
+`restore_generation` job calls a legacy staging function, not the full restore
+pipeline, and it reads a different manifest namespace from current
+publication. The dashboard promote/rollback actions update database records
+without switching active bytes.
 
-### Monitor restore progress
+Until Plan 003 is implemented, a restore requires approved direct tooling that
+calls `run_restore_pipeline()` against a disposable application/volume. This
+is intentionally not presented as a copy-paste production command because the
+generation, target, sanitization, rehearsal, activation, image compatibility,
+and rollback choices must be recorded for the incident.
 
-```bash
-docker compose -f docker-compose.yml logs --tail=100 web | grep -i "restore\|workspace"
-docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
+Full-pipeline workspaces are created under:
+
+```text
+/app/data/backups/restore-workspaces/
 ```
 
-The workspace state machine progresses through each stage. Each stage produces
-a checkpoint. If a stage fails, the workspace is paused at that stage for
-inspection.
-
-### Cancel a restore
-
-Cancel the maintenance job through the dashboard. The workspace is preserved
-for inspection. Discard it manually after evidence retention.
-
-### Clean up failed workspaces
-
-Failed workspaces in `/app/data/restore_workspaces/` are not auto-cleaned.
-Remove them after evidence retention to free disk space. Never delete a
-workspace that is still referenced by an active or pending maintenance job.
+Monitor the process that actually invoked the pipeline and inspect workspace
+metadata read-only. Preserve failed workspaces through incident review. Never
+delete a workspace referenced by an incident, activation journal, or pending
+job.
 
 ## Activation Operations
 
@@ -930,29 +951,25 @@ heartbeat-based crash recovery (`core/activation_journal.py`).
 ### Verify active generation
 
 ```bash
-ls -la /app/data/current
-docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
+docker compose -f docker-compose.yml exec -T web \
+  python manage.py shell -c \
+  'from core.activation_journal import activation_status; print(activation_status())'
 ```
 
-`/app/data/current` must be a symlink to the active generation directory.
-`inventory_artifacts` shows which generation is marked active.
+Also inventory the active database/media/FAISS paths and run a representative
+search. A local `ArtifactGeneration` row or dashboard badge is not activation
+proof.
 
 ### Check activation journal
 
-```bash
-cat /app/data/.activation_journal
-```
-
-The journal records heartbeat entries during activation. A complete sequence
-ends with a `committed` marker. An incomplete sequence (missing `committed`)
-indicates a crash during activation — the recovery will roll back on next
-startup.
+Use `activation_status()` rather than assuming a journal path. A complete
+sequence and matching active pointer are required. An incomplete activation is
+reconciled by startup; preserve its logs and metadata.
 
 ### Manual activation recovery
 
-If automatic crash recovery fails, use the management command to inspect the
-journal and manually complete or roll back the activation. Never manually
-modify the symlink or journal file.
+If automatic crash recovery fails, stop and inspect the journal/pointer through
+the activation service helpers. Never manually modify the symlink or journal.
 
 ## Management Commands Reference
 
@@ -960,5 +977,5 @@ modify the symlink or journal file.
 |---------|---------|
 | `config_inspect` | Report environment identity, data mode, side-effect policy |
 | `verify_object_store_capabilities` | Probe S3/RustFS for conditional operation support |
-| `inventory_artifacts` | List all generations, validation status, retention state |
+| `inventory_artifacts` | Build a content-free inventory of the current data root |
 | `validate_data_release` | Run full compatibility check suite |

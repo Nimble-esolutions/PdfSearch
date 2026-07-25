@@ -163,9 +163,10 @@ environment contract. New environment variables:
 - `PRODUCTION_SOURCE_ID` — canonical production source identifier
 - `AUTHORITATIVE_DATASET_ID` — authoritative dataset reference
 - `DATASET_ID` — current dataset identifier
-- `BACKUP_ROLE` — backup role (primary, secondary, none)
+- `BACKUP_ROLE` — backup role (`writer`, `reader`, `disabled`)
 - `EXTERNAL_SIDE_EFFECTS_MODE` — external side-effect safety mode
-- `DATA_MODE` — data access mode (read_only, read_write)
+- `DATA_MODE` — data posture (`empty`, `seed`, `local`, `s3-restore`,
+  `s3-pinned`, `sanitized-production`, `exact-production`)
 
 ## Global Writer Fencing
 
@@ -250,11 +251,15 @@ content-addressed storage safely deduplicates identical bytes. Conflicting
 FAISS or metadata keys remain rejected.
 
 **Current boundary:** explicit superadmin sync creates an immutable generation;
-explicit pull verifies every object and writes only to a quarantine staging
-directory. The `restore_pipeline`, `restore_workspace`, `compatibility`,
-`sanitize`, `rehearsal`, `activation_journal`, and `activate` modules provide
-the full promotion pipeline. Automated startup synchronization, live release
-promotion, and retention deletion are implemented through these modules.
+the current admin pull uses a legacy flat-manifest staging path, while sync
+publishes a dataset-scoped manifest. The `restore_pipeline`,
+`restore_workspace`, `compatibility`, `sanitize`, `rehearsal`,
+`activation_journal`, and `activate` modules provide a separately tested full
+promotion pipeline, but that pipeline is not called by startup or the admin
+maintenance restore job. Admin promotion currently changes generation metadata
+without activating runtime bytes. Automated startup synchronization and
+production-ready scheduled publication are not implemented end to end. See
+[`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) for the audited boundary.
 
 ## Reconciliation Record: 2026-07-22
 

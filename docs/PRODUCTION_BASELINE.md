@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator, Recovery
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-07-26
 Canonical source: docs/PRODUCTION_BASELINE.md
 Supersedes: None
 
@@ -50,8 +50,8 @@ synchronization.
 ## Current Versus Planned
 
 Current: immutable application release, Redis runtime dependency, operator-held
-snapshots/checksums, manual staged restore and promotion, explicit artifact
-inventory/RustFS custody, environment identity (`environment.py`), side-effect
+snapshots/checksums, explicit artifact inventory/RustFS custody, environment
+identity (`environment.py`), side-effect
 guards (`side_effects.py`), AI call guarding (`ai_guard.py`), activation
 journal (`activation_journal.py`), restore pipeline (`restore_pipeline.py`),
 restore workspace (`restore_workspace.py`), global writer fencing
@@ -62,10 +62,11 @@ restore workspace (`restore_workspace.py`), global writer fencing
 (`namespace.py`), and object-store capability probing
 (`object_store_capabilities.py`).
 
-Planned or absent: automatic cross-environment sync, release pointers,
-retention automation, and FAISS recovery orchestration. Restore now builds the
-canonical database chunks/embeddings/index pipeline and fails atomically if it
-cannot produce a searchable result set.
+Planned or absent: one operator/startup path connected to the full restore
+pipeline, automatic cross-environment sync, production-ready scheduled
+publication, retention automation, and FAISS recovery orchestration. The
+library-level restore pipeline passes isolated integration tests, but current
+admin restore/promotion does not activate runtime bytes.
 
 ## Runtime Facts
 
@@ -73,17 +74,19 @@ cannot produce a searchable result set.
 - `PRODUCTION_SOURCE_ID` and `AUTHORITATIVE_DATASET_ID` identify the canonical
   dataset for publication.
 - `DATASET_ID` scopes operations to a specific registered dataset.
-- `BACKUP_ROLE` gates backup write capability (writer/reader/none).
+- `BACKUP_ROLE` gates backup write capability (`writer`, `reader`, `disabled`).
 - `EXTERNAL_SIDE_EFFECTS_MODE` controls email, AI, and other external calls
-  (enabled/disabled/dry_run).
-- `DATA_MODE` selects data access mode (read_write/read_only).
+  (`enabled`, `disabled`, `sandbox`).
+- `DATA_MODE` selects data posture (`empty`, `seed`, `local`, `s3-restore`,
+  `s3-pinned`, `sanitized-production`, `exact-production`).
 
 ## Data Boundaries
 
 - `/app/flowdocs`: immutable application code (never shadow with a volume).
 - `/app/data`: persistent data root (SQLite, media, FAISS, Chroma).
-- `/app/staticfiles`: collected static assets.
-- `/app/backups`: operator backup target.
+- `/app/data/staticfiles`: collected static assets.
+- `/app/data/backups`: same-volume local snapshots and restore workspaces; not
+  an off-host backup.
 - RustFS bucket `ai-sahakar-prod-flowdocs-data-volume`: recovery vault only.
 
 ## Verification Gates

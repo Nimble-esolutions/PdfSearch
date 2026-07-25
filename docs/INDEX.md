@@ -43,6 +43,7 @@ source, and supersession relationship.
 ## Dokploy Deployment
 
 - [`DEPLOYMENT_GUIDE.md`](../DEPLOYMENT_GUIDE.md) — Compose deployment, UI checkpoints, migration, backup, restore, and rollback
+- [`DOKPLOY_DATA_PERSISTENCE.md`](DOKPLOY_DATA_PERSISTENCE.md) — Deploy/autodeploy behavior, named-volume survival, destructive actions, and recovery options
 - [`DEPLOYMENT.md`](../DEPLOYMENT.md) — concise deployment contract
 - [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md) — required production env values and bootstrap caveats
 - [`PRODUCTION_OPERATING_RULES.md`](PRODUCTION_OPERATING_RULES.md) — release, data, health, and incident rules
@@ -63,7 +64,7 @@ source, and supersession relationship.
 ## Data Recovery
 
 - [`DATA_CUSTODY_AND_PROMOTION.md`](DATA_CUSTODY_AND_PROMOTION.md) — quarantine, reconciliation, staging, and explicit promotion
-- [`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) — snapshot/checksum custody boundary
+- [`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) — audited vault verdict, generation contents, intact/fresh/lost-volume behavior, restore limits, and completion gate
 - [`INTERNAL_VAULT_MIGRATION.md`](INTERNAL_VAULT_MIGRATION.md) — dry-run-first legacy volume migration and candidate-generation publish tool
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — recovery-set contents and compatibility rules
 - [`FAISS_COMPATIBILITY.md`](FAISS_COMPATIBILITY.md) — index fingerprint validation

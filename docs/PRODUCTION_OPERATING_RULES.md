@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-07-26
 Canonical source: docs/PRODUCTION_OPERATING_RULES.md
 Supersedes: None
 
@@ -17,13 +17,16 @@ These rules apply to every PdfSearch production change.
 - Dokploy must pull exact web and Redis image digests with `pull_policy: always`.
 - Do not deploy a tag, cached `latest`, or alias as the release identifier.
 - Keep application code in the image and mutable data in `/app/data`.
+- A normal Dokploy deploy/autodeploy may recreate containers while retaining
+  the named `/app/data` volume; this is conditional on the Compose project and
+  volume mapping remaining unchanged. It is never a backup guarantee.
 
 ## Environment Identity
 
 - Every deployment must set `APP_ENV`, `PRODUCTION_SOURCE_ID`,
   `AUTHORITATIVE_DATASET_ID`, `DATASET_ID`, `BACKUP_ROLE`,
   `EXTERNAL_SIDE_EFFECTS_MODE`, and `DATA_MODE`.
-- Production requires `APP_ENV=production`, `DATA_MODE=live`, and a non-empty
+- Production requires `APP_ENV=production`, `DATA_MODE=local`, and a non-empty
   `PRODUCTION_SOURCE_ID`.
 - Startup validation is fail-closed: an invalid identity exits before migrations.
 - Never delete or rotate `/app/data/.instance_id` on a live instance.
@@ -41,6 +44,10 @@ These rules apply to every PdfSearch production change.
 ## Data Safety
 
 - Never delete a volume without a verified backup and restore path.
+- Never delete/recreate a Dokploy project, change its Compose project/volume
+  name, or run `docker compose down -v` as part of a routine deployment.
+- Before and after every deployment, record and compare the image digest,
+  OCI revision, Compose hash, `/app/data` volume identity, and data counts.
 - Never use a host bind path as an undocumented persistence contract.
 - Never mount a named volume to a file path.
 - Never mount persistent data over `/app/flowdocs`.
@@ -95,17 +102,17 @@ directly into the active data root.
 
 ### Sanitization
 
-`core/sanitize.py` enforces PII sanitization for non-prod data. When
-`DATA_MODE=sanitized`, all PII is stripped before data reaches the application.
-Production (`DATA_MODE=live`) skips sanitization. Never deploy sanitized data
-to a production instance.
+`core/sanitize.py` supports PII sanitization inside the full isolated restore
+pipeline. `DATA_MODE=sanitized-production` declares that posture but does not
+trigger restore/sanitization at startup. Production (`DATA_MODE=local`) uses
+its local volume. Never deploy sanitized data to a production instance.
 
 ### Backup Policy
 
-`core/backup_policy.py` tracks dirty-state with fingerprinting and debouncing.
-Backups are triggered only when data has changed since the last backup.
-Fingerprint comparison prevents redundant backups. Never skip the dirty-state
-check to force a backup — use the explicit management command instead.
+`core/backup_policy.py` contains dirty-state, fingerprinting, and debouncing
+primitives. Current mutations do not call `mark_data_dirty()`, so
+scheduled/hybrid mode is not a production backup guarantee. Use explicit
+manual generation publication and verify the immutable pointer/checksums.
 
 ### Writer Lease
 
@@ -116,11 +123,12 @@ without renewal.
 
 ### Generation Lifecycle
 
-Generations follow a strict state machine: `staged` → `validated` → `active` →
-`superseded`. Promotion (`promote_active_generation`) atomically marks the prior
-active generation as superseded and sets the new one active. Rollback
-re-promotes a prior generation. Purge deletes generations past their retention
-window. All lifecycle transitions are audited via `MaintenanceAuditEvent`.
+Generation database records follow `staged` → `validated` → `active` →
+`superseded`. Current admin promotion/rollback changes those records only; it
+does not call `activate_generation()` or prove that runtime bytes switched.
+Purge also marks records `purged`; it does not establish object-store deletion.
+All transitions are audited via `MaintenanceAuditEvent`, but audit state must
+not be confused with byte-level restore/activation evidence.
 
 ### PDF Lifecycle
 

@@ -1,11 +1,47 @@
-# Runtime Configuration and Settings Center
+# Plan 002: Reconcile the runtime configuration registry and settings center
 
-## Evidence and defect
+> **Executor instructions**: Most of this plan has been implemented. Verify the
+> current registry and UI before editing. Close only confirmed residual gaps;
+> do not build a second settings system.
 
-- `flowdocs/core/views.py:1733-1776` exposes only nine allowlisted settings and resolves values with `db_value or env_value`, which loses intentional false/empty values and does not explain precedence.
-- `flowdocs/flowdocs/settings.py:204-286` defines substantially more configuration: Redis, search limits, folder scope, cache, CSRF/CORS, upload limits, PDF/embedding parameters, sessions/security, email, vector/index paths, backup paths, and environment identity.
-- `flowdocs/core/views.py:1831-1848` says settings take effect immediately, although many Django settings are startup-only.
-- The settings vault status currently infers reachability and bucket existence from `env_identity.is_backup_writer` rather than executing a real capability probe.
+## Status
+
+- **Priority**: P1
+- **Effort**: S/M
+- **Risk**: MED
+- **Depends on**: none
+- **Category**: configuration / DX
+- **Planned at**: commit `f742b59`, 2026-07-26
+- **Roadmap status**: RECONCILE
+
+## Drift check
+
+Run:
+
+```bash
+git diff --stat f742b59..HEAD -- \
+  flowdocs/core/configuration_registry.py flowdocs/core/models.py \
+  flowdocs/core/views.py flowdocs/core/templates/settings.html \
+  flowdocs/core/tests.py flowdocs/flowdocs/settings.py
+```
+
+If these files changed, compare this plan to the live implementation before
+proceeding.
+
+## Historical defect and current evidence
+
+- `flowdocs/core/configuration_registry.py:9-97` now defines typed
+  configuration definitions, display redaction, and grouped inventory output.
+- `flowdocs/core/models.py:325-351` provides the database-backed `SiteSetting`
+  projection.
+- `flowdocs/core/views.py:1795-1893` renders vault/configuration state and
+  persists named runtime settings.
+- `flowdocs/core/tests.py:2610-2635` covers feature flags, safe inventory, and
+  runtime persistence.
+
+The original defect is therefore substantially implemented. Remaining work is
+verification of complete key coverage, explicit precedence, false/zero/empty
+semantics, restart requirements, optimistic concurrency, and audit evidence.
 
 Impact: operators cannot distinguish editable runtime controls from deployment configuration, may believe a change is active when it is not, and receive misleading infrastructure health.
 
@@ -21,14 +57,33 @@ Create a declarative, typed configuration registry in an application-owned modul
 
 Use a resolver that preserves `False`, `0`, and empty values intentionally; report effective value, source, validation status, and restart requirement. Never return secret values. A save should either persist a supported runtime setting and re-read it, or clearly say that a restart/deployment is required.
 
-## Implementation steps
+## Reconciliation steps
 
-1. Inventory every supported env/settings key and classify it; add regression tests for omissions and redaction.
-2. Introduce typed resolver/registry APIs without changing existing consumers.
-3. Refactor current settings view to consume the registry and return structured metadata.
-4. Add validation, optimistic concurrency/versioning, audit event, and post-save effective-state response for runtime settings.
-5. Update the existing Hallmark settings template to show grouped rows, source badges, restart badges, safe values, and actionable validation errors.
-6. Add an operator-facing “configuration health” summary with links to the relevant operational page.
+1. Run the focused tests and inspect rendered groups. Record implemented,
+   missing, and intentionally deployment-only keys.
+2. Add characterization tests for `False`, `0`, empty string, invalid integer,
+   source precedence, redaction, and startup-only settings.
+3. If a test fails, patch the existing registry/resolver; do not create a
+   parallel configuration abstraction.
+4. Verify stale concurrent saves cannot silently overwrite an operator change.
+   If versioning is absent, add the smallest model/form contract and audit event.
+5. Update environment/configuration docs from the same registry or add a drift
+   test; do not duplicate hand-maintained key lists.
+
+## Commands and scope
+
+```bash
+python manage.py test \
+  core.tests.LegalPageTests core.tests.EnvironmentContractTests
+python manage.py check
+python manage.py makemigrations --check --dry-run
+git diff --check
+```
+
+In scope: `configuration_registry.py`, `SiteSetting`, settings views/template,
+focused tests, and configuration docs. Out of scope: secret values, production
+environment mutation, unrelated search/index behavior, and protected lifecycle
+modules.
 
 ## Tests and done criteria
 
@@ -38,3 +93,10 @@ Use a resolver that preserves `False`, `0`, and empty values intentionally; repo
 - Invalid values do not persist; concurrent stale saves are rejected.
 - A settings change reports its actual effective state.
 - Existing settings, dashboard access, and role restrictions remain green.
+
+## STOP conditions
+
+Stop if a setting is consumed only at Django import/startup and the proposed UI
+would claim immediate activation; if a secret would need to be displayed; if
+the registry and deployment documentation disagree on a security-sensitive
+default; or if the fix requires changing protected backend files.
