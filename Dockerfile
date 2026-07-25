@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # =====================================================================
 # STAGE 1: Builder - compile Python wheels, discard build tools
 # =====================================================================
@@ -11,9 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     g++ \
@@ -37,8 +33,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 COPY requirements-web.lock .
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip wheel --require-hashes --wheel-dir /build/wheels -r requirements-web.lock
+RUN pip wheel --require-hashes --wheel-dir /build/wheels -r requirements-web.lock
 
 # =====================================================================
 # STAGE 2: Runtime - minimal image with only runtime libraries
@@ -61,9 +56,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     sqlite3 \
      gosu \
@@ -74,8 +67,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
      fonts-noto-core
 
 COPY --from=builder /build/wheels /wheels
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-compile --no-index --no-deps /wheels/*.whl && \
+RUN pip install --no-compile --no-index --no-deps /wheels/*.whl && \
     pip uninstall -y setuptools wheel && \
     rm -rf /wheels
 
