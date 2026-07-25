@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-07-25
 Canonical source: DEPLOYMENT_GUIDE.md
 Supersedes: None
 
@@ -10,6 +10,12 @@ Supersedes: None
 This application is deployed as a Dokploy **Compose** application. Dokploy owns
 service naming, Traefik labels, deployment history, and environment injection.
 The repository Compose file owns service behavior and persistent volume names.
+
+Read [`docs/DOKPLOY_DATA_PERSISTENCE.md`](docs/DOKPLOY_DATA_PERSISTENCE.md)
+before using Deploy or enabling autodeploy. A normal redeploy replaces the
+container but retains the named `/app/data` volume only while the Dokploy
+project and volume mapping remain unchanged. It is not a backup and it is not
+safe to delete/recreate the project or run `down -v`.
 
 ## Deployment Contract
 
@@ -66,6 +72,11 @@ custody counts and release boundary.
 9. Confirm the Compose application resolves the web service to container port `8000` and the external `dokploy-network` is attached.
 10. Confirm the configured domain and TLS route point to this Compose application, not a static application.
 11. Deploy only after the pre-deployment checklist passes.
+
+The Deploy button is an image/service lifecycle action, not a data reset. It
+must not be used as a substitute for a backup, restore, or data cleanup. After
+deployment, verify both the running immutable image digest and the actual
+`/app/data` volume identity.
 
 ## GitHub/Dokploy Source Of Truth
 

@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-07-25
 Canonical source: docs/PRODUCTION_OPERATING_RULES.md
 Supersedes: None
 
@@ -17,6 +17,9 @@ These rules apply to every PdfSearch production change.
 - Dokploy must pull exact web and Redis image digests with `pull_policy: always`.
 - Do not deploy a tag, cached `latest`, or alias as the release identifier.
 - Keep application code in the image and mutable data in `/app/data`.
+- A normal Dokploy deploy/autodeploy may recreate containers while retaining
+  the named `/app/data` volume; this is conditional on the Compose project and
+  volume mapping remaining unchanged. It is never a backup guarantee.
 
 ## Environment Identity
 
@@ -41,6 +44,10 @@ These rules apply to every PdfSearch production change.
 ## Data Safety
 
 - Never delete a volume without a verified backup and restore path.
+- Never delete/recreate a Dokploy project, change its Compose project/volume
+  name, or run `docker compose down -v` as part of a routine deployment.
+- Before and after every deployment, record and compare the image digest,
+  OCI revision, Compose hash, `/app/data` volume identity, and data counts.
 - Never use a host bind path as an undocumented persistence contract.
 - Never mount a named volume to a file path.
 - Never mount persistent data over `/app/flowdocs`.

@@ -43,6 +43,7 @@ source, and supersession relationship.
 ## Dokploy Deployment
 
 - [`DEPLOYMENT_GUIDE.md`](../DEPLOYMENT_GUIDE.md) — Compose deployment, UI checkpoints, migration, backup, restore, and rollback
+- [`DOKPLOY_DATA_PERSISTENCE.md`](DOKPLOY_DATA_PERSISTENCE.md) — Deploy/autodeploy behavior, named-volume survival, destructive actions, and recovery options
 - [`DEPLOYMENT.md`](../DEPLOYMENT.md) — concise deployment contract
 - [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md) — required production env values and bootstrap caveats
 - [`PRODUCTION_OPERATING_RULES.md`](PRODUCTION_OPERATING_RULES.md) — release, data, health, and incident rules
