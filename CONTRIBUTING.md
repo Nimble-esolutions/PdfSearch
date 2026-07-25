@@ -1,7 +1,7 @@
 # Contributing to PdfSearch
 
-**Status:** Active  
-**Audience:** Contributors, reviewers, and agents  
+**Status:** Active
+**Audience:** Contributors, reviewers, and agents
 **Last audited:** 2026-07-25
 
 ## Before starting

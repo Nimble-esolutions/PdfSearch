@@ -1,8 +1,8 @@
 # Environment Configuration Guide
 
-**Status:** Active  
-**Audience:** Developers, release operators, and reviewers  
-**Last audited:** 2026-07-25  
+**Status:** Active
+**Audience:** Developers, release operators, and reviewers
+**Last audited:** 2026-07-25
 **Canonical contract:** [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md)
 
 This guide explains the runtime effect of the environment variables. It does
@@ -147,4 +147,3 @@ development configuration.
   reader/disabled backup role.
 - **Rollback:** restore the previous immutable image digest and matching data
   generation; do not roll back by retagging `latest`.
-
