@@ -23,11 +23,24 @@ test.describe('Civic Knowledge Workbench', () => {
     await expect(page.locator('.knowledge-rail')).toBeVisible({ visible: viewportWidth >= 901 });
     await expect(page.locator('.evidence-rail')).toBeVisible({ visible: viewportWidth >= 1440 || viewportWidth <= 900 });
     await expect(page.locator('.empty-state h2')).toHaveText('Ask AI Sahakar');
+    await expect(page.locator('.workspace-heading__support')).toContainText('official department documents');
+    await expect(page.locator('.composer-controls')).toBeVisible();
+    await expect(page.locator('.composer-submit svg')).toBeVisible();
     await expect(page.locator('#userQuery')).toHaveAttribute('placeholder', /what are the rules/);
     await expect(page.locator('#sendBtn')).toBeDisabled();
     await page.locator('#userQuery').fill('audit procedure');
     await expect(page.locator('#wordCounter')).toHaveText('2 of 30 words');
     await expect(page.locator('#sendBtn')).toBeEnabled();
+    const inputBox = await page.locator('#userQuery').boundingBox();
+    const buttonBox = await page.locator('#sendBtn').boundingBox();
+    expect(inputBox).not.toBeNull();
+    expect(buttonBox).not.toBeNull();
+    if (viewportWidth > 430) {
+      expect(Math.abs((inputBox?.y ?? 0) - (buttonBox?.y ?? 0))).toBeLessThanOrEqual(1);
+    } else {
+      expect(buttonBox?.width).toBeGreaterThanOrEqual((inputBox?.width ?? 0) - 1);
+      expect(buttonBox?.y ?? 0).toBeGreaterThan(inputBox?.y ?? 0);
+    }
   });
 
   test('a question produces a document-oriented answer and source evidence', async ({ page }) => {
