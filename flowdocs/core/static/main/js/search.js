@@ -9,11 +9,18 @@ const searchLoadingStages = JSON.parse(document.getElementById("search-loading-s
 const retryLabel = JSON.parse(document.getElementById("retry-label").textContent);
 const sourceDocumentsLabel = JSON.parse(document.getElementById("source-documents-label").textContent);
 const searchMessages = JSON.parse(document.getElementById("search-messages").textContent);
+const workbenchCopy = JSON.parse(document.getElementById("workbench-copy").textContent);
 const searchComposer = document.getElementById("searchComposer");
 const aboutDialog = document.getElementById("aboutDialog");
-const aboutOpen = document.querySelector("[data-about-open]");
+const aboutOpens = document.querySelectorAll("[data-about-open]");
 const aboutClose = document.querySelector("[data-about-close]");
+const evidenceRail = document.getElementById("evidenceRail");
+const evidenceAnswer = document.querySelector("[data-evidence-answer]");
+const evidenceContent = document.querySelector("[data-evidence-content]");
+const evidenceClose = document.querySelector("[data-evidence-close]");
+const newQuestion = document.querySelector("[data-new-question]");
 let aboutReturnFocus = null;
+let evidenceReturnFocus = null;
 let requestPending = false;
 let activeController = null;
 let requestTimeout = null;
@@ -70,6 +77,15 @@ searchComposer.addEventListener("submit", event => {
     sendMessage();
 });
 
+newQuestion?.addEventListener("click", () => {
+    chatMain.replaceChildren();
+    appendWelcomeMessage();
+    userQuery.value = "";
+    userQuery.dispatchEvent(new Event("input", {bubbles: true}));
+    userQuery.focus();
+    resetEvidenceRail();
+});
+
 function closeAbout() {
     if (!aboutDialog) return;
     if (typeof aboutDialog.close === "function") {
@@ -80,15 +96,12 @@ function closeAbout() {
     if (aboutReturnFocus) aboutReturnFocus.focus();
 }
 
-aboutOpen?.addEventListener("click", () => {
+aboutOpens.forEach(aboutOpen => aboutOpen.addEventListener("click", () => {
     aboutReturnFocus = aboutOpen;
-    if (typeof aboutDialog.showModal === "function") {
-        aboutDialog.showModal();
-    } else {
-        aboutDialog.setAttribute("open", "");
-    }
+    if (typeof aboutDialog.showModal === "function") aboutDialog.showModal();
+    else aboutDialog.setAttribute("open", "");
     aboutClose?.focus();
-});
+}));
 aboutClose?.addEventListener("click", closeAbout);
 aboutDialog?.addEventListener("cancel", event => {
     event.preventDefault();
@@ -208,7 +221,9 @@ async function sendMessage(){
 
 function appendMessage(text, sender, isLoading=false){
     const div = document.createElement('div');
-    div.className = sender === 'user' ? 'user-msg' : 'gpt-msg';
+    div.className = sender === 'user'
+        ? 'conversation-entry conversation-entry--user user-msg'
+        : 'conversation-entry conversation-entry--assistant gpt-msg';
 
     if (isLoading) {
         div.textContent = text;
@@ -226,37 +241,55 @@ function appendMessage(text, sender, isLoading=false){
 }
 
 function appendWelcomeMessage(text, href, label) {
-    const div = appendMessage('', 'gpt');
-    div.classList.add('gpt-msg--welcome');
-    div.appendChild(document.createTextNode(text + ' '));
-    const link = document.createElement('a');
-    link.href = href;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.textContent = label;
-    div.appendChild(link);
+    const div = document.createElement('section');
+    div.className = 'empty-state gpt-msg--welcome';
+    div.setAttribute('aria-labelledby', 'empty-state-heading');
 
-    const promptLabel = document.createElement('span');
-    promptLabel.className = 'welcome-prompts__label';
-    promptLabel.textContent = welcomePromptLabel;
-    div.appendChild(promptLabel);
+    const mark = document.createElement('span');
+    mark.className = 'empty-state__mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = 'AI';
+    div.appendChild(mark);
+
+    const heading = document.createElement('h2');
+    heading.id = 'empty-state-heading';
+    heading.textContent = workbenchCopy.empty_heading;
+    div.appendChild(heading);
+
+    const support = document.createElement('p');
+    support.className = 'empty-state__support';
+    support.textContent = workbenchCopy.empty_support;
+    div.appendChild(support);
+
+    const trust = document.createElement('p');
+    trust.className = 'empty-state__trust';
+    trust.textContent = workbenchCopy.empty_trust;
+    div.appendChild(trust);
 
     const promptWrap = document.createElement('div');
-    promptWrap.className = 'prompt-chips';
+    promptWrap.className = 'suggested-questions';
+    const promptHeading = document.createElement('strong');
+    promptHeading.textContent = workbenchCopy.suggested_questions;
+    promptWrap.appendChild(promptHeading);
+    const promptGrid = document.createElement('div');
+    promptGrid.className = 'suggested-questions__grid';
     welcomePrompts.forEach(prompt => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'prompt-chip';
+        button.className = 'suggested-question prompt-chip';
         button.textContent = prompt;
         button.dataset.prompt = prompt;
-        promptWrap.appendChild(button);
+        promptGrid.appendChild(button);
     });
+    promptWrap.appendChild(promptGrid);
     div.appendChild(promptWrap);
+    chatMain.appendChild(div);
+    chatMain.scrollTop = 0;
 }
 
 function appendErrorMessage(title, detail, retryQuery) {
     const box = document.createElement('div');
-    box.className = 'search-error';
+    box.className = 'search-error conversation-entry conversation-entry--assistant';
 
     const content = document.createElement('div');
     const heading = document.createElement('strong');
@@ -280,13 +313,15 @@ function appendErrorMessage(title, detail, retryQuery) {
 
 function typeEffect(text, references = []) {
     const div = document.createElement('div');
-    div.className = 'gpt-msg';
+    div.className = 'conversation-entry conversation-entry--assistant gpt-msg';
     div.setAttribute("aria-live", "off");
     chatMain.appendChild(div);
 
     const finish = () => {
         div.classList.add("answer-complete");
         appendReferences(div, references);
+        appendAnswerActions(div, text);
+        updateEvidenceRail(references);
         const announcement = document.createElement("span");
         announcement.className = "visually-hidden";
         announcement.setAttribute("role", "status");
@@ -341,28 +376,133 @@ function appendPlainText(parent, text) {
 }
 
 function appendReferences(parent, references) {
-    if (!references.length) return;
+    const section = document.createElement("section");
+    section.className = "answer-sources references";
+    section.setAttribute("aria-label", sourceDocumentsLabel);
+    const header = document.createElement("div");
+    header.className = "answer-sources__header";
     const refDiv = document.createElement("div");
-    refDiv.className = "references";
+    refDiv.className = "answer-sources__list";
     const heading = document.createElement("strong");
     heading.textContent = sourceDocumentsLabel;
-    refDiv.appendChild(heading);
-    references.forEach(ref => {
-        const card = document.createElement("div");
-        card.className = "ref-card";
-        const link = document.createElement("a");
-        link.href = safeReferenceUrl(ref);
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.textContent = ref.title || sourceDocumentsLabel;
-        card.appendChild(link);
-        const meta = document.createElement("small");
-        meta.textContent = [ref.folder, ref.uploaded_at].filter(Boolean).join(" • ");
-        if (meta.textContent) card.appendChild(meta);
-        refDiv.appendChild(card);
+    header.appendChild(heading);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "source-drawer-trigger";
+    open.dataset.evidenceOpen = "true";
+    open.textContent = references.length
+        ? `${workbenchCopy.view_sources} (${references.length})`
+        : workbenchCopy.view_sources;
+    header.appendChild(open);
+    section.appendChild(header);
+    if (!references.length) {
+        const empty = document.createElement("p");
+        empty.className = "answer-sources__empty";
+        empty.textContent = workbenchCopy.empty_sources;
+        section.appendChild(empty);
+        parent.appendChild(section);
+        return;
+    }
+    references.forEach((ref, index) => {
+        refDiv.appendChild(createReferenceCard(ref, index + 1));
     });
-    parent.appendChild(refDiv);
+    section.appendChild(refDiv);
+    parent.appendChild(section);
 }
+
+function createReferenceCard(ref, index = 1) {
+    const card = document.createElement("article");
+    card.className = "ref-card";
+    const number = document.createElement("span");
+    number.className = "ref-card__number";
+    number.setAttribute("aria-hidden", "true");
+    number.textContent = `[${index}]`;
+    card.appendChild(number);
+    const body = document.createElement("div");
+    const link = document.createElement("a");
+    link.href = safeReferenceUrl(ref);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = ref.title || sourceDocumentsLabel;
+    link.setAttribute("aria-label", `${workbenchCopy.view_original}: ${link.textContent}`);
+    body.appendChild(link);
+    const meta = document.createElement("small");
+    meta.textContent = [ref.folder, ref.page ? `Page ${ref.page}` : "", ref.uploaded_at]
+        .filter(Boolean)
+        .join(" • ");
+    if (meta.textContent) body.appendChild(meta);
+    if (ref.excerpt) {
+        const excerpt = document.createElement("p");
+        excerpt.textContent = ref.excerpt;
+        body.appendChild(excerpt);
+    }
+    card.appendChild(body);
+    return card;
+}
+
+function appendAnswerActions(parent, text) {
+    const actions = document.createElement("div");
+    actions.className = "answer-actions";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.dataset.copyAnswer = text;
+    copy.textContent = workbenchCopy.copy_answer;
+    actions.appendChild(copy);
+    const feedback = document.createElement("a");
+    feedback.href = window.PdfSearch.feedbackUrl;
+    feedback.target = "_blank";
+    feedback.rel = "noopener noreferrer";
+    feedback.textContent = workbenchCopy.feedback;
+    actions.appendChild(feedback);
+    const share = document.createElement("a");
+    share.href = `${window.PdfSearch.whatsappUrl}?text=${encodeURIComponent(text.slice(0, 500))}`;
+    share.target = "_blank";
+    share.rel = "noopener noreferrer";
+    share.textContent = workbenchCopy.whatsapp;
+    actions.appendChild(share);
+    parent.appendChild(actions);
+}
+
+function updateEvidenceRail(references) {
+    if (!evidenceRail || !evidenceAnswer || !evidenceContent) return;
+    evidenceContent.replaceChildren();
+    const intro = document.createElement("p");
+    intro.className = "evidence-summary";
+    intro.textContent = references.length
+        ? `${references.length} ${sourceDocumentsLabel.toLowerCase()}`
+        : workbenchCopy.empty_sources;
+    evidenceContent.appendChild(intro);
+    references.forEach((ref, index) => evidenceContent.appendChild(createReferenceCard(ref, index + 1)));
+    evidenceAnswer.hidden = false;
+    document.querySelector("[data-evidence-empty]")?.setAttribute("hidden", "");
+}
+
+function openEvidence(trigger) {
+    if (!evidenceRail) return;
+    evidenceReturnFocus = trigger || null;
+    evidenceRail.classList.add("is-open");
+    evidenceClose?.focus();
+}
+
+function closeEvidence() {
+    if (!evidenceRail) return;
+    evidenceRail.classList.remove("is-open");
+    evidenceReturnFocus?.focus();
+    evidenceReturnFocus = null;
+}
+
+function resetEvidenceRail() {
+    if (!evidenceRail || !evidenceAnswer || !evidenceContent) return;
+    evidenceAnswer.hidden = true;
+    evidenceContent.replaceChildren();
+    document.querySelector("[data-evidence-empty]")?.removeAttribute("hidden");
+    closeEvidence();
+}
+
+evidenceClose?.addEventListener("click", closeEvidence);
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeEvidence();
+});
 
 function appendPromptOrRetry(event) {
     const prompt = event.target.closest("[data-prompt]");
@@ -377,6 +517,20 @@ function appendPromptOrRetry(event) {
         userQuery.value = retry.dataset.retryQuery;
         userQuery.dispatchEvent(new Event("input", {bubbles: true}));
         sendMessage();
+        return;
+    }
+    const sourceTrigger = event.target.closest("[data-evidence-open]");
+    if (sourceTrigger) {
+        openEvidence(sourceTrigger);
+        return;
+    }
+    const copy = event.target.closest("[data-copy-answer]");
+    if (copy) {
+        const copyPromise = navigator.clipboard?.writeText(copy.dataset.copyAnswer || "") || Promise.resolve();
+        copyPromise.then(() => {
+            copy.textContent = workbenchCopy.copied;
+            setTimeout(() => { copy.textContent = workbenchCopy.copy_answer; }, 1600);
+        });
     }
 }
 
@@ -410,7 +564,7 @@ userQuery.addEventListener("input", function () {
     const words = this.value.trim().split(/\s+/).filter(w => w.length > 0);
     const count = words.length;
 
-    wordCounter.textContent = `${count}/30`;
+    wordCounter.textContent = `${count} ${workbenchCopy.word_count}`;
 
     if (count > 30) {
         wordCounter.className = "word-counter word-counter--over";
@@ -422,6 +576,20 @@ userQuery.addEventListener("input", function () {
         wordCounter.className = "word-counter word-counter--ok";
         updateSendButton();
     }
+});
+
+updateSendButton();
+
+userQuery.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        searchComposer.requestSubmit();
+    }
+});
+
+userQuery.addEventListener("input", () => {
+    userQuery.style.height = "auto";
+    userQuery.style.height = `${Math.min(userQuery.scrollHeight, 140)}px`;
 });
 
 document.querySelectorAll('form[action="' + window.PdfSearch.setLanguageUrl + '"]').forEach(form => {
