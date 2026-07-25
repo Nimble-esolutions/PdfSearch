@@ -161,17 +161,29 @@
 
   <section class="conversation-workspace" aria-label="{% trans 'AI Sahakar conversation' %}">
     <div class="workspace-heading">
-      <div><p class="eyebrow">{% trans "Civic knowledge desk" %}</p><h1 id="search-page-heading">{% trans "Ask about Maharashtra cooperative law" %}</h1></div>
-      <span class="workspace-status"><i aria-hidden="true"></i>{% trans "Official documents" %}</span>
+      <div class="workspace-heading__copy">
+        <p class="eyebrow">{% trans "Civic knowledge desk" %}</p>
+        <h1 id="search-page-heading">{% trans "Ask about Maharashtra cooperative law" %}</h1>
+        <p class="workspace-heading__support">{% trans "Ask in English or Marathi. AI Sahakar searches official department documents and shows the sources used for the answer." %}</p>
+      </div>
+      <div class="workspace-status" role="status">
+        <i aria-hidden="true"></i>
+        <span><strong>{% trans "Official documents" %}</strong><small>{% trans "Review sources" %}</small></span>
+      </div>
     </div>
     <div id="chatMain" class="conversation-scroll" aria-live="off" aria-label="{% trans 'Search answers' %}" aria-busy="false"></div>
     <form class="workbench-composer" id="searchComposer" novalidate>
       <div class="composer-field">
         <label for="userQuery">{% trans "Ask a question in English or Marathi" %}</label>
-        <textarea id="userQuery" rows="1" placeholder="{% trans 'For example, what are the rules for a society audit?' %}" autocomplete="off" maxlength="240" enterkeyhint="search"></textarea>
+        <div class="composer-controls">
+          <textarea id="userQuery" rows="1" placeholder="{% trans 'For example, what are the rules for a society audit?' %}" autocomplete="off" maxlength="240" enterkeyhint="search"></textarea>
+          <button id="sendBtn" class="composer-submit" type="submit" disabled>
+            <span>{% trans "Search" %}</span>
+            <svg aria-hidden="true" viewBox="0 0 20 20" focusable="false"><path d="m8.5 4.5 5 5-5 5M13 9.5H3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></svg>
+          </button>
+        </div>
         <div class="composer-meta"><small id="wordCounter" aria-live="polite">0 {% trans "of 30 words" %}</small><span>{% trans "Enter to search" %}</span></div>
       </div>
-      <button id="sendBtn" class="composer-submit" type="submit" disabled><span>{% trans "Search" %}</span><span aria-hidden="true">↗</span></button>
     </form>
     <div class="composer-help">{% trans "Answers are informational. Check the cited document before making an important decision." %}</div>
   </section>
