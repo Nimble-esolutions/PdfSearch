@@ -1,8 +1,8 @@
 # `dev` Cleanup Scope
 
-**Status:** Active audit record  
-**Audit date:** 2026-07-25  
-**Compared branch:** `origin/dev` at `a37b4d4`  
+**Status:** Active audit record
+**Audit date:** 2026-07-25
+**Compared branch:** `origin/dev` at `a37b4d4`
 **Scope:** Read-only inventory; no cleanup deletion is included in this UI documentation change
 
 ## Root-cause summary
