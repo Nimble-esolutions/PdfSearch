@@ -78,6 +78,15 @@ The manifest is the restore contract. Each object is uploaded with conditional
 create semantics; an existing object is accepted only when its size and
 checksum match. A different object under the same immutable key fails.
 
+## Completed initial port
+
+The first agent-run port completed against the read-only legacy volume using
+the target bucket and stable namespace above. The active destination generation
+is `legacy-20260725T204411Z-v2c4d9e1`; the manifest contains 564 files,
+including 242 PDFs and 45 FAISS files. The destination registration and
+authoritative pointer were verified after upload. The earlier incomplete
+generation remains immutable and is not selected by the pointer.
+
 ## Local dry run
 
 Run from a repository checkout in a disposable execution environment. The
@@ -150,6 +159,17 @@ but the maintenance worker's legacy `restore_generation` path is not a
 substitute for that pipeline. Follow-up work must wire the protected UI job to
 `run_restore_pipeline` and persist workspace/activation evidence before
 calling the fresh-deployment restore flow complete.
+
+## Future refresh design
+
+The same agent-side tool can be run again against a later read-only snapshot.
+Each run should create a new generation, upload only missing content-addressed
+objects, write its manifest, and CAS-update the single `ai-sahakar-prod`
+authoritative pointer. A failed run leaves the previous pointer untouched.
+The latest application can then use the pointer for latest-compatible restore,
+or a pinned generation for rollback. A later in-app sync feature should call
+the same publication contract through the normal writer-fencing path rather
+than duplicating this migration logic.
 
 ## Rollback and failure handling
 
