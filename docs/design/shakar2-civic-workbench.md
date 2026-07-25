@@ -1,0 +1,100 @@
+# AI Sahakar Civic Knowledge Workbench
+
+## Design record
+
+The public home route remains a Django-rendered, English-default civic document
+search service. This redesign changes the information architecture and visual
+composition only; the existing `/search/` request, CSRF protection, public
+scope, authentication boundaries, protected PDF URLs, and locale context remain
+unchanged.
+
+## Users and intent
+
+Citizens, cooperative-society members, office-bearers, auditors, researchers,
+and public officials need a calm way to ask about Maharashtra cooperative law
+and inspect the documents behind an answer. The primary journey is: choose a
+topic or ask a question, receive an explanation, then inspect the evidence.
+
+## Current defects observed
+
+- A single large card leaves a dead central area at widescreen sizes.
+- The introduction, prompt chips, composer, support links, legal warning, and
+  document count read as unrelated blocks.
+- The header presents department identity and product identity as competing
+  mastheads, with cramped public navigation.
+- The robot asset makes the civic service feel like a generic chatbot.
+- Sources have no persistent evidence surface before or after an answer.
+- The cookie notice can obscure the empty state and composer, especially on
+  mobile.
+
+## Hallmark direction
+
+- Macrostructure: Workbench.
+- Theme: Civic Knowledge Workbench.
+- Philosophy: official, evidence-led, quiet, and useful before decorative.
+- Surfaces use warm paper, white workspace, maroon institutional accents, and
+  restrained ochre focus/progress states.
+- Layout relies on grid, dividers, and typography rather than a stack of
+  floating rounded cards. No gradients, robot branding, invented metrics, or
+  decorative government motifs are introduced.
+
+## Information architecture
+
+- Unified header: department identity, AI Sahakar product label, compact public
+  navigation, language control, and secondary admin access.
+- Knowledge rail: new question, common topics, useful-question guidance, and
+  human/official help.
+- Conversation workspace: empty state or query/answer history with a sticky
+  composer.
+- Evidence rail: how the service works before an answer; source documents,
+  answer context, and support after an answer.
+- On tablet/mobile the rails collapse into topic rows and an accessible source
+  drawer; sources also appear inline below an answer.
+
+## Responsive behavior
+
+- 1440px+: three columns, approximately 260px / minmax(0, 1fr) / 320px.
+- 1024–1439px: compact left rail and main workspace; evidence becomes a drawer.
+- 768–1023px: one main column with horizontal topic navigation and source drawer.
+- 320–767px: sticky compact header, single-column conversation, inline sources,
+  safe-area composer, and no hover-only actions.
+
+## Conversation and source decisions
+
+Answers remain text-node rendered from the existing JSON response. References
+use only fields returned by the backend (`title`, `folder`, `uploaded_at`,
+`page`, `excerpt`, and protected `url` when supplied); missing metadata is not
+fabricated. Desktop evidence is a persistent rail; smaller layouts expose the
+same records through a labelled drawer and inline summary.
+
+## English/Marathi mapping
+
+All visible copy is Django locale context or translated template copy. The
+client receives translated labels through `json_script`; it never concatenates
+translated fragments and never changes user-entered questions. The document
+language remains `en` or `mr` for the existing endpoint.
+
+## Accessibility and interaction
+
+- One main landmark, labelled navigation/rails, logical heading order, and
+  visible focus rings.
+- Composer uses an accessible textarea and descriptive word count (`6 of 30
+  words`).
+- Loading/error status uses polite live regions without character-by-character
+  announcements.
+- Source drawer supports Escape, focus restoration, and a labelled close action.
+- Reduced motion disables nonessential transitions.
+
+## Performance budget
+
+- No animation dependency or new large asset.
+- Keep the public CSS/JS additions focused on the existing route.
+- Preserve fallback-first system Devanagari rendering and the existing adaptive
+  answer profile.
+- Validate at 320, 375, 390, 414, 768, 1024, 1280, 1440, and 1920 widths with
+  no horizontal overflow or sticky-element obstruction.
+
+## Protected boundaries
+
+No backend search, embedding, OpenAI policy, data lifecycle, RustFS, writer,
+scheduler, or protected operational file changes are part of this design.
