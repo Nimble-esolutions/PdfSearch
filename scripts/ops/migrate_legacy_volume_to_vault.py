@@ -23,6 +23,7 @@ from typing import Any
 
 DEFAULT_BUCKET = "ai-sahakar-prod-flowdocs-artifact-vault"
 DEFAULT_DATASET_ID = "ai-sahakar-prod"
+DEFAULT_PRODUCTION_SOURCE_ID = "ai-sahakar-prod"
 RUNTIME_TREES = ("media", "faiss_indexes", "chroma_db", "pdf_cache", "staticfiles")
 
 
@@ -185,16 +186,17 @@ def put_immutable(client: Any, bucket: str, key: str, data: bytes, content_type:
         raise RuntimeError(f"Immutable object conflict: {key}") from exc
 
 
-def registration_payload(dataset_id: str, source_label: str) -> bytes:
+def registration_payload(dataset_id: str, production_source_id: str, source_label: str) -> bytes:
     return canonical_json(
         {
             "dataset_id": dataset_id,
             "registration_version": 1,
             "manifest_schema_range": {"min": 1, "max": 1},
             "app_identifier": "pdfsearch",
-            "production_source_id": source_label,
+            "production_source_id": production_source_id,
             "initial_instance_id": "legacy-migration-tool",
             "org_name": "Registrar Co-operative Societies, Maharashtra",
+            "migration_source": source_label,
             "registration_nonce": secrets.token_hex(16),
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -231,7 +233,7 @@ def write_pointer(
     manifest_key: str,
     manifest_digest: str,
     previous_generation_id: str,
-    source_label: str,
+    production_source_id: str,
 ) -> None:
     key = f"datasets/{dataset_id}/control/authoritative.json"
     previous, etag = read_json_object(client, bucket, key)
@@ -241,7 +243,7 @@ def write_pointer(
         "manifest_object_key": manifest_key,
         "manifest_sha256": manifest_digest,
         "writer_epoch": 0,
-        "production_source_id": source_label,
+        "production_source_id": production_source_id,
         "instance_id": "legacy-migration-tool",
         "app_release": "legacy-volume-port",
         "image_digest": "",
@@ -264,6 +266,7 @@ def write_pointer(
 def migrate(args: argparse.Namespace) -> dict[str, Any]:
     validate_id(args.dataset_id, "dataset id")
     validate_id(args.bucket, "bucket")
+    validate_id(args.production_source_id, "production source id")
     source_root = args.source_root.resolve()
     if not source_root.is_dir():
         raise RuntimeError(f"Source root not found: {source_root}")
@@ -290,9 +293,23 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
             stats[status] += 1
         manifest_key = f"datasets/{args.dataset_id}/generations/{generation_id}/manifest.json"
         stats[put_immutable(client, args.bucket, manifest_key, manifest_data, "application/json")] += 1
-        write_registration(client, args.bucket, args.dataset_id, registration_payload(args.dataset_id, args.source_label))
+        write_registration(
+            client,
+            args.bucket,
+            args.dataset_id,
+            registration_payload(args.dataset_id, args.production_source_id, args.source_label),
+        )
         if not args.candidate_only:
-            write_pointer(client, args.bucket, args.dataset_id, generation_id, manifest_key, hashlib.sha256(manifest_data).hexdigest(), "", args.source_label)
+            write_pointer(
+                client,
+                args.bucket,
+                args.dataset_id,
+                generation_id,
+                manifest_key,
+                hashlib.sha256(manifest_data).hexdigest(),
+                "",
+                args.production_source_id,
+            )
         output.update(stats, pointer_updated=not args.candidate_only)
         return output
     finally:
@@ -305,6 +322,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--database", type=Path, help="SQLite path; defaults to SOURCE_ROOT/db.sqlite3")
     parser.add_argument("--dataset-id", default=os.environ.get("VAULT_DATASET_ID", DEFAULT_DATASET_ID))
     parser.add_argument("--bucket", default=os.environ.get("ARTIFACT_VAULT_BUCKET", DEFAULT_BUCKET))
+    parser.add_argument(
+        "--production-source-id",
+        default=os.environ.get("PRODUCTION_SOURCE_ID", DEFAULT_PRODUCTION_SOURCE_ID),
+    )
     parser.add_argument("--generation-id")
     parser.add_argument("--source-label", default="sahakar-dev-frontend-dockerfile-1cubi5")
     parser.add_argument("--output", type=Path, help="Write the manifest inventory locally")
