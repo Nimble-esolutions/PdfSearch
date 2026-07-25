@@ -21,8 +21,11 @@ class UploadForm(forms.ModelForm):
         max_size = int(getattr(settings, 'MAX_FILE_SIZE', 10 * 1024 * 1024))
         if uploaded.size > max_size:
             max_size_mb = getattr(settings, 'MAX_FILE_SIZE_MB', max_size / (1024 * 1024))
+            display_size_mb = format(max_size_mb, 'f')
+            if '.' in display_size_mb:
+                display_size_mb = display_size_mb.rstrip('0').rstrip('.')
             raise forms.ValidationError(
-                f'Files must be no larger than {max_size_mb:g} MB.'
+                f'Files must be no larger than {display_size_mb} MB.'
             )
         if not uploaded.name.lower().endswith('.pdf'):
             raise forms.ValidationError('Only PDF files are accepted.')
