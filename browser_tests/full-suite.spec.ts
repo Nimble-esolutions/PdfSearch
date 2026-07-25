@@ -1,5 +1,15 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+
+async function mockSearch(page: Page, answer = 'A concise answer from the official source.') {
+  await page.route('**/search/**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ answer, references: [] }),
+    });
+  });
+}
 
 // ---- Auth Tests ----
 test.describe('Authentication', () => {
@@ -52,6 +62,7 @@ test.describe('Search', () => {
   });
 
   test('search renders user and gpt messages', async ({ page }) => {
+    await mockSearch(page);
     await page.goto('/');
     await page.locator('#userQuery').fill('What is the service policy?');
     await page.locator('#sendBtn').click();
@@ -69,6 +80,7 @@ test.describe('Search', () => {
   });
 
   test('Marathi search works', async ({ page }) => {
+    await mockSearch(page, 'हे अधिकृत दस्तऐवजांवर आधारित माहिती आहे.');
     await page.goto('/');
     await page.locator('#userQuery').fill('सेवा धोरण काय आहे?');
     await page.locator('#sendBtn').click();
