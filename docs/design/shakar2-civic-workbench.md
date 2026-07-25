@@ -1,5 +1,29 @@
 # AI Sahakar Civic Knowledge Workbench
 
+## 2026-07-25 approved visual refinement: unified composer row
+
+The screenshot audit identified a structural alignment defect in the public
+search desk: the submit action was laid out beside the complete field block,
+which included the label and word-count metadata. The action therefore looked
+detached from the textarea and its arrow resembled an external-link affordance.
+
+This refinement keeps the locked Workbench composition and backend contract,
+but places the textarea and submit control in one shared control row. The
+heading now uses the same reading gutter as the composer and states the
+official-document/source relationship in the workspace itself. The official
+status remains static and text-labelled, so it is not dependent on motion.
+
+Affected surface: workspace heading and composer. Breakpoints: shared desktop
+layout, tablet single-column layout, and mobile stack below 430px. States:
+default, focus-visible, disabled, loading (`aria-busy`), error, and completed
+search remain owned by the existing search script. Locale impact is limited to
+existing translated strings; no new mixed-language copy was introduced.
+
+Accessibility: the existing label, live word count, submit button semantics,
+focus ring, and keyboard Enter behavior are preserved; the decorative icon is
+hidden from assistive technology. Performance: one inline SVG replaces the
+ambiguous text arrow and adds no request or asset dependency.
+
 > **Canonical lock:** This implementation record is retained for context. The
 > active, protected design and change-control rules are in
 > [`AI_SAHAKAR_UI_CONTRACT.md`](AI_SAHAKAR_UI_CONTRACT.md).
