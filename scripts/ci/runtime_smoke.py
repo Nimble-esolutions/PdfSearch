@@ -117,7 +117,10 @@ def main():
         assert subcheck in ready["checks"], f"/readyz missing sub-check: {subcheck}"
 
     status, _, body = request(unauthenticated, "/")
-    require(status == 200 and b"AI Enabled Search" in body, "search landing page failed")
+    require(
+        status == 200 and b'id="userQuery"' in body and b"Ask AI Sahakar" in body,
+        "search landing page failed",
+    )
     status, _, body = request(unauthenticated, "/static/main/css/style.css")
     require(status == 200 and b".searchBG" in body, "static asset failed")
 
@@ -170,7 +173,12 @@ def main():
     status, headers, body = request(authenticated, pdf_path)
     require(status == 200 and headers.get("Content-Type") == "application/pdf" and body == PDF_BYTES, "protected PDF response failed")
 
-    status, _, search_page = request(authenticated, "/search/")
+    status, headers, search_page = request(authenticated, "/search/")
+    require(
+        status == 301 and headers.get("Location") == "/",
+        "legacy search GET redirect failed",
+    )
+    status, _, search_page = request(authenticated, "/")
     require(status == 200, "search page failed")
     token = csrf_token(search_page)
     status, _, body = request(
