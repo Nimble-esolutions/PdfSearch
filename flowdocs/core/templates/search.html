@@ -6,6 +6,19 @@
 
 {% block admin_shell %}{% endblock %}
 
+{% block technology_partners %}
+    <div class="admin-footer__partners">
+      <details>
+        <summary>{% trans "Technology partners" %}</summary>
+        <div class="admin-footer__partners-menu" role="menu">
+          <span role="menuitem">{% trans "MediaNetwork" %}</span>
+          <a role="menuitem" href="https://nimble-esolutions.com/" target="_blank" rel="noopener noreferrer">{% trans "Nimble e-Solutions" %}</a>
+          <a role="menuitem" href="https://my.securiace.com/" target="_blank" rel="noopener noreferrer">{% trans "Securiace Technologies" %}</a>
+        </div>
+      </details>
+    </div>
+{% endblock %}
+
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'main/css/search.css' %}">
   <link rel="stylesheet" href="{% static 'main/css/civic-workbench.css' %}">
