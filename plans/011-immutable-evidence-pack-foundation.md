@@ -3,6 +3,16 @@
 > **Executor instructions**: Build this without changing the public search API
 > or replacing SQLite. The output must work on the current Docker volume and in
 > a disposable object-storage bucket.
+>
+> **Drift check (run first)**:
+>
+> ```bash
+> git diff --stat f742b59..HEAD -- \
+>   flowdocs/core/models.py flowdocs/core/utils.py \
+>   flowdocs/core/maintenance.py \
+>   flowdocs/core/management/commands/inventory_artifacts.py \
+>   flowdocs/core/data_release_validation.py flowdocs/core/tests.py
+> ```
 
 ## Status
 
@@ -11,7 +21,8 @@
 - **Risk**: MED
 - **Depends on**: none
 - **Category**: migration / data-integrity
-- **Planned at**: commit `b6c8363`, 2026-07-26
+- **Planned at**: commit `f742b59`, 2026-07-26
+- **Roadmap status**: TODO
 
 ## Decision this plan establishes
 
@@ -95,6 +106,31 @@ be identified, canonical serialization is non-deterministic, or access
 projections cannot be reproduced. Do not resolve mismatches by choosing the
 side with more files.
 
+## Commands, scope, and git workflow
+
+```bash
+python manage.py test core.tests.ArtifactInventoryTests \
+  core.test_artifact_vault.ArtifactVaultTests
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python -m unittest discover -s integration_tests -p 'test_*.py'
+git diff --check
+```
+
+Add focused deterministic tests for canonical JSON, path/key normalization,
+page/chunk ordering, pack-root changes, corruption, visibility drift,
+generation promotion, and last-known-good fallback.
+
+In scope: additive manifest/schema adapters, read-only pack builder,
+reconciliation command, disposable object-storage integration, and tests. Out
+of scope: production backfill/cutover, database replacement, public API change,
+automatic deletion/repair, or modifying protected vault/activation modules
+without separate approval.
+
+Use separate commits for schema/canonicalization, builder, reconciliation,
+storage rehearsal, and documentation. Existing search must remain primary until
+the plan's done criteria pass.
+
 ## Done criteria
 
 - A verified pack reconstructs the PDF, text, chunks, embeddings, and index
@@ -104,3 +140,9 @@ side with more files.
 - Plans 008 and 009 consume pack roots instead of copying opaque files.
 - A generation can be promoted or rolled back atomically without changing the
   public UI/API contract.
+
+## Maintenance notes
+
+Canonicalization is a permanent compatibility surface. A changed serializer,
+extractor, page mapper, chunker, float format, access projection, or hash
+algorithm requires a new manifest version and migration/replay evidence.

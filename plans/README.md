@@ -1,46 +1,125 @@
-# PdfSearch Improvement Plans
+# PdfSearch implementation roadmap
 
-These plans are the durable implementation brief for future agents. They supersede the partially implemented ideas in `docs/ADMIN_UI_REDESIGN_SRS.md` where the two conflict.
+Reviewed against commit `f742b59` on 2026-07-26. These files are handoff
+contracts for future developers and AI agents. Read the selected plan fully,
+run its drift check, and stop when a stated assumption is false.
 
-## Baseline
+## Status vocabulary
 
-- Baseline commit: `d3fc328` (`docs(operations): define Dokploy data persistence contract`)
-- Branch for this planning pass: `docs/dokploy-data-persistence`
-- Scope: preserve the Civic Knowledge Workbench and operations contract while
-  planning durable data custody, retrieval normalization, and platform evolution.
-- Application code is unchanged by this planning pass; only planning documents
-  are added or updated.
+- `DONE`: implemented decision or verified historical work; do not rebuild.
+- `TODO`: approved work that has not been implemented.
+- `RECONCILE`: implementation exists; verify it, close residual gaps, then mark
+  `DONE`. Do not replace it wholesale.
+- `ACTIVE GATE`: recurring verification contract applied to every relevant PR.
+- `BLOCKED`: a named prerequisite or operator decision is missing.
+- `REJECTED`: explicitly considered and not worth implementing now.
 
-## Delivery order
+## Execution order and status
 
-1. `001-registrar-domain-brief.md` — DONE: domain vocabulary, identity, and content provenance.
-2. `002-runtime-config-and-settings-center.md` — TODO, P1: typed configuration inventory and safe settings UX.
-3. `003-vault-operational-state-and-lifecycle.md` — TODO, P1: truthful vault health and operational workflows.
-4. `004-breadcrumb-dashboard-category-workbench.md` — TODO, P1: route-aware navigation and dashboard/category workbench.
-5. `005-hallmark-public-search-redesign.md` — TODO, P1: preserve the Hallmark visual direction while rebuilding the search experience.
-6. `006-cross-surface-verification.md` — TODO, P1: automated and visual release gates.
-7. `007-search-reference-audit.md` — existing plan: source-reference parity and validation.
-8. `011-immutable-evidence-pack-foundation.md` — TODO, P1: make document custody and reconciliation authoritative before changing databases.
-9. `012-compatibility-and-agent-capability-contracts.md` — TODO, P1: relax internal coupling while preserving Django, the UI, and the public API adapter.
-10. `008-postgres-object-storage-migration.md` — TODO, P1: move custody to object storage and conditionally migrate relational state to PostgreSQL.
-11. `009-search-domain-and-index-normalization.md` — TODO, P1: benchmark hybrid retrieval and normalize documents/chunks/embeddings/index generations.
-12. `010-reliable-civic-ai-platform-architecture.md` — TODO, P2: evolve the modular monolith, worker, observability, security, and cost posture.
+| Plan | Purpose | Priority | Effort | Depends on | Status |
+|---|---|---:|---:|---|---|
+| 001 | Registrar domain and visual identity record | P1 | S | — | DONE |
+| 002 | Reconcile runtime configuration registry and settings center | P1 | S/M | — | RECONCILE |
+| 003 | Reconcile vault health, generations, jobs, and operator actions | P1 | M | 006 gate | RECONCILE |
+| 004 | Reconcile breadcrumbs, dashboard, and category workbench | P1 | S/M | 006 gate | RECONCILE |
+| 005 | Reconcile and protect the Hallmark Civic Workbench | P1 | S/M | 001, 006 gate | RECONCILE |
+| 006 | Cross-surface verification and release evidence | P1 | M | — | ACTIVE GATE |
+| 007 | Reconcile public source references, sharing, and evidence UX | P1 | S/M | 005, 006 gate | RECONCILE |
+| 011 | Establish immutable evidence packs and reconciliation | P1 | M | 006 gate | TODO |
+| 012 | Add compatibility seams and agent-safe capabilities | P1 | M | 011 | TODO |
+| 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
+| 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
+| 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
 
-Plans 002–004 should land as small cherry-pickable PRs. Plan 005 may proceed in parallel after the domain brief, but its backend/API contract must be agreed before visual work. Plan 006 gates merging.
+## Dependency graph
 
-Plans 008–012 are future architecture work and must not be started as one
-large rewrite. Plan 011 establishes evidence custody first. Plan 012 defines
-compatibility seams and agent-safe capabilities. Plan 008 then separates
-object custody and makes PostgreSQL an evidence-based decision. Plan 009
-normalizes retrieval and adds lexical/semantic/provenance checks. Plan 010
-consolidates the resulting boundaries and operational evidence.
+```text
+001 domain/UI record ───────────────┐
+                                    ├─> 005 UI reconciliation ─> 007 evidence UX
+006 recurring verification gate ───┼─> 002/003/004 reconciliation
+                                    └─> 011 evidence packs
+                                           │
+                                           v
+                                    012 compatibility seams
+                                      │              │
+                                      v              v
+                           008 custody/database    009 retrieval benchmark
+                                      └──────┬───────┘
+                                             v
+                                      010 platform evolution
+```
 
-## Non-negotiable constraints
+Plan 011 comes before database replacement because recovery must not depend on
+the migration succeeding. Plan 012 comes before provider changes because the
+current public API needs a compatibility adapter. Plans 008 and 009 are
+separate decisions: object custody can change without PostgreSQL, and retrieval
+can improve without changing the relational database.
 
-- Preserve the current Hallmark header, maroon navigation, CC identity mark, typography direction, and information hierarchy unless a measurable improvement is demonstrated.
-- Purge competing/legacy search themes only after the canonical Hallmark search has feature parity and responsive coverage.
-- Never display secrets, raw `.env` values, tokens, or connection credentials.
-- Do not claim an action succeeded until the backend has completed and returned a persisted result.
-- Every route must have a breadcrumb or an intentional documented exception.
-- Backend changes must be additive/refactoring-oriented and covered by tests; no deletion of working capabilities.
-- Branch, commit, verify, push, and open PR. Do not merge without explicit operator approval.
+## Universal execution contract
+
+Every executor must:
+
+1. Read `AGENTS.md`, `CONTRIBUTING.md`, and
+   `docs/design/AI_SAHAKAR_UI_CONTRACT.md` when UI is in scope.
+2. Create a feature branch from current `dev`; never commit directly to
+   `dev` or `main`.
+3. Run the plan's drift check before editing.
+4. Preserve unrelated user changes and the protected backend files named in
+   `AGENTS.md` and the project brief.
+5. Commit logical, cherry-pickable changes, verify before push, open a PR into
+   `dev`, and never merge without operator authorization.
+6. Record exact commands, failures, migration/data impact, and rollback in the
+   PR. Do not claim browser, CI, or deployment validation from screenshots.
+
+Baseline checks used by the plans:
+
+```bash
+git diff --check
+python manage.py check
+python manage.py makemigrations --check --dry-run
+node --check flowdocs/core/static/main/js/search.js
+npx playwright test
+```
+
+For image/runtime changes:
+
+```bash
+docker build -t pdfsearch-ci:source .
+PDFSEARCH_IMAGE=pdfsearch-ci:source REDIS_IMAGE=redis:7-alpine \
+  bash scripts/ci/run_compose_smoke.sh
+```
+
+Use focused tests first. The Compose smoke gate is required when entrypoints,
+dependencies, migrations, runtime data, static assets, or image behavior
+changes.
+
+## Non-negotiable product and safety constraints
+
+- Keep Django and the Civic Knowledge Workbench visual language unless a human
+  explicitly approves a product-direction change.
+- Preserve authentication, authorization, CSRF, query limits, public folder
+  scope, protected PDF access, English/Marathi behavior, and source visibility.
+- Preserve public response behavior through a compatibility adapter while
+  allowing internal schemas and providers to evolve.
+- Never display or commit secrets, raw environment values, storage keys,
+  production PDFs, databases, embeddings, or indexes.
+- Animation is never evidence of backend progress or success.
+- Every data/index generation is immutable, validated, promotable, and
+  rollbackable; partial generations remain invisible.
+- Database, object storage, index, model provider, queue, and orchestration
+  choices require measured gates and an owner.
+
+## Considered and rejected for the current scale
+
+- Immediate microservices, Rust/Go gateway, Kafka, or Kubernetes: operational
+  complexity is not justified by measured traffic or team boundaries.
+- Adopting Django Ninja and Django REST Framework together: overlapping API
+  abstractions would create drift; select one only after Plan 012's spike.
+- Adding Celery because it is present in dependencies: measure the existing
+  maintenance-job runner first.
+- Treating Redis as durable queue, audit ledger, or custody store: rejected;
+  Redis remains cache, rate-limit, and short-lived coordination infrastructure.
+- Semantic-only retrieval or an external vector database by default: legal and
+  civic queries require a measured lexical/semantic hybrid benchmark first.
+- Replacing the server-rendered UI with a SPA: no demonstrated user or
+  operational benefit; preserve small, progressively enhanced JavaScript.

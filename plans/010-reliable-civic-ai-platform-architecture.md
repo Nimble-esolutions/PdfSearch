@@ -5,6 +5,16 @@
 > incremental boundaries; preserve the existing search behavior, UI contract,
 > and authentication while allowing implementation-level data custody to move
 > behind the Plan 011/012 compatibility seams.
+>
+> **Drift check (run first)**:
+>
+> ```bash
+> git diff --stat f742b59..HEAD -- \
+>   flowdocs/core flowdocs/flowdocs/settings.py \
+>   requirements*.txt docker-compose*.yml scripts/ci .github/workflows
+> ```
+>
+> This plan is a direction record. Do not implement it as one PR.
 
 ## Status
 
@@ -13,7 +23,8 @@
 - **Risk**: MED/HIGH
 - **Depends on**: Plans 011, 008, and 009
 - **Category**: direction / architecture
-- **Planned at**: commit `d3fc328`, 2026-07-26
+- **Planned at**: commit `f742b59`, 2026-07-26
+- **Roadmap status**: TODO, executed only as approved child plans
 
 ## Recommended target topology
 
@@ -161,6 +172,21 @@ scopes with adversarial cross-category fixtures.
 - Use OpenTelemetry-compatible traces/metrics if the operational footprint
   justifies it; begin with Prometheus metrics already exposed by the app.
 
+## Architecture decision process
+
+Before creating a child implementation plan, record:
+
+1. the measured problem and baseline;
+2. at least two viable options, including “keep current”;
+3. security, custody, failure, staffing, and monthly-cost impact;
+4. migration and rollback;
+5. owner and operating runbook;
+6. acceptance/error budget and reassessment date.
+
+Each child plan must use Plan 006 gates and include exact files/commands. This
+direction plan does not authorize framework, database, provider, queue, or
+orchestrator installation by itself.
+
 ## Alternatives considered
 
 | Direction | Verdict | Reason |
@@ -195,3 +221,11 @@ scopes with adversarial cross-category fixtures.
   budgets are measured in production-like tests.
 - Operators can diagnose a failed release from immutable evidence without
   reading raw secrets or manually copying production files.
+
+## STOP conditions and maintenance
+
+Stop if a proposal has no measured bottleneck, no owner, no rollback, weakens
+tenant/public access controls, or requires simultaneous database/storage/index/
+API/UI replacement. Review this direction after Plans 008/009/011/012 produce
+evidence, or when traffic, corpus, team size, RPO/RTO, provider requirements, or
+regulation materially changes.
