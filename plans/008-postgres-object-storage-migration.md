@@ -10,7 +10,7 @@
 - **Priority**: P1
 - **Effort**: L
 - **Risk**: HIGH
-- **Depends on**: Plan 011; Plan 006 release gates must be used
+- **Depends on**: Plans 011 and 012; Plan 006 release gates must be used
 - **Category**: migration
 - **Planned at**: commit `d3fc328`, 2026-07-26
 

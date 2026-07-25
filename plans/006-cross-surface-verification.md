@@ -27,3 +27,8 @@ Use axe or equivalent accessibility checks plus screenshot diff review. A page i
 ## Stop conditions
 
 Stop and return to design review if a change removes a working action, changes public search exposure, introduces a secret-bearing UI, creates a false operational state, breaks the Hallmark header baseline, or cannot be verified at the supported viewport sizes.
+
+When a backend implementation changes behind a compatibility seam, verify both
+the unchanged public response/UI behavior and the new generation/evidence
+metadata. Do not treat a passing root-page screenshot as proof that storage,
+retrieval, source custody, or rollback behavior is correct.

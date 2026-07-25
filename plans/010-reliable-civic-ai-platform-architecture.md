@@ -2,8 +2,9 @@
 
 > **Executor instructions**: This is a target architecture plan, not permission
 > to replace the current deployment wholesale. Prefer a modular monolith and
-> incremental boundaries; each platform change must preserve the existing
-> search API, UI contract, authentication, and data-custody rules.
+> incremental boundaries; preserve the existing search behavior, UI contract,
+> and authentication while allowing implementation-level data custody to move
+> behind the Plan 011/012 compatibility seams.
 
 ## Status
 
@@ -174,13 +175,15 @@ scopes with adversarial cross-category fixtures.
 ## Rollout order
 
 1. Establish immutable evidence packs, reconciliation, and restore drills.
-2. Move binary custody to object storage while retaining SQLite if the gate is
+2. Add compatibility schemas and agent-safe capabilities while retaining the
+   current UI/API adapters.
+3. Move binary custody to object storage while retaining SQLite if the gate is
    not yet met.
-3. Execute Plan 009 with hybrid shadow retrieval and safe provider switching.
-4. Adopt PostgreSQL/pgvector only if Plan 008's evidence gate passes.
-5. Add worker/outbox and observability improvements.
-6. Remove legacy paths only after usage and rollback evidence.
-7. Reassess managed services, CDN, vector infrastructure, and orchestration
+4. Execute Plan 009 with hybrid shadow retrieval and safe provider switching.
+5. Adopt PostgreSQL/pgvector only if Plan 008's evidence gate passes.
+6. Add worker/outbox and observability improvements.
+7. Remove legacy paths only after usage and rollback evidence.
+8. Reassess managed services, CDN, vector infrastructure, and orchestration
    from measured load, RTO/RPO, cost, and team capacity.
 
 ## Done criteria
