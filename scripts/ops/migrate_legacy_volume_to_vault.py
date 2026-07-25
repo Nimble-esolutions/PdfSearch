@@ -114,13 +114,30 @@ def inventory_source(
                 relative = safe_relative(source_root, path)
                 add(path, relative, "backup")
 
+    database_entry = next(item for item in files if item["artifact_type"] == "database")
+    faiss_entries = [item for item in files if item["artifact_type"] == "faiss_indexes"]
+    chroma_entries = [item for item in files if item["artifact_type"] == "chroma_db"]
+    pdf_entries = [
+        item for item in files
+        if item["artifact_type"] == "media" and item["path"].lower().endswith(".pdf")
+    ]
     return {
         "manifest_version": 1,
         "read_only": True,
         "release_id": generation_id,
         "dataset_id": dataset_id,
+        "schema": {
+            "inventory_schema": "legacy-volume-port/v1",
+            "django_app": "core",
+            "pdf_model": "core.PDFFile",
+        },
         "source": {"kind": "legacy-data-root", "root_contract": "read-only-volume"},
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "database": {**sqlite_metadata(snapshot_path), "entry": database_entry},
+        "pdf_storage": {"root": "media", "files": pdf_entries, "file_count": len(pdf_entries)},
+        "faiss": {"root": "faiss_indexes", "files": faiss_entries, "count": len(faiss_entries)},
+        "chroma": {"root": "chroma_db", "files": chroma_entries, "count": len(chroma_entries)},
+        "embedding_index": {"model": "", "metadata_files": [], "database_rows_with_embeddings": None},
         "runtime_trees": list(RUNTIME_TREES),
         "included_backups": include_backups,
         "files": files,
@@ -138,6 +155,38 @@ def inventory_source(
 
 def canonical_json(value: Any) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def sqlite_metadata(path: Path) -> dict[str, Any]:
+    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        tables = [
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+        ]
+        migrations: list[dict[str, str]] = []
+        if "django_migrations" in tables:
+            migrations = [
+                {"app": row[0], "name": row[1]}
+                for row in connection.execute("SELECT app, name FROM django_migrations ORDER BY app, name")
+            ]
+        core_migrations = [row["name"] for row in migrations if row["app"] == "core"]
+        return {
+            "path": "db.sqlite3",
+            "contract": "in-contract",
+            "size_bytes": path.stat().st_size,
+            "sha256": sha256_file(path),
+            "sqlite": {"tables": tables, "table_count": len(tables)},
+            "migrations": {
+                "applied": migrations,
+                "count": len(migrations),
+                "latest": core_migrations[-1] if core_migrations else None,
+            },
+        }
+    finally:
+        connection.close()
 
 
 def s3_client():
