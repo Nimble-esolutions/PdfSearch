@@ -48,6 +48,14 @@ chunk ordering, and float serialization before hashing. A repeated build from
 the same input/configuration must produce the same root; any changed input,
 tool, model, or access projection produces a new root.
 
+Use the manifest as the foundation for a generation-pinned projection control
+plane: `ArtifactGeneration` (or its future replacement) must bind one complete
+set of source objects, chunks, embeddings, indexes, and evidence bundles. A
+failed generation never becomes active; the last-known-good generation remains
+servable until a replacement passes validation. This is the compatibility seam
+that permits SQLite, PostgreSQL, FAISS, pgvector, or another search engine to
+change independently.
+
 ## Steps
 
 1. Define manifest schema, canonicalization rules, and key builder.
@@ -63,6 +71,8 @@ tool, model, or access projection produces a new root.
    artifacts.
 8. Publish verified packs to disposable object storage and restore one into a
    separate local volume.
+9. Generate one provider-neutral evidence bundle from the pack and verify that
+   its citations resolve to the same document/page/chunk after a rebuild.
 
 ## Reconciliation rules
 
@@ -92,3 +102,5 @@ side with more files.
 - Reconciliation detects all injected drift classes.
 - Existing search behavior and public response shape are unchanged.
 - Plans 008 and 009 consume pack roots instead of copying opaque files.
+- A generation can be promoted or rolled back atomically without changing the
+  public UI/API contract.

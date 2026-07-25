@@ -11,6 +11,11 @@
 - Word-limit feedback integrated into the query field with OK, warning, and over-limit states.
 - Dedicated error surface with explanatory text and a retry action.
 - Clear source-reference cards that remain protected by the existing PDF URL boundary.
+
+The PDF URL is a public behavior boundary, not a requirement that the source
+bytes remain on the local Docker volume. Source cards should resolve through a
+custody adapter and carry document-version, page/chunk, and generation
+provenance when available; never expose object-store keys directly.
 - Localized welcome guidance that explains the service without mixing English and Marathi in one view.
 
 ## Hallmark decisions

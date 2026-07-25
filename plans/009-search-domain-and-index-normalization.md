@@ -10,7 +10,7 @@
 - **Priority**: P1
 - **Effort**: L
 - **Risk**: HIGH
-- **Depends on**: Plan 011, then Plan 008 when PostgreSQL is selected
+- **Depends on**: Plans 011 and 012, then Plan 008 when PostgreSQL is selected
 - **Category**: tech-debt / migration
 - **Planned at**: commit `d3fc328`, 2026-07-26
 
@@ -81,6 +81,12 @@ Use these concepts and invariants:
 Every search result must carry document version, chunk ID, retrieval
 generation, score, and source location. Every answer citation must point to a
 retrieval result, never reconstructed title text.
+
+The retrieval provider must return an `EvidenceBundle` rather than prompt-ready
+strings. The answer layer consumes that bundle through a provider-neutral
+adapter and records an `AnswerRecord`; OpenAI is the current provider, not the
+contract. This makes model changes, local/offline evaluation, and replay
+possible without changing the public search response.
 
 ## Implementation sequence
 

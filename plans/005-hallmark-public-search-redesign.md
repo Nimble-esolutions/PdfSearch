@@ -17,6 +17,11 @@ Use responsive CSS grid/flex, intrinsic sizing, logical properties, `content-vis
 
 Keep public folder scoping, authentication/authorization, rate limiting, query limits, and retrieval semantics on the server. Add bounded request cancellation, request IDs, safe error categories, and server-timed metadata. Preserve streaming/progressive results only if the API contract supports it; never expose internal prompts, stack traces, storage keys, or hidden folders.
 
+The Hallmark visual system and citizen-facing behavior are product boundaries;
+the implementation behind them is not. The public response remains compatible
+through an adapter while Plans 011/012 allow evidence bundles, generation
+manifests, retrieval providers, and model providers to evolve independently.
+
 ## Implementation steps
 
 1. Freeze the canonical Hallmark search route and capture feature parity for query, references, feedback, support, and language actions.

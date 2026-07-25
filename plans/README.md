@@ -21,16 +21,18 @@ These plans are the durable implementation brief for future agents. They superse
 6. `006-cross-surface-verification.md` — TODO, P1: automated and visual release gates.
 7. `007-search-reference-audit.md` — existing plan: source-reference parity and validation.
 8. `011-immutable-evidence-pack-foundation.md` — TODO, P1: make document custody and reconciliation authoritative before changing databases.
-9. `008-postgres-object-storage-migration.md` — TODO, P1: move custody to object storage and conditionally migrate relational state to PostgreSQL.
-10. `009-search-domain-and-index-normalization.md` — TODO, P1: benchmark hybrid retrieval and normalize documents/chunks/embeddings/index generations.
-11. `010-reliable-civic-ai-platform-architecture.md` — TODO, P2: evolve the modular monolith, worker, observability, security, and cost posture.
+9. `012-compatibility-and-agent-capability-contracts.md` — TODO, P1: relax internal coupling while preserving Django, the UI, and the public API adapter.
+10. `008-postgres-object-storage-migration.md` — TODO, P1: move custody to object storage and conditionally migrate relational state to PostgreSQL.
+11. `009-search-domain-and-index-normalization.md` — TODO, P1: benchmark hybrid retrieval and normalize documents/chunks/embeddings/index generations.
+12. `010-reliable-civic-ai-platform-architecture.md` — TODO, P2: evolve the modular monolith, worker, observability, security, and cost posture.
 
 Plans 002–004 should land as small cherry-pickable PRs. Plan 005 may proceed in parallel after the domain brief, but its backend/API contract must be agreed before visual work. Plan 006 gates merging.
 
-Plans 008–011 are future architecture work and must not be started as one
-large rewrite. Plan 011 establishes evidence custody first. Plan 008 then
-separates object custody and makes PostgreSQL an evidence-based decision. Plan
-009 normalizes retrieval and adds lexical/semantic/provenance checks. Plan 010
+Plans 008–012 are future architecture work and must not be started as one
+large rewrite. Plan 011 establishes evidence custody first. Plan 012 defines
+compatibility seams and agent-safe capabilities. Plan 008 then separates
+object custody and makes PostgreSQL an evidence-based decision. Plan 009
+normalizes retrieval and adds lexical/semantic/provenance checks. Plan 010
 consolidates the resulting boundaries and operational evidence.
 
 ## Non-negotiable constraints
