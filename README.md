@@ -17,6 +17,7 @@ Use the route that matches the work:
 
 - Local development: [`docker-compose.dev.yml`](docker-compose.dev.yml) and [`docs/INDEX.md`](docs/INDEX.md#local-development)
 - Dokploy deployment: [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
+- Dokploy data persistence and safe redeploys: [`docs/DOKPLOY_DATA_PERSISTENCE.md`](docs/DOKPLOY_DATA_PERSISTENCE.md)
 - Release promotion: [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md)
 - Production baseline: [`docs/PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md)
 - Data custody and recovery: [`docs/DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md), [`docs/RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md), and [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
@@ -134,6 +135,13 @@ The repository keeps tag defaults for compatibility, but production must set
 `PDFSEARCH_IMAGE` to the exact digest and verify the running container's digest.
 Tags such as `:latest` are never release identity and must not be reused from a
 stale local cache.
+
+Deploying a new image normally recreates the container while retaining the
+Compose-managed `/app/data` named volume. This is conditional on preserving the
+Dokploy project and volume mapping; deleting the project, changing the project
+or volume name, or using `down -v` can create an empty volume or delete data.
+Read [`DOKPLOY_DATA_PERSISTENCE.md`](docs/DOKPLOY_DATA_PERSISTENCE.md) before
+enabling autodeploy or pressing Deploy.
 
 ## Current Data-Custody Boundary
 
