@@ -32,6 +32,7 @@ services:
     pull_policy: always
     volumes:
       - flowdocs_data:/app/data
+      - flowdocs_control:/app/data-control
       - prod_flowdocs:/mnt/legacy:ro
     ports:
       # Traefik is the public ingress. Keep the container port off the host's
@@ -39,6 +40,8 @@ services:
       - "127.0.0.1:${WEB_PORT:-8000}:8000"
     environment:
       - DATA_ROOT=/app/data
+      - DATA_CONTROL_ROOT=/app/data-control
+      - CONTROL_DB_PATH=/app/data-control/control.sqlite3
       - SQLITE_DB_PATH=/app/data/db.sqlite3
       - MEDIA_ROOT=/app/data/media
       - STATIC_ROOT=/app/data/staticfiles
@@ -154,9 +157,12 @@ services:
     entrypoint: ["./worker-entrypoint.sh"]
     volumes:
       - flowdocs_data:/app/data
+      - flowdocs_control:/app/data-control
       - prod_flowdocs:/mnt/legacy:ro
     environment:
       DATA_ROOT: /app/data
+      DATA_CONTROL_ROOT: /app/data-control
+      CONTROL_DB_PATH: /app/data-control/control.sqlite3
       SQLITE_DB_PATH: /app/data/db.sqlite3
       MEDIA_ROOT: /app/data/media
       FAISS_INDEX_DIR: /app/data/faiss_indexes
@@ -205,6 +211,10 @@ volumes:
     labels:
       com.dokploy.backup: "true"
   flowdocs_data:
+    driver: local
+    labels:
+      com.dokploy.backup: "true"
+  flowdocs_control:
     driver: local
     labels:
       com.dokploy.backup: "true"
