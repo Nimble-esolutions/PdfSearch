@@ -290,9 +290,10 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
         for entry in manifest["files"]:
             path = snapshot if entry["artifact_type"] == "database" else source_root / entry["path"]
             status = put_immutable(client, args.bucket, entry["object_key"], path.read_bytes(), "application/octet-stream")
-            stats[status] += 1
+            stats[status.replace("-", "_")] += 1
         manifest_key = f"datasets/{args.dataset_id}/generations/{generation_id}/manifest.json"
-        stats[put_immutable(client, args.bucket, manifest_key, manifest_data, "application/json")] += 1
+        status = put_immutable(client, args.bucket, manifest_key, manifest_data, "application/json")
+        stats[status.replace("-", "_")] += 1
         write_registration(
             client,
             args.bucket,
