@@ -39,6 +39,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - prod_a_data:/app/data
+      - prod_a_control:/app/data-control
     environment:
       APP_ENV: production
       DATASET_ID: ai-sahakar-test
@@ -81,6 +82,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - prod_b_data:/app/data
+      - prod_b_control:/app/data-control
     environment:
       APP_ENV: production
       DATASET_ID: ai-sahakar-test
@@ -119,6 +121,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - staging_data:/app/data
+      - staging_control:/app/data-control
     environment:
       APP_ENV: staging
       DATASET_ID: ai-sahakar-staging
@@ -186,8 +189,11 @@ services:
 volumes:
   minio_data:
   prod_a_data:
+  prod_a_control:
   prod_b_data:
+  prod_b_control:
   staging_data:
+  staging_control:
 
 networks:
   integration:

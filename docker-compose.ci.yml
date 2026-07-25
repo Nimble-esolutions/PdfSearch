@@ -18,12 +18,15 @@ services:
     pull_policy: never
     volumes:
       - ci_data:/app/data
+      - ci_control:/app/data-control
       # Prevent image-bundled init artifacts from entering the fixture run.
       - ./scripts/ci/empty-init:/app/init:ro
     ports:
       - "127.0.0.1:${WEB_PORT:-18000}:8000"
     environment:
       DATA_ROOT: /app/data
+      DATA_CONTROL_ROOT: /app/data-control
+      CONTROL_DB_PATH: /app/data-control/control.sqlite3
       SQLITE_DB_PATH: /app/data/db.sqlite3
       MEDIA_ROOT: /app/data/media
       STATIC_ROOT: /app/data/staticfiles
@@ -86,6 +89,7 @@ services:
 
 volumes:
   ci_data:
+  ci_control:
 
 networks:
   ci:

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 DATA_ROOT="${DATA_ROOT:-/app/data}"
+DATA_CONTROL_ROOT="${DATA_CONTROL_ROOT:-/app/data-control}"
+CONTROL_DB_PATH="${CONTROL_DB_PATH:-$DATA_CONTROL_ROOT/control.sqlite3}"
 DB_PATH="${SQLITE_DB_PATH:-$DATA_ROOT/db.sqlite3}"
 MEDIA_DIR="${MEDIA_ROOT:-$DATA_ROOT/media}"
 FAISS_DIR="${FAISS_INDEX_DIR:-$DATA_ROOT/faiss_indexes}"
@@ -17,7 +19,7 @@ SEED_VALIDATION_MARKER="$DATA_ROOT/.declared_seed_validation.pending"
 DATA_BOOTSTRAP_MODE="${DATA_BOOTSTRAP_MODE:-strict}"
 SEED_DB_COPIED=0
 
-export DATA_ROOT DB_PATH MEDIA_DIR FAISS_DIR CHROMA_DIR STATIC_DIR BACKUP_DIR
+export DATA_ROOT DATA_CONTROL_ROOT CONTROL_DB_PATH DB_PATH MEDIA_DIR FAISS_DIR CHROMA_DIR STATIC_DIR BACKUP_DIR
 export DATA_BOOTSTRAP_MODE
 export SECRET_KEY="${SECRET_KEY:-}"
 export DEBUG="${DEBUG:-False}"
@@ -41,9 +43,11 @@ if [ -z "$SECRET_KEY" ] && [ "${ALLOW_INSECURE_DEFAULTS:-0}" != "1" ]; then
     exit 1
 fi
 
-mkdir -p "$DATA_ROOT" "$MEDIA_DIR/pdfs" "$CHROMA_DIR" "$FAISS_DIR" \
-    "$BACKUP_DIR/json_backups" "$BACKUP_DIR/chroma_backup" "$STATIC_DIR"
+mkdir -p "$DATA_ROOT" "$DATA_CONTROL_ROOT" "$MEDIA_DIR/pdfs" "$CHROMA_DIR" "$FAISS_DIR" \
+    "$BACKUP_DIR/json_backups" "$BACKUP_DIR/chroma_backup" \
+    "$BACKUP_DIR/control_backups" "$STATIC_DIR"
 test -w "$DATA_ROOT" || { echo "[data] ERROR: $DATA_ROOT is not writable" >&2; exit 1; }
+test -w "$DATA_CONTROL_ROOT" || { echo "[control] ERROR: $DATA_CONTROL_ROOT is not writable" >&2; exit 1; }
 
 # Import only mutable production data from the legacy volume. Application code
 # remains in the image and is never copied from the legacy volume.
@@ -121,6 +125,18 @@ if [ -s "$DB_PATH" ]; then
     fi
 fi
 
+if [ -s "$CONTROL_DB_PATH" ]; then
+    echo "[control] Running integrity check..."
+    CONTROL_INTEGRITY=$(sqlite3 "$CONTROL_DB_PATH" "PRAGMA integrity_check")
+    if [ "$CONTROL_INTEGRITY" != "ok" ]; then
+        echo "[control] FATAL: control database integrity check failed: $CONTROL_INTEGRITY" >&2
+        exit 1
+    fi
+    CONTROL_BACKUP_FILE="$BACKUP_DIR/control_backups/control_backup_$TIMESTAMP.sqlite3"
+    sqlite3 "$CONTROL_DB_PATH" ".backup '$CONTROL_BACKUP_FILE'"
+    echo "[control] Stable control database backup verified"
+fi
+
 cd /app/flowdocs
 
 if [ "${RUN_JSON_MIGRATIONS:-0}" = "1" ] && [ -x /usr/local/bin/apply_sqlite_json.py ]; then
@@ -128,8 +144,10 @@ if [ "${RUN_JSON_MIGRATIONS:-0}" = "1" ] && [ -x /usr/local/bin/apply_sqlite_jso
     python /usr/local/bin/apply_sqlite_json.py
 fi
 
-echo "[migrate] Running Django migrations"
+echo "[migrate] Running application database migrations"
 python manage.py migrate --noinput
+echo "[migrate] Running stable control database migrations"
+python manage.py migrate --database control --noinput
 
 echo "[db] Running post-migration integrity check..."
 POST_INTEGRITY=$(sqlite3 "$DB_PATH" "PRAGMA integrity_check")
@@ -138,6 +156,13 @@ if [ "$POST_INTEGRITY" != "ok" ]; then
     exit 1
 fi
 echo "[db] Post-migration integrity: ok"
+
+CONTROL_POST_INTEGRITY=$(sqlite3 "$CONTROL_DB_PATH" "PRAGMA integrity_check")
+if [ "$CONTROL_POST_INTEGRITY" != "ok" ]; then
+    echo "[control] FATAL: post-migration integrity check failed: $CONTROL_POST_INTEGRITY" >&2
+    exit 1
+fi
+echo "[control] Post-migration integrity: ok"
 
 if [ "$SEED_DB_COPIED" = "1" ] || [ -f "$SEED_VALIDATION_MARKER" ]; then
     echo "[data] Validating declared seed media before Gunicorn"
