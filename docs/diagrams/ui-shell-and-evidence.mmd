@@ -1,0 +1,13 @@
+flowchart LR
+    H[Official header<br/>Department identity · AI Sahakar · language] --> W
+    subgraph W[Public Civic Knowledge Workbench]
+        L[Knowledge rail<br/>Topics · starters · help]
+        C[Conversation workspace<br/>Empty state · questions · answers · composer]
+        E[Evidence rail<br/>Sources · excerpts · official PDF · support]
+    end
+    L -->|choose topic| C
+    C -->|search official documents| E
+    E -->|inspect evidence| C
+    C -->|mobile/tablet| D[Accessible source drawer<br/>Escape · focus restore · inline summary]
+    E --> D
+    C --> F[Footer<br/>Privacy · terms · accessibility · official site]
