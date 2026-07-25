@@ -41,13 +41,14 @@ The `EnvironmentIdentity` system (`core/environment.py`) enforces fail-closed
 startup validation. Every deployment must set these:
 
 ```text
-APP_ENV=production|staging|training|togo|togolive|hs|dev
+APP_ENV=production|staging|development|test|review
 PRODUCTION_SOURCE_ID=<unique-source-identifier>
 AUTHORITATIVE_DATASET_ID=<canonical-dataset-id>
 DATASET_ID=<this-instance-dataset-id>
-BACKUP_ROLE=primary|replica|none
-EXTERNAL_SIDE_EFFECTS_MODE=live|sandbox|disabled
-DATA_MODE=live|sanitized|empty
+BACKUP_ROLE=writer|reader|disabled
+BACKUP_SYNC_MODE=manual|scheduled|event-driven|hybrid
+EXTERNAL_SIDE_EFFECTS_MODE=enabled|sandbox|disabled
+DATA_MODE=empty|seed|local|s3-restore|s3-pinned|sanitized-production|exact-production
 ```
 
 ### AppEnv Enum
@@ -56,27 +57,32 @@ DATA_MODE=live|sanitized|empty
 |-------|-------------|
 | `production` | Live production deployment |
 | `staging` | Pre-production staging |
-| `training` | Training environment |
-| `togo` | Togo demo |
-| `togolive` | Togo live |
-| `hs` | HS demo |
-| `dev` | Local development |
+| `development` | Local development |
+| `test` | Automated/disposable test environment |
+| `review` | Isolated review application |
 
 ### DataMode Enum
 
 | Value | Description |
 |-------|-------------|
-| `live` | Real production data |
-| `sanitized` | PII-sanitized copy (non-prod) |
 | `empty` | No data, fresh start |
+| `seed` | Bootstrap from the declared image seed |
+| `local` | Use the data already present in the local volume |
+| `s3-restore` | Restore-source identity with latest-generation policy |
+| `s3-pinned` | Restore-source identity with a pinned generation |
+| `sanitized-production` | Production-derived data requiring sanitization |
+| `exact-production` | Explicitly approved exact production-derived data; forbidden in production |
+
+The S3 modes currently validate identity and policy. They do not cause either
+entrypoint to restore data automatically.
 
 ### BackupRole Enum
 
 | Value | Description |
 |-------|-------------|
-| `primary` | Authoritative backup source |
-| `replica` | Read-only backup replica |
-| `none` | No backup role |
+| `writer` | Authoritative production publisher |
+| `reader` | Read-only vault consumer |
+| `disabled` | No vault publication role |
 
 ### Side-Effect Policy (`core/side_effects.py`)
 
@@ -84,7 +90,7 @@ DATA_MODE=live|sanitized|empty
 
 | Mode | Email | OpenAI | Payments | Webhooks |
 |------|-------|--------|----------|----------|
-| `live` | Allowed | Allowed | Allowed | Allowed |
+| `enabled` | Allowed | Allowed | Allowed | Allowed |
 | `sandbox` | Allowed | Allowed | Blocked | Blocked |
 | `disabled` | Blocked | Blocked | Blocked | Blocked |
 
@@ -131,26 +137,28 @@ ARTIFACT_VAULT_ACCESS_KEY=<access-key>
 ARTIFACT_VAULT_SECRET_KEY=<secret-key>
 ARTIFACT_VAULT_BUCKET=ai-sahakar-prod-flowdocs-data-volume
 ARTIFACT_VAULT_REGION=us-east-1
-ARTIFACT_VAULT_AUTO_SYNC=0
-ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY=0
-ARTIFACT_VAULT_BOOTSTRAP_GENERATION=
-ARTIFACT_VAULT_RETENTION_COUNT=5
+ARTIFACT_VAULT_ENABLED=1
+BACKUP_SYNC_MODE=manual
+MAINTENANCE_SCHEDULER_ENABLED=0
 ```
 
 The vault uses S3-compatible storage (RustFS). Object store capabilities are
-probed at startup via `core/object_store_capabilities.py` — conditional
-operations (If-None-Match, If-Match) are verified before any write path is
-enabled. Namespace-scoped keys are built by `core/namespace.py` using the
-`DATASET_ID`.
+probed by the explicit publication path and the verification management
+command. Conditional operations (If-None-Match, If-Match) gate authoritative
+publication. They are not an automatic startup backup. Namespace-scoped keys
+are built by `core/namespace.py` using `DATASET_ID`.
+
+The web and maintenance services are separate processes. The service executing
+sync or restore must receive the vault values, identity values, sync policy,
+and immutable release identity. An optional Compose `env_file` is not a safe
+substitute for explicit Dokploy service wiring.
 
 ## Restore Configuration
 
 ```text
-RESTORE_WORKSPACE_ROOT=/app/data/restore_workspaces
-RESTORE_STAGE_TIMEOUT_SECONDS=3600
-RESTORE_REHEARSAL_ENABLED=1
-RESTORE_SANITIZE_ENABLED=0
-RESTORE_COMPATIBILITY_CHECK_ENABLED=1
+RESTORE_SOURCE_DATASET_ID=<source-dataset-id>
+RESTORE_POLICY=disabled|manual|startup-latest|startup-pinned
+DATA_PINNED_GENERATION=<immutable-generation-id>
 ```
 
 The restore pipeline (`core/restore_pipeline.py`) runs:
@@ -162,6 +170,17 @@ crash recovery (`core/activation_journal.py`). Migration rehearsal
 (`core/rehearsal.py`) runs against an isolated copy before activation.
 Compatibility checks (`core/compatibility.py`) verify schema, embedding
 dimensions, and FAISS index format before promotion.
+
+The full pipeline is currently invoked directly by integration tests, not by
+the application entrypoints or the admin maintenance restore job. The admin
+job uses a legacy staging path and must not be treated as disaster-recovery
+activation. `RESTORE_POLICY` and `DATA_PINNED_GENERATION` are parsed policy
+inputs only until Plan 003 connects startup/operator orchestration.
+
+`RESTORE_WORKSPACE_ROOT`, `RESTORE_STAGE_TIMEOUT_SECONDS`,
+`RESTORE_REHEARSAL_ENABLED`, `RESTORE_SANITIZE_ENABLED`, and
+`RESTORE_COMPATIBILITY_CHECK_ENABLED` are not consumed by the current runtime
+and must not be represented as active controls.
 
 ## Runtime Data
 
@@ -247,15 +266,20 @@ fail-closed until their manifests pass staging validation.
 
 ```text
 MAINTENANCE_WORKER_POLL_SECONDS=3
-ARTIFACT_VAULT_AUTO_SYNC=0
-ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY=0
-ARTIFACT_VAULT_BOOTSTRAP_GENERATION=
-ARTIFACT_VAULT_RETENTION_COUNT=5
+MAINTENANCE_SCHEDULER_ENABLED=0
+BACKUP_SYNC_MODE=manual
+RESTORE_POLICY=disabled
 ```
 
-The `AUTO_*` and retention values are reserved configuration for a future
-scheduled automation release. They do not enable background sync or deletion;
-all current vault actions are explicit superadmin jobs.
+`ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`,
+`ARTIFACT_VAULT_BOOTSTRAP_GENERATION`, and
+`ARTIFACT_VAULT_RETENTION_COUNT` are not consumed runtime controls.
+
+Scheduled/hybrid modes are not currently production-ready: the scheduler
+requires `MAINTENANCE_SCHEDULER_ENABLED=1`, a writer identity, a non-manual
+sync mode, and a dirty-state signal, but application mutations do not yet call
+the dirty-state marker. Use explicit manual publication and verify the
+resulting immutable generation until Plan 003 closes this gap.
 
 ## Bootstrap Credentials
 

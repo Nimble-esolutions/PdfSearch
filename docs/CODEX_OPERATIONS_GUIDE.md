@@ -247,9 +247,10 @@ The `environment` module defines the runtime contract. Key variables:
 - `PRODUCTION_SOURCE_ID` — canonical production source identifier
 - `AUTHORITATIVE_DATASET_ID` — authoritative dataset reference
 - `DATASET_ID` — current dataset identifier
-- `BACKUP_ROLE` — backup role (primary, secondary, none)
+- `BACKUP_ROLE` — backup role (`writer`, `reader`, `disabled`)
 - `EXTERNAL_SIDE_EFFECTS_MODE` — external side-effect safety mode
-- `DATA_MODE` — data access mode (read_only, read_write)
+- `DATA_MODE` — data posture (`empty`, `seed`, `local`, `s3-restore`,
+  `s3-pinned`, `sanitized-production`, `exact-production`)
 
 ## Side-Effect Safety
 

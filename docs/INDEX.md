@@ -64,7 +64,7 @@ source, and supersession relationship.
 ## Data Recovery
 
 - [`DATA_CUSTODY_AND_PROMOTION.md`](DATA_CUSTODY_AND_PROMOTION.md) — quarantine, reconciliation, staging, and explicit promotion
-- [`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) — snapshot/checksum custody boundary
+- [`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) — audited vault verdict, generation contents, intact/fresh/lost-volume behavior, restore limits, and completion gate
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — recovery-set contents and compatibility rules
 - [`FAISS_COMPATIBILITY.md`](FAISS_COMPATIBILITY.md) — index fingerprint validation
 - [`OPERATIONS_RUNBOOK.md`](OPERATIONS_RUNBOOK.md) — backup evidence, restore isolation, and failed-restore response
