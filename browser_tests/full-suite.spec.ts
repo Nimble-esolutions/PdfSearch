@@ -65,7 +65,7 @@ test.describe('Search', () => {
     await page.locator('#sendBtn').click();
     await page.waitForTimeout(2000);
     const pageContent = await page.content();
-    expect(pageContent).toContain('AI Enabled Search');
+    expect(pageContent).toContain('Ask AI Sahakar');
   });
 
   test('Marathi search works', async ({ page }) => {
