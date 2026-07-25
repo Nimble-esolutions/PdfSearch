@@ -1,9 +1,21 @@
-# Plan 008: Migrate relational and document custody to PostgreSQL plus object storage
+# Plan 008: Separate object custody and conditionally migrate relational state
 
 > **Executor instructions**: This is a future migration plan. Do not start the
 > migration on a live environment without an approved maintenance window,
 > verified backups, and an isolated rehearsal. Preserve the current SQLite
 > volume until the cutover has passed its rollback window.
+>
+> **Drift check (run first)**:
+>
+> ```bash
+> git diff --stat f742b59..HEAD -- \
+>   flowdocs/core/models.py flowdocs/flowdocs/settings.py \
+>   flowdocs/core/maintenance.py flowdocs/core/management/commands \
+>   requirements-web.txt requirements-web.lock docker-compose*.yml
+> ```
+>
+> If the relational/storage configuration or migration tooling changed,
+> reconcile this plan with live code before provisioning anything.
 
 ## Status
 
@@ -12,7 +24,8 @@
 - **Risk**: HIGH
 - **Depends on**: Plans 011 and 012; Plan 006 release gates must be used
 - **Category**: migration
-- **Planned at**: commit `d3fc328`, 2026-07-26
+- **Planned at**: commit `f742b59`, 2026-07-26
+- **Roadmap status**: TODO
 
 ## Why this matters
 
@@ -249,6 +262,34 @@ restore drills, and an operator-signed custody record.
   delta, database outage, object-store outage, and worker restart.
 - Browser tests for login, PDF viewing, source links, upload status, and search.
 
+## Commands, scope, and git workflow
+
+Minimum local/rehearsal gates:
+
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test core.tests.ArtifactInventoryTests \
+  core.tests.SearchIndexLifecycleTests
+python -m unittest discover -s integration_tests -p 'test_*.py'
+git diff --check
+```
+
+When runtime/image dependencies change, build the source image and run
+`scripts/ci/run_compose_smoke.sh`. Migration tooling must also run against an
+empty target, a sanitized production-shaped snapshot, and a restored target.
+
+In scope: additive schemas, adapters, migration/reconciliation commands,
+object-key contracts, tests, and cutover/rollback runbooks. Out of scope:
+production execution without a maintenance approval, changing search prompts or
+public response behavior, deleting the old volume during the rollback window,
+or editing protected lifecycle modules without a separate approved plan.
+
+Use a feature branch such as `feat/postgres-object-custody`, commit schema,
+copy tooling, adapters, and runbooks in independently reviewable chunks, and
+open a PR into `dev`. Never combine provisioning credentials or production data
+with the code PR.
+
 ## Scope and stop conditions
 
 In scope: schema, migration tooling, data manifests, object storage adapter,
@@ -276,3 +317,11 @@ previous release.
 - If PostgreSQL is deferred, the active release is instead identified by the
   SQLite migration leaf, evidence-pack digest, object manifest digest, image
   digest, and generation ID; no custody guarantee depends on a database swap.
+
+## Maintenance notes
+
+The custody adapter must remain independent of Django `FileField` path strings.
+Reviewers should scrutinize source/target identity, checksum verification,
+access-policy mapping, transaction boundaries, and rollback after target writes.
+Re-run the PostgreSQL decision gate when writer concurrency, RPO/RTO, corpus
+size, or managed-service cost changes.

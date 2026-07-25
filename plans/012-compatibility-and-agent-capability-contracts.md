@@ -4,6 +4,15 @@
 > the current public search behavior, and the current authentication model.
 > Relax implementation coupling behind adapters; do not force a public API or
 > storage migration as part of this plan.
+>
+> **Drift check (run first)**:
+>
+> ```bash
+> git diff --stat f742b59..HEAD -- \
+>   flowdocs/core/models.py flowdocs/core/views.py \
+>   flowdocs/core/maintenance.py flowdocs/core/utils.py \
+>   flowdocs/core/tests.py flowdocs/core/urls.py
+> ```
 
 ## Status
 
@@ -12,7 +21,8 @@
 - **Risk**: MED
 - **Depends on**: Plan 011
 - **Category**: architecture / developer-experience
-- **Planned at**: commit `e6a3bb8`, 2026-07-26
+- **Planned at**: commit `f742b59`, 2026-07-26
+- **Roadmap status**: TODO
 
 ## Decision
 
@@ -123,3 +133,37 @@ Schema documentation](https://docs.pydantic.dev/latest/concepts/json_schema/),
 Stop if the service boundary duplicates business logic, if idempotency cannot
 be made durable on the selected relational backend, or if a proposed library
 requires changing the public UI/API without an approved versioning plan.
+
+## Commands, scope, and git workflow
+
+```bash
+python manage.py test core.tests.SearchAndAuthenticationTests \
+  core.tests.AuditAndValidationTests core.tests.JobDrawerTests
+python manage.py check
+python manage.py makemigrations --check --dry-run
+node --check flowdocs/core/static/main/js/search.js
+git diff --check
+```
+
+Add contract fixtures and schema snapshots that contain no production content.
+If a new endpoint is added, generate/validate its OpenAPI schema and add
+authentication, authorization, CSRF, idempotency, replay, malformed-input, and
+rate-limit tests.
+
+In scope: versioned schemas, Django service interfaces, compatibility adapters,
+read-only inspect/cite capabilities, durable receipts over existing maintenance
+jobs, tests, and docs. Out of scope: adopting both DRF and Django Ninja,
+arbitrary agent shell/file access, production mutations, public v1 removal,
+provider migration, or microservices.
+
+Use separate commits for contracts, read-only services, durable receipts,
+endpoint/command adapters, and UI integration. Existing views remain the public
+adapter until explicit versioned cutover approval.
+
+## Maintenance notes
+
+Schema compatibility is reviewed like a public API even when initially
+internal. Every capability needs one owning service, least privilege,
+idempotency for mutation, correlation/audit identity, bounded output, safe
+errors, and a removal/versioning policy. AI-agent convenience never overrides
+human authorization or data-custody rules.

@@ -1,4 +1,26 @@
-# Registrar Co-operative Societies: Product Brief
+# Plan 001: Maintain the Registrar domain and visual identity contract
+
+> **Executor instructions**: This is an active decision record, not an
+> implementation backlog. Do not redesign the product identity from this file.
+> Re-open it only when an official source, approved asset, or human product
+> decision changes.
+
+## Status
+
+- **Priority**: P1
+- **Effort**: S
+- **Risk**: LOW
+- **Depends on**: none
+- **Category**: direction / product contract
+- **Planned at**: commit `f742b59`, 2026-07-26
+- **Roadmap status**: DONE
+
+## Drift check
+
+Re-open the official links below and compare
+`docs/design/AI_SAHAKAR_UI_CONTRACT.md` before changing vocabulary, identity,
+or institutional claims. If an official page is unavailable or contradictory,
+stop and request human confirmation.
 
 ## Confirmed institutional context
 
@@ -24,3 +46,15 @@ Public service language includes registration, bye-law amendment, licensing/rene
 - The current Hallmark header and CC mark are the visual baseline. Do not replace them with a speculative internet logo.
 - The Nimble mark remains a restrained technology-partner credit in the footer, not the institutional identity.
 - Any candidate logo requires source URL, usage/licence evidence, image dimensions, contrast check, and operator approval before adoption.
+
+## Verification and maintenance
+
+- Public English and Marathi copy uses the same institutional meaning.
+- No changing office count, document count, hours, or availability claim is
+  hardcoded without a dated official source.
+- Official marks retain source/licence evidence and accessible alternative
+  text.
+- Reviewers reject robot branding, invented government imagery, tricolour
+  decoration, and partner marks that compete with the department identity.
+- Revalidate this record annually or when the department publishes a new
+  identity/service standard.

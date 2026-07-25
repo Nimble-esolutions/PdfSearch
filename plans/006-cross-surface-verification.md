@@ -1,4 +1,31 @@
-# Cross-Surface Verification and Release Gates
+# Plan 006: Apply cross-surface verification and release gates
+
+> **Executor instructions**: This is a recurring gate, not a one-time feature.
+> Select the rows relevant to a PR, record exact evidence, and keep failures
+> blocking until fixed or explicitly waived by the operator.
+
+## Status
+
+- **Priority**: P1
+- **Effort**: M per major release; S per focused PR
+- **Risk**: LOW
+- **Depends on**: none
+- **Category**: tests / release engineering
+- **Planned at**: commit `f742b59`, 2026-07-26
+- **Roadmap status**: ACTIVE GATE
+
+## Drift check
+
+```bash
+git diff --stat f742b59..HEAD -- \
+  scripts/ci .github/workflows docker-compose.ci.yml \
+  playwright.config.ts browser_tests flowdocs/core/tests.py \
+  integration_tests
+```
+
+Before editing the gate, compare workflow commands to
+`scripts/ci/run_compose_smoke.sh`; CI and documentation must invoke the same
+contract.
 
 ## Required workflow
 
@@ -12,6 +39,17 @@ Each implementation plan is a separate branch and cherry-pickable commit/PR. Bef
 - Security checks for CSRF, authorization, secret redaction, public folder scope, rate limits, and unsafe action confirmation.
 - Performance checks for response size, query count, asset weight, and search request cancellation.
 
+## Required command matrix
+
+| Change type | Required commands | Expected result |
+|---|---|---|
+| Documentation only | `git diff --check` | exit 0 |
+| Django/view/model | `python manage.py check`; focused tests; `python manage.py makemigrations --check --dry-run` | exit 0; no ungenerated migrations |
+| Search JavaScript/CSS/template | focused Django tests; `node --check flowdocs/core/static/main/js/search.js`; `npx playwright test` | all pass; critical/serious axe violations 0 |
+| Runtime/image/dependency | Docker build and `scripts/ci/run_compose_smoke.sh` | source image and runtime smoke pass |
+| Custody/index/generation | focused unit tests plus `python -m unittest discover -s integration_tests -p 'test_*.py'` and restore/rebuild evidence | no unexplained drift; rollback passes |
+| Release/deploy | source CI, published digest smoke, declared/running digest comparison, `/livez`, `/readyz`, representative browser flow | immutable identity and route evidence agree |
+
 ## Visual gates
 
 Using the local dev server and browser automation, capture authenticated/admin pages and public search at 320, 390, 768, 1024, 1440, and a wide viewport. Review:
@@ -24,6 +62,16 @@ Using the local dev server and browser automation, capture authenticated/admin p
 
 Use axe or equivalent accessibility checks plus screenshot diff review. A page is not done because it returns 200; actions, state transitions, and failure paths must be observed.
 
+## Evidence record
+
+Each PR/release report must include branch, commit, base, commands and exit
+status, browser projects/viewports, axe counts, console errors, unexpected
+failed requests, CSS/JS sizes when changed, image digest when built, migration
+and data impact, rollback path, and unresolved defects by severity.
+
+Do not report `green` when GitHub returns no check runs, when tests were skipped,
+or when only screenshots were captured.
+
 ## Stop conditions
 
 Stop and return to design review if a change removes a working action, changes public search exposure, introduces a secret-bearing UI, creates a false operational state, breaks the Hallmark header baseline, or cannot be verified at the supported viewport sizes.
@@ -32,3 +80,13 @@ When a backend implementation changes behind a compatibility seam, verify both
 the unchanged public response/UI behavior and the new generation/evidence
 metadata. Do not treat a passing root-page screenshot as proof that storage,
 retrieval, source custody, or rollback behavior is correct.
+
+## Scope and maintenance
+
+In scope: test/workflow configuration, deterministic fixtures, smoke scripts,
+browser coverage, and evidence templates. Out of scope: weakening assertions to
+make CI pass, production mutation, secrets, and automatic merging.
+
+Reviewers should watch for documentation paths that drift from live test
+locations (for example `browser_tests/` versus older `tests/browser/` names),
+mutable image tags used as release identity, and tests that call live providers.

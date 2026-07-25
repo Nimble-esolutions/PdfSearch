@@ -1,9 +1,19 @@
 # Plan 009: Normalize document, chunk, embedding, and index architecture
 
-> **Executor instructions**: Treat this as a design-and-implementation plan
-> that follows Plan 008's custody migration. Do not remove FAISS or the current
-> search path until the replacement has retrieval-parity evidence and a
-> rollback switch.
+> **Executor instructions**: Start after Plans 011 and 012. Plan 008 is also a
+> prerequisite only when PostgreSQL is the selected retrieval path. Do not
+> remove FAISS or the current search path until the replacement has
+> retrieval-parity evidence and a rollback switch.
+>
+> **Drift check (run first)**:
+>
+> ```bash
+> git diff --stat f742b59..HEAD -- \
+>   flowdocs/core/models.py flowdocs/core/utils.py \
+>   flowdocs/core/views.py flowdocs/core/compatibility.py \
+>   flowdocs/core/vectorstore.py flowdocs/core/pdf_serach_app.py \
+>   flowdocs/core/tests.py
+> ```
 
 ## Status
 
@@ -12,7 +22,8 @@
 - **Risk**: HIGH
 - **Depends on**: Plans 011 and 012, then Plan 008 when PostgreSQL is selected
 - **Category**: tech-debt / migration
-- **Planned at**: commit `d3fc328`, 2026-07-26
+- **Planned at**: commit `f742b59`, 2026-07-26
+- **Roadmap status**: TODO
 
 ## Why this matters
 
@@ -186,6 +197,31 @@ dataset.
 - Browser tests for upload progress, ready/error states, source links, and
   follow-up search.
 
+## Commands, scope, and git workflow
+
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test core.tests.SearchAndAuthenticationTests \
+  core.tests.SearchIndexLifecycleTests core.tests.ArtifactInventoryTests
+python -m unittest discover -s integration_tests -p 'test_*.py'
+git diff --check
+```
+
+Add a deterministic evaluation command that runs without live OpenAI calls and
+emits query ID, provider/generation, ranked chunk IDs, access decisions,
+latency, and citation coverage. Store only sanitized fixtures/results.
+
+In scope: additive document/version/chunk/embedding/generation schema,
+ingestion state, provider adapters, evaluation fixtures, shadow reads, and
+tests. Out of scope: changing citizen-facing answer JSON, removing current
+retrieval before rollback evidence, introducing an external search service
+without a benchmark, and fabricating page metadata.
+
+Use separate commits for characterization fixtures, additive schema,
+ingestion, provider/shadow reads, and retirement. Every commit must keep the
+existing search path bootable.
+
 ## Stop conditions and boundaries
 
 Stop if the active embedding model cannot be identified, if current results
@@ -203,3 +239,11 @@ compatibility decision is approved.
 - Search provider can switch between old and new implementations safely.
 - Retrieval parity and access-control tests pass.
 - FAISS/legacy Chroma status is explicit and no duplicate path is accidental.
+
+## Maintenance notes
+
+Every extractor, chunker, embedder, ranker, and model change creates a new
+configuration/generation identity. Reviewers should scrutinize access filters
+before ranking and before citation serialization, false refusals from evidence
+quorum, and English/Marathi exact-term regression. Never compare generated prose
+byte-for-byte as a retrieval parity test.
