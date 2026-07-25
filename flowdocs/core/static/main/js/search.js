@@ -82,6 +82,8 @@ searchComposer.addEventListener("submit", event => {
 
 newQuestion?.addEventListener("click", () => {
     chatMain.replaceChildren();
+    answerStore.clear();
+    answerSequence = 0;
     appendWelcomeMessage();
     userQuery.value = "";
     userQuery.dispatchEvent(new Event("input", {bubbles: true}));
@@ -338,7 +340,10 @@ function typeEffect(text, references = [], query = "") {
         div.appendChild(announcement);
     };
 
-    const renderImmediately = performanceProfile.mode !== "full" || text.length > ANSWER_REVEAL_LIMIT;
+    const hasStructuredFormatting = /(^|\n)(#{1,3}\s|[-*]\s|\d+[.)]\s)|\*\*/.test(text);
+    const renderImmediately = performanceProfile.mode !== "full"
+        || text.length > ANSWER_REVEAL_LIMIT
+        || hasStructuredFormatting;
     if (renderImmediately) {
         appendFormattedAnswer(div, text);
         answerFormatted = true;
@@ -499,12 +504,17 @@ function createReferenceCard(ref, index = 1) {
     number.textContent = `[${index}]`;
     card.appendChild(number);
     const body = document.createElement("div");
-    const link = document.createElement("a");
-    link.href = safeReferenceUrl(ref);
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
+    const referenceUrl = safeReferenceUrl(ref);
+    const link = document.createElement(referenceUrl ? "a" : "span");
+    if (referenceUrl) {
+        link.href = referenceUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+    } else {
+        link.className = "ref-card__unavailable";
+    }
     link.textContent = ref.title || sourceDocumentsLabel;
-    link.setAttribute("aria-label", `${workbenchCopy.view_original}: ${link.textContent}`);
+    if (referenceUrl) link.setAttribute("aria-label", `${workbenchCopy.view_original}: ${link.textContent}`);
     body.appendChild(link);
     const meta = document.createElement("small");
     meta.textContent = [ref.folder, ref.page ? `Page ${ref.page}` : "", ref.uploaded_at]
@@ -522,13 +532,13 @@ function createReferenceCard(ref, index = 1) {
 
 function buildShareText({answer, query, references}) {
     const cleanAnswer = cleanAnswerText(answer);
-    const sourceLines = references.length
-        ? references.map((ref, index) => {
-            const url = new URL(safeReferenceUrl(ref), window.location.origin).href;
-            return `[${index + 1}] ${ref.title || sourceDocumentsLabel} — ${url}`;
-        }).join("\n")
-        : workbenchCopy.empty_sources;
-    return `*AI Sahakar answer*\n\nQuestion:\n${query}\n\nAnswer:\n${cleanAnswer}\n\nSource documents:\n${sourceLines}`;
+    const sourceLines = references.map((ref, index) => {
+        const referenceUrl = safeReferenceUrl(ref);
+        if (!referenceUrl) return null;
+        const url = new URL(referenceUrl, window.location.origin).href;
+        return `[${index + 1}] ${ref.title || sourceDocumentsLabel} — ${url}`;
+    }).filter(Boolean).join("\n");
+    return `${workbenchCopy.share_title}\n\n${workbenchCopy.share_question}:\n${query}\n\n${workbenchCopy.share_answer_label}:\n${cleanAnswer}\n\n${workbenchCopy.share_sources}:\n${sourceLines || workbenchCopy.empty_sources}`;
 }
 
 function cleanAnswerText(answer) {
@@ -543,6 +553,7 @@ function appendAnswerActions(parent, payload) {
     actions.className = "answer-actions";
     const answerId = `answer-${++answerSequence}`;
     answerStore.set(answerId, payload);
+    while (answerStore.size > 20) answerStore.delete(answerStore.keys().next().value);
     const copy = document.createElement("button");
     copy.type = "button";
     copy.dataset.answerId = answerId;
@@ -582,11 +593,12 @@ async function copyAnswerText(text) {
 }
 
 function createShareMenu(button, payload) {
-    document.querySelector(".share-menu")?.remove();
+    closeShareMenu();
     shareMenuReturnFocus = button;
     const menu = document.createElement("div");
     menu.className = "share-menu";
     menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", workbenchCopy.share_menu_label);
     const text = buildShareText(payload);
     const encodedText = encodeURIComponent(text);
     const encodedUrl = encodeURIComponent(window.location.href);
@@ -618,7 +630,32 @@ function createShareMenu(button, payload) {
     });
     menu.appendChild(copy);
     button.parentElement.appendChild(menu);
+    button.setAttribute("aria-expanded", "true");
+    button.setAttribute("aria-haspopup", "menu");
+    const menuItems = [...menu.querySelectorAll("a, button")];
+    menu.addEventListener("keydown", event => {
+        const current = menuItems.indexOf(document.activeElement);
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            const next = event.key === "ArrowDown"
+                ? (current + 1) % menuItems.length
+                : (current - 1 + menuItems.length) % menuItems.length;
+            menuItems[next].focus();
+        } else if (event.key === "Home" || event.key === "End") {
+            event.preventDefault();
+            menuItems[event.key === "Home" ? 0 : menuItems.length - 1].focus();
+        }
+    });
     menu.querySelector("a, button")?.focus();
+}
+
+function closeShareMenu(restoreFocus = false) {
+    const menu = document.querySelector(".share-menu");
+    if (!menu) return;
+    menu.remove();
+    shareMenuReturnFocus?.setAttribute("aria-expanded", "false");
+    if (restoreFocus) shareMenuReturnFocus?.focus();
+    shareMenuReturnFocus = null;
 }
 
 async function shareAnswer(button, payload) {
@@ -678,10 +715,13 @@ evidenceClose?.addEventListener("click", closeEvidence);
 document.addEventListener("keydown", event => {
     if (event.key === "Escape") {
         closeEvidence();
-        document.querySelector(".share-menu")?.remove();
-        shareMenuReturnFocus?.focus();
-        shareMenuReturnFocus = null;
+        closeShareMenu(true);
     }
+});
+
+document.addEventListener("click", event => {
+    const menu = document.querySelector(".share-menu");
+    if (menu && !menu.contains(event.target) && event.target !== shareMenuReturnFocus) closeShareMenu();
 });
 
 function appendPromptOrRetry(event) {
@@ -728,7 +768,7 @@ chatMain.addEventListener("click", appendPromptOrRetry);
 
 
 function protectedPdfUrl(pdfId) {
-    if (!pdfId) return "#";
+    if (!pdfId) return null;
     return viewPdfUrlTemplate.replace("/0/", `/${encodeURIComponent(pdfId)}/`);
 }
 

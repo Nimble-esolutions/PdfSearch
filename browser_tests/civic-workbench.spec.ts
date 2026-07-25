@@ -86,6 +86,32 @@ test.describe('Civic Knowledge Workbench', () => {
     expect(shared.text).toContain('/pdf/');
   });
 
+  test('uses an explicit fallback share menu without a fixed recipient or fake source link', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (value: string) => { (window as unknown as { copied: string }).copied = value; } },
+      });
+    });
+    await mockSearch(page, { answer, references: [{ title: 'Unavailable source' }] });
+    await page.goto('/');
+    await page.locator('#userQuery').fill('What is the society audit procedure?');
+    await page.locator('#sendBtn').click();
+    const share = page.locator('[data-share-answer]');
+    await share.click();
+    await expect(page.locator('.share-menu')).toHaveAttribute('aria-label', 'Share options');
+    await expect(page.locator('.share-menu a')).toHaveCount(3);
+    for (const link of await page.locator('.share-menu a').all()) {
+      await expect(link).not.toHaveAttribute('href', /phone=/);
+    }
+    await page.locator('.share-menu button').click();
+    expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).not.toContain('/#');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.share-menu')).toHaveCount(0);
+    await expect(share).toBeFocused();
+  });
+
   test('footer partner disclosure is keyboard and touch discoverable without a layout jump', async ({ page }) => {
     await page.goto('/');
     const footer = page.locator('.admin-footer__partners');

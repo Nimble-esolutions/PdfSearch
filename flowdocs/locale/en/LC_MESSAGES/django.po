@@ -135,6 +135,15 @@ msgstr ""
 msgid "AI Sahakar answer"
 msgstr ""
 
+msgid "Question"
+msgstr ""
+
+msgid "Answer"
+msgstr ""
+
+msgid "Share options"
+msgstr ""
+
 msgid "WhatsApp"
 msgstr ""
 
