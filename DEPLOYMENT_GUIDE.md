@@ -164,9 +164,10 @@ evidence and recovery work. It is not the ongoing application data store.
 
 ## Legacy and Active Data Promotion
 
-Legacy data must not be copied directly into active data. The verified baseline
-is divergent: legacy has 242 PDFs and 45 FAISS files; active has 17 PDF rows, 0
-PDF files, and 11 FAISS files; only 6 PDF paths overlap. Use the procedure in
+Legacy data must not be copied directly into active data. The pre-reconciliation
+sources were divergent; the current documented active baseline is 253 PDF rows,
+242 PDF files, 53 folders, 8 users, and 51 rebuilt FAISS indexes. Eleven
+target-only rows remain preserved but unrecovered. Use the procedure in
 [`DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md):
 
 1. Preserve both sources and take or verify timestamped snapshots/checksums.

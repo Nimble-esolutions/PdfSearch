@@ -60,8 +60,10 @@ isolated from the application network; recovery is an operator-mediated restore
 through the `restore_pipeline` and `restore_workspace` modules, not a runtime
 read or automatic sync. The `object_store_capabilities` module detects and
 verifies S3-compatible storage capabilities. Explicit superadmin generation sync
-creates immutable generations; explicit pull verifies every object and writes
-only to a quarantine staging directory.
+creates immutable dataset-scoped generations. The current admin pull uses a
+different legacy manifest namespace and is not the full restore pipeline.
+Until Plan 003 reconciles that path, use controlled direct restore tooling in a
+quarantine target and do not promote from the admin label alone.
 
 ## Gates
 
@@ -71,13 +73,13 @@ failed isolated targets and evidence until the recovery decision is closed.
 
 ## Current Versus Planned
 
-Current: manual custody, inventory, conflict classification, staged restore,
-fingerprint checks, explicit promotion, compatibility checks, migration
-rehearsal, sanitization, activation journal, atomic pointer switch, global
-writer fencing, dataset registration, writer lease, backup policy, object
-store capabilities, namespace, and metrics.
+Current: manual custody, generated inventory/generation manifests, conflict
+classification, compatibility, migration rehearsal, sanitization, activation
+journal, atomic pointer switch, global writer fencing, dataset registration,
+writer lease, object-store capabilities, namespace, and metrics. These
+primitives are not yet connected to one admin/startup restore path.
 
-Planned: generated artifact manifests, automatic reconciliation, automatic
-cross-environment sync, and automated FAISS recovery. The restore pipeline
-and activation journal provide the foundation for these; full automation
-remains a future target.
+Planned: immutable evidence-pack reconciliation, automatic reconciliation,
+automatic cross-environment sync, and automated FAISS recovery. The restore
+pipeline and activation journal provide the foundation for these; full
+automation remains a future target.

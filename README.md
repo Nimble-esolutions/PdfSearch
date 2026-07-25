@@ -153,8 +153,15 @@ RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` contains timestamped active
 and legacy snapshots and checksums. Application-level S3 integration is implemented
 through the artifact vault adapter, dataset registration, global writer fencing,
 namespace-scoped keys, object store capability probing, and a full restore pipeline
-(download→validate→sanitize→rehearse→activate). The bucket remains an operator
-recovery vault; automatic cross-environment sync is planned but not yet automated.
+(download→validate→sanitize→rehearse→activate).
+
+The 2026-07-26 audit verified those primitives against disposable MinIO, but
+also confirmed that the normal admin/worker path and startup entrypoints are
+not yet connected to one end-to-end restore orchestrator. Scheduled backup is
+not currently reliable, and a fresh volume does not auto-pull from RustFS.
+Treat the bucket as an explicit operator recovery component and read
+[`RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md) before depending on
+it for a deploy, restore, or disaster-recovery decision.
 
 ## Verification Gates
 

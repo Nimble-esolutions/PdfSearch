@@ -147,4 +147,6 @@ store capabilities, namespace, metrics, and the data release contract
 Planned: separately published versioned data artifacts, automatic FAISS recovery,
 and automatic cross-environment synchronization. The restore pipeline and
 activation journal provide the foundation for these; full automation of artifact
-publishing and cross-environment sync remains a future target.
+publishing and cross-environment sync remains a future target. The current
+admin/worker restore path is not wired to the full pipeline, and startup restore
+policies are not consumed; see Plan 003 and the audited vault guide.

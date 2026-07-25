@@ -88,12 +88,13 @@ divergence and deployment incidents documented above:
 ### Environment Identity (`core/environment.py`)
 Fail-closed startup validation ensures every deployment declares its
 `APP_ENV`, `DATA_MODE`, `BACKUP_ROLE`, and `EXTERNAL_SIDE_EFFECTS_MODE`.
-Production requires `DATA_MODE=live` and a non-empty `PRODUCTION_SOURCE_ID`.
+Production uses `DATA_MODE=local` for the current volume-backed runtime and
+requires a non-empty `PRODUCTION_SOURCE_ID`.
 An invalid identity exits before migrations run — no silent misconfiguration.
 
 ### Side-Effect Policy (`core/side_effects.py`)
 External calls (email, OpenAI, payments, webhooks) are gated by
-`EXTERNAL_SIDE_EFFECTS_MODE`. Production uses `live`; staging uses `sandbox`
+`EXTERNAL_SIDE_EFFECTS_MODE`. Production uses `enabled`; staging uses `sandbox`
 (payments/webhooks blocked); dev uses `disabled`. The AI guard
 (`core/ai_guard.py`) enforces OpenAI containment at construction time.
 

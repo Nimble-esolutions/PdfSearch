@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operators, release managers, and developers changing Dokploy settings
 Owner: FlowDocs maintainers
-Last verified: 2026-07-25
+Last verified: 2026-07-26
 Canonical source: This document
 Supersedes: None
 
@@ -24,6 +24,12 @@ start the application with a new or empty data volume.
 The release image contains code. The named volume contains mutable data. They
 must be versioned, inspected, backed up, and rolled back separately.
 
+The RustFS artifact vault is a third custody layer. It stores only explicit,
+immutable publications; it is not a live mirror of the volume and is not pulled
+automatically when Dokploy creates an empty volume. Read
+[`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) before relying on it for
+recovery.
+
 ## What a normal action does
 
 | Action | Application container | Named `/app/data` volume | Redis data | Expected result |
@@ -40,6 +46,22 @@ must be versioned, inspected, backed up, and rolled back separately.
 “Retained” means Docker keeps the volume object. It does not prove that the
 application is using the intended volume, that the data is internally valid, or
 that a newer image is serving traffic.
+
+## Volume and vault decision matrix
+
+| Observed state after deploy | Correct interpretation | Safe next action |
+| --- | --- | --- |
+| Same volume identity and expected counts | Existing accumulated data survived | Continue post-deploy checks; do not restore |
+| Same volume identity but unexpected counts/integrity | Volume survived but data state is suspect | Stop traffic/promotion, preserve evidence, investigate in isolation |
+| New or empty volume, no selected generation | The deploy did not recover application data | Stop; do not accept an empty service as success |
+| New or empty volume, validated vault generation exists | Recovery may be possible, but is not automatic | Restore into a disposable target using the full pipeline and acceptance gate |
+| Healthy local volume and newer/different vault generation | Two custody states exist | Never auto-merge or overwrite; inventory and reconcile explicitly |
+| Volume and RustFS share one failed host | Both recovery layers may be unavailable | Recover from an independent off-host copy |
+
+The existing named volume remains authoritative during a normal redeploy.
+Neither `DATA_MODE=s3-restore` nor `RESTORE_POLICY=startup-latest` currently
+causes an entrypoint restore. Admin generation status also does not prove that
+the active database/media/index files changed.
 
 ## Current stage contract
 
@@ -83,8 +105,10 @@ changing environment values:
    is mounted over `/app/flowdocs`.
 5. Complete a verified application-data backup and record its location,
    checksum, and retention expiry.
-6. Check disk headroom, memory headroom, and backup growth.
-7. Confirm the previous image and matching data release are available for
+6. Record the latest successfully published vault generation and its age. If no
+   generation exists, record that the vault recovery point is unavailable.
+7. Check disk headroom, memory headroom, and backup growth.
+8. Confirm the previous image and matching data release are available for
    rollback.
 
 Read-only inspection:
@@ -136,6 +160,11 @@ restarting again.
   post-deploy acceptance is complete.
 - A local SQLite backup inside the same Docker volume is not an off-host backup.
   Maintain an independent recovery copy and perform periodic restore drills.
+- A successful vault health probe is not a successful backup. Require an
+  immutable generation, manifest/checksum evidence, and a tested restore.
+- Do not use the current admin “promote” or “rollback” status as byte-level
+  activation evidence until Plan 003 connects those actions to the full restore
+  pipeline.
 
 ## Options and recommendation
 
