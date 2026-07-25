@@ -46,6 +46,12 @@ def _env_positive_decimal(name, default):
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 DATA_ROOT = Path(os.getenv('DATA_ROOT', str(BASE_DIR / 'data')))
+DATA_CONTROL_ROOT = Path(
+    os.getenv('DATA_CONTROL_ROOT', str(DATA_ROOT / 'data-control'))
+)
+CONTROL_DB_PATH = Path(
+    os.getenv('CONTROL_DB_PATH', str(DATA_CONTROL_ROOT / 'control.sqlite3'))
+)
 #--------------for gemini Model---------------------
 # GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
@@ -92,6 +98,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'core',
+    'vaultops',
 ]
 
 MIDDLEWARE = [
@@ -135,9 +142,14 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.getenv('SQLITE_DB_PATH', str(DATA_ROOT / 'db.sqlite3')),
-    }
+    },
+    'control': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': str(CONTROL_DB_PATH),
+    },
 }
 
+DATABASE_ROUTERS = ['vaultops.router.VaultControlRouter']
 
 
 # Password validation
