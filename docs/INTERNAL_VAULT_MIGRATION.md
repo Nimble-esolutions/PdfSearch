@@ -29,6 +29,24 @@ future migration. Never use a mutable `:latest` image for the migration
 command; use the exact released image digest and the same application
 configuration required by Django.
 
+### Live storage reconciliation
+
+The read-only production audit found the following state at the time of the
+feature work:
+
+| Location | Observed state | Meaning |
+| --- | --- | --- |
+| `ai-sahakar-prod-flowdocs-artifact-vault` | 0 files, about 4 KB | Requested target bucket exists but has no published generation |
+| `ai-sahakar-prod-flowdocs-data-volume` | 1,098 files, about 2.6 GB | Existing RustFS data-volume custody contains the `ai-sahakar-prod` dataset and generation objects |
+| `sahakar-dev-frontend-dockerfile-1cubi5` task | no `ARTIFACT_VAULT_*`, `DATASET_ID`, `BACKUP_ROLE`, `BACKUP_SYNC_MODE`, or `DATA_MODE` runtime variables | Legacy app cannot publish to or restore from the vault contract |
+
+The difference is expected until the new image and vault environment are
+deployed and the internal publisher is run. The existing data-volume bucket
+must not be treated as an implicit source for the new artifact-vault bucket:
+first reconcile its authoritative pointer, generation identity, checksums and
+intended dataset with the legacy-volume inventory. Do not bulk-copy RustFS
+internal files or `.xl.meta` objects; use the application manifest contract.
+
 ## What is published
 
 The command creates one manifest containing:
@@ -83,6 +101,11 @@ Publishing requires the vault environment to be explicitly enabled and the
 target bucket/endpoint credentials to be supplied through the deployment's
 secret mechanism. Never put those values in the command line, repository,
 logs or screenshots.
+
+For the current server, the target bucket name is known, but the publishing
+image, endpoint configuration, dataset ownership and operator credential
+posture still require staging confirmation. PR #92 is the implementation
+vehicle and is intentionally draft until that review is complete.
 
 ```bash
 python manage.py publish_legacy_generation \
