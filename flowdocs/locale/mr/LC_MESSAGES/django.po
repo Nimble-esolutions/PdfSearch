@@ -125,6 +125,39 @@ msgstr "अभिप्राय पाठवा"
 msgid "Share on WhatsApp"
 msgstr "WhatsApp वर शेअर करा"
 
+msgid "Share answer"
+msgstr "उत्तर शेअर करा"
+
+msgid "AI Sahakar answer"
+msgstr "सहकार AI चे उत्तर"
+
+msgid "WhatsApp"
+msgstr "WhatsApp"
+
+msgid "Telegram"
+msgstr "Telegram"
+
+msgid "Microsoft Teams"
+msgstr "Microsoft Teams"
+
+msgid "Copy share text"
+msgstr "शेअर मजकूर कॉपी करा"
+
+msgid "Copy failed"
+msgstr "कॉपी करता आले नाही"
+
+msgid "Technology partners"
+msgstr "तंत्रज्ञान भागीदार"
+
+msgid "MediaNetwork"
+msgstr "MediaNetwork"
+
+msgid "Nimble e-Solutions"
+msgstr "Nimble e-Solutions"
+
+msgid "Securiace Technologies"
+msgstr "Securiace Technologies"
+
 msgid "Society election rules"
 msgstr "संस्थेच्या निवडणुकीचे नियम"
 

@@ -54,6 +54,54 @@ test.describe('Civic Knowledge Workbench', () => {
     await expect(page.locator('[data-evidence-answer]')).not.toHaveAttribute('hidden');
   });
 
+  test('formats answer structure and shares the complete answer with source links', async ({ page }) => {
+    const richAnswer = 'A short answer.\n\n1. **First requirement**\n2. Second requirement';
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (value: string) => { (window as unknown as { copied: string }).copied = value; } },
+      });
+      Object.defineProperty(navigator, 'share', {
+        configurable: true,
+        value: async (value: unknown) => { (window as unknown as { shared: unknown }).shared = value; },
+      });
+      Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    });
+    await mockSearch(page, { answer: richAnswer, references });
+    await page.goto('/');
+    await page.locator('#userQuery').fill('What documents are required?');
+    await page.locator('#sendBtn').click();
+    await expect(page.locator('.answer-body strong')).toHaveText('First requirement');
+    await expect(page.locator('.answer-body')).not.toContainText('**First requirement**');
+
+    await page.locator('[data-copy-answer]').click();
+    await expect(page.locator('[data-copy-answer]')).toHaveText('Copied');
+    expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).toContain('First requirement');
+    expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).not.toContain('**');
+
+    await page.locator('[data-share-answer]').click();
+    const shared = await page.evaluate(() => (window as unknown as { shared: {text: string} }).shared);
+    expect(shared.text).toContain('First requirement');
+    expect(shared.text).toContain('Maharashtra Cooperative Societies Act');
+    expect(shared.text).toContain('/pdf/');
+  });
+
+  test('footer partner disclosure is keyboard and touch discoverable without a layout jump', async ({ page }) => {
+    await page.goto('/');
+    const footer = page.locator('.admin-footer__partners');
+    await expect(footer).toBeVisible();
+    const before = await footer.boundingBox();
+    const beforeFlowHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+    await footer.locator('summary').click();
+    await expect(footer.locator('.admin-footer__partners-menu')).toBeVisible();
+    await expect(footer).toContainText('MediaNetwork');
+    await expect(footer).toContainText('Nimble e-Solutions');
+    const after = await footer.boundingBox();
+    const afterFlowHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+    expect(after?.height).toBe(before?.height);
+    expect(afterFlowHeight).toBe(beforeFlowHeight);
+  });
+
   test('source drawer opens and restores focus after Escape', async ({ page }) => {
     await mockSearch(page);
     await page.goto('/');

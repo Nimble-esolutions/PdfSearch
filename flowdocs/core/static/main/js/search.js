@@ -21,10 +21,13 @@ const evidenceClose = document.querySelector("[data-evidence-close]");
 const newQuestion = document.querySelector("[data-new-question]");
 let aboutReturnFocus = null;
 let evidenceReturnFocus = null;
+let shareMenuReturnFocus = null;
 let requestPending = false;
 let activeController = null;
 let requestTimeout = null;
 let stageTimer = null;
+let answerSequence = 0;
+const answerStore = new Map();
 const ANSWER_REVEAL_LIMIT = 900;
 
 function detectPerformanceProfile() {
@@ -194,7 +197,7 @@ async function sendMessage(){
         typingDiv.setAttribute("aria-label", stages[stages.length - 1]);
         typingDiv.remove();
         if(data.answer){
-            typeEffect(data.answer, data.references || []);
+            typeEffect(data.answer, data.references || [], query);
         } else if(data.error){
             appendErrorMessage(searchMessages.search_unavailable, searchMessages.try_later, query);
         }
@@ -311,16 +314,21 @@ function appendErrorMessage(title, detail, retryQuery) {
 }
 
 
-function typeEffect(text, references = []) {
+function typeEffect(text, references = [], query = "") {
     const div = document.createElement('div');
     div.className = 'conversation-entry conversation-entry--assistant gpt-msg';
     div.setAttribute("aria-live", "off");
     chatMain.appendChild(div);
+    let answerFormatted = false;
 
     const finish = () => {
+        if (!answerFormatted) {
+            div.replaceChildren();
+            appendFormattedAnswer(div, text);
+        }
         div.classList.add("answer-complete");
         appendReferences(div, references);
-        appendAnswerActions(div, text);
+        appendAnswerActions(div, {answer: text, query, references});
         updateEvidenceRail(references);
         const announcement = document.createElement("span");
         announcement.className = "visually-hidden";
@@ -332,7 +340,8 @@ function typeEffect(text, references = []) {
 
     const renderImmediately = performanceProfile.mode !== "full" || text.length > ANSWER_REVEAL_LIMIT;
     if (renderImmediately) {
-        appendPlainText(div, text);
+        appendFormattedAnswer(div, text);
+        answerFormatted = true;
         finish();
         return div;
     }
@@ -366,6 +375,77 @@ function typeEffect(text, references = []) {
     }
     typing();
     return div;
+}
+
+function appendFormattedAnswer(parent, text) {
+    const body = document.createElement("div");
+    body.className = "answer-body";
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    let paragraph = null;
+    let list = null;
+    let listType = null;
+
+    const flushParagraph = () => {
+        if (paragraph) {
+            body.appendChild(paragraph);
+            paragraph = null;
+        }
+    };
+    const closeList = () => {
+        flushParagraph();
+        list = null;
+        listType = null;
+    };
+
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+            closeList();
+            return;
+        }
+        const heading = trimmed.match(/^#{1,3}\s+(.+)$/);
+        const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+        const unordered = trimmed.match(/^[-*]\s+(.+)$/);
+        if (heading) {
+            closeList();
+            const element = document.createElement("h3");
+            appendInlineFormatting(element, heading[1]);
+            body.appendChild(element);
+            return;
+        }
+        if (ordered || unordered) {
+            const nextType = ordered ? "ol" : "ul";
+            if (!list || listType !== nextType) {
+                closeList();
+                listType = nextType;
+                list = document.createElement(nextType);
+                body.appendChild(list);
+            }
+            const item = document.createElement("li");
+            appendInlineFormatting(item, (ordered || unordered)[1]);
+            list.appendChild(item);
+            return;
+        }
+        closeList();
+        if (!paragraph) paragraph = document.createElement("p");
+        else paragraph.appendChild(document.createElement("br"));
+        appendInlineFormatting(paragraph, trimmed);
+    });
+    closeList();
+    parent.appendChild(body);
+}
+
+function appendInlineFormatting(parent, value) {
+    value.split(/(\*\*[^*]+\*\*)/g).forEach(token => {
+        if (!token) return;
+        if (token.startsWith("**") && token.endsWith("**")) {
+            const strong = document.createElement("strong");
+            strong.textContent = token.slice(2, -2);
+            parent.appendChild(strong);
+        } else {
+            parent.appendChild(document.createTextNode(token));
+        }
+    });
 }
 
 function appendPlainText(parent, text) {
@@ -440,12 +520,33 @@ function createReferenceCard(ref, index = 1) {
     return card;
 }
 
-function appendAnswerActions(parent, text) {
+function buildShareText({answer, query, references}) {
+    const cleanAnswer = cleanAnswerText(answer);
+    const sourceLines = references.length
+        ? references.map((ref, index) => {
+            const url = new URL(safeReferenceUrl(ref), window.location.origin).href;
+            return `[${index + 1}] ${ref.title || sourceDocumentsLabel} — ${url}`;
+        }).join("\n")
+        : workbenchCopy.empty_sources;
+    return `*AI Sahakar answer*\n\nQuestion:\n${query}\n\nAnswer:\n${cleanAnswer}\n\nSource documents:\n${sourceLines}`;
+}
+
+function cleanAnswerText(answer) {
+    return answer
+        .replace(/\*\*(.*?)\*\*/g, "$1")
+        .replace(/^#{1,3}\s+/gm, "")
+        .replace(/^\s*[-*]\s+/gm, "• ");
+}
+
+function appendAnswerActions(parent, payload) {
     const actions = document.createElement("div");
     actions.className = "answer-actions";
+    const answerId = `answer-${++answerSequence}`;
+    answerStore.set(answerId, payload);
     const copy = document.createElement("button");
     copy.type = "button";
-    copy.dataset.copyAnswer = text;
+    copy.dataset.answerId = answerId;
+    copy.dataset.copyAnswer = "true";
     copy.textContent = workbenchCopy.copy_answer;
     actions.appendChild(copy);
     const feedback = document.createElement("a");
@@ -454,13 +555,87 @@ function appendAnswerActions(parent, text) {
     feedback.rel = "noopener noreferrer";
     feedback.textContent = workbenchCopy.feedback;
     actions.appendChild(feedback);
-    const share = document.createElement("a");
-    share.href = `${window.PdfSearch.whatsappUrl}?text=${encodeURIComponent(text.slice(0, 500))}`;
-    share.target = "_blank";
-    share.rel = "noopener noreferrer";
-    share.textContent = workbenchCopy.whatsapp;
+    const share = document.createElement("button");
+    share.type = "button";
+    share.dataset.answerId = answerId;
+    share.dataset.shareAnswer = "true";
+    share.textContent = workbenchCopy.share_answer;
     actions.appendChild(share);
     parent.appendChild(actions);
+}
+
+async function copyAnswerText(text) {
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+    const fallback = document.createElement("textarea");
+    fallback.value = text;
+    fallback.setAttribute("readonly", "");
+    fallback.style.position = "fixed";
+    fallback.style.opacity = "0";
+    document.body.appendChild(fallback);
+    fallback.select();
+    const copied = document.execCommand("copy");
+    fallback.remove();
+    if (!copied) throw new Error("Clipboard unavailable");
+}
+
+function createShareMenu(button, payload) {
+    document.querySelector(".share-menu")?.remove();
+    shareMenuReturnFocus = button;
+    const menu = document.createElement("div");
+    menu.className = "share-menu";
+    menu.setAttribute("role", "menu");
+    const text = buildShareText(payload);
+    const encodedText = encodeURIComponent(text);
+    const encodedUrl = encodeURIComponent(window.location.href);
+    const options = [
+        [workbenchCopy.share_whatsapp, `https://api.whatsapp.com/send?text=${encodedText}`],
+        [workbenchCopy.share_telegram, `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`],
+        [workbenchCopy.share_teams, `https://teams.microsoft.com/share?href=${encodedUrl}&msgText=${encodedText}`],
+    ];
+    options.forEach(([label, href]) => {
+        const link = document.createElement("a");
+        link.href = href;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.setAttribute("role", "menuitem");
+        link.textContent = label;
+        menu.appendChild(link);
+    });
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.setAttribute("role", "menuitem");
+    copy.textContent = workbenchCopy.copy_share_text;
+    copy.addEventListener("click", async () => {
+        try {
+            await copyAnswerText(text);
+            copy.textContent = workbenchCopy.copied;
+        } catch (_) {
+            copy.textContent = workbenchCopy.copy_failed;
+        }
+    });
+    menu.appendChild(copy);
+    button.parentElement.appendChild(menu);
+    menu.querySelector("a, button")?.focus();
+}
+
+async function shareAnswer(button, payload) {
+    const shareData = {
+        title: workbenchCopy.share_title,
+        text: buildShareText(payload),
+        url: window.location.href,
+    };
+    if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        try {
+            await navigator.share(shareData);
+            return;
+        } catch (error) {
+            if (error?.name === "AbortError") return;
+        }
+    }
+    createShareMenu(button, payload);
 }
 
 function updateEvidenceRail(references) {
@@ -501,7 +676,12 @@ function resetEvidenceRail() {
 
 evidenceClose?.addEventListener("click", closeEvidence);
 document.addEventListener("keydown", event => {
-    if (event.key === "Escape") closeEvidence();
+    if (event.key === "Escape") {
+        closeEvidence();
+        document.querySelector(".share-menu")?.remove();
+        shareMenuReturnFocus?.focus();
+        shareMenuReturnFocus = null;
+    }
 });
 
 function appendPromptOrRetry(event) {
@@ -526,11 +706,21 @@ function appendPromptOrRetry(event) {
     }
     const copy = event.target.closest("[data-copy-answer]");
     if (copy) {
-        const copyPromise = navigator.clipboard?.writeText(copy.dataset.copyAnswer || "") || Promise.resolve();
-        copyPromise.then(() => {
+        const payload = answerStore.get(copy.dataset.answerId);
+        if (!payload) return;
+        copyAnswerText(cleanAnswerText(payload.answer)).then(() => {
             copy.textContent = workbenchCopy.copied;
             setTimeout(() => { copy.textContent = workbenchCopy.copy_answer; }, 1600);
+        }).catch(() => {
+            copy.textContent = workbenchCopy.copy_failed;
+            setTimeout(() => { copy.textContent = workbenchCopy.copy_answer; }, 1600);
         });
+        return;
+    }
+    const share = event.target.closest("[data-share-answer]");
+    if (share) {
+        const payload = answerStore.get(share.dataset.answerId);
+        if (payload) shareAnswer(share, payload);
     }
 }
 
