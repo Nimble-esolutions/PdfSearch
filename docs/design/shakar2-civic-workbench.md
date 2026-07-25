@@ -45,6 +45,28 @@ accessible, keyboard/touch-friendly popover containing lightweight text
 wordmarks and approved partner links. Partner logos remain approval-gated and
 are not scraped or hotlinked. The department footer identity remains primary.
 
+## 2026-07-25 follow-up: share hardening and build reliability
+
+Shared answer labels are supplied through the locale configuration so Marathi
+shares do not contain hardcoded English section headings. Source links are
+included only when the backend provides a valid protected PDF URL; unavailable
+source metadata is presented as unavailable rather than converted into a
+misleading `/#` link.
+
+The unsupported-browser share menu is an accessible fallback: it has a named
+menu, Escape and outside-click dismissal, focus restoration, and arrow-key
+navigation. The native Web Share path remains the preferred mobile behavior
+because the user chooses the final messaging application and recipient.
+
+The client answer payload cache is bounded and reset by “New question”.
+Structured answers skip progressive raw-text reveal so Markdown markers never
+flash before final formatting.
+
+The Dockerfile no longer depends on downloading an unpinned external Dockerfile
+frontend during source validation. Cache mounts were build accelerators rather
+than runtime requirements; removing them makes validation resilient when Docker
+Hub is temporarily unavailable, at the cost of less local/CI cache reuse.
+
 > **Canonical lock:** This implementation record is retained for context. The
 > active, protected design and change-control rules are in
 > [`AI_SAHAKAR_UI_CONTRACT.md`](AI_SAHAKAR_UI_CONTRACT.md).

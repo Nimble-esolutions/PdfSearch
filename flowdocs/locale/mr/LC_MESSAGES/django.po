@@ -131,6 +131,15 @@ msgstr "उत्तर शेअर करा"
 msgid "AI Sahakar answer"
 msgstr "सहकार AI चे उत्तर"
 
+msgid "Question"
+msgstr "प्रश्न"
+
+msgid "Answer"
+msgstr "उत्तर"
+
+msgid "Share options"
+msgstr "शेअर करण्याचे पर्याय"
+
 msgid "WhatsApp"
 msgstr "WhatsApp"
 

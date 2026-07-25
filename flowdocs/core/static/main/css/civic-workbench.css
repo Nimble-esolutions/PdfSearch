@@ -221,6 +221,7 @@ body.public-search {
 .ref-card { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: .55rem; padding: .7rem 0; background: none; border: 0; border-top: 1px solid var(--civic-line); border-radius: 0; }
 .ref-card__number { color: var(--civic-ochre); font-size: .75rem; font-weight: 800; }
 .ref-card a { color: var(--civic-maroon); font-size: .82rem; font-weight: 800; overflow-wrap: anywhere; text-decoration: none; }
+.ref-card__unavailable { color: var(--civic-muted); font-size: .82rem; font-weight: 800; overflow-wrap: anywhere; }
 .ref-card small { display: block; margin-top: .2rem; color: var(--civic-muted); font-size: .68rem; }
 .ref-card p { margin: .45rem 0 0; color: var(--civic-muted); font-size: .76rem; line-height: 1.45; }
 .answer-body { line-height: 1.65; }
