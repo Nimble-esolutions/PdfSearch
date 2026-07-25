@@ -129,6 +129,39 @@ msgstr ""
 msgid "Share on WhatsApp"
 msgstr ""
 
+msgid "Share answer"
+msgstr ""
+
+msgid "AI Sahakar answer"
+msgstr ""
+
+msgid "WhatsApp"
+msgstr ""
+
+msgid "Telegram"
+msgstr ""
+
+msgid "Microsoft Teams"
+msgstr ""
+
+msgid "Copy share text"
+msgstr ""
+
+msgid "Copy failed"
+msgstr ""
+
+msgid "Technology partners"
+msgstr ""
+
+msgid "MediaNetwork"
+msgstr ""
+
+msgid "Nimble e-Solutions"
+msgstr ""
+
+msgid "Securiace Technologies"
+msgstr ""
+
 msgid "Society election rules"
 msgstr ""
 
