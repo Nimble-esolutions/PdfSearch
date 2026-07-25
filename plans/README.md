@@ -20,16 +20,18 @@ These plans are the durable implementation brief for future agents. They superse
 5. `005-hallmark-public-search-redesign.md` — TODO, P1: preserve the Hallmark visual direction while rebuilding the search experience.
 6. `006-cross-surface-verification.md` — TODO, P1: automated and visual release gates.
 7. `007-search-reference-audit.md` — existing plan: source-reference parity and validation.
-8. `008-postgres-object-storage-migration.md` — TODO, P1: migrate SQLite/media/index custody through a rehearsed PostgreSQL and object-storage cutover.
-9. `009-search-domain-and-index-normalization.md` — TODO, P1: normalize documents/chunks/embeddings and introduce safe pgvector retrieval.
-10. `010-reliable-civic-ai-platform-architecture.md` — TODO, P2: evolve the modular monolith, worker, observability, security, and cost posture.
+8. `011-immutable-evidence-pack-foundation.md` — TODO, P1: make document custody and reconciliation authoritative before changing databases.
+9. `008-postgres-object-storage-migration.md` — TODO, P1: move custody to object storage and conditionally migrate relational state to PostgreSQL.
+10. `009-search-domain-and-index-normalization.md` — TODO, P1: benchmark hybrid retrieval and normalize documents/chunks/embeddings/index generations.
+11. `010-reliable-civic-ai-platform-architecture.md` — TODO, P2: evolve the modular monolith, worker, observability, security, and cost posture.
 
 Plans 002–004 should land as small cherry-pickable PRs. Plan 005 may proceed in parallel after the domain brief, but its backend/API contract must be agreed before visual work. Plan 006 gates merging.
 
-Plans 008–010 are future architecture work and must not be started as one
-large rewrite. Plan 008 establishes data custody first; Plan 009 depends on
-the target relational/object model; Plan 010 consolidates the resulting
-boundaries and operational evidence.
+Plans 008–011 are future architecture work and must not be started as one
+large rewrite. Plan 011 establishes evidence custody first. Plan 008 then
+separates object custody and makes PostgreSQL an evidence-based decision. Plan
+009 normalizes retrieval and adds lexical/semantic/provenance checks. Plan 010
+consolidates the resulting boundaries and operational evidence.
 
 ## Non-negotiable constraints
 
