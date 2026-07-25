@@ -55,7 +55,7 @@ def validate(html: str) -> list[str]:
     if 'rel="noopener noreferrer"' not in html:
         issues.append("missing-noopener-on-external-links")
 
-    if "AI-generated answers should not be used for legal purposes" not in html:
+    if "Answers are informational" not in html:
         issues.append("missing-disclaimer")
 
     return issues
