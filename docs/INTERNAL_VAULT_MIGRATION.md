@@ -2,7 +2,8 @@
 
 This runbook describes the developer/operator tool for importing a legacy
 PdfSearch data root into the S3-compatible artifact vault. It is intentionally
-separate from application startup and from the normal authoritative sync job.
+an AI-agent/dev-side repository utility, separate from application startup,
+application images and the normal authoritative sync job.
 
 ## Safety boundary
 
@@ -79,13 +80,14 @@ checksum match. A different object under the same immutable key fails.
 
 ## Local dry run
 
-Run from the repository's released image or development container with the
-same non-secret Django settings as the source application:
+Run from a repository checkout in a disposable execution environment. The
+source volume is mounted read-only; the tool itself is not added to the
+application image:
 
 ```bash
-python manage.py publish_legacy_generation \
+python scripts/ops/migrate_legacy_volume_to_vault.py \
   --source-root /source \
-  --dataset-id legacy-prod-20260726 \
+  --dataset-id ai-sahakar-prod \
   --source-label sahakar-dev-frontend-dockerfile-1cubi5-prod-flowdocs \
   --output /tmp/legacy-release.json
 ```
@@ -108,9 +110,9 @@ posture still require staging confirmation. PR #92 is the implementation
 vehicle and is intentionally draft until that review is complete.
 
 ```bash
-python manage.py publish_legacy_generation \
+python scripts/ops/migrate_legacy_volume_to_vault.py \
   --source-root /source \
-  --dataset-id legacy-prod-20260726 \
+  --dataset-id ai-sahakar-prod \
   --generation-id legacy-20260726T120000Z-a1b2c3d4 \
   --source-label sahakar-dev-frontend-dockerfile-1cubi5-prod-flowdocs \
   --publish
@@ -121,10 +123,10 @@ It ends with an explicit statement that the authoritative pointer was not
 changed. Use a unique dataset namespace for a staging rehearsal when there is
 any possibility of confusing production and staging data.
 
-To create a dataset registration as part of the same explicit operation, add
-`--register-dataset --production-source-id <non-secret-operator-id>`. The
-registration is created conditionally and is never overwritten. Omit this
-option when another deployment already owns the dataset registration.
+Publishing creates the destination registration conditionally and updates the
+destination authoritative pointer with compare-and-swap semantics after all
+artifacts and the manifest succeed. Use `--candidate-only` when an operator
+wants to upload/register without moving the destination pointer.
 
 ## Restore into a fresh deployment
 
