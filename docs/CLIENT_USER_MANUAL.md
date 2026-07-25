@@ -1,32 +1,33 @@
 Status: Client-facing
 Audience: Client
 Owner: Client support team
-Last verified: 2026-07-22
+Last verified: 2026-07-25
 Canonical source: docs/CLIENT_USER_MANUAL.md
 Supersedes: None
 
-# FlowDocs Client User Manual
+# AI Sahakar Client User Manual
 
-**Product:** FlowDocs PDF Search
+**Product:** AI Sahakar official document search
 **Audience:** Document search users, administrators, and client support teams
 **Document status:** Living manual; update this file when user-visible behavior changes.
 
 ## 1. What FlowDocs Does
 
-FlowDocs lets authorized users upload PDF documents, organize them into folders,
-and ask natural-language questions over the available documents. Search answers
-are generated from indexed documents and include references when matching
-content is available.
+AI Sahakar lets citizens ask questions in English or Marathi about Maharashtra
+cooperative laws, rules, circulars, and department guidance. It searches the
+department's indexed documents and shows the references used for an answer.
+Authorized administrators use the separate Operations Cockpit to manage those
+documents; see the [admin guide](AI_SAHAKAR_ADMIN_USER_GUIDE.md).
 
 FlowDocs is a document search tool, not a substitute for reviewing the source
 PDF. Always verify important decisions against the referenced document.
 
 ## 2. Access and Sign-In
 
-1. Open the organization-provided FlowDocs URL.
-2. Select **Login**.
-3. Enter your username and password.
-4. After signing in, open the dashboard to manage documents or use search.
+1. Open the organization-provided AI Sahakar URL.
+2. Ask a question from the public search page; login is not required for public search.
+3. Authorized staff select **Login** to open the admin console.
+4. Enter your username and password.
 5. Select **Logout** when finished on a shared device.
 
 Do not share passwords or API credentials. Contact the designated support team
@@ -35,12 +36,13 @@ your organization instructs you to do so.
 
 ## 3. Searching Documents
 
-1. Open the search page.
-2. Ask a specific question in natural language.
+1. Open the AI Sahakar search page.
+2. Choose a suggested topic or ask one specific question in natural language.
 3. Include useful terms such as department, document type, subject, date, or
    rule number.
 4. Submit the question.
-5. Review the answer and open the listed references.
+5. Review the answer, source summary, and contextual caution.
+6. Open the listed references or choose **View sources** before relying on it.
 6. If the answer is incomplete, try a narrower question or use terminology
    that appears in the source document.
 
@@ -101,12 +103,10 @@ index. Confirm the document is no longer required before deleting it.
 
 ## 6. Language
 
-FlowDocs supports English and Marathi where translations are available. Use the
-language selector when it is visible. Search quality depends on the language,
-OCR quality, document text, and the terms used in the question.
-
-Some interface labels may remain in English while translations are being
-updated.
+AI Sahakar supports complete English and Marathi interface flows. Use
+**English | मराठी**; your question is not changed when the interface language
+changes. Search quality depends on the language, OCR quality, document text,
+and the terms used in the question.
 
 ## 7. Common Problems
 
@@ -160,7 +160,7 @@ Use this template when contacting support:
 
 ```text
 Date/time and timezone:
-FlowDocs URL:
+AI Sahakar URL:
 Username or role (do not include password):
 Action attempted:
 Folder/document title:

@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
@@ -26,6 +27,17 @@ def _env_positive_int(name, default):
         raise ImproperlyConfigured(f'{name} must be an integer') from exc
     if value < 1:
         raise ImproperlyConfigured(f'{name} must be a positive integer')
+    return value
+
+
+def _env_positive_decimal(name, default):
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        value = Decimal(raw_value)
+    except (InvalidOperation, ValueError) as exc:
+        raise ImproperlyConfigured(f'{name} must be a positive number') from exc
+    if not value.is_finite() or value <= 0:
+        raise ImproperlyConfigured(f'{name} must be a positive number')
     return value
 
 
@@ -240,8 +252,30 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_USE_SESSIONS = False
 
 
-# File upload settings
-MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', str(10 * 1024 * 1024)))
+# File upload settings. MAX_FILE_SIZE_MB is the operator-facing setting. The
+# conversion uses 1024**2 bytes so the historical 10 MB default remains exact.
+_BYTES_PER_MB = 1024 * 1024
+_legacy_max_file_size = os.getenv('MAX_FILE_SIZE')
+_configured_max_file_size_mb = os.getenv('MAX_FILE_SIZE_MB')
+if _configured_max_file_size_mb is not None:
+    MAX_FILE_SIZE_MB = _env_positive_decimal('MAX_FILE_SIZE_MB', 10)
+    MAX_FILE_SIZE = int(
+        (MAX_FILE_SIZE_MB * _BYTES_PER_MB).to_integral_value(rounding=ROUND_HALF_UP)
+    )
+    if _legacy_max_file_size is not None:
+        _legacy_max_file_size_bytes = _env_positive_int('MAX_FILE_SIZE', MAX_FILE_SIZE)
+        if _legacy_max_file_size_bytes != MAX_FILE_SIZE:
+            raise ImproperlyConfigured(
+                'MAX_FILE_SIZE conflicts with MAX_FILE_SIZE_MB; remove the deprecated '
+                'MAX_FILE_SIZE setting'
+            )
+else:
+    # Compatibility for one deployment cycle. New environments must define
+    # MAX_FILE_SIZE_MB; this branch preserves existing byte-based deployments.
+    MAX_FILE_SIZE = _env_positive_int('MAX_FILE_SIZE', 10 * _BYTES_PER_MB)
+    MAX_FILE_SIZE_MB = (
+        Decimal(MAX_FILE_SIZE) / Decimal(_BYTES_PER_MB)
+    ).normalize()
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_FILE_SIZE
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_FILE_SIZE
 

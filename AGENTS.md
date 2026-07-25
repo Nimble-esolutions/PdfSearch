@@ -100,3 +100,13 @@ msgfmt --check flowdocs/locale/mr/LC_MESSAGES/django.po -o /tmp/django-mr.mo
 
 If Docker is not running, report that verification gap instead of inventing a
 green result.
+
+## UI design lock
+
+Before changing public search/admin templates, CSS, JavaScript, translations,
+browser tests, or visual documentation, read
+`docs/design/AI_SAHAKAR_UI_CONTRACT.md` and use
+`skills/ai-sahakar-ui-contract/SKILL.md`. Preserve the Civic Knowledge
+Workbench and Operations Cockpit directions unless an explicit human request
+changes them. Enhancements must retain evidence-first hierarchy, Marathi
+parity, accessibility, responsive behavior, and existing backend contracts.

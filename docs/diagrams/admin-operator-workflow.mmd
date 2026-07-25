@@ -1,0 +1,11 @@
+flowchart LR
+    A[Admin sign-in] --> B[Operations Cockpit]
+    B --> C[Category Yard]
+    C --> D[PDF intake]
+    D --> E[Queued maintenance/indexing]
+    E --> F{Search readiness}
+    F -->|Ready| G[Public AI Sahakar search]
+    F -->|Needs attention| H[Maintenance Jobs / Operations]
+    H --> E
+    B --> I[Users / Settings / Vault]
+    I --> J[Role-aware controls and audit evidence]

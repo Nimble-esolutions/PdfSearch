@@ -1,7 +1,7 @@
 Status: Active
 Audience: Agent operators and maintainers
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-07-25
 Canonical source: docs/AGENT_RULE_AUTHORITY.md
 Supersedes: ad hoc Kilo/OpenCode/Codex rule copies when they conflict
 
@@ -75,6 +75,10 @@ authority and fix the lower adapter in a separate docs/rules PR.
   `inventory_artifacts`, `validate_data_release`.
 - New UI: `/dashboard/operations/`, `/dashboard/users/`, PDF lifecycle,
   generation lifecycle.
+- Public/admin visual authority: [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md).
+  It protects the Civic Knowledge Workbench and Operations Cockpit directions;
+  agents may make evidence-backed enhancements but may not change the visual
+  direction without an explicit human request.
 - Post-reconciliation data: 253 PDF rows, 242 PDF files, 53 folders, 8 users,
   51 FAISS indexes, 8,753 vectors.
 - COMPLETION_PLAN: the data release pipeline (environment identity, global

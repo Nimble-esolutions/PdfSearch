@@ -1,0 +1,11 @@
+flowchart TD
+    A[Human request or evidence-backed enhancement] --> B{Preserves UI contract?}
+    B -->|No| X[Stop and request explicit human direction]
+    B -->|Yes| C[Record component, breakpoint, locale, state, accessibility, performance, backend boundary]
+    C --> D[Implement small contextual change with existing Django and CSS tokens]
+    D --> E[Run focused tests and browser states]
+    E --> F{Checks green?}
+    F -->|No| G[Root-cause analysis and repair]
+    G --> E
+    F -->|Yes| H[Update contract/guides when needed]
+    H --> I[Commit logical chunk, push PR to dev, wait for review; never self-merge]
