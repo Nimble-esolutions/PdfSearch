@@ -24,6 +24,27 @@ focus ring, and keyboard Enter behavior are preserved; the decorative icon is
 hidden from assistive technology. Performance: one inline SVG replaces the
 ambiguous text arrow and adds no request or asset dependency.
 
+## 2026-07-25 follow-up: answer actions, formatting, and partner disclosure
+
+Answer actions are part of the evidence workflow, not generic social buttons.
+Copy must reflect the complete generated answer and report failure when the
+browser clipboard is unavailable. Share uses the native device share sheet
+when available so citizens choose WhatsApp, Telegram, Teams, or another
+target; desktop fallback options are explicit and never target the department
+contact number. Shared content includes the original question, formatted
+answer, and backend-provided source-document links.
+
+The answer renderer supports a deliberately small safe formatting subset:
+paragraphs, headings, lists, and bold text. It builds DOM nodes and text
+content; model output is never inserted as raw HTML. The complete answer
+remains in the accessible DOM and long answers still use immediate rendering on
+light/reduced profiles.
+
+The public footer retains its closed height. “Technology partners” reveals an
+accessible, keyboard/touch-friendly popover containing lightweight text
+wordmarks and approved partner links. Partner logos remain approval-gated and
+are not scraped or hotlinked. The department footer identity remains primary.
+
 > **Canonical lock:** This implementation record is retained for context. The
 > active, protected design and change-control rules are in
 > [`AI_SAHAKAR_UI_CONTRACT.md`](AI_SAHAKAR_UI_CONTRACT.md).
