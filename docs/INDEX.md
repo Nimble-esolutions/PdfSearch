@@ -19,6 +19,11 @@ source, and supersession relationship.
 - [`docker-compose.dev.yml`](../docker-compose.dev.yml) — local services and isolated named volumes
 - [`.env.example`](../.env.example) — canonical non-secret environment example
 - [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md) — runtime env variable contract and stale-template supersession
+- [`ENVIRONMENT_CONFIGURATION_GUIDE.md`](ENVIRONMENT_CONFIGURATION_GUIDE.md) — variable impact matrix, MB upload migration, and edge cases
+- [`environments/development.env.example`](environments/development.env.example) — reviewed local development example
+- [`environments/stage.env.example`](environments/stage.env.example) — reviewed stage example
+- [`environments/production.env.example`](environments/production.env.example) — reviewed production reference
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — contribution, PR, and dev-to-release workflow
 - [`environment`](../flowdocs/core/environment.py) — APP_ENV, PRODUCTION_SOURCE_ID, AUTHORITATIVE_DATASET_ID, DATASET_ID, BACKUP_ROLE, EXTERNAL_SIDE_EFFECTS_MODE, DATA_MODE
 - [`side_effects`](../flowdocs/core/side_effects.py) — external side-effect safety gating
 - [`ai_guard`](../flowdocs/core/ai_guard.py) — AI operation authorization

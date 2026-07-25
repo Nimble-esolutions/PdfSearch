@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-07-25
 Canonical source: docs/ENVIRONMENT_CONTRACT.md
 Supersedes: env.minimal, env.template
 
@@ -199,11 +199,21 @@ MAX_CONTEXT_WORDS=2500
 TOP_K_CHUNKS=5
 EMBEDDING_TTL=604800
 SEARCH_CACHE_TTL=600
+MAX_FILE_SIZE_MB=10
 ```
 
 Model, chunking, and cache changes can affect FAISS compatibility, answer
 quality, latency, and cost. Record the before/after values with any release that
 changes them.
+
+`MAX_FILE_SIZE_MB` is the operator-facing upload limit. It uses 1,048,576 bytes
+per configured MB, accepts positive fractional values, and is converted to
+bytes internally for Django. The old `MAX_FILE_SIZE` byte variable is accepted
+only as a deprecated compatibility fallback; conflicting values fail startup.
+Use the reviewed environment examples and remove the old key after migration.
+
+See [`ENVIRONMENT_CONFIGURATION_GUIDE.md`](ENVIRONMENT_CONFIGURATION_GUIDE.md)
+for the complete variable impact matrix and edge-case playbook.
 
 ## Cache And Public Search
 
