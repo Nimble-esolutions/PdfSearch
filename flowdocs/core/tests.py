@@ -3,6 +3,7 @@ import os
 import sqlite3
 import tempfile
 import time
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import skipUnless
@@ -151,6 +152,21 @@ class EnvironmentContractTests(SimpleTestCase):
             ):
                 project_settings._env_positive_int("PDF_CHUNK_SIZE", 1200)
 
+    def test_positive_decimal_reader_accepts_fractional_megabytes(self):
+        with patch.dict(os.environ, {"MAX_FILE_SIZE_MB": "10.5"}):
+            self.assertEqual(
+                project_settings._env_positive_decimal("MAX_FILE_SIZE_MB", 10),
+                Decimal("10.5"),
+            )
+
+    def test_positive_decimal_reader_rejects_zero(self):
+        with patch.dict(os.environ, {"MAX_FILE_SIZE_MB": "0"}):
+            with self.assertRaisesMessage(
+                ImproperlyConfigured,
+                "MAX_FILE_SIZE_MB must be a positive number",
+            ):
+                project_settings._env_positive_decimal("MAX_FILE_SIZE_MB", 10)
+
 
 class UploadValidationTests(TestCase):
     def test_rejects_non_pdf_content(self):
@@ -163,6 +179,16 @@ class UploadValidationTests(TestCase):
         uploaded = SimpleUploadedFile('document.pdf', b'%PDF-1.7\ncontent', content_type='application/pdf')
         form = UploadForm(data={'title': 'Document'}, files={'file': uploaded})
         self.assertTrue(form.is_valid(), form.errors)
+
+    def test_upload_size_error_uses_megabytes(self):
+        uploaded = SimpleUploadedFile(
+            'large.pdf', b'%PDF-' + b'x' * (11 * 1024 * 1024),
+            content_type='application/pdf',
+        )
+        with self.settings(MAX_FILE_SIZE=10 * 1024 * 1024, MAX_FILE_SIZE_MB=10):
+            form = UploadForm(data={'title': 'Large'}, files={'file': uploaded})
+        self.assertFalse(form.is_valid())
+        self.assertIn('10 MB', str(form.errors))
 
 
 class ArtifactVaultHealthTests(SimpleTestCase):

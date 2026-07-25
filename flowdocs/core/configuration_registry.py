@@ -30,7 +30,7 @@ CONFIGURATION_DEFINITIONS = (
     ConfigurationDefinition("EXTERNAL_SIDE_EFFECTS_MODE", "External side effects", "Runtime controls", True, False),
     ConfigurationDefinition("SETTINGS_EDIT_ENABLED", "Settings editing", "Runtime controls"),
     ConfigurationDefinition("REDIS_URL", "Redis backend", "Infrastructure", secret=True),
-    ConfigurationDefinition("MAX_FILE_SIZE", "Maximum upload bytes", "Document processing"),
+    ConfigurationDefinition("MAX_FILE_SIZE_MB", "Maximum upload size (MB)", "Document processing"),
     ConfigurationDefinition("PDF_CHUNK_SIZE", "PDF chunk size", "Document processing"),
     ConfigurationDefinition("PDF_CHUNK_OVERLAP", "PDF chunk overlap", "Document processing"),
     ConfigurationDefinition("MAX_CONTEXT_WORDS", "Maximum context words", "Document processing"),

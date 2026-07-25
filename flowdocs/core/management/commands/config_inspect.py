@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import sys
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from core.environment import EnvironmentIdentity
@@ -71,11 +72,22 @@ class Command(BaseCommand):
         self._kv("BACKUP_DIR", _env_str("BACKUP_DIR"))
 
         self._section("Search Configuration")
-        self._kv("PUBLIC_SEARCH_ENABLED", _env_bool_str("PUBLIC_SEARCH_ENABLED"))
-        self._kv("OPENAI_EMBED_MODEL", _env_str("OPENAI_EMBED_MODEL"))
-        self._kv("OPENAI_CHAT_MODEL", _env_str("OPENAI_CHAT_MODEL"))
-        self._kv("REDIS_URL", "configured" if _env_str("REDIS_URL") else "(not set)")
-        self._kv("DEBUG", _env_bool_str("DEBUG"))
+        self._kv("PUBLIC_SEARCH_ENABLED", "yes" if settings.PUBLIC_SEARCH_ENABLED else "no")
+        self._kv("DISPLAY_SERVICE_FOOTER", "yes" if settings.DISPLAY_SERVICE_FOOTER else "no")
+        self._kv("PUBLIC_SEARCH_MAX_WORDS", str(settings.PUBLIC_SEARCH_MAX_WORDS))
+        self._kv("PUBLIC_SEARCH_RATE_LIMIT", str(settings.PUBLIC_SEARCH_RATE_LIMIT))
+        self._kv("PUBLIC_SEARCH_RATE_WINDOW", str(settings.PUBLIC_SEARCH_RATE_WINDOW))
+        self._kv("OPENAI_EMBED_MODEL", settings.OPENAI_EMBED_MODEL)
+        self._kv("OPENAI_CHAT_MODEL", settings.OPENAI_CHAT_MODEL)
+        self._kv("PDF_CHUNK_SIZE", str(settings.PDF_CHUNK_SIZE))
+        self._kv("PDF_CHUNK_OVERLAP", str(settings.PDF_CHUNK_OVERLAP))
+        self._kv("MAX_CONTEXT_WORDS", str(settings.MAX_CONTEXT_WORDS))
+        self._kv("TOP_K_CHUNKS", str(settings.TOP_K_CHUNKS))
+        self._kv("EMBEDDING_TTL", str(settings.EMBEDDING_TTL))
+        self._kv("SEARCH_CACHE_TTL", str(settings.SEARCH_CACHE_TTL))
+        self._kv("MAX_FILE_SIZE_MB", str(settings.MAX_FILE_SIZE_MB))
+        self._kv("REDIS_URL", "configured" if settings.REDIS_URL else "(not set)")
+        self._kv("DEBUG", "yes" if settings.DEBUG else "no")
 
         self._section("Validation Results")
         if errors:
