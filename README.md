@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-07-25
 Canonical source: README.md
 Supersedes: None
 
@@ -23,6 +23,10 @@ Use the route that matches the work:
 - FAISS compatibility: [`docs/FAISS_COMPATIBILITY.md`](docs/FAISS_COMPATIBILITY.md)
 - Incident response: [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
 - Client usage: [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md)
+- Public/admin design lock: [`docs/design/AI_SAHAKAR_UI_CONTRACT.md`](docs/design/AI_SAHAKAR_UI_CONTRACT.md)
+- Developer UI guide: [`docs/AI_SAHAKAR_DEVELOPER_GUIDE.md`](docs/AI_SAHAKAR_DEVELOPER_GUIDE.md)
+- Admin user guide: [`docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md`](docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md)
+- `dev` cleanup scope: [`docs/DEV_CLEANUP_SCOPE.md`](docs/DEV_CLEANUP_SCOPE.md)
 - Documentation map and historical context: [`docs/INDEX.md`](docs/INDEX.md)
 
 ## Prerequisites
@@ -46,6 +50,21 @@ The development Compose file uses `flowdocs_data_dev` and `redis_data_dev`.
 It does not mount the production legacy volume. Stop local services with
 `docker compose -f docker-compose.dev.yml stop`; do not use `down -v` when data
 needs to be retained.
+
+## Product surfaces and design lock
+
+The public `/` route is the AI Sahakar **Civic Knowledge Workbench**: a
+three-region evidence-led workspace on widescreens that collapses into a
+single-column conversation with accessible source drawers on smaller screens.
+The authenticated surface is the **Operations Cockpit** admin UI. These are
+protected product directions. Enhancements are welcome when they improve
+clarity, evidence access, accessibility, or performance while preserving the
+contract; a change of visual direction requires an explicit human request.
+
+Read the [active UI contract](docs/design/AI_SAHAKAR_UI_CONTRACT.md) before
+changing templates, CSS, JavaScript, translations, browser tests, or visual
+documentation. The tracked agent skill is
+[`skills/ai-sahakar-ui-contract/SKILL.md`](skills/ai-sahakar-ui-contract/SKILL.md).
 
 ## Architecture
 
@@ -155,6 +174,7 @@ official decision.
 - Release evidence: [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md)
 - Persistent data contract: [`docs/PERSISTENT_DATA_RELEASE.md`](docs/PERSISTENT_DATA_RELEASE.md)
 - Client manual: [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md)
+- UI guides: [`docs/AI_SAHAKAR_DEVELOPER_GUIDE.md`](docs/AI_SAHAKAR_DEVELOPER_GUIDE.md) and [`docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md`](docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md)
 - Historical documents and supersession map: [`docs/INDEX.md`](docs/INDEX.md#historical-context)
 
 Update the client manual in the same change as user-visible behavior changes;

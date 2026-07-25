@@ -1,8 +1,15 @@
 # Admin UI Redesign — SRS & DRS
 
-**Status**: Planning  
+**Status**: Historical
 **Created**: 2026-07-24  
+**Last reviewed**: 2026-07-25
 **Audit base**: `dev` at `a5b405e` (PR #56 merged)
+**Current replacement**: [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md) and [`AI_SAHAKAR_ADMIN_USER_GUIDE.md`](AI_SAHAKAR_ADMIN_USER_GUIDE.md)
+
+> This is a historical planning record, not an active implementation plan.
+> Several items below were delivered or superseded by the Operations Cockpit.
+> Do not repeat its conflict-marker or dead-file cleanup instructions without
+> rechecking the target branch. Use the current replacement above.
 
 ---
 

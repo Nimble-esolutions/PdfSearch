@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-07-25
 Canonical source: docs/INDEX.md
 Supersedes: None
 
@@ -48,7 +48,7 @@ source, and supersession relationship.
 
 - [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) — current workflow guarantees and future targets
 - [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md) — Admin Operations Cockpit merge, image digest, and dev-release evidence
-- [`releases/2026-07-24-data-release-pipeline.md`](releases/2026-07-24-data-release-pipeline.md) — data release pipeline merge through PR #53
+- Data release pipeline merge evidence is maintained in [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) and the current data-custody/release records.
 - [`SECURITY_SCAN.md`](SECURITY_SCAN.md) — Trivy behavior, root cause, remediation, and verification
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — current release record and proposed artifact manifest
 - [`UI_DATA_INTEGRATION_PLAN.md`](UI_DATA_INTEGRATION_PLAN.md) — historical UI, init-data, FAISS, bootstrap, and blue-green integration plan
@@ -78,6 +78,10 @@ source, and supersession relationship.
 ## Client Usage
 
 - [`CLIENT_USER_MANUAL.md`](CLIENT_USER_MANUAL.md) — sign-in, upload, search, permissions, and support guidance
+- [`AI_SAHAKAR_ADMIN_USER_GUIDE.md`](AI_SAHAKAR_ADMIN_USER_GUIDE.md) — Operations Cockpit and document-management workflow
+- [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md) — protected public/admin design and interaction contract
+- [`AI_SAHAKAR_DEVELOPER_GUIDE.md`](AI_SAHAKAR_DEVELOPER_GUIDE.md) — safe UI extension and verification workflow
+- [`DEV_CLEANUP_SCOPE.md`](DEV_CLEANUP_SCOPE.md) — read-only cleanup audit for `dev`
 - `/dashboard/operations/` — operations dashboard
 - `/dashboard/users/` — user management dashboard
 - PDF lifecycle — PDF upload, processing, indexing, and archival lifecycle
@@ -107,6 +111,9 @@ Historical documents remain for context and are not deployment instructions:
 - [`data-custody-promotion.mmd`](diagrams/data-custody-promotion.mmd) — snapshot-to-promotion controls
 - [`incident-recovery.mmd`](diagrams/incident-recovery.mmd) — incident evidence and isolated recovery
 - [`legacy-reconciliation.mmd`](diagrams/legacy-reconciliation.mmd) — active versus legacy data classification
+- [`ui-shell-and-evidence.mmd`](diagrams/ui-shell-and-evidence.mmd) — public workbench regions and mobile source drawer
+- [`ui-change-control.mmd`](diagrams/ui-change-control.mmd) — enhancement, verification, and human-approval flow
+- [`admin-operator-workflow.mmd`](diagrams/admin-operator-workflow.mmd) — admin document-to-search readiness flow
 
 ## Document Lifecycle
 

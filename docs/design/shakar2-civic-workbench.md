@@ -1,5 +1,9 @@
 # AI Sahakar Civic Knowledge Workbench
 
+> **Canonical lock:** This implementation record is retained for context. The
+> active, protected design and change-control rules are in
+> [`AI_SAHAKAR_UI_CONTRACT.md`](AI_SAHAKAR_UI_CONTRACT.md).
+
 ## Design record
 
 The public home route remains a Django-rendered, English-default civic document
