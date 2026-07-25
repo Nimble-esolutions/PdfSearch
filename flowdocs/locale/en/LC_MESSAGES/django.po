@@ -3,19 +3,149 @@
 # This file is distributed under the same license as the PdfSearch package.
 #
 msgid ""
-msgstr ""
-"Project-Id-Version: PdfSearch Admin UI\n"
+msgstr "Project-Id-Version: PdfSearch\n"
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-24 08:51+0000\n"
 "PO-Revision-Date: 2026-07-24 14:56+0530\n"
 "Last-Translator: Sahakar AI Team\n"
 "Language-Team: English (Indian)\n"
-"Language: en_IN\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "Ask AI Sahakar"
+msgstr ""
+
+msgid "Search Maharashtra cooperative laws, rules, circulars and department guidance in plain language."
+msgstr ""
+
+msgid "Answers are prepared from the department's indexed documents and include source references."
+msgstr ""
+
+msgid "Common topics"
+msgstr ""
+
+msgid "Suggested questions"
+msgstr ""
+
+msgid "Browse all topics"
+msgstr ""
+
+msgid "New question"
+msgstr ""
+
+msgid "How to ask a useful question"
+msgstr ""
+
+msgid "Include the Act, Rule, section number, society type or topic when you know it."
+msgstr ""
+
+msgid "Human department support"
+msgstr ""
+
+msgid "For official guidance, contact the department or visit the official website."
+msgstr ""
+
+msgid "Contact on WhatsApp"
+msgstr ""
+
+msgid "Civic knowledge desk"
+msgstr ""
+
+msgid "Ask about Maharashtra cooperative law"
+msgstr ""
+
+msgid "Official documents"
+msgstr ""
+
+msgid "AI Sahakar conversation"
+msgstr ""
+
+msgid "Ask a question in English or Marathi"
+msgstr ""
+
+msgid "For example, what are the rules for a society audit?"
+msgstr ""
+
+msgid "Enter to search"
+msgstr ""
+
+msgid "of 30 words"
+msgstr ""
+
+msgid "Answers are informational. Check the cited document before making an important decision."
+msgstr ""
+
+msgid "Evidence and help"
+msgstr ""
+
+msgid "Search official documents with confidence"
+msgstr ""
+
+msgid "Ask in English or Marathi. AI Sahakar searches official department documents and shows the sources used for the answer."
+msgstr ""
+
+msgid "Ask plainly"
+msgstr ""
+
+msgid "Use a section, topic, society type or phrase."
+msgstr ""
+
+msgid "Review sources"
+msgstr ""
+
+msgid "Open the original document behind the explanation."
+msgstr ""
+
+msgid "Answer evidence"
+msgstr ""
+
+msgid "Close evidence panel"
+msgstr ""
+
+msgid "View sources"
+msgstr ""
+
+msgid "About this answer"
+msgstr ""
+
+msgid "View original PDF"
+msgstr ""
+
+msgid "Copy answer"
+msgstr ""
+
+msgid "Copied"
+msgstr ""
+
+msgid "Sources will appear here after you ask a question."
+msgstr ""
+
+msgid "Send feedback"
+msgstr ""
+
+msgid "Share on WhatsApp"
+msgstr ""
+
+msgid "Society election rules"
+msgstr ""
+
+msgid "Documents required for registration"
+msgstr ""
+
+msgid "Procedure for amending society bye-laws"
+msgstr ""
+
+msgid "Searching official department documents…"
+msgstr ""
+
+msgid "Reviewing relevant sources…"
+msgstr ""
+
+msgid "Preparing an answer…"
+msgstr ""
 #: core/templates/base.html:8 core/templates/home.html:8
 msgid ""
 "Commissioner for Cooperation and Registrar, Cooperative Societies, "

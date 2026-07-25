@@ -8,6 +8,7 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'main/css/search.css' %}">
+  <link rel="stylesheet" href="{% static 'main/css/civic-workbench.css' %}">
 {% endblock %}
 
 {% block seo %}
@@ -101,108 +102,93 @@
 {% endblock %}
 
 {% block public_header %}
-<div class="public-search-topbar">
-  <div class="public-search-topbar__inner">
-    <nav aria-label="{% trans 'Public service links' %}">
-      {% if user.is_authenticated %}
-      <a href="{% url 'dashboard' %}">{% trans "Dashboard" %}</a>
-      <span class="public-search-topbar__identity">{{ user.username }}</span>
-      <form method="post" action="{% url 'logout' %}" class="d-inline">
-        {% csrf_token %}
-        <button type="submit">{% trans "Logout" %}</button>
-      </form>
-      {% else %}
-      <a href="{% url 'login' %}">{% trans "Admin Login" %}</a>
-      {% endif %}
-      <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx">{% trans "Official site" %}</a>
-      <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6">{% trans "Locate us" %}</a>
-
-      <form action="{% url 'set_language' %}" method="post" class="d-inline">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.path }}">
-        {% if request.LANGUAGE_CODE == 'en' %}
-          <input type="hidden" name="language" value="mr">
-          <button type="submit">मराठी</button>
-        {% else %}
-          <input type="hidden" name="language" value="en">
-          <button type="submit">English</button>
-        {% endif %}
-      </form>
-    </nav>
+<header class="workbench-header">
+  <a class="workbench-brand" href="{% url 'home' %}" aria-label="{% trans 'AI Sahakar home' %}">
+    <img src="{% static 'main/images/registrar-seal.webp' %}" width="48" height="54" alt="{% trans 'Registrar Co-operative Societies seal' %}">
+    <span class="workbench-brand__department">
+      <strong>{% trans "Registrar Co-operative Societies" %}</strong>
+      <small>{% trans "Maharashtra State" %}</small>
+    </span>
+  </a>
+  <div class="workbench-product" aria-label="{% trans 'AI Sahakar official document search' %}">
+    <span class="workbench-product__mark" aria-hidden="true">AI</span>
+    <span><strong>AI Sahakar</strong><small>{% trans "Official document search" %}</small></span>
   </div>
-</div>
-
-<header class="public-search-header">
-  <div class="public-search-header__title">
-    <div class="public-search-identity">
-      <img src="{% static 'main/images/registrar-seal.webp' %}" alt="{% trans 'Registrar Co-operative Societies seal' %}">
-      <span class="public-search-identity__wordmark">
-        <strong>{% trans "Registrar Co-operative Societies" %}</strong>
-        <small>{% trans "MAHARASHTRA STATE" %}</small>
-      </span>
-      <img class="public-search-identity__india" src="{% static 'main/images/national-emblem.svg' %}" alt="{% trans 'State Emblem of India' %}">
-    </div>
-    <span>{% trans "Public document service" %}</span>
-    <h1>{% trans "Sahakar AI Search" %}</h1>
-    <p>{% trans "Search Maharashtra co-operative society acts, rules, and official documents." %}</p>
-    <button type="button" class="about-trigger" data-about-open aria-controls="aboutDialog">
-      <span aria-hidden="true">i</span>{% trans "About this service" %}
-    </button>
-  </div>
+  <nav class="workbench-nav" aria-label="{% trans 'Public service links' %}">
+    <a class="workbench-nav__active" href="{% url 'home' %}">{% trans "Home" %}</a>
+    <button type="button" data-about-open aria-controls="aboutDialog">{% trans "Help" %}</button>
+    <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" target="_blank" rel="noopener noreferrer">{% trans "Official website" %}</a>
+    <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6" target="_blank" rel="noopener noreferrer">{% trans "Locate us" %}</a>
+    <form action="{% url 'set_language' %}" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.path }}">
+      {% if request.LANGUAGE_CODE == 'en' %}<input type="hidden" name="language" value="mr"><button type="submit">मराठी</button>{% else %}<input type="hidden" name="language" value="en"><button type="submit">English</button>{% endif %}
+    </form>
+    {% if user.is_authenticated %}
+      <a class="workbench-nav__account" href="{% url 'dashboard' %}">{% trans "Dashboard" %}<span>{{ user.username }}</span></a>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">{% trans "Logout" %}</button></form>
+    {% else %}
+      <a class="workbench-nav__admin" href="{% url 'login' %}">{% trans "Admin login" %}</a>
+    {% endif %}
+  </nav>
 </header>
 {% endblock %}
 
 {% block page_content %}
 {% block content %}
-<main class="search-app" aria-labelledby="search-page-heading">
-  <div class="chat-container">
+<main class="workbench" aria-labelledby="search-page-heading">
+  <aside class="knowledge-rail" aria-label="{% trans 'Knowledge navigation' %}">
+    <button type="button" class="rail-new-question" data-new-question>
+      <span aria-hidden="true">+</span>{% trans "New question" %}
+    </button>
+    <section class="rail-section">
+      <h2>{% trans "Common topics" %}</h2>
+      <nav class="topic-list" aria-label="{% trans 'Common topics' %}">
+        {% for prompt in welcome_prompts|slice:":4" %}<button type="button" data-prompt="{{ prompt }}">{{ prompt }}</button>{% endfor %}
+      </nav>
+      <button type="button" class="rail-text-action" data-about-open aria-controls="aboutDialog">{% trans "Browse all topics" %}<span aria-hidden="true">→</span></button>
+    </section>
+    <section class="rail-section rail-guidance">
+      <h2>{% trans "How to ask a useful question" %}</h2>
+      <p>{% trans "Include the Act, Rule, section number, society type or topic when you know it." %}</p>
+    </section>
+    <section class="rail-section rail-support">
+      <h2>{% trans "Human department support" %}</h2>
+      <p>{% trans "For official guidance, contact the department or visit the official website." %}</p>
+      <a href="https://wa.me/{{ whatsapp_number|default:"919421200000" }}" target="_blank" rel="noopener noreferrer">{% trans "Contact on WhatsApp" %}<span aria-hidden="true">↗</span></a>
+    </section>
+  </aside>
 
-      <div class="public-search-intro">
-        <p class="public-search-kicker">{% trans "Official document search" %}</p>
-        <h2 id="search-page-heading">{% trans "Ask a question about co-operative society law" %}</h2>
-        <p>{% trans "Search by section number, Act or Rule name, society type, topic, or phrase in English or Marathi." %}</p>
+  <section class="conversation-workspace" aria-label="{% trans 'AI Sahakar conversation' %}">
+    <div class="workspace-heading">
+      <div><p class="eyebrow">{% trans "Civic knowledge desk" %}</p><h1 id="search-page-heading">{% trans "Ask about Maharashtra cooperative law" %}</h1></div>
+      <span class="workspace-status"><i aria-hidden="true"></i>{% trans "Official documents" %}</span>
+    </div>
+    <div id="chatMain" class="conversation-scroll" aria-live="off" aria-label="{% trans 'Search answers' %}" aria-busy="false"></div>
+    <form class="workbench-composer" id="searchComposer" novalidate>
+      <div class="composer-field">
+        <label for="userQuery">{% trans "Ask a question in English or Marathi" %}</label>
+        <textarea id="userQuery" rows="1" placeholder="{% trans 'For example, what are the rules for a society audit?' %}" autocomplete="off" maxlength="240" enterkeyhint="search"></textarea>
+        <div class="composer-meta"><small id="wordCounter" aria-live="polite">0 {% trans "of 30 words" %}</small><span>{% trans "Enter to search" %}</span></div>
       </div>
+      <button id="sendBtn" class="composer-submit" type="submit" disabled><span>{% trans "Search" %}</span><span aria-hidden="true">↗</span></button>
+    </form>
+    <div class="composer-help">{% trans "Answers are informational. Check the cited document before making an important decision." %}</div>
+  </section>
 
-      <div id="chatMain" aria-live="polite" aria-label="{% trans 'Search answers' %}" aria-busy="false">
-      </div>
-
-      <form class="chat-input" id="searchComposer" novalidate>
-         <img src="{% static 'main/images/Option-1 BOT.png' %}" alt="" class="chat-input__avatar" aria-hidden="true">
-          <div class="chat-query-field">
-            <label class="visually-hidden" for="userQuery">{% trans "Ask your question" %}</label>
-            <input type="text" id="userQuery" placeholder="{% trans 'Ask your question...' %}" autocomplete="off" maxlength="240" enterkeyhint="search">
-            <small id="wordCounter" class="word-counter" aria-live="polite">0/30</small>
-          </div>
-          <button id="sendBtn" type="submit">{% trans "Search" %}</button>
-      </form>
-
-      <div class="chat-support-links" aria-label="{% trans 'Support links' %}">
-<a href="https://wa.me/{{ whatsapp_number|default:"919421200000" }}" target="_blank" rel="noopener noreferrer" class="whatsapp-link" aria-label="{% trans 'Contact support on WhatsApp' %}">
-  <picture>
-    <source media="(max-width: 768px)" srcset="{% static 'main/images/wh-btn-mobile.jpg' %}">
-    <img src="{% static 'main/images/wh-btn.jpg' %}" alt="" aria-hidden="true">
-  </picture>
-  <span>{% trans "WhatsApp" %}</span>
-</a>
-
-<a href="https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform" target="_blank" rel="noopener noreferrer" class="feedback-link" aria-label="{% trans 'Send feedback' %}">
-  <picture>
-    <source media="(max-width: 768px)" srcset="{% static 'main/images/fd-btn-mobile.jpg' %}">
-    <img src="{% static 'main/images/fd-btn.jpg' %}" alt="" aria-hidden="true">
-  </picture>
-  <span>{% trans "Feedback" %}</span>
-</a>
-      </div>
-
-      <div class="search-disclaimer">
-          {% trans "AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}
-      </div>
-
-      <div class="search-index-count">
-        {{ indexed_count }}/{{ total_count }} {% trans "documents indexed" %}
-      </div>
-
-  </div>
+  <aside class="evidence-rail" id="evidenceRail" aria-label="{% trans 'Evidence and help' %}">
+    <div class="evidence-rail__intro" data-evidence-empty>
+      <p class="eyebrow">{% trans "Evidence and help" %}</p>
+      <h2>{% trans "Search official documents with confidence" %}</h2>
+      <p>{% trans "Ask in English or Marathi. AI Sahakar searches official department documents and shows the sources used for the answer." %}</p>
+      <div class="evidence-rule"><span>01</span><p><strong>{% trans "Ask plainly" %}</strong><br>{% trans "Use a section, topic, society type or phrase." %}</p></div>
+      <div class="evidence-rule"><span>02</span><p><strong>{% trans "Review sources" %}</strong><br>{% trans "Open the original document behind the explanation." %}</p></div>
+    </div>
+    <div class="evidence-rail__answer" data-evidence-answer hidden>
+      <div class="evidence-rail__header"><p class="eyebrow">{% trans "Answer evidence" %}</p><button type="button" class="rail-close" data-evidence-close aria-label="{% trans 'Close evidence panel' %}">×</button></div>
+      <div data-evidence-content></div>
+    </div>
+  </aside>
 </main>
 {% endblock %}
 
@@ -264,6 +250,7 @@
 {{ welcome_help_label|json_script:"welcome-help-label" }}
 {{ welcome_prompt_label|json_script:"welcome-prompt-label" }}
 {{ welcome_prompts|json_script:"welcome-prompts" }}
+{{ workbench_copy|json_script:"workbench-copy" }}
 {{ search_loading_stages|json_script:"search-loading-stages" }}
 {{ retry_label|json_script:"retry-label" }}
 {{ about_close_label|json_script:"about-close-label" }}
@@ -274,7 +261,9 @@ window.PdfSearch = {
   viewPdfUrlTemplate: "{% url 'view_pdf' 0 %}",
   searchQueryUrl: "{% url 'search_query' %}",
   csrfToken: "{{ csrf_token }}",
-  setLanguageUrl: "{% url 'set_language' %}"
+  setLanguageUrl: "{% url 'set_language' %}",
+  whatsappUrl: "https://wa.me/{{ whatsapp_number|default:'919421200000' }}",
+  feedbackUrl: "https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform"
 };
 </script>
 <script src="{% static 'main/js/search.js' %}"></script>

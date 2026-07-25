@@ -1377,11 +1377,51 @@ def search_query(request):
                     gettext("Housing society audit procedure"),
                     gettext("Co-operative member rights"),
                     gettext("Agricultural credit society rules"),
+                    gettext("Society election rules"),
+                    gettext("Documents required for registration"),
+                    gettext("Procedure for amending society bye-laws"),
                 ],
+                "workbench_copy": {
+                    "empty_heading": gettext("Ask AI Sahakar"),
+                    "empty_support": gettext(
+                        "Search Maharashtra cooperative laws, rules, circulars and department guidance in plain language."
+                    ),
+                    "empty_trust": gettext(
+                        "Answers are prepared from the department's indexed documents and include source references."
+                    ),
+                    "common_topics": gettext("Common topics"),
+                    "suggested_questions": gettext("Suggested questions"),
+                    "browse_topics": gettext("Browse all topics"),
+                    "new_question": gettext("New question"),
+                    "how_to_ask": gettext("How to ask a useful question"),
+                    "how_to_ask_detail": gettext(
+                        "Include the Act, Rule, section number, society type or topic when you know it."
+                    ),
+                    "how_it_works": gettext("How AI Sahakar works"),
+                    "how_it_works_detail": gettext(
+                        "Ask in English or Marathi. AI Sahakar searches official department documents and shows the sources used for the answer."
+                    ),
+                    "evidence_title": gettext("Evidence and help"),
+                    "evidence_detail": gettext(
+                        "Your answer will show the official documents used so you can verify the explanation."
+                    ),
+                    "human_support": gettext("Human department support"),
+                    "contact_whatsapp": gettext("Contact on WhatsApp"),
+                    "feedback": gettext("Send feedback"),
+                    "whatsapp": gettext("Share on WhatsApp"),
+                    "view_sources": gettext("View sources"),
+                    "about_answer": gettext("About this answer"),
+                    "view_original": gettext("View original PDF"),
+                    "close": gettext("Close"),
+                    "copy_answer": gettext("Copy answer"),
+                    "copied": gettext("Copied"),
+                    "empty_sources": gettext("Sources will appear here after you ask a question."),
+                    "word_count": gettext("of 30 words"),
+                },
                 "search_loading_stages": [
-                    gettext("Searching documents"),
-                    gettext("Reviewing sources"),
-                    gettext("Preparing answer"),
+                    gettext("Searching official department documents…"),
+                    gettext("Reviewing relevant sources…"),
+                    gettext("Preparing an answer…"),
                 ],
                 "retry_label": gettext("Try again"),
                 "about_close_label": gettext("Close"),
@@ -1400,6 +1440,7 @@ def search_query(request):
                     "timeout": gettext("Search is taking longer than expected"),
                     "try_again": gettext("Please try again."),
                     "unexpected": gettext("Something went wrong"),
+                    "feedback": gettext("Send feedback"),
                 },
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),

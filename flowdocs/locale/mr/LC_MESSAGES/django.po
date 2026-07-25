@@ -1,17 +1,147 @@
 msgid ""
-msgstr ""
-"Project-Id-Version: PdfSearch Admin UI\n"
+msgstr "Project-Id-Version: PdfSearch\n"
+"Language: mr\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-24 08:51+0000\n"
 "PO-Revision-Date: 2026-07-24 14:56+0530\n"
 "Last-Translator: Sahakar AI Team\n"
 "Language-Team: Marathi\n"
-"Language: mr\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n!=1);\n"
 
+msgid "Ask AI Sahakar"
+msgstr "सहकार AI ला विचारा"
+
+msgid "Search Maharashtra cooperative laws, rules, circulars and department guidance in plain language."
+msgstr "महाराष्ट्रातील सहकारी कायदे, नियम, परिपत्रके आणि विभागीय मार्गदर्शन सोप्या भाषेत शोधा."
+
+msgid "Answers are prepared from the department's indexed documents and include source references."
+msgstr "उत्तरे विभागाच्या उपलब्ध दस्तऐवजांवर आधारित असून संबंधित संदर्भांसह दिली जातात."
+
+msgid "Common topics"
+msgstr "सामान्य विषय"
+
+msgid "Suggested questions"
+msgstr "सुचवलेले प्रश्न"
+
+msgid "Browse all topics"
+msgstr "सर्व विषय पहा"
+
+msgid "New question"
+msgstr "नवा प्रश्न"
+
+msgid "How to ask a useful question"
+msgstr "उपयुक्त प्रश्न कसा विचारावा"
+
+msgid "Include the Act, Rule, section number, society type or topic when you know it."
+msgstr "माहित असल्यास अधिनियम, नियम, कलम क्रमांक, संस्थेचा प्रकार किंवा विषय नमूद करा."
+
+msgid "Human department support"
+msgstr "विभागाचे मानवी सहाय्य"
+
+msgid "For official guidance, contact the department or visit the official website."
+msgstr "अधिकृत मार्गदर्शनासाठी विभागाशी संपर्क साधा किंवा अधिकृत संकेतस्थळाला भेट द्या."
+
+msgid "Contact on WhatsApp"
+msgstr "WhatsApp वर संपर्क करा"
+
+msgid "Civic knowledge desk"
+msgstr "नागरिक ज्ञान कक्ष"
+
+msgid "Ask about Maharashtra cooperative law"
+msgstr "महाराष्ट्रातील सहकारी कायद्याबद्दल विचारा"
+
+msgid "Official documents"
+msgstr "अधिकृत दस्तऐवज"
+
+msgid "AI Sahakar conversation"
+msgstr "सहकार AI संवाद"
+
+msgid "Ask a question in English or Marathi"
+msgstr "इंग्रजी किंवा मराठीत प्रश्न विचारा"
+
+msgid "For example, what are the rules for a society audit?"
+msgstr "उदाहरणार्थ, संस्थेच्या लेखापरीक्षणासाठी कोणते नियम आहेत?"
+
+msgid "Enter to search"
+msgstr "शोधण्यासाठी Enter दाबा"
+
+msgid "of 30 words"
+msgstr "३० शब्दांपैकी"
+
+msgid "Answers are informational. Check the cited document before making an important decision."
+msgstr "उत्तरे माहितीच्या स्वरूपाची आहेत. महत्त्वाचा निर्णय घेण्यापूर्वी संदर्भित दस्तऐवज तपासा."
+
+msgid "Evidence and help"
+msgstr "पुरावे आणि मदत"
+
+msgid "Search official documents with confidence"
+msgstr "विश्वासाने अधिकृत दस्तऐवज शोधा"
+
+msgid "Ask in English or Marathi. AI Sahakar searches official department documents and shows the sources used for the answer."
+msgstr "इंग्रजी किंवा मराठीत विचारा. सहकार AI अधिकृत विभागीय दस्तऐवज शोधतो आणि उत्तरासाठी वापरलेले स्रोत दाखवतो."
+
+msgid "Ask plainly"
+msgstr "सोप्या भाषेत विचारा"
+
+msgid "Use a section, topic, society type or phrase."
+msgstr "कलम, विषय, संस्थेचा प्रकार किंवा वाक्यांश वापरा."
+
+msgid "Review sources"
+msgstr "स्रोत तपासा"
+
+msgid "Open the original document behind the explanation."
+msgstr "स्पष्टीकरणामागील मूळ दस्तऐवज उघडा."
+
+msgid "Answer evidence"
+msgstr "उत्तराचे पुरावे"
+
+msgid "Close evidence panel"
+msgstr "पुरावा पटल बंद करा"
+
+msgid "View sources"
+msgstr "स्रोत पहा"
+
+msgid "About this answer"
+msgstr "या उत्तराबद्दल"
+
+msgid "View original PDF"
+msgstr "मूळ PDF पहा"
+
+msgid "Copy answer"
+msgstr "उत्तर कॉपी करा"
+
+msgid "Copied"
+msgstr "कॉपी केले"
+
+msgid "Sources will appear here after you ask a question."
+msgstr "प्रश्न विचारल्यानंतर येथे स्रोत दिसतील."
+
+msgid "Send feedback"
+msgstr "अभिप्राय पाठवा"
+
+msgid "Share on WhatsApp"
+msgstr "WhatsApp वर शेअर करा"
+
+msgid "Society election rules"
+msgstr "संस्थेच्या निवडणुकीचे नियम"
+
+msgid "Documents required for registration"
+msgstr "नोंदणीसाठी आवश्यक दस्तऐवज"
+
+msgid "Procedure for amending society bye-laws"
+msgstr "संस्थेच्या उपविधींमध्ये दुरुस्तीची प्रक्रिया"
+
+msgid "Searching official department documents…"
+msgstr "विभागाच्या अधिकृत दस्तऐवजांमध्ये शोध घेत आहोत…"
+
+msgid "Reviewing relevant sources…"
+msgstr "संबंधित स्रोत तपासत आहोत…"
+
+msgid "Preparing an answer…"
+msgstr "उत्तर तयार करत आहोत…"
 #: core/templates/base.html:8 core/templates/home.html:8
 msgid ""
 "Commissioner for Cooperation and Registrar, Cooperative Societies, "
