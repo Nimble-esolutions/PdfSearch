@@ -11,6 +11,9 @@ urlpatterns = [
     path("generations/", views.generations_api, name="generations"),
     path("jobs/", views.jobs_api, name="jobs"),
     path("audit/", views.audit_api, name="audit"),
+    path("diagnostics/", views.diagnostics_api, name="diagnostics"),
+    path("retention/", views.retention_api, name="retention"),
+    path("gc-plans/", views.gc_plans_api, name="gc_plans"),
     path("sync/run/", views.sync_run, name="sync_run"),
     path("restores/start/", views.restore_start, name="restore_start"),
     path(
@@ -37,6 +40,36 @@ urlpatterns = [
         "generations/<str:generation_id>/promote/",
         views.promote_generation,
         name="promote_generation",
+    ),
+    path(
+        "generations/<str:generation_id>/retire/",
+        views.retire_generation_view,
+        name="retire_generation",
+    ),
+    path(
+        "generations/<str:generation_id>/unretire/",
+        views.unretire_generation_view,
+        name="unretire_generation",
+    ),
+    path(
+        "generations/<str:generation_id>/holds/",
+        views.retention_hold_create,
+        name="retention_hold_create",
+    ),
+    path(
+        "retention/holds/<int:hold_id>/release/",
+        views.retention_hold_release,
+        name="retention_hold_release",
+    ),
+    path(
+        "gc-plans/create/",
+        views.gc_plan_create,
+        name="gc_plan_create",
+    ),
+    path(
+        "gc-plans/<uuid:plan_id>/execute/",
+        views.gc_plan_execute,
+        name="gc_plan_execute",
     ),
     path(
         "activations/<uuid:workspace_id>/schedule/",

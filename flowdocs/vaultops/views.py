@@ -10,13 +10,16 @@ from django.db import transaction
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from core.views import superadmin_required
 from vaultops.models import (
     ArtifactGeneration,
+    GarbageCollectionPlan,
     RestoreWorkspace,
+    RetentionHold,
     VaultConnectionProfile,
     VaultJob,
 )
@@ -34,6 +37,15 @@ from vaultops.services.read_model import (
     workspace_state_digest,
 )
 from vaultops.services.restore import queue_restore_job
+from vaultops.services.retention import (
+    create_gc_plan,
+    create_retention_hold,
+    execute_gc_plan,
+    generation_protection_reasons,
+    release_retention_hold,
+    retire_generation as retire_projected_generation,
+    unretire_generation as unretire_projected_generation,
+)
 from vaultops.services.sync import queue_sync_job
 
 
@@ -43,6 +55,7 @@ SECTIONS = {
     "generations",
     "restore",
     "jobs",
+    "retention",
     "configuration",
 }
 IDEMPOTENCY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,159}$")
@@ -301,6 +314,70 @@ def audit_api(request):
 
 
 @superadmin_required
+@require_GET
+def diagnostics_api(request):
+    state = build_workbench_state()
+    diagnostics = {
+        "environment": state["environment"],
+        "authority": state["authority"],
+        "sync": state["sync"],
+        "lease": state["lease"],
+        "feature_flags": state["feature_flags"],
+        "counts": {
+            "profiles": len(state["profiles"]),
+            "generations": len(state["generations"]),
+            "workspaces": len(state["workspaces"]),
+            "jobs": len(state["jobs"]),
+            "retention_holds": len(state["retention_holds"]),
+            "gc_plans": len(state["gc_plans"]),
+        },
+        "retention": {
+            "active_holds": sum(
+                1 for hold in state["retention_holds"] if hold["active"]
+            ),
+            "retired_generations": sum(
+                1
+                for generation in state["generations"]
+                if generation["vault_state"] == "retired"
+            ),
+            "gc_execution_enabled": bool(
+                state["feature_flags"].get("gc_enabled")
+            ),
+        },
+    }
+    return _api_response(
+        status=state["status"],
+        reason_code=state["reason_code"],
+        severity=state["severity"],
+        recommended_action=state["recommended_action"],
+        state_version=state["state_version"],
+        data=diagnostics,
+    )
+
+
+@superadmin_required
+@require_GET
+def retention_api(request):
+    state = build_workbench_state()
+    return _api_response(
+        status="ok",
+        state_version=state["state_version"],
+        data={"retention_holds": state["retention_holds"]},
+    )
+
+
+@superadmin_required
+@require_GET
+def gc_plans_api(request):
+    state = build_workbench_state()
+    return _api_response(
+        status="ok",
+        state_version=state["state_version"],
+        data={"gc_plans": state["gc_plans"]},
+    )
+
+
+@superadmin_required
 @require_POST
 def sync_run(request):
     try:
@@ -452,12 +529,44 @@ def _default_generation_queryset():
 
 
 def _confirmation_target(action, target):
-    if action == "promote_generation":
+    if action in {
+        "promote_generation",
+        "retire_generation",
+        "unretire_generation",
+    }:
         generation = get_object_or_404(
             _default_generation_queryset(), generation_id=target
         )
-        if generation.vault_state != ArtifactGeneration.VaultState.CANDIDATE:
+        if (
+            action == "promote_generation"
+            and generation.vault_state
+            != ArtifactGeneration.VaultState.CANDIDATE
+        ):
             raise WorkbenchRequestError("generation_not_candidate")
+        if action == "retire_generation":
+            blocking = [
+                reason
+                for reason in generation_protection_reasons(generation)
+                if reason
+                in {
+                    "generation_authoritative",
+                    "generation_runtime_referenced",
+                    "generation_job_in_progress",
+                }
+            ]
+            if blocking:
+                raise WorkbenchRequestError(blocking[0])
+            if generation.vault_state not in {
+                ArtifactGeneration.VaultState.CANDIDATE,
+                ArtifactGeneration.VaultState.LEGACY_READ_ONLY,
+            }:
+                raise WorkbenchRequestError("generation_not_retirable")
+        if (
+            action == "unretire_generation"
+            and generation.vault_state
+            != ArtifactGeneration.VaultState.RETIRED
+        ):
+            raise WorkbenchRequestError("generation_not_retired")
         return generation_state_digest(generation)
     if action == "activate_workspace":
         workspace = get_object_or_404(
@@ -472,6 +581,32 @@ def _confirmation_target(action, target):
             )
         return workspace_state_digest(workspace)
     raise WorkbenchRequestError("confirmation_action_invalid")
+
+
+def _confirmation_submit_url(action, target):
+    routes = {
+        "promote_generation": (
+            "vaultops:promote_generation",
+            {"generation_id": target},
+        ),
+        "retire_generation": (
+            "vaultops:retire_generation",
+            {"generation_id": target},
+        ),
+        "unretire_generation": (
+            "vaultops:unretire_generation",
+            {"generation_id": target},
+        ),
+        "activate_workspace": (
+            "vaultops:schedule_activation",
+            {"workspace_id": target},
+        ),
+    }
+    try:
+        route, kwargs = routes[action]
+    except KeyError as exc:
+        raise WorkbenchRequestError("confirmation_action_invalid") from exc
+    return reverse(route, kwargs=kwargs)
 
 
 @superadmin_required
@@ -511,17 +646,7 @@ def confirmation_issue(request):
                 "target": target,
                 "state_digest": state_digest,
                 "idempotency_key": str(uuid.uuid4()),
-                "submit_url": (
-                    reverse(
-                        "vaultops:promote_generation",
-                        kwargs={"generation_id": target},
-                    )
-                    if action == "promote_generation"
-                    else reverse(
-                        "vaultops:schedule_activation",
-                        kwargs={"workspace_id": target},
-                    )
-                ),
+                "submit_url": _confirmation_submit_url(action, target),
                 "breadcrumb_items": [
                     {"label": "Dashboard", "url": reverse("dashboard")},
                     {
@@ -610,6 +735,212 @@ def promote_generation(request, generation_id):
         )
     except Exception as exc:
         return _mutation_error(request, exc, section="generations")
+
+
+def _confirmed_generation_transition(
+    request,
+    *,
+    generation_id,
+    action,
+    transition,
+):
+    _request_idempotency_key(request)
+    generation = get_object_or_404(
+        _default_generation_queryset().select_related("profile"),
+        generation_id=generation_id,
+    )
+    with transaction.atomic(using="control"):
+        digest = generation_state_digest(generation)
+        confirmation_digest = _consume(
+            request,
+            action=action,
+            target=generation_id,
+            state_digest=digest,
+        )
+        actor_id, actor_name = _actor(request)
+        generation = transition(
+            generation,
+            actor_id=actor_id,
+            actor_name=actor_name,
+        )
+        append_event(
+            action=f"{action}_confirmed",
+            result="succeeded",
+            correlation_id=uuid.uuid4(),
+            actor_id=actor_id,
+            actor_name=actor_name,
+            confirmation_digest=confirmation_digest,
+            after_state={
+                "generation_id": generation.generation_id,
+                "vault_state": generation.vault_state,
+            },
+        )
+    return generation
+
+
+@superadmin_required
+@require_POST
+def retire_generation_view(request, generation_id):
+    try:
+        generation = _confirmed_generation_transition(
+            request,
+            generation_id=generation_id,
+            action="retire_generation",
+            transition=retire_projected_generation,
+        )
+        return _mutation_success(
+            request,
+            section="retention",
+            reason_code="generation_retired",
+            message=(
+                f"Generation {generation.generation_id} is retired. "
+                "No object was deleted."
+            ),
+            data={"generation_id": generation.generation_id},
+            state_version=generation_state_digest(generation),
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="retention")
+
+
+@superadmin_required
+@require_POST
+def unretire_generation_view(request, generation_id):
+    try:
+        generation = _confirmed_generation_transition(
+            request,
+            generation_id=generation_id,
+            action="unretire_generation",
+            transition=unretire_projected_generation,
+        )
+        return _mutation_success(
+            request,
+            section="retention",
+            reason_code="generation_unretired",
+            message=f"Generation {generation.generation_id} is a candidate.",
+            data={"generation_id": generation.generation_id},
+            state_version=generation_state_digest(generation),
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="retention")
+
+
+@superadmin_required
+@require_POST
+def retention_hold_create(request, generation_id):
+    try:
+        _request_idempotency_key(request)
+        _state_version_guard(request)
+        generation = get_object_or_404(
+            _default_generation_queryset(),
+            generation_id=generation_id,
+        )
+        expires_at = None
+        raw_expiry = _request_value(request, "expires_at", "").strip()
+        if raw_expiry:
+            expires_at = parse_datetime(raw_expiry)
+            if expires_at is None:
+                raise WorkbenchRequestError("retention_hold_expiry_invalid")
+            if timezone.is_naive(expires_at):
+                expires_at = timezone.make_aware(expires_at)
+        actor_id, actor_name = _actor(request)
+        hold = create_retention_hold(
+            generation,
+            reason_code=_request_value(request, "reason_code", ""),
+            owner_reference=_request_value(request, "owner_reference", ""),
+            notes=_request_value(request, "notes", ""),
+            expires_at=expires_at,
+            actor_id=actor_id,
+            actor_name=actor_name,
+        )
+        return _mutation_success(
+            request,
+            section="retention",
+            reason_code="retention_hold_created",
+            message=(
+                f"Retention hold {hold.pk} protects "
+                f"{generation.generation_id}."
+            ),
+            data={"hold_id": hold.pk},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="retention")
+
+
+@superadmin_required
+@require_POST
+def retention_hold_release(request, hold_id):
+    try:
+        _request_idempotency_key(request)
+        _state_version_guard(request)
+        hold = get_object_or_404(
+            RetentionHold.objects.select_related("generation"),
+            pk=hold_id,
+        )
+        actor_id, actor_name = _actor(request)
+        hold = release_retention_hold(
+            hold,
+            actor_id=actor_id,
+            actor_name=actor_name,
+        )
+        return _mutation_success(
+            request,
+            section="retention",
+            reason_code="retention_hold_released",
+            message=(
+                f"Retention hold {hold.pk} was released. "
+                "No object was deleted."
+            ),
+            data={"hold_id": hold.pk},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="retention")
+
+
+@superadmin_required
+@require_POST
+def gc_plan_create(request):
+    try:
+        _request_idempotency_key(request)
+        _state_version_guard(request)
+        profile = get_object_or_404(
+            VaultConnectionProfile,
+            key=settings.VAULT_DEFAULT_PROFILE,
+            enabled=True,
+        )
+        actor_id, actor_name = _actor(request)
+        plan = create_gc_plan(
+            profile,
+            dataset_id=profile.dataset_id,
+            actor_id=actor_id,
+            actor_name=actor_name,
+        )
+        return _mutation_success(
+            request,
+            section="retention",
+            reason_code="gc_plan_created",
+            message=(
+                f"GC dry-run {plan.public_id} is ready. "
+                "Deletion remains disabled."
+            ),
+            data={"gc_plan_id": str(plan.public_id)},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="retention")
+
+
+@superadmin_required
+@require_POST
+def gc_plan_execute(request, plan_id):
+    try:
+        _request_idempotency_key(request)
+        _state_version_guard(request)
+        plan = get_object_or_404(GarbageCollectionPlan, public_id=plan_id)
+        actor_id, actor_name = _actor(request)
+        execute_gc_plan(plan, actor_id=actor_id, actor_name=actor_name)
+        raise WorkbenchRequestError("gc_execution_unavailable")
+    except Exception as exc:
+        return _mutation_error(request, exc, section="retention")
 
 
 @superadmin_required

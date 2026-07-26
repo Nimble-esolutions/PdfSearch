@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.lease import acquire_lease, release_lease
 from core.models import ArtifactGeneration as LegacyGeneration
@@ -12,6 +13,8 @@ from core.models import CustomUser
 from vaultops.models import (
     ArtifactGeneration,
     ConfirmationChallenge,
+    GarbageCollectionPlan,
+    RetentionHold,
     VaultConnectionProfile,
     VaultDatasetProjection,
     VaultAuditEvent,
@@ -106,6 +109,11 @@ class VaultWorkbenchTests(TestCase):
         self.assertContains(response, "तिजोरी संचालन कार्यपटल")
         self.assertContains(response, "अधिकृत स्थिती तुलना")
         self.assertNotContains(response, "Vault Operations Workbench")
+        retention = self.client.get(
+            reverse("operations_panel"), {"section": "retention"}
+        )
+        self.assertContains(retention, "पिढी निवृत्ती")
+        self.assertContains(retention, "कचरा संकलन योजना")
 
     def test_state_api_is_redacted_and_uses_contract_envelope(self):
         lease = acquire_lease(
@@ -128,6 +136,25 @@ class VaultWorkbenchTests(TestCase):
         self.assertNotIn(lease.owner_token, serialized)
         self.assertNotIn("sensitive-instance-name", serialized)
         self.assertEqual(payload["data"]["lease"]["state"], "held")
+
+    def test_diagnostics_export_is_redacted_and_aggregated(self):
+        object_key = "datasets/private/objects/pdf/" + "7" * 64
+        self.candidate.manifest = {
+            "files": [{"object_key": object_key, "bytes": 12}]
+        }
+        self.candidate.save(update_fields=["manifest", "updated_at"])
+
+        response = self.client.get(reverse("vaultops:diagnostics"))
+        payload = response.json()
+        serialized = json.dumps(payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["data"]["counts"]["generations"], 1)
+        self.assertFalse(
+            payload["data"]["retention"]["gc_execution_enabled"]
+        )
+        self.assertNotIn(object_key, serialized)
+        self.assertNotIn("credential_alias", serialized)
 
     def test_state_version_is_stable_without_authority_changes(self):
         first = self.client.get(reverse("vaultops:state")).json()
@@ -199,6 +226,139 @@ class VaultWorkbenchTests(TestCase):
                 operation="promote_generation"
             ).count(),
             1,
+        )
+
+    def test_typed_retirement_is_reversible_and_never_claims_deletion(self):
+        page = self.client.get(
+            reverse("operations_panel"), {"section": "retention"}
+        )
+        self.assertContains(page, "Retirement removes promotion eligibility")
+        self.assertContains(page, "Dry-run only")
+        issue = self.client.post(
+            reverse("vaultops:confirmation_issue"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "action": "retire_generation",
+                "target": self.candidate.generation_id,
+            },
+        )
+        retirement = self.client.post(
+            reverse(
+                "vaultops:retire_generation",
+                kwargs={"generation_id": self.candidate.generation_id},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "challenge_id": str(issue.context["challenge"].public_id),
+                "confirmation_phrase": issue.context["phrase"],
+            },
+        )
+        self.assertEqual(retirement.status_code, 303)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.vault_state, "retired")
+
+        issue = self.client.post(
+            reverse("vaultops:confirmation_issue"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "action": "unretire_generation",
+                "target": self.candidate.generation_id,
+            },
+        )
+        unretirement = self.client.post(
+            reverse(
+                "vaultops:unretire_generation",
+                kwargs={"generation_id": self.candidate.generation_id},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "challenge_id": str(issue.context["challenge"].public_id),
+                "confirmation_phrase": issue.context["phrase"],
+            },
+        )
+        self.assertEqual(unretirement.status_code, 303)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.vault_state, "candidate")
+
+    def test_retention_hold_create_and_release_use_fresh_state(self):
+        state = self.client.get(reverse("vaultops:state")).json()
+        created = self.client.post(
+            reverse(
+                "vaultops:retention_hold_create",
+                kwargs={"generation_id": self.candidate.generation_id},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": state["state_version"],
+                "reason_code": "incident",
+                "owner_reference": "INC-42",
+            },
+        )
+        self.assertEqual(created.status_code, 303)
+        hold = RetentionHold.objects.get()
+        self.assertIsNone(hold.released_at)
+
+        state = self.client.get(reverse("vaultops:state")).json()
+        released = self.client.post(
+            reverse(
+                "vaultops:retention_hold_release",
+                kwargs={"hold_id": hold.pk},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": state["state_version"],
+            },
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(released.status_code, 202, released.content)
+        hold.refresh_from_db()
+        self.assertIsNotNone(hold.released_at)
+
+    def test_gc_execute_endpoint_is_disabled_even_for_ready_plan(self):
+        plan = GarbageCollectionPlan.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_version="i" * 64,
+            pointer_version="p" * 64,
+            candidates=[
+                {
+                    "generation_id": "generation-retired",
+                    "exclusive_object_keys": ["private/object/key"],
+                }
+            ],
+            estimates={
+                "deletion_enabled": False,
+                "exclusive_objects": 1,
+                "exclusive_bytes": 10,
+            },
+            plan_digest="g" * 64,
+            state=GarbageCollectionPlan.State.READY,
+            expires_at=timezone.now(),
+        )
+        listing = self.client.get(reverse("vaultops:gc_plans"))
+        self.assertNotContains(listing, "private/object/key")
+        page = self.client.get(
+            reverse("operations_panel"), {"section": "retention"}
+        )
+        self.assertContains(page, "GC execution disabled")
+        state = self.client.get(reverse("vaultops:state")).json()
+        response = self.client.post(
+            reverse(
+                "vaultops:gc_plan_execute",
+                kwargs={"plan_id": plan.public_id},
+            ),
+            data=json.dumps(
+                {
+                    "idempotency_key": str(uuid.uuid4()),
+                    "state_version": state["state_version"],
+                }
+            ),
+            content_type="application/json",
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["reason_code"], "gc_execution_disabled"
         )
 
     def test_confirmation_is_rejected_after_observed_state_changes(self):

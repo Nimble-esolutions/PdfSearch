@@ -14,6 +14,8 @@ from vaultops.models import ConfirmationChallenge
 ALLOWED_ACTIONS = {
     "activate_workspace": "ACTIVATE",
     "promote_generation": "PROMOTE",
+    "retire_generation": "RETIRE",
+    "unretire_generation": "UNRETIRE",
 }
 TARGET_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
 

@@ -203,7 +203,9 @@ def create_retention_hold(
             after_state={
                 "hold_id": hold.pk,
                 "generation_id": generation.generation_id,
-                "expires_at": hold.expires_at,
+                "expires_at": (
+                    hold.expires_at.isoformat() if hold.expires_at else None
+                ),
             },
             evidence={"owner_reference": hold.owner_reference},
         )
@@ -240,7 +242,7 @@ def release_retention_hold(
                 "generation_id": hold.generation.generation_id,
                 "released_at": None,
             },
-            after_state={"released_at": hold.released_at},
+            after_state={"released_at": hold.released_at.isoformat()},
         )
         return hold
 
