@@ -42,6 +42,7 @@
     <a href="?section=generations"{% if section == "generations" %} aria-current="page"{% endif %}>{% trans "Generations" %}</a>
     <a href="?section=restore"{% if section == "restore" %} aria-current="page"{% endif %}>{% trans "Restore & Activation" %}</a>
     <a href="?section=jobs"{% if section == "jobs" %} aria-current="page"{% endif %}>{% trans "Jobs & Audit" %}</a>
+    <a href="?section=retention"{% if section == "retention" %} aria-current="page"{% endif %}>{% trans "Retention & GC" %}</a>
     <a href="?section=configuration"{% if section == "configuration" %} aria-current="page"{% endif %}>{% trans "Configuration" %}</a>
   </nav>
 
@@ -131,6 +132,9 @@
           <div><dt>{% trans "Objects" %}</dt><dd>{{ generation.file_count }}</dd></div>
           <div><dt>{% trans "Bytes" %}</dt><dd>{{ generation.byte_count|filesizeformat }}</dd></div>
         </dl>
+        {% if generation.protection_reasons %}
+        <p class="vault-note">{% trans "Protected by" %}: {% for reason in generation.protection_reasons %}<code>{{ reason }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+        {% endif %}
         {% if generation.vault_state == "candidate" and state.feature_flags.admin_mutations_enabled %}
         <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
           {% csrf_token %}
@@ -146,6 +150,100 @@
       {% endfor %}
     </div>
   </section>
+  {% endif %}
+
+  {% if section == "retention" %}
+  <div class="vault-grid">
+    <section class="vault-panel" aria-labelledby="retirement-heading">
+      <header><p>{% trans "Reversible lifecycle" %}</p><h3 id="retirement-heading">{% trans "Generation retirement" %}</h3></header>
+      <p class="vault-note">{% trans "Retirement removes promotion eligibility. It does not delete manifests or content-addressed objects." %}</p>
+      <div class="vault-records" role="list">
+        {% for generation in state.generations %}
+        <article class="vault-record vault-record--compact" role="listitem">
+          <h4>{{ generation.generation_id }}</h4>
+          <p>{{ generation.vault_state }} · {{ generation.file_count }} {% trans "objects" %}</p>
+          {% if generation.protection_reasons %}
+          <p>{% trans "Protected by" %}: {% for reason in generation.protection_reasons %}<code>{{ reason }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+          {% endif %}
+          {% if generation.retirement_allowed and state.feature_flags.admin_mutations_enabled %}
+          <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:retire:{{ forloop.counter }}">
+            <input type="hidden" name="action" value="retire_generation">
+            <input type="hidden" name="target" value="{{ generation.generation_id }}">
+            <button class="vault-button vault-button--secondary" type="submit">{% trans "Prepare retirement confirmation" %}</button>
+          </form>
+          {% elif generation.unretirement_allowed and state.feature_flags.admin_mutations_enabled %}
+          <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:unretire:{{ forloop.counter }}">
+            <input type="hidden" name="action" value="unretire_generation">
+            <input type="hidden" name="target" value="{{ generation.generation_id }}">
+            <button class="vault-button vault-button--secondary" type="submit">{% trans "Prepare unretirement confirmation" %}</button>
+          </form>
+          {% endif %}
+          <form class="vault-form" method="post" action="{% url 'vaultops:retention_hold_create' generation.generation_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:hold:{{ forloop.counter }}">
+            <input type="hidden" name="state_version" value="{{ state.state_version }}">
+            <label for="hold-reason-{{ forloop.counter }}">{% trans "Hold reason code" %}</label>
+            <input id="hold-reason-{{ forloop.counter }}" name="reason_code" maxlength="80" required>
+            <label for="hold-owner-{{ forloop.counter }}">{% trans "Incident or owner reference" %}</label>
+            <input id="hold-owner-{{ forloop.counter }}" name="owner_reference" maxlength="160" required>
+            <button class="vault-button vault-button--secondary" type="submit"{% if not state.feature_flags.admin_mutations_enabled %} disabled{% endif %}>{% trans "Create retention hold" %}</button>
+          </form>
+        </article>
+        {% empty %}<p class="vault-empty">{% trans "No generation projections are available." %}</p>{% endfor %}
+      </div>
+    </section>
+
+    <section class="vault-panel" aria-labelledby="holds-heading">
+      <header><p>{% trans "Deletion protection" %}</p><h3 id="holds-heading">{% trans "Retention holds" %}</h3></header>
+      <div class="vault-records" role="list">
+        {% for hold in state.retention_holds %}
+        <article class="vault-record vault-record--compact" role="listitem">
+          <h4>{{ hold.generation_id }}</h4>
+          <p><code>{{ hold.reason_code }}</code> · {{ hold.owner_reference }}</p>
+          <p>{% if hold.active %}{% trans "Active" %}{% else %}{% trans "Released or expired" %}{% endif %}</p>
+          {% if hold.active and state.feature_flags.admin_mutations_enabled %}
+          <form method="post" action="{% url 'vaultops:retention_hold_release' hold.public_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:release-hold:{{ forloop.counter }}">
+            <input type="hidden" name="state_version" value="{{ state.state_version }}">
+            <button class="vault-button vault-button--secondary" type="submit">{% trans "Release retention hold" %}</button>
+          </form>
+          {% endif %}
+        </article>
+        {% empty %}<p class="vault-empty">{% trans "No retention holds are recorded." %}</p>{% endfor %}
+      </div>
+    </section>
+
+    <section class="vault-panel" aria-labelledby="gc-heading">
+      <header><p>{% trans "Dry-run only" %}</p><h3 id="gc-heading">{% trans "Garbage collection plans" %}</h3></header>
+      <p class="vault-note">{% trans "Plans use a fresh verified inventory, pointer version, retirement grace period, retention holds, runtime references, workspaces, jobs, and shared-object accounting." %}</p>
+      <form method="post" action="{% url 'vaultops:gc_plan_create' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:gc-plan">
+        <input type="hidden" name="state_version" value="{{ state.state_version }}">
+        <button class="vault-button" type="submit"{% if not state.feature_flags.admin_mutations_enabled %} disabled{% endif %}>{% trans "Create GC dry-run" %}</button>
+      </form>
+      <div class="vault-records" role="list">
+        {% for plan in state.gc_plans %}
+        <article class="vault-record vault-record--compact" role="listitem">
+          <h4>{{ plan.public_id }}</h4>
+          <p>{{ plan.state }} · {{ plan.candidate_generation_ids|length }} {% trans "candidate generations" %}</p>
+          <dl>
+            <div><dt>{% trans "Exclusive objects" %}</dt><dd>{{ plan.estimates.exclusive_objects|default:"0" }}</dd></div>
+            <div><dt>{% trans "Exclusive bytes" %}</dt><dd>{{ plan.estimates.exclusive_bytes|default:"0"|filesizeformat }}</dd></div>
+            <div><dt>{% trans "Shared objects" %}</dt><dd>{{ plan.estimates.shared_objects|default:"0" }}</dd></div>
+            <div><dt>{% trans "Deletion" %}</dt><dd>{% trans "Disabled" %}</dd></div>
+          </dl>
+          <button class="vault-button vault-button--danger" type="button" disabled>{% trans "GC execution disabled" %}</button>
+        </article>
+        {% empty %}<p class="vault-empty">{% trans "No GC dry-runs are recorded." %}</p>{% endfor %}
+      </div>
+    </section>
+  </div>
   {% endif %}
 
   {% if section == "restore" %}

@@ -16,6 +16,7 @@ from vaultops.services.retention import (
     create_gc_plan,
     create_retention_hold,
     execute_gc_plan,
+    release_retention_hold,
     retire_generation,
     unretire_generation,
 )
@@ -134,6 +135,22 @@ class RetentionServiceTests(TestCase):
             RetentionHold.objects.filter(generation=generation).exists()
         )
 
+    def test_retention_hold_release_is_audited_and_idempotent(self):
+        generation = self.make_generation("generation-held")
+        hold = create_retention_hold(
+            generation,
+            reason_code="incident",
+            owner_reference="INC-18",
+        )
+
+        released = release_retention_hold(hold, actor_name="operator")
+        released_again = release_retention_hold(
+            released, actor_name="operator"
+        )
+
+        self.assertIsNotNone(released.released_at)
+        self.assertEqual(released_again.released_at, released.released_at)
+
     def test_gc_plan_separates_shared_and_exclusive_objects(self):
         shared_key = (
             "datasets/ai-sahakar-test/objects/pdf/" + "1" * 64
@@ -222,3 +239,38 @@ class RetentionServiceTests(TestCase):
             execute_gc_plan(plan)
 
         self.assertEqual(raised.exception.reason_code, "gc_execution_disabled")
+
+    def test_metrics_report_retention_and_gc_without_object_keys(self):
+        generation = self.make_generation(
+            "generation-retired",
+            state="retired",
+            files=[
+                {
+                    "object_key": "datasets/ai-sahakar-test/objects/pdf/" + "9" * 64,
+                    "sha256": "9" * 64,
+                    "bytes": 21,
+                }
+            ],
+        )
+        self.age_generation(generation)
+        create_retention_hold(
+            self.make_generation("generation-held"),
+            reason_code="incident",
+            owner_reference="INC-19",
+        )
+        create_gc_plan(
+            self.profile,
+            dataset_id=self.profile.dataset_id,
+            now=self.now,
+        )
+
+        response = self.client.get("/health/metrics/")
+        body = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("pdfsearch_vault_retired_generation_count 1.0", body)
+        self.assertIn("pdfsearch_vault_active_retention_hold_count 1.0", body)
+        self.assertIn("pdfsearch_vault_gc_ready_plan_count 1.0", body)
+        self.assertIn("pdfsearch_vault_gc_planned_exclusive_bytes 21.0", body)
+        self.assertIn("pdfsearch_vault_gc_execution_enabled 0.0", body)
+        self.assertNotIn("objects/pdf/", body)

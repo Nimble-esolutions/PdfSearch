@@ -2317,3 +2317,111 @@ msgstr "लेखक भाडेपट्टा"
 #| msgid "Subject"
 msgid "objects"
 msgstr "वस्तू"
+
+#: core/templates/vaultops/workbench.html
+msgid "Retention & GC"
+msgstr "जतन आणि कचरा संकलन"
+
+#: core/templates/vaultops/workbench.html
+msgid "Protected by"
+msgstr "यामुळे संरक्षित"
+
+#: core/templates/vaultops/workbench.html
+msgid "Reversible lifecycle"
+msgstr "पूर्ववत करता येणारे जीवनचक्र"
+
+#: core/templates/vaultops/workbench.html
+msgid "Generation retirement"
+msgstr "पिढी निवृत्ती"
+
+#: core/templates/vaultops/workbench.html
+msgid "Retirement removes promotion eligibility. It does not delete manifests or content-addressed objects."
+msgstr "निवृत्तीमुळे बढतीची पात्रता काढली जाते. त्यामुळे मॅनिफेस्ट किंवा सामग्री-पत्तायुक्त वस्तू हटवल्या जात नाहीत."
+
+#: core/templates/vaultops/workbench.html
+msgid "Prepare retirement confirmation"
+msgstr "निवृत्ती पुष्टी तयार करा"
+
+#: core/templates/vaultops/workbench.html
+msgid "Prepare unretirement confirmation"
+msgstr "निवृत्ती मागे घेण्याची पुष्टी तयार करा"
+
+#: core/templates/vaultops/workbench.html
+msgid "Hold reason code"
+msgstr "जतन-स्थगिती कारण संकेत"
+
+#: core/templates/vaultops/workbench.html
+msgid "Incident or owner reference"
+msgstr "घटना किंवा मालक संदर्भ"
+
+#: core/templates/vaultops/workbench.html
+msgid "Create retention hold"
+msgstr "जतन स्थगिती तयार करा"
+
+#: core/templates/vaultops/workbench.html
+msgid "No generation projections are available."
+msgstr "पिढीची कोणतीही प्रक्षेपित नोंद उपलब्ध नाही."
+
+#: core/templates/vaultops/workbench.html
+msgid "Deletion protection"
+msgstr "हटविण्यापासून संरक्षण"
+
+#: core/templates/vaultops/workbench.html
+msgid "Retention holds"
+msgstr "जतन स्थगिती"
+
+#: core/templates/vaultops/workbench.html
+msgid "Released or expired"
+msgstr "मुक्त केलेली किंवा कालबाह्य"
+
+#: core/templates/vaultops/workbench.html
+msgid "Release retention hold"
+msgstr "जतन स्थगिती मुक्त करा"
+
+#: core/templates/vaultops/workbench.html
+msgid "No retention holds are recorded."
+msgstr "कोणतीही जतन स्थगिती नोंदवलेली नाही."
+
+#: core/templates/vaultops/workbench.html
+msgid "Dry-run only"
+msgstr "केवळ पूर्वचाचणी"
+
+#: core/templates/vaultops/workbench.html
+msgid "Garbage collection plans"
+msgstr "कचरा संकलन योजना"
+
+#: core/templates/vaultops/workbench.html
+msgid "Plans use a fresh verified inventory, pointer version, retirement grace period, retention holds, runtime references, workspaces, jobs, and shared-object accounting."
+msgstr "योजना ताजी पडताळलेली सूची, सूचक आवृत्ती, निवृत्ती सवलत कालावधी, जतन स्थगिती, रनटाइम संदर्भ, कार्यक्षेत्रे, कार्ये आणि सामायिक वस्तूंचा हिशोब वापरतात."
+
+#: core/templates/vaultops/workbench.html
+msgid "Create GC dry-run"
+msgstr "GC पूर्वचाचणी तयार करा"
+
+#: core/templates/vaultops/workbench.html
+msgid "candidate generations"
+msgstr "उमेदवार पिढ्या"
+
+#: core/templates/vaultops/workbench.html
+msgid "Exclusive objects"
+msgstr "स्वतंत्र वस्तू"
+
+#: core/templates/vaultops/workbench.html
+msgid "Exclusive bytes"
+msgstr "स्वतंत्र बाइट्स"
+
+#: core/templates/vaultops/workbench.html
+msgid "Shared objects"
+msgstr "सामायिक वस्तू"
+
+#: core/templates/vaultops/workbench.html
+msgid "Deletion"
+msgstr "हटविणे"
+
+#: core/templates/vaultops/workbench.html
+msgid "GC execution disabled"
+msgstr "GC अंमलबजावणी बंद आहे"
+
+#: core/templates/vaultops/workbench.html
+msgid "No GC dry-runs are recorded."
+msgstr "कोणतीही GC पूर्वचाचणी नोंदवलेली नाही."
