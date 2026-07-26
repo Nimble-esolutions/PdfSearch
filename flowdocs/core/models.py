@@ -1,9 +1,15 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
 import uuid
 from django.conf import settings
 
 # ---------------- Custom User ----------------
+class CustomUserManager(UserManager):
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        extra_fields["role"] = "superadmin"
+        return super().create_superuser(username, email, password, **extra_fields)
+
+
 class CustomUser(AbstractUser):
     ROLE_CHOICES = (
         ('superadmin', 'SuperAdmin'),
@@ -11,6 +17,7 @@ class CustomUser(AbstractUser):
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     department = models.CharField(max_length=100, blank=True, null=True)
+    objects = CustomUserManager()
 
 # ---------------- Folder ----------------
 from django.db import models
