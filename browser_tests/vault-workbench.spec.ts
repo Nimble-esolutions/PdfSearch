@@ -6,10 +6,13 @@ const password = 'ci-only-password-not-for-production';
 
 async function login(page: Page, next = '/dashboard/operations/') {
   await page.goto(`/login/?next=${encodeURIComponent(next)}`);
-  await page.locator('input[name="username"]').fill(username);
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('form button[type="submit"]').first().click();
-  await page.waitForURL('**/dashboard/operations/**');
+  const loginForm = page.locator('input[name="username"]').locator('xpath=ancestor::form');
+  await loginForm.locator('input[name="username"]').fill(username);
+  await loginForm.locator('input[name="password"]').fill(password);
+  await Promise.all([
+    page.waitForURL('**/dashboard/operations/**'),
+    loginForm.locator('button[type="submit"]').click(),
+  ]);
 }
 
 test.describe('Vault Operations Workbench', () => {
