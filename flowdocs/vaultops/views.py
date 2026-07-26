@@ -30,7 +30,12 @@ from vaultops.services.confirmations import (
     issue_confirmation,
 )
 from vaultops.services.jobs import request_cancellation, requeue_job
-from vaultops.services.profiles import probe_restore_profile
+from vaultops.services.inventory import project_verified_generation, verify_generation
+from vaultops.services.profiles import (
+    probe_restore_profile,
+    upsert_restore_profile,
+    vault_for_profile,
+)
 from vaultops.services.read_model import (
     build_workbench_state,
     generation_state_digest,
@@ -115,8 +120,8 @@ def _enforce_mutation_rate_limit(request):
         raise WorkbenchRequestError("rate_limited", status_code=429)
 
 
-def _request_idempotency_key(request):
-    if not settings.VAULT_ADMIN_MUTATIONS_ENABLED:
+def _request_idempotency_key(request, *, require_admin_gate=True):
+    if require_admin_gate and not settings.VAULT_ADMIN_MUTATIONS_ENABLED:
         raise WorkbenchRequestError(
             "vault_admin_mutations_disabled", status_code=409
         )
@@ -128,6 +133,48 @@ def _request_idempotency_key(request):
     if not IDEMPOTENCY_RE.fullmatch(value):
         raise WorkbenchRequestError("idempotency_key_required")
     return value
+
+
+@superadmin_required
+@require_POST
+def profile_configure(request):
+    try:
+        _request_idempotency_key(request, require_admin_gate=False)
+        supplied_secret_fields = {
+            name
+            for name in (
+                "access_key",
+                "secret_key",
+                "password",
+                "token",
+            )
+            if _request_value(request, name, "")
+        }
+        if supplied_secret_fields:
+            raise WorkbenchRequestError("browser_secret_entry_rejected")
+        profile = upsert_restore_profile(
+            key=_request_value(request, "key", "").strip(),
+            display_name=_request_value(request, "display_name", "").strip(),
+            endpoint_origin=_request_value(request, "endpoint_origin", "").strip(),
+            bucket=_request_value(request, "bucket", "").strip(),
+            region=_request_value(request, "region", "").strip(),
+            dataset_id=_request_value(request, "dataset_id", "").strip(),
+            production_source_id=_request_value(
+                request, "production_source_id", ""
+            ).strip(),
+            credential_alias=_request_value(
+                request, "credential_alias", ""
+            ).strip(),
+        )
+        return _mutation_success(
+            request,
+            section="configuration",
+            reason_code="profile_configured",
+            message=f"Read-only profile {profile.key} configured.",
+            data={"profile_key": profile.key},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="configuration")
 
 
 def _actor(request):
@@ -500,7 +547,7 @@ def job_retry(request, job_id):
 @require_POST
 def profile_probe(request, profile_key):
     try:
-        _request_idempotency_key(request)
+        _request_idempotency_key(request, require_admin_gate=False)
         _state_version_guard(request)
         profile = get_object_or_404(
             VaultConnectionProfile, key=profile_key, enabled=True
@@ -515,6 +562,44 @@ def profile_probe(request, profile_key):
                 f"{'reachable' if evidence['reachable'] else 'unavailable'}."
             ),
             data={"evidence": evidence},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="configuration")
+
+
+@superadmin_required
+@require_POST
+def profile_inventory(request, profile_key):
+    try:
+        _request_idempotency_key(request, require_admin_gate=False)
+        profile = get_object_or_404(
+            VaultConnectionProfile, key=profile_key, enabled=True
+        )
+        verified = verify_generation(
+            vault_for_profile(profile),
+            profile,
+            generation_id=_request_value(
+                request, "generation_id", ""
+            ).strip(),
+            verify_objects=True,
+        )
+        projection, generation = project_verified_generation(profile, verified)
+        return _mutation_success(
+            request,
+            section="configuration",
+            reason_code="profile_inventory_verified",
+            message=(
+                f"Verified generation {generation.generation_id} "
+                f"({verified.file_count} objects)."
+            ),
+            data={
+                "profile_key": profile.key,
+                "generation_id": generation.generation_id,
+                "authoritative": verified.authoritative,
+                "file_count": verified.file_count,
+                "byte_count": verified.byte_count,
+                "inventory_state": projection.inventory_state,
+            },
         )
     except Exception as exc:
         return _mutation_error(request, exc, section="configuration")

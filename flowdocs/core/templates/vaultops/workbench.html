@@ -356,9 +356,28 @@
             <input type="hidden" name="state_version" value="{{ state.state_version }}">
             <button class="vault-button vault-button--secondary" type="submit">{% trans "Run read-only probe" %}</button>
           </form>
+          <form method="post" action="{% url 'vaultops:profile_inventory' profile.key %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:inventory:{{ forloop.counter }}">
+            <button class="vault-button vault-button--secondary" type="submit">{% trans "Verify authoritative inventory" %}</button>
+          </form>
         </article>
         {% empty %}<p class="vault-empty">{% trans "No approved profiles are available." %}</p>{% endfor %}
       </div>
+      <form method="post" action="{% url 'vaultops:profile_configure' %}" class="vault-form">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:configure">
+        <label>{% trans "Profile key" %}<input name="key" required></label>
+        <label>{% trans "Display name" %}<input name="display_name" required></label>
+        <label>{% trans "S3 endpoint origin" %}<input name="endpoint_origin" type="url" required></label>
+        <label>{% trans "Bucket" %}<input name="bucket" required></label>
+        <label>{% trans "Region" %}<input name="region" required></label>
+        <label>{% trans "Dataset" %}<input name="dataset_id" required></label>
+        <label>{% trans "Production source identity" %}<input name="production_source_id" required></label>
+        <label>{% trans "Approved credential alias" %}<input name="credential_alias" required></label>
+        <p class="vault-note">{% trans "Credentials are resolved only from server-approved aliases. Secret values are never accepted here." %}</p>
+        <button class="vault-button" type="submit"{% if not state.feature_flags.ui_profile_configuration_enabled %} disabled{% endif %}>{% trans "Configure read-only profile" %}</button>
+      </form>
     </section>
 
     <section class="vault-panel" aria-labelledby="lease-heading">

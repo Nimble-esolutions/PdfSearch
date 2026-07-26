@@ -1,5 +1,7 @@
 import json
 import uuid
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
@@ -101,6 +103,102 @@ class VaultWorkbenchTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("operations_panel"))
         self.assertEqual(response.status_code, 403)
+
+    def test_create_superuser_assigns_supported_vault_role(self):
+        user = CustomUser.objects.create_superuser(
+            username="role-invariant",
+            password="test-password",
+            role="admin",
+        )
+        self.assertEqual(user.role, "superadmin")
+        self.client.force_login(user)
+        self.assertEqual(
+            self.client.get(reverse("vaultops:state")).status_code, 200
+        )
+
+    @override_settings(
+        VAULT_UI_PROFILE_CONFIGURATION_ENABLED=True,
+        VAULT_CREDENTIAL_ALIASES={
+            "production-readonly": {
+                "access_key_env": "TEST_ACCESS_KEY",
+                "secret_key_env": "TEST_SECRET_KEY",
+            }
+        },
+    )
+    @patch("vaultops.views.upsert_restore_profile")
+    def test_profile_configure_accepts_alias_contract_not_secrets(self, upsert):
+        upsert.return_value = SimpleNamespace(key="production-readonly")
+        response = self.client.post(
+            reverse("vaultops:profile_configure"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "key": "production-readonly",
+                "display_name": "Production read only",
+                "endpoint_origin": "https://vault.example",
+                "bucket": "artifacts",
+                "region": "test",
+                "dataset_id": "ai-sahakar-prod",
+                "production_source_id": "ai-sahakar-prod",
+                "credential_alias": "production-readonly",
+            },
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertNotIn("secret_key", upsert.call_args.kwargs)
+        self.assertEqual(
+            upsert.call_args.kwargs["credential_alias"],
+            "production-readonly",
+        )
+
+        rejected = self.client.post(
+            reverse("vaultops:profile_configure"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "key": "production-readonly",
+                "secret_key": "must-be-rejected",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(
+            rejected.json()["reason_code"], "browser_secret_entry_rejected"
+        )
+        self.assertEqual(upsert.call_count, 1)
+
+    @patch("vaultops.views.project_verified_generation")
+    @patch("vaultops.views.verify_generation")
+    @patch("vaultops.views.vault_for_profile")
+    def test_profile_inventory_verifies_and_projects(
+        self, vault_for_profile, verify_generation, project_generation
+    ):
+        verified = SimpleNamespace(
+            generation_id="generation-authoritative",
+            authoritative=True,
+            file_count=564,
+            byte_count=1234,
+        )
+        verify_generation.return_value = verified
+        projection = SimpleNamespace(inventory_state="verified")
+        generation = SimpleNamespace(
+            generation_id="generation-authoritative"
+        )
+        project_generation.return_value = (projection, generation)
+        response = self.client.post(
+            reverse(
+                "vaultops:profile_inventory",
+                kwargs={"profile_key": self.profile.key},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "generation_id": "generation-authoritative",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(response.status_code, 202)
+        payload = response.json()
+        self.assertEqual(payload["reason_code"], "profile_inventory_verified")
+        self.assertEqual(payload["data"]["file_count"], 564)
+        verify_generation.assert_called_once()
+        project_generation.assert_called_once_with(self.profile, verified)
 
     def test_marathi_workbench_uses_reviewed_operations_language(self):
         self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"

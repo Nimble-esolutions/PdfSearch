@@ -8,6 +8,11 @@ app_name = "vaultops"
 urlpatterns = [
     path("state/", views.state_api, name="state"),
     path("profiles/", views.profiles_api, name="profiles"),
+    path(
+        "profiles/configure/",
+        views.profile_configure,
+        name="profile_configure",
+    ),
     path("generations/", views.generations_api, name="generations"),
     path("jobs/", views.jobs_api, name="jobs"),
     path("audit/", views.audit_api, name="audit"),
@@ -30,6 +35,11 @@ urlpatterns = [
         "profiles/<slug:profile_key>/probe/",
         views.profile_probe,
         name="profile_probe",
+    ),
+    path(
+        "profiles/<slug:profile_key>/inventory/",
+        views.profile_inventory,
+        name="profile_inventory",
     ),
     path(
         "confirmations/issue/",
