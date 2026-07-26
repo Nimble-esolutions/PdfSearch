@@ -843,10 +843,9 @@ msgid "Production Source"
 msgstr "उत्पादन स्रोत"
 
 #: core/templates/dashboard_operations.html:41
-#, fuzzy
 #| msgid "Department"
 msgid "Deployment"
-msgstr "विभाग"
+msgstr "तैनाती"
 
 #: core/templates/dashboard_operations.html:44
 #, fuzzy
@@ -1850,3 +1849,471 @@ msgstr "क्षमस्व, उपलब्ध दस्तऐवजांम
 
 #~ msgid "No users found."
 #~ msgstr "वापरकर्ते आढळले नाहीत."
+
+
+#: core/templates/vaultops/workbench.html:69
+#| msgid "%(counter)s empty"
+#| msgid_plural "%(counter)s empty"
+msgid "%(count)s workspace"
+msgid_plural "%(count)s workspaces"
+msgstr[0] "%(count)s कार्यक्षेत्र"
+msgstr[1] "%(count)s कार्यक्षेत्रे"
+
+#: core/templates/dashboard_settings.html:143
+#: core/templates/vaultops/confirmation.html:16
+#| msgid "Actions"
+msgid "Action"
+msgstr "कृती"
+
+#: core/templates/vaultops/workbench.html:33
+#: core/templates/vaultops/workbench.html:41
+#: core/templates/vaultops/workbench.html:95
+#| msgid "Active"
+msgid "Active Sync"
+msgstr "सक्रिय समक्रमण"
+
+#: core/templates/vaultops/workbench.html:85
+#| msgid "Administration"
+msgid "Admin mutations"
+msgstr "प्रशासकीय बदल"
+
+#: core/templates/vaultops/workbench.html:31
+msgid "Aligned"
+msgstr "सुसंगत"
+
+#: core/templates/vaultops/workbench.html:230
+#| msgid "Answer evidence"
+msgid "Append-only evidence"
+msgstr "फक्त जोडता येणारा पुरावा"
+
+#: core/templates/vaultops/workbench.html:159
+msgid "Approved profile"
+msgstr "मान्यताप्राप्त प्रोफाइल"
+
+#: core/templates/vaultops/workbench.html:230
+msgid "Audit trail"
+msgstr "लेखापरीक्षण मागोवा"
+
+#: core/templates/vaultops/workbench.html:63
+#| msgid "Authoritative"
+msgid "Authority comparison"
+msgstr "अधिकृत स्थिती तुलना"
+
+#: core/templates/vaultops/confirmation.html:12
+msgid "Authority-changing operation"
+msgstr "अधिकृत स्थिती बदलणारी कार्यवाही"
+
+#: core/templates/vaultops/workbench.html:132
+msgid "Bytes"
+msgstr "बाइट्स"
+
+#: core/templates/vaultops/confirmation.html:29
+msgid "Cancel and return to workbench"
+msgstr "रद्द करून कार्यपटलावर परत जा"
+
+#: core/templates/vaultops/workbench.html:101
+msgid "Completed epoch"
+msgstr "पूर्ण कालखंड"
+
+#: core/templates/dashboard.html:187 core/templates/vaultops/workbench.html:45
+#| msgid "Document operations"
+msgid "Configuration"
+msgstr "संरचना"
+
+#: core/templates/vaultops/confirmation.html:4
+#| msgid "Create user - CC & RCS Maharashtra"
+msgid "Confirm vault operation — CC & RCS Maharashtra"
+msgstr "तिजोरी कार्यवाहीची पुष्टी करा — सीसी आणि आरसीएस महाराष्ट्र"
+
+#: core/templates/vaultops/confirmation.html:26
+msgid "Confirmation phrase"
+msgstr "पुष्टीकरण वाक्यांश"
+
+#: core/templates/vaultops/workbench.html:252
+msgid "Credentials"
+msgstr "प्रमाणपत्रे"
+
+#: core/templates/vaultops/workbench.html:35
+msgid "Critical job"
+msgstr "गंभीर कार्य"
+
+#: core/templates/vaultops/workbench.html:79
+#| msgid "Current user"
+msgid "Current posture"
+msgstr "सध्याची स्थिती"
+
+#: core/templates/vaultops/workbench.html:75
+msgid "Database projections never move the remote pointer or runtime pointer implicitly."
+msgstr "डेटाबेस प्रक्षेपणे दूरस्थ निर्देशांक किंवा कार्यरत निर्देशांक कधीही आपोआप बदलत नाहीत."
+
+#: core/templates/vaultops/workbench.html:30
+msgid "Drift"
+msgstr "तफावत"
+
+#: core/templates/vaultops/workbench.html:201
+msgid "Durable queue"
+msgstr "टिकाऊ रांग"
+
+#: core/templates/dashboard_s3ops.html:36
+#: core/templates/dashboard_settings.html:107
+#: core/templates/vaultops/workbench.html:85
+#: core/templates/vaultops/workbench.html:87
+#| msgid "Disabled"
+msgid "Enabled,Disabled"
+msgstr "सक्षम,अक्षम"
+
+#: core/templates/vaultops/workbench.html:50
+msgid "Evidence requires attention"
+msgstr "पुराव्याकडे लक्ष देणे आवश्यक आहे"
+
+#: core/templates/dashboard_s3ops.html:582
+#: core/templates/vaultops/confirmation.html:19
+#| msgid "Purge Expired"
+msgid "Expires"
+msgstr "कालबाह्य होण्याची वेळ"
+
+#: core/templates/vaultops/workbench.html:270
+msgid "Fencing epoch"
+msgstr "कुंपण कालखंड"
+
+#: core/templates/vaultops/workbench.html:87
+msgid "Garbage collection"
+msgstr "अनावश्यक वस्तू संकलन"
+
+#: core/templates/dashboard_s3ops.html:244
+#: core/templates/vaultops/workbench.html:165
+#| msgid "Document operations"
+msgid "Generation ID"
+msgstr "निर्मिती संच आयडी"
+
+#: core/templates/vaultops/workbench.html:42
+#: core/templates/vaultops/workbench.html:119
+#| msgid "Document operations"
+msgid "Generations"
+msgstr "निर्मिती संच"
+
+#: core/templates/vaultops/workbench.html:269
+msgid "Holder fingerprint"
+msgstr "धारक ओळखछाप"
+
+#: core/templates/vaultops/workbench.html:119
+#| msgid "Index operations"
+msgid "Independent projections"
+msgstr "स्वतंत्र प्रक्षेपणे"
+
+#: core/templates/vaultops/workbench.html:279
+msgid "JavaScript is disabled. All critical forms remain available; refresh the page to update evidence."
+msgstr "JavaScript अक्षम आहे. सर्व महत्त्वाचे फॉर्म उपलब्ध आहेत; पुरावा अद्ययावत करण्यासाठी पृष्ठ रीफ्रेश करा."
+
+#: core/templates/vaultops/workbench.html:44
+msgid "Jobs & Audit"
+msgstr "कार्ये आणि लेखापरीक्षण"
+
+#: core/templates/vaultops/workbench.html:249
+msgid "Key"
+msgstr "किल्ली"
+
+#: core/templates/vaultops/workbench.html:166
+msgid "Leave blank for authoritative"
+msgstr "अधिकृत संचासाठी रिकामे ठेवा"
+
+#: core/templates/vaultops/workbench.html:130
+msgid "Local"
+msgstr "स्थानिक"
+
+#: core/templates/vaultops/workbench.html:173
+#| msgid "Answer evidence"
+msgid "Local evidence"
+msgstr "स्थानिक पुरावा"
+
+#: core/templates/vaultops/workbench.html:253
+#| msgid "Lock Held"
+msgid "Locked"
+msgstr "लॉक केलेले"
+
+#: core/templates/vaultops/workbench.html:261
+msgid "No approved profiles are available."
+msgstr "मान्यताप्राप्त प्रोफाइल उपलब्ध नाहीत."
+
+#: core/templates/vaultops/workbench.html:234
+msgid "No control-plane audit events are recorded."
+msgstr "नियंत्रण स्तरावरील लेखापरीक्षण घटना नोंदलेल्या नाहीत."
+
+#: core/templates/vaultops/workbench.html:191
+msgid "No restore workspaces are projected."
+msgstr "कोणतीही पुनर्संचयन कार्यक्षेत्रे नोंदलेली नाहीत."
+
+#: core/templates/vaultops/workbench.html:225
+msgid "No vault jobs are recorded."
+msgstr "तिजोरीची कोणतीही कार्ये नोंदलेली नाहीत."
+
+#: core/templates/vaultops/workbench.html:145
+msgid "No verified generation projections are available."
+msgstr "पडताळलेली निर्मिती संच प्रक्षेपणे उपलब्ध नाहीत."
+
+#: core/templates/vaultops/workbench.html:35
+msgid "None"
+msgstr "काहीही नाही"
+
+#: core/templates/vaultops/workbench.html:131
+#| msgid "Subject"
+msgid "Objects"
+msgstr "वस्तू"
+
+#: core/templates/vaultops/workbench.html:19
+msgid "Observed"
+msgstr "निरीक्षण वेळ"
+
+#: core/templates/vaultops/confirmation.html:18
+msgid "Observed state"
+msgstr "निरीक्षित स्थिती"
+
+#: core/templates/vaultops/workbench.html:14
+msgid "Operations / Vault Workbench"
+msgstr "संचालन / तिजोरी कार्यपटल"
+
+#: core/templates/vaultops/workbench.html:40
+#| msgid "Owner review"
+msgid "Overview"
+msgstr "आढावा"
+
+#: core/templates/vaultops/workbench.html:273
+msgid "Owner tokens and raw lease records are never sent to the browser. Recovery requires a separately guarded operator flow."
+msgstr "मालक टोकन आणि कच्च्या भाडेपट्टा नोंदी ब्राउझरला कधीही पाठवल्या जात नाहीत. पुनर्प्राप्तीसाठी स्वतंत्र संरक्षित प्रक्रिया आवश्यक आहे."
+
+#: core/templates/vaultops/workbench.html:102
+msgid "Pending epoch"
+msgstr "प्रलंबित कालखंड"
+
+#: core/templates/vaultops/workbench.html:24
+#| msgid "Operations summary"
+msgid "Persistent operations summary"
+msgstr "कायम संचालन सारांश"
+
+#: core/templates/vaultops/workbench.html:154
+msgid "Plan a restore"
+msgstr "पुनर्संचयनाची योजना करा"
+
+#: core/templates/vaultops/workbench.html:98
+msgid "Policy"
+msgstr "धोरण"
+
+#: core/templates/vaultops/workbench.html:251
+msgid "Posture"
+msgstr "सुरक्षा स्थिती"
+
+#: core/templates/vaultops/workbench.html:140
+msgid "Prepare promotion confirmation"
+msgstr "अधिकृत करण्याच्या पुष्टीची तयारी करा"
+
+#: core/templates/vaultops/workbench.html:186
+msgid "Prepare staging activation"
+msgstr "चाचणी वातावरण सक्रियकरणाची तयारी करा"
+
+#: core/templates/vaultops/workbench.html:69
+msgid "Prepared locally"
+msgstr "स्थानिकरीत्या तयार"
+
+#: core/templates/vaultops/workbench.html:86
+#| msgid "Production Source"
+msgid "Production activation"
+msgstr "उत्पादन सक्रियकरण"
+
+#: core/templates/vaultops/workbench.html:82
+msgid "Profile"
+msgstr "प्रोफाइल"
+
+#: core/templates/vaultops/workbench.html:99
+#| msgid "Production Source"
+msgid "Promotion policy"
+msgstr "अधिकृत करण्याचे धोरण"
+
+#: core/templates/vaultops/workbench.html:105
+msgid "Publish a candidate"
+msgstr "उमेदवार प्रकाशित करा"
+
+#: core/templates/vaultops/workbench.html:111
+msgid "Queue publish-only sync"
+msgstr "केवळ-प्रकाशन समक्रमण रांगेत लावा"
+
+#: core/templates/vaultops/workbench.html:168
+msgid "Queue restore preparation"
+msgstr "पुनर्संचयन तयारी रांगेत लावा"
+
+#: core/templates/dashboard_settings.html:185
+#: core/templates/vaultops/workbench.html:251
+#| msgid "Ready"
+msgid "Read only"
+msgstr "केवळ-वाचन"
+
+#: core/templates/vaultops/workbench.html:79
+msgid "Readiness and controls"
+msgstr "तयारी आणि नियंत्रणे"
+
+#: core/templates/vaultops/workbench.html:271
+msgid "Reason"
+msgstr "कारण"
+
+#: core/templates/vaultops/workbench.html:266
+msgid "Redacted ownership"
+msgstr "गोपनीय तपशील वगळलेली मालकी"
+
+#: core/templates/vaultops/workbench.html:29
+#| msgid "Authoritative"
+msgid "Remote authoritative"
+msgstr "दूरस्थ अधिकृत संच"
+
+#: core/templates/vaultops/workbench.html:66
+msgid "Remote authority"
+msgstr "दूरस्थ अधिकृत स्थिती"
+
+#: core/templates/vaultops/workbench.html:16
+msgid "Remote authority, restore preparation, runtime state, jobs, and configuration are shown as separate evidence."
+msgstr "दूरस्थ अधिकृत स्थिती, पुनर्संचयन तयारी, कार्यरत स्थिती, कार्ये आणि संरचना स्वतंत्र पुरावा म्हणून दाखवली आहेत."
+
+#: core/templates/vaultops/workbench.html:83
+msgid "Remote inventory"
+msgstr "दूरस्थ सूची"
+
+#: core/templates/vaultops/workbench.html:154
+msgid "Remote to quarantine"
+msgstr "दूरस्थ स्रोत ते विलगीकरण"
+
+#: core/templates/vaultops/workbench.html:214
+msgid "Request cancellation"
+msgstr "रद्द करण्याची विनंती करा"
+
+#: core/templates/vaultops/confirmation.html:21
+msgid "Required confirmation phrase"
+msgstr "आवश्यक पुष्टीकरण वाक्यांश"
+
+#: core/templates/vaultops/workbench.html:43
+msgid "Restore & Activation"
+msgstr "पुनर्संचयन आणि सक्रियकरण"
+
+#: core/templates/vaultops/workbench.html:167
+msgid "Restore prepares quarantine and an immutable runtime workspace. It never activates automatically."
+msgstr "पुनर्संचयन विलगीकरण आणि अपरिवर्तनीय कार्यरत कार्यक्षेत्र तयार करते. ते कधीही आपोआप सक्रिय होत नाही."
+
+#: core/templates/vaultops/workbench.html:173
+#| msgid "Restore Source"
+msgid "Restore workspaces"
+msgstr "पुनर्संचयन कार्यक्षेत्रे"
+
+#: core/templates/vaultops/workbench.html:221
+msgid "Retry from checkpoint"
+msgstr "तपासणी बिंदूपासून पुन्हा प्रयत्न करा"
+
+#: core/templates/vaultops/confirmation.html:14
+msgid "Review the action and observed-state binding. This challenge can be used once and expires shortly."
+msgstr "कार्यवाही आणि निरीक्षित स्थितीशी असलेली जोडणी तपासा. हे पुष्टीकरण एकदाच वापरता येते आणि लवकरच कालबाह्य होते."
+
+#: core/templates/vaultops/workbench.html:258
+msgid "Run read-only probe"
+msgstr "केवळ-वाचन तपासणी चालवा"
+
+#: core/templates/dashboard_settings.html:185
+#: core/templates/vaultops/workbench.html:129
+msgid "Runtime"
+msgstr "कार्यरत प्रणाली"
+
+#: core/templates/vaultops/workbench.html:72
+msgid "Runtime authority"
+msgstr "कार्यरत अधिकृत स्थिती"
+
+#: core/templates/vaultops/workbench.html:28
+#| msgid "Available generation"
+msgid "Runtime generation"
+msgstr "कार्यरत निर्मिती संच"
+
+#: core/templates/vaultops/workbench.html:84
+#| msgid "Index readiness"
+msgid "Runtime readiness"
+msgstr "कार्यरत प्रणालीची तयारी"
+
+#: core/templates/vaultops/workbench.html:243
+msgid "Server-approved sources"
+msgstr "सर्व्हरने मान्य केलेले स्रोत"
+
+#: core/templates/vaultops/workbench.html:100
+#| msgid "Source documents"
+msgid "Source epoch"
+msgstr "स्रोत आवृत्ती कालखंड"
+
+#: core/templates/vaultops/workbench.html:95
+#| msgid "Source documents"
+msgid "Source to candidate"
+msgstr "स्रोत ते उमेदवार"
+
+#: core/templates/vaultops/workbench.html:97
+#: core/templates/vaultops/workbench.html:268
+#| msgid "Status"
+msgid "State"
+msgstr "स्थिती"
+
+#: core/templates/vaultops/confirmation.html:28
+msgid "Submit confirmed operation"
+msgstr "पुष्टी केलेली कार्यवाही सादर करा"
+
+#: core/templates/vaultops/confirmation.html:17
+msgid "Target"
+msgstr "लक्ष्य"
+
+#: core/templates/vaultops/workbench.html:106
+msgid "This queues a consistent snapshot and immutable candidate. It does not move the authoritative pointer."
+msgstr "यामुळे सुसंगत स्नॅपशॉट आणि अपरिवर्तनीय उमेदवार रांगेत जातो. अधिकृत निर्देशांक बदलत नाही."
+
+#: core/templates/vaultops/workbench.html:63
+msgid "Trust chain"
+msgstr "विश्वास साखळी"
+
+#: core/templates/vaultops/confirmation.html:13
+msgid "Type the confirmation phrase"
+msgstr "पुष्टीकरण वाक्यांश टाइप करा"
+
+#: core/templates/vaultops/workbench.html:31
+#| msgid "Unknown owner"
+msgid "Unknown or different"
+msgstr "अज्ञात किंवा भिन्न"
+
+#: core/templates/base.html:67 core/templates/vaultops/workbench.html:128
+msgid "Vault"
+msgstr "कलाकृती तिजोरी"
+
+#: core/templates/vaultops/workbench.html:15
+#| msgid "Document operations"
+msgid "Vault Operations Workbench"
+msgstr "तिजोरी संचालन कार्यपटल"
+
+#: core/templates/vaultops/workbench.html:4
+#| msgid "Operations Cockpit - CC & RCS Maharashtra"
+msgid "Vault Operations Workbench — CC & RCS Maharashtra"
+msgstr "तिजोरी संचालन कार्यपटल — सीसी आणि आरसीएस महाराष्ट्र"
+
+#: core/templates/vaultops/workbench.html:201
+msgid "Vault jobs"
+msgstr "तिजोरी कार्ये"
+
+#: core/templates/vaultops/workbench.html:243
+#| msgid "Validate Files"
+msgid "Vault profiles"
+msgstr "तिजोरी प्रोफाइल"
+
+#: core/templates/vaultops/workbench.html:39
+msgid "Workbench sections"
+msgstr "कार्यपटल विभाग"
+
+#: core/templates/vaultops/workbench.html:251
+msgid "Write capable"
+msgstr "लेखन-सक्षम"
+
+#: core/templates/vaultops/workbench.html:34
+#: core/templates/vaultops/workbench.html:266
+#| msgid "Release"
+msgid "Writer lease"
+msgstr "लेखक भाडेपट्टा"
+
+#: core/templates/vaultops/workbench.html:178
+#| msgid "Subject"
+msgid "objects"
+msgstr "वस्तू"

@@ -2,7 +2,7 @@
 
 **Status:** Active
 **Audience:** Authorized administrators and superadmins
-**Last verified:** 2026-07-25
+**Last verified:** 2026-07-26
 **Related:** [`CLIENT_USER_MANUAL.md`](CLIENT_USER_MANUAL.md), [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md)
 
 ## What the console is for
@@ -50,9 +50,29 @@ retryable work. Bulk indexing and OCR repair are durable maintenance jobs; do
 not turn them into repeated browser submissions. Preserve cancellation,
 retry, and per-item failure evidence.
 
+Superadmins use the **Vault Operations Workbench** under Operations for vault
+and runtime custody. Its persistent summary deliberately shows remote
+authoritative generation, locally prepared workspace, runtime generation,
+Active Sync, writer lease, and critical job as independent evidence. Unknown
+or different values are warnings; the newest generation is never assumed to
+be authoritative.
+
+Active Sync creates an immutable candidate without moving the authoritative
+pointer. Promotion and staging activation require a fresh, one-use typed
+confirmation bound to the observed state. Restore downloads into quarantine
+and prepares an immutable runtime workspace; it never activates automatically.
+Production activation and garbage collection remain hard-disabled.
+
+All critical Workbench actions are ordinary server-rendered forms and remain
+available without JavaScript. Refresh the page to update evidence when
+JavaScript is disabled. The browser receives only redacted profile and lease
+evidence—never credentials, raw owner tokens, or raw object-store errors.
+
 Vault, generation, settings, and data controls are superadmin-sensitive. Read
-the deployment and data-custody runbooks before any restore, promotion, or
-destructive action. Never run production cleanup from a local browser session.
+the deployment and data-custody runbooks before any restore or promotion.
+Legacy Promote, Rollback, and Purge controls no longer relabel or delete data;
+use the guarded Workbench flow. Never run production cleanup from a local
+browser session.
 
 ## Destructive actions and support
 

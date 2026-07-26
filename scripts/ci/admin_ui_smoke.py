@@ -42,6 +42,19 @@ def main():
     require(PASSWORD_PATH.exists(), f"missing password file: {PASSWORD_PATH}")
     password = PASSWORD_PATH.read_text(encoding="utf-8")
     user_model = get_user_model()
+    operator = user_model.objects.get(username=USERNAME)
+    operator.role = "superadmin"
+    operator.is_staff = True
+    operator.is_superuser = True
+    operator.is_active = True
+    operator.save(
+        update_fields=[
+            "role",
+            "is_staff",
+            "is_superuser",
+            "is_active",
+        ]
+    )
 
     user_model.objects.filter(username=CREATED_USER).delete()
     Folder.objects.filter(name__in=[FOLDER_NAME, RENAMED_FOLDER_NAME]).delete()
@@ -78,6 +91,58 @@ def main():
             and ("No categories yet" in dashboard.text or "admin-category-card" in dashboard.text),
             "dashboard UI missing",
         )
+
+        operations = client.get("/dashboard/operations/")
+        require(
+            operations.status_code == 200
+            and "Vault Operations Workbench" in operations.text
+            and "Authority comparison" in operations.text
+            and "vendor/bootstrap/5.3.0" in operations.text
+            and "cdn.jsdelivr.net" not in operations.text,
+            "vault operations workbench missing or externally dependent",
+        )
+        sync = client.get("/dashboard/operations/?section=sync")
+        require(
+            sync.status_code == 200
+            and "Queue publish-only sync" in sync.text
+            and 'method="post"' in sync.text,
+            "no-JavaScript Active Sync form missing",
+        )
+        state = client.get("/dashboard/operations/api/v1/state/")
+        require(state.status_code == 200, "workbench state API failed")
+        state_payload = state.json()
+        require(
+            "state_version" in state_payload
+            and "correlation_id" in state_payload
+            and "owner_token" not in state.text,
+            "workbench state contract or redaction failed",
+        )
+        token = csrf_token(operations.text)
+        marathi = client.post(
+            "/i18n/setlang/",
+            data={
+                "csrfmiddlewaretoken": token,
+                "language": "mr",
+                "next": "/dashboard/operations/",
+            },
+        )
+        require(marathi.status_code == 302, "Marathi switch failed")
+        operations_mr = client.get("/dashboard/operations/")
+        require(
+            operations_mr.status_code == 200
+            and "तिजोरी संचालन कार्यपटल" in operations_mr.text,
+            "reviewed Marathi workbench language missing",
+        )
+        token = csrf_token(operations_mr.text)
+        english = client.post(
+            "/i18n/setlang/",
+            data={
+                "csrfmiddlewaretoken": token,
+                "language": "en",
+                "next": "/dashboard/",
+            },
+        )
+        require(english.status_code == 302, "English switch failed")
 
         token = csrf_token(dashboard.text)
         create = client.post(
@@ -189,7 +254,11 @@ def main():
         new_user.refresh_from_db()
         require(new_user.is_active is False, "toggle user did not persist")
 
-    print("admin http smoke passed: login dashboard category keywords rename folder pdf view users register toggle")
+    print(
+        "admin http smoke passed: login dashboard vault workbench "
+        "English/Marathi no-JS category keywords rename folder pdf view "
+        "users register toggle"
+    )
 
 
 if __name__ == "__main__":

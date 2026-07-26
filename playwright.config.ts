@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './browser_tests',
   timeout: 30000,
   use: {
-    baseURL: 'http://localhost:8000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8000',
     channel: 'chrome',
     headless: true,
     screenshot: 'only-on-failure',
