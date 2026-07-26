@@ -118,6 +118,52 @@ def metrics_view(request):
         gauge("pdfsearch_backup_role", 1 if env_identity.is_backup_writer else 0)
         gauge("pdfsearch_is_production", 1 if env_identity.is_production else 0)
 
+    if getattr(settings, "VAULT_SYNC_ENABLED", False):
+        try:
+            from vaultops.models import (
+                SourceMutationState,
+                SourceSnapshot,
+                VaultJob,
+            )
+
+            source = SourceMutationState.objects.filter(
+                deployment_id=env_identity.deployment_id
+            ).first()
+            gauge(
+                "pdfsearch_vault_source_mutation_epoch",
+                source.current_epoch if source else 0,
+                "Current durable source mutation epoch",
+            )
+            gauge(
+                "pdfsearch_vault_source_mutation_lag_seconds",
+                _age_seconds(source.last_mutation_at)
+                if source and source.last_mutation_at
+                else 0,
+                "Age of the latest source mutation",
+            )
+            gauge(
+                "pdfsearch_vault_job_queue_depth",
+                VaultJob.objects.filter(
+                    status__in=("queued", "claimed", "running", "waiting")
+                ).count(),
+                "Durable vault control-plane queue depth",
+            )
+            latest_snapshot = SourceSnapshot.objects.filter(
+                state="finalized"
+            ).order_by("-finalized_at").first()
+            gauge(
+                "pdfsearch_vault_snapshot_last_success_timestamp",
+                latest_snapshot.finalized_at.timestamp()
+                if latest_snapshot and latest_snapshot.finalized_at
+                else 0,
+                "Unix timestamp of the latest coherent source snapshot",
+            )
+        except Exception:
+            gauge("pdfsearch_vault_source_mutation_epoch", 0)
+            gauge("pdfsearch_vault_source_mutation_lag_seconds", 0)
+            gauge("pdfsearch_vault_job_queue_depth", 0)
+            gauge("pdfsearch_vault_snapshot_last_success_timestamp", 0)
+
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain; charset=utf-8")
 
 

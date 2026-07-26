@@ -30,6 +30,7 @@ services:
       - CONTROL_DB_PATH=/app/data-control/control.sqlite3
       - SQLITE_DB_PATH=/app/data/db.sqlite3
       - MEDIA_ROOT=/app/data/media
+      - PDF_CACHE_DIR=/app/data/pdf_cache
       - STATIC_ROOT=/app/data/staticfiles
       - FAISS_INDEX_DIR=/app/data/faiss_indexes
       - CHROMA_DIR=/app/data/chroma_db
@@ -45,6 +46,10 @@ services:
       - DATA_MODE=${DATA_MODE:-empty}
       - BACKUP_ROLE=${BACKUP_ROLE:-disabled}
       - BACKUP_SYNC_MODE=${BACKUP_SYNC_MODE:-manual}
+      - VAULT_SYNC_ENABLED=${VAULT_SYNC_ENABLED:-0}
+      - VAULT_SYNC_MODE=${VAULT_SYNC_MODE:-manual}
+      - VAULT_SYNC_PROMOTION_MODE=${VAULT_SYNC_PROMOTION_MODE:-manual}
+      - VAULT_SNAPSHOT_ROOT=/app/data-control/snapshots
       - EXTERNAL_SIDE_EFFECTS_MODE=${EXTERNAL_SIDE_EFFECTS_MODE:-sandbox}
       - DEBUG=True
       - ALLOW_INSECURE_DEFAULTS=1
