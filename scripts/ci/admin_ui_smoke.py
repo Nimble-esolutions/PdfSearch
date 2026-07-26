@@ -215,7 +215,8 @@ def main():
         users = client.get("/dashboard/users/")
         require(users.status_code == 200, f"user list failed: {users.status_code}")
         require(
-            "Registered Users" in users.text
+            "Users &amp; Access" in users.text
+            and "Account directory" in users.text
             and "Current user" in users.text
             and USERNAME in users.text,
             "user list UI missing",
