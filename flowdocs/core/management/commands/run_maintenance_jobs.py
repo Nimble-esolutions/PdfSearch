@@ -139,7 +139,10 @@ class Command(BaseCommand):
         signal.signal(signal.SIGINT, _handle_shutdown)
 
         recovered = _recover_orphaned_jobs()
-        if getattr(settings, "VAULT_SYNC_ENABLED", False):
+        if (
+            getattr(settings, "VAULT_SYNC_ENABLED", False)
+            or getattr(settings, "VAULT_RESTORE_ENABLED", False)
+        ):
             from vaultops.services.jobs import recover_stale_jobs
 
             recovered += len(
@@ -167,7 +170,10 @@ class Command(BaseCommand):
                 last_scheduler_eval = now
 
             vault_claim = None
-            if getattr(settings, "VAULT_SYNC_ENABLED", False):
+            if (
+                getattr(settings, "VAULT_SYNC_ENABLED", False)
+                or getattr(settings, "VAULT_RESTORE_ENABLED", False)
+            ):
                 from vaultops.services.jobs import claim_next_job as claim_next_vault_job
                 from vaultops.services.sync import worker_identity
 

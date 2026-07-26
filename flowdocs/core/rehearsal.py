@@ -65,6 +65,7 @@ def rehearse_migrations(
     *,
     workspace_path: str | Path = "",
     timeout_seconds: int = 120,
+    promote_to: str | Path | None = None,
 ) -> dict[str, Any]:
     """Migrate a private database copy in another Python process.
 
@@ -126,6 +127,13 @@ def rehearse_migrations(
     if not foreign_keys_ok:
         raise RehearsalError("migration_rehearsal_foreign_keys_failed")
     after = _migration_leaf(rehearsal_db)
+    if promote_to is not None:
+        destination = Path(promote_to).resolve()
+        temporary = destination.with_name(
+            f".{destination.name}.rehearsed.partial"
+        )
+        shutil.copy2(rehearsal_db, temporary)
+        os.replace(temporary, destination)
     return {
         "success": True,
         "migration_leaf_before": before,

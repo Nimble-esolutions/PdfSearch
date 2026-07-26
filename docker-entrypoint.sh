@@ -27,10 +27,13 @@ mkdir -p \
     "$VAULT_RESTORE_ROOT" \
     "$RUNTIME_GENERATIONS_ROOT"
 
-chown -R appuser:appuser "$DATA_ROOT" 2>/dev/null || true
-chown -R appuser:appuser "$DATA_CONTROL_ROOT" 2>/dev/null || true
-chmod -R 770 "$DATA_ROOT" 2>/dev/null || true
-chmod -R 770 "$DATA_CONTROL_ROOT" 2>/dev/null || true
+chown appuser:appuser "$DATA_ROOT" "$DATA_CONTROL_ROOT" 2>/dev/null || true
+for mutable_path in \
+    "$MEDIA_ROOT" "$PDF_CACHE_DIR" "$CHROMA_DIR" "$FAISS_INDEX_DIR" \
+    "$BACKUP_DIR" "$STATIC_ROOT"; do
+    chown -R appuser:appuser "$mutable_path" 2>/dev/null || true
+done
+chmod 770 "$DATA_ROOT" "$DATA_CONTROL_ROOT" 2>/dev/null || true
 
 test -w "$DATA_ROOT" || {
     echo "[entrypoint] ERROR: DATA_ROOT=$DATA_ROOT is not writable" >&2

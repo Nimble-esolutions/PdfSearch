@@ -22,6 +22,20 @@ SEED_VALIDATION_MARKER="$DATA_ROOT/.declared_seed_validation.pending"
 DATA_BOOTSTRAP_MODE="${DATA_BOOTSTRAP_MODE:-strict}"
 SEED_DB_COPIED=0
 
+if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
+    for mutation_switch in IMPORT_LEGACY_DATA RUN_JSON_MIGRATIONS CREATE_SUPERUSER; do
+        if [ "${!mutation_switch:-0}" = "1" ]; then
+            echo "[activation] ERROR: $mutation_switch cannot mutate an immutable runtime" >&2
+            exit 1
+        fi
+    done
+    DB_PATH="$(python /app/flowdocs/runtime_paths_cli.py database)"
+    MEDIA_DIR="$(python /app/flowdocs/runtime_paths_cli.py media)"
+    PDF_CACHE_DIR="$(python /app/flowdocs/runtime_paths_cli.py pdf_cache)"
+    FAISS_DIR="$(python /app/flowdocs/runtime_paths_cli.py faiss)"
+    CHROMA_DIR="$(python /app/flowdocs/runtime_paths_cli.py chroma)"
+fi
+
 export DATA_ROOT DATA_CONTROL_ROOT CONTROL_DB_PATH DB_PATH MEDIA_DIR PDF_CACHE_DIR FAISS_DIR CHROMA_DIR STATIC_DIR BACKUP_DIR VAULT_RESTORE_ROOT RUNTIME_GENERATIONS_ROOT
 export DATA_BOOTSTRAP_MODE
 export SECRET_KEY="${SECRET_KEY:-}"
@@ -148,8 +162,20 @@ if [ "${RUN_JSON_MIGRATIONS:-0}" = "1" ] && [ -x /usr/local/bin/apply_sqlite_jso
     python /usr/local/bin/apply_sqlite_json.py
 fi
 
-echo "[migrate] Running application database migrations"
-python manage.py migrate --noinput
+if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
+    echo "[migrate] Verifying immutable runtime has no pending migrations"
+    python manage.py shell -c '
+import sys
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+executor = MigrationExecutor(connection)
+pending = executor.migration_plan(executor.loader.graph.leaf_nodes())
+sys.exit(1 if pending else 0)
+'
+else
+    echo "[migrate] Running application database migrations"
+    python manage.py migrate --noinput
+fi
 echo "[migrate] Running stable control database migrations"
 python manage.py migrate --database control --noinput
 
@@ -203,17 +229,6 @@ if getattr(user, "role", None) != "superadmin":
 '
 fi
 
-echo "[activation] Reconciling incomplete activations..."
-python manage.py shell -c "
-from core.activation_journal import reconcile_incomplete_activations
-actions = reconcile_incomplete_activations()
-if actions:
-    for a in actions:
-        print(f'[activation] Recovery: {a[\"activation_id\"]} -> {a[\"action_taken\"]}')
-else:
-    print('[activation] No incomplete activations found')
-"
-
 if [ -n "$(ls -A "$CHROMA_DIR" 2>/dev/null)" ]; then
     echo "[chroma] $(find "$CHROMA_DIR" -type f | wc -l | tr -d ' ') files present"
 fi
@@ -232,14 +247,6 @@ if [ "${FIXTURE_BACKUP:-0}" = "1" ]; then
 fi
 
 echo "============================================================"
-echo "  Starting Gunicorn on 0.0.0.0:8000 (4 workers)"
+echo "  Starting web runtime supervisor"
 echo "============================================================"
-exec gunicorn \
-    --bind 0.0.0.0:8000 \
-    --workers "${GUNICORN_WORKERS:-4}" \
-    --max-requests "${GUNICORN_MAX_REQUESTS:-1000}" \
-    --max-requests-jitter "${GUNICORN_MAX_REQUESTS_JITTER:-50}" \
-    --timeout "${GUNICORN_TIMEOUT:-300}" \
-    --access-logfile - \
-    --error-logfile - \
-    flowdocs.wsgi:application
+exec python /app/flowdocs/runtime_supervisor.py --role web

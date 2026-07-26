@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 
 
 SANITIZATION_POLICY_V1 = "pdfsearch-sanitize/v1"
@@ -35,6 +36,7 @@ def sanitize_database(
     Transformations:
     - User emails: replace real domain with sanitized domain
     - User names: deterministic hash-based replacement
+    - Passwords: make every copied credential unusable
     - Sessions: delete all
     - Password reset tokens: nullify
     - Audit actor references: preserve referential integrity, hash names
@@ -71,10 +73,18 @@ def sanitize_database(
 
                 c.execute(
                     "UPDATE core_customuser SET username=?, email=?, first_name=?, "
-                    "last_name=?, is_active=1 WHERE id=?",
-                    (sanitized_username, sanitized_email, sanitized_first, sanitized_last, user_id),
+                    "last_name=?, password=?, is_active=1 WHERE id=?",
+                    (
+                        sanitized_username,
+                        sanitized_email,
+                        sanitized_first,
+                        sanitized_last,
+                        f"!sanitized-{_hash_id(user_id, dataset_id)}",
+                        user_id,
+                    ),
                 )
             stats["users_sanitized"] = len(users)
+            stats["passwords_disabled"] = len(users)
 
         for session_table in ("django_session",):
             c.execute(
@@ -116,7 +126,79 @@ def sanitize_database(
     }
 
 
-def validate_sanitization(database_path: Path) -> list[str]:
+def provision_recovery_superadmin(
+    database_path: Path,
+    *,
+    username: str,
+    password: str,
+) -> dict[str, Any]:
+    """Provision exactly one known recovery login in a sanitized database.
+
+    The credential is written only to the isolated runtime copy. It is never
+    returned in evidence, and every other copied password remains unusable.
+    """
+    if not username or not password:
+        raise ValueError("recovery_superadmin_credentials_required")
+    conn = sqlite3.connect(str(database_path))
+    try:
+        columns = {
+            row[1]
+            for row in conn.execute(
+                'PRAGMA table_info("core_customuser")'
+            ).fetchall()
+        }
+        required = {
+            "id",
+            "username",
+            "password",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "role",
+        }
+        if not required.issubset(columns):
+            raise ValueError("recovery_superadmin_schema_unsupported")
+        row = conn.execute(
+            "SELECT id FROM core_customuser "
+            "ORDER BY CASE WHEN username=? THEN 0 "
+            "WHEN is_superuser=1 THEN 1 ELSE 2 END, id LIMIT 1",
+            (username,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("recovery_superadmin_source_user_missing")
+        user_id = row[0]
+        values = {
+            "username": username,
+            "password": make_password(password),
+            "is_active": 1,
+            "is_staff": 1,
+            "is_superuser": 1,
+            "role": "superadmin",
+        }
+        if "email" in columns:
+            values["email"] = (
+                f"recovery@{DEFAULT_SANITIZED_DOMAIN}"
+            )
+        assignments = ", ".join(f'"{key}"=?' for key in values)
+        conn.execute(
+            f'UPDATE core_customuser SET {assignments} WHERE id=?',
+            (*values.values(), user_id),
+        )
+        conn.commit()
+        return {
+            "provisioned": True,
+            "user_id": user_id,
+            "credentials_exposed": False,
+        }
+    finally:
+        conn.close()
+
+
+def validate_sanitization(
+    database_path: Path,
+    *,
+    recovery_username: str = "",
+) -> list[str]:
     """Verify that a database has been properly sanitized.
 
     Returns a list of issues. An empty list means the database passes validation.
@@ -137,6 +219,19 @@ def validate_sanitization(database_path: Path) -> list[str]:
             if host and host not in (DEFAULT_SANITIZED_DOMAIN,):
                 if not host.endswith(".internal"):
                     issues.append("non_sanitized_email_domain")
+
+        c.execute("PRAGMA table_info('core_customuser')")
+        columns = {row[1] for row in c.fetchall()}
+        if "password" in columns:
+            c.execute(
+                "SELECT username, password FROM core_customuser"
+            )
+            for username, password in c.fetchall():
+                if username == recovery_username:
+                    continue
+                if not str(password or "").startswith("!"):
+                    issues.append("copied_user_password_usable")
+                    break
 
         c.execute(
             "SELECT session_key FROM django_session LIMIT 1"

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.contrib.auth.hashers import check_password
 
 from core.artifact_vault import ArtifactVault, VaultConfig
 from core.namespace import KeyBuilder
@@ -129,11 +130,14 @@ def database_bytes():
         connection.execute(
             "CREATE TABLE core_customuser ("
             "id INTEGER PRIMARY KEY, username TEXT, email TEXT, "
-            "first_name TEXT, last_name TEXT, is_active INTEGER)"
+            "first_name TEXT, last_name TEXT, password TEXT, "
+            "is_active INTEGER, is_staff INTEGER, "
+            "is_superuser INTEGER, role TEXT)"
         )
         connection.execute(
             "INSERT INTO core_customuser VALUES "
-            "(1, 'operator', 'operator@example.org', 'Ops', 'User', 1)"
+            "(1, 'operator', 'operator@example.org', 'Ops', 'User', "
+            "'copied-password-hash', 1, 1, 1, 'superadmin')"
         )
         connection.execute(
             "CREATE TABLE django_session (session_key TEXT PRIMARY KEY)"
@@ -408,6 +412,8 @@ class InventoryAndRestoreTests(TestCase):
         VAULT_RESTORE_REQUIRE_SANITIZATION=True,
         VAULT_RESTORE_MIN_FREE_BYTES=0,
         VAULT_RESTORE_MIN_FREE_INODES=0,
+        ACTIVATION_RECOVERY_SUPERADMIN_USERNAME="recovery",
+        ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD="staging-recovery-password",
     )
     def test_restore_sanitizes_prepared_copy_and_never_activates(self):
         job = self._job()
@@ -451,12 +457,26 @@ class InventoryAndRestoreTests(TestCase):
             runtime_sessions = runtime.execute(
                 "SELECT COUNT(*) FROM django_session"
             ).fetchone()[0]
+            runtime_user = runtime.execute(
+                "SELECT username, password, is_superuser, role "
+                "FROM core_customuser"
+            ).fetchone()
         finally:
             quarantine.close()
             runtime.close()
         self.assertEqual(original_email, "operator@example.org")
         self.assertTrue(sanitized_email.endswith(".internal"))
         self.assertEqual(runtime_sessions, 0)
+        self.assertEqual(runtime_user[0], "recovery")
+        self.assertTrue(
+            check_password("staging-recovery-password", runtime_user[1])
+        )
+        self.assertEqual(runtime_user[2:], (1, "superadmin"))
+        self.assertTrue(
+            workspace.sanitization_evidence["stats"][
+                "recovery_superadmin_provisioned"
+            ]
+        )
         self.assertTrue(workspace.sanitization_evidence["validated"])
         self.assertEqual(
             (Path(workspace.runtime_path).stat().st_mode & 0o222), 0

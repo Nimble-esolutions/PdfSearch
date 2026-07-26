@@ -14,10 +14,19 @@ mkdir -p "$DATA_ROOT" "$DATA_ROOT/media/pdfs" "$DATA_ROOT/faiss_indexes" \
   "$PDF_CACHE_DIR" "$DATA_ROOT/chroma_db" \
   "$DATA_ROOT/backups/json_backups" "$DATA_CONTROL_ROOT" \
   "$VAULT_RESTORE_ROOT" "$RUNTIME_GENERATIONS_ROOT"
-chown -R appuser:appuser "$DATA_ROOT" 2>/dev/null || true
-chown -R appuser:appuser "$DATA_CONTROL_ROOT" 2>/dev/null || true
+chown appuser:appuser "$DATA_ROOT" "$DATA_CONTROL_ROOT" 2>/dev/null || true
 
-gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py migrate --noinput'
+if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
+  gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py shell -c "
+import sys
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+executor = MigrationExecutor(connection)
+sys.exit(1 if executor.migration_plan(executor.loader.graph.leaf_nodes()) else 0)
+"'
+else
+  gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py migrate --noinput'
+fi
 gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py migrate --database control --noinput'
 
-exec gosu appuser:appuser bash -lc 'cd /app/flowdocs && python manage.py run_maintenance_jobs'
+exec gosu appuser:appuser bash -lc 'cd /app/flowdocs && python runtime_supervisor.py --role maintenance'
