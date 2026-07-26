@@ -193,43 +193,44 @@ def release_global_writer(
     *,
     writer_record: dict[str, Any],
 ) -> None:
-    """Expire this holder's writer record with ownership-checked CAS.
-
-    A blind delete can remove a successor that acquired authority after this
-    caller's lease expired. Re-read and validate the token/epoch, then replace
-    only the exact record observed by this holder.
-    """
+    """Expire only the caller's current writer authority using exact CAS."""
     key = _writer_key(dataset_id)
+    current = _read_writer_record(vault, key)
+    if current is None:
+        raise GlobalWriterConflict("Cannot verify global writer before release")
+    caller_token_hash = _token_hash(writer_record.get("_token", ""))
+    if (
+        not caller_token_hash
+        or current.get("owner_token_hash") != caller_token_hash
+        or current.get("writer_epoch") != writer_record.get("writer_epoch")
+    ):
+        raise GlobalWriterConflict("Global writer ownership changed before release")
+    expected_etag = current.get("_etag", "")
+    if not expected_etag:
+        raise GlobalWriterConflict("Global writer has no ETag for conditional release")
+    released = {
+        key: value
+        for key, value in current.items()
+        if not key.startswith("_")
+    }
+    released["heartbeat_at"] = time.time()
+    released["expires_at"] = 0
+    released["released_at"] = datetime.now(timezone.utc).isoformat()
+    data = json.dumps(released, sort_keys=True).encode()
+    digest = hashlib.sha256(data).hexdigest()
     try:
-        current = validate_writer_for_publication(
-            vault,
-            dataset_id,
-            writer_record=writer_record,
-            production_source_id=writer_record.get("production_source_id", ""),
-            instance_id=writer_record.get("instance_id", ""),
-            expected_epoch=writer_record.get("writer_epoch"),
-        )
-        expected_etag = current.pop("_etag", "")
-        if not expected_etag:
-            return
-        now = time.time()
-        current["heartbeat_at"] = now
-        current["expires_at"] = now
-        current["released_at"] = now
-        data = json.dumps(current, sort_keys=True).encode()
-        digest = hashlib.sha256(data).hexdigest()
         vault.client.put_object(
             Bucket=vault.config.bucket,
             Key=key,
             Body=data,
             ContentType="application/json",
-            Metadata={"sha256": digest, "control": "writer"},
+            Metadata={"sha256": digest},
             IfMatch=expected_etag,
         )
-    except Exception:
-        # Ownership changed, the lease expired, or the endpoint rejected the
-        # CAS. Never fall back to deletion; bounded expiry is the safe outcome.
-        pass
+    except Exception as exc:
+        raise GlobalWriterConflict(
+            "Global writer ownership changed during release"
+        ) from exc
 
 
 def get_global_writer(
@@ -278,6 +279,7 @@ def validate_writer_for_publication(
             f"got {current.get('writer_epoch')}"
         )
 
+    current["_token"] = writer_record.get("_token", "")
     return current
 
 
@@ -286,9 +288,26 @@ def _read_writer_record(
 ) -> dict[str, Any] | None:
     try:
         resp = vault.client.get_object(Bucket=vault.config.bucket, Key=key)
+    except Exception as exc:
+        response = getattr(exc, "response", {}) or {}
+        error = response.get("Error", {}) or {}
+        if str(error.get("Code", "")) in {
+            "404",
+            "NoSuchKey",
+            "NotFound",
+        }:
+            return None
+        raise GlobalWriterError("global_writer_read_failed") from exc
+    try:
         data = resp["Body"].read()
         record = json.loads(data)
-        record["_etag"] = resp.get("ETag", "")
-        return record
-    except Exception:
-        return None
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
+        raise GlobalWriterError("global_writer_record_malformed") from exc
+    if not isinstance(record, dict):
+        raise GlobalWriterError("global_writer_record_malformed")
+    digest = hashlib.sha256(data).hexdigest()
+    stored_digest = (resp.get("Metadata") or {}).get("sha256", "")
+    if stored_digest and stored_digest != digest:
+        raise GlobalWriterError("global_writer_digest_mismatch")
+    record["_etag"] = resp.get("ETag", "")
+    return record

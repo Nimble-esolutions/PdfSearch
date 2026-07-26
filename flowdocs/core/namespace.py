@@ -78,6 +78,18 @@ class KeyBuilder:
         _validate_sha256(sha256)
         return f"{self.prefix()}/blobs/faiss/{sha256}.index"
 
+    def content_blob(self, category: str, sha256: str, extension: str = "") -> str:
+        _validate_safe_component(category, "blob category")
+        _validate_sha256(sha256)
+        if extension:
+            _validate_safe_component(extension, "blob extension")
+            suffix = f".{extension}"
+        else:
+            suffix = ""
+        return (
+            f"{self.prefix()}/blobs/{category}/sha256/{sha256}{suffix}"
+        )
+
     @staticmethod
     def legacy_pdf_key(sha256: str) -> str:
         _validate_sha256(sha256)
