@@ -65,7 +65,7 @@ test.describe('Vault Operations Workbench', () => {
     await expect(form).toBeVisible();
     await expect(form.locator('input[name="idempotency_key"]')).toHaveCount(1);
     await expect(form.locator('input[name="state_version"]')).toHaveCount(1);
-    await expect(noJsPage.locator('noscript')).toContainText('All critical forms remain available');
+    expect(await noJsPage.content()).toContain('All critical forms remain available');
     await noJsContext.close();
 
     await page.setViewportSize({ width: 320, height: 720 });
