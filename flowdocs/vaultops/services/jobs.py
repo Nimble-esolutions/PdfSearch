@@ -84,6 +84,21 @@ def claim_job(job_public_id, *, worker_id, now=None):
     return job, token
 
 
+def claim_next_job(*, worker_id, now=None):
+    candidate = (
+        VaultJob.objects.filter(status=VaultJob.Status.QUEUED)
+        .order_by("created_at")
+        .values_list("public_id", flat=True)
+        .first()
+    )
+    if candidate is None:
+        return None
+    try:
+        return claim_job(candidate, worker_id=worker_id, now=now)
+    except LifecycleConflict:
+        return None
+
+
 def start_job(job_public_id, *, token, fencing_epoch, now=None):
     now = now or timezone.now()
     with transaction.atomic(using=CONTROL_DB):
@@ -198,6 +213,125 @@ def request_cancellation(job_public_id, *, now=None):
             job_public_id=job.public_id,
             before_state={"job_state": previous},
             after_state={"job_state": requested},
+        )
+        return job
+
+
+def cancellation_requested(job_public_id):
+    return VaultJob.objects.filter(
+        public_id=job_public_id,
+        status=VaultJob.Status.CANCELLING,
+    ).exists()
+
+
+def complete_owned_job(
+    job_public_id,
+    *,
+    token,
+    fencing_epoch,
+    irreversible_completed=False,
+    now=None,
+):
+    now = now or timezone.now()
+    with transaction.atomic(using=CONTROL_DB):
+        job = VaultJob.objects.select_for_update().get(public_id=job_public_id)
+        _verify_owner(job, token, fencing_epoch)
+        requested = (
+            VaultJob.Status.SUCCEEDED
+            if job.status != VaultJob.Status.CANCELLING or irreversible_completed
+            else VaultJob.Status.CANCELLED
+        )
+        _guard_transition(
+            job.status,
+            requested,
+            JOB_TRANSITIONS,
+            "job_not_completable",
+        )
+        previous = job.status
+        job.status = requested
+        job.finished_at = now
+        job.heartbeat_at = now
+        job.claim_token_hash = ""
+        job.claimed_by = ""
+        job.state_version += 1
+        job.save(
+            update_fields=[
+                "status",
+                "finished_at",
+                "heartbeat_at",
+                "claim_token_hash",
+                "claimed_by",
+                "state_version",
+                "updated_at",
+            ]
+        )
+        append_event(
+            action="job_completed",
+            result=requested,
+            correlation_id=job.correlation_id,
+            actor_id=job.requested_by_id,
+            actor_name=job.requested_by_name,
+            job_public_id=job.public_id,
+            before_state={"job_state": previous},
+            after_state={"job_state": requested},
+        )
+        return job
+
+
+def fail_owned_job(
+    job_public_id,
+    *,
+    token,
+    fencing_epoch,
+    safe_error_code,
+    retryable=True,
+    now=None,
+):
+    now = now or timezone.now()
+    requested = (
+        VaultJob.Status.RETRYABLE_FAILED
+        if retryable
+        else VaultJob.Status.TERMINAL_FAILED
+    )
+    with transaction.atomic(using=CONTROL_DB):
+        job = VaultJob.objects.select_for_update().get(public_id=job_public_id)
+        _verify_owner(job, token, fencing_epoch)
+        _guard_transition(
+            job.status,
+            requested,
+            JOB_TRANSITIONS,
+            "job_not_failable",
+        )
+        previous = job.status
+        job.status = requested
+        job.safe_error_code = safe_error_code
+        job.finished_at = now
+        job.heartbeat_at = now
+        job.claim_token_hash = ""
+        job.claimed_by = ""
+        job.state_version += 1
+        job.save(
+            update_fields=[
+                "status",
+                "safe_error_code",
+                "finished_at",
+                "heartbeat_at",
+                "claim_token_hash",
+                "claimed_by",
+                "state_version",
+                "updated_at",
+            ]
+        )
+        append_event(
+            action="job_failed",
+            result=requested,
+            correlation_id=job.correlation_id,
+            actor_id=job.requested_by_id,
+            actor_name=job.requested_by_name,
+            job_public_id=job.public_id,
+            before_state={"job_state": previous},
+            after_state={"job_state": requested},
+            safe_error_code=safe_error_code,
         )
         return job
 

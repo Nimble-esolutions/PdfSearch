@@ -49,9 +49,6 @@ def _recover_orphaned_jobs():
     )
     recovered = 0
     for job in orphaned:
-        if job.kind == "sync_generation":
-            _release_writer_lock_for_orphaned_job(job)
-
         job.status = "queued"
         job.started_at = None
         job.save(update_fields=["status", "started_at"])
@@ -61,7 +58,7 @@ def _recover_orphaned_jobs():
             payload={
                 "previous_status": "running",
                 "started_at": str(cutoff),
-                "writer_lock_released": job.kind == "sync_generation",
+                "writer_lock_released": False,
                 "reason": "stale_running_job_recovered",
             },
         )
@@ -76,38 +73,6 @@ def _recover_orphaned_jobs():
     return recovered
 
 
-def _release_writer_lock_for_orphaned_job(job):
-    """Release any held global writer lock for an orphaned sync job."""
-    try:
-        from core.maintenance import get_global_writer, release_global_writer
-        from core.maintenance import get_lease_status as _get_lease_status
-
-        writer_status = get_global_writer()
-        if writer_status and writer_status.get("lease_held"):
-            lease_info = writer_status.get("lease", {})
-            held_by = lease_info.get("instance_id", "")
-            current_instance = os.environ.get("INSTANCE_ID", "")
-            if held_by == current_instance or not held_by:
-                release_global_writer(
-                    reason=f"Crash recovery for orphaned job {job.public_id}"
-                )
-                print(f"[worker] Released stale writer lock for job {job.public_id}")
-
-        try:
-            lease_status = _get_lease_status()
-            if lease_status and lease_status.get("held"):
-                held_by = lease_status.get("instance_id", "")
-                if held_by == current_instance or not held_by:
-                    from django.core.cache import cache
-                    cache.delete("global_writer_lease")
-                    print(f"[worker] Released stale cache lease for {job.public_id}")
-        except Exception:
-            pass
-
-    except Exception as e:
-        print(f"[worker] Could not release writer lock for {job.public_id}: {e}")
-
-
 _scheduler_logged_reason = False
 
 def _should_evaluate_scheduler() -> bool:
@@ -116,6 +81,11 @@ def _should_evaluate_scheduler() -> bool:
     if env_identity is None:
         if not _scheduler_logged_reason:
             print("[scheduler] Disabled: ENV_IDENTITY not available")
+            _scheduler_logged_reason = True
+        return False
+    if not getattr(settings, "VAULT_SYNC_ENABLED", False):
+        if not _scheduler_logged_reason:
+            print("[scheduler] Disabled: VAULT_SYNC_ENABLED is not set")
             _scheduler_logged_reason = True
         return False
     if not env_identity.maintenance_scheduler_enabled:
@@ -128,9 +98,12 @@ def _should_evaluate_scheduler() -> bool:
             print("[scheduler] Disabled: BACKUP_ROLE is not writer")
             _scheduler_logged_reason = True
         return False
-    if env_identity.backup_sync_mode.value == "manual":
+    if getattr(settings, "VAULT_SYNC_MODE", "manual") in {
+        "manual",
+        "disabled",
+    }:
         if not _scheduler_logged_reason:
-            print("[scheduler] Disabled: BACKUP_SYNC_MODE is manual")
+            print("[scheduler] Disabled: VAULT_SYNC_MODE is manual or disabled")
             _scheduler_logged_reason = True
         return False
     if not _scheduler_logged_reason:
@@ -144,11 +117,13 @@ def _evaluate_scheduler() -> int:
     if not _should_evaluate_scheduler():
         return 0
     try:
-        from core.backup_policy import queue_backup_if_needed
-        job = queue_backup_if_needed(min_interval_seconds=SCHEDULER_INTERVAL_SECONDS)
+        from vaultops.services.sync import evaluate_sync_scheduler
+        job = evaluate_sync_scheduler()
         _write_scheduler_tick()
         return 1 if job else 0
-    except Exception:
+    except Exception as exc:
+        reason_code = getattr(exc, "reason_code", "scheduler_evaluation_failed")
+        print(f"[scheduler] Evaluation failed: {reason_code}")
         return 0
 
 
@@ -164,6 +139,14 @@ class Command(BaseCommand):
         signal.signal(signal.SIGINT, _handle_shutdown)
 
         recovered = _recover_orphaned_jobs()
+        if getattr(settings, "VAULT_SYNC_ENABLED", False):
+            from vaultops.services.jobs import recover_stale_jobs
+
+            recovered += len(
+                recover_stale_jobs(
+                    stale_seconds=settings.VAULT_JOB_STALE_SECONDS
+                )
+            )
         if recovered:
             self.stdout.write(
                 self.style.WARNING(
@@ -183,6 +166,31 @@ class Command(BaseCommand):
                     )
                 last_scheduler_eval = now
 
+            vault_claim = None
+            if getattr(settings, "VAULT_SYNC_ENABLED", False):
+                from vaultops.services.jobs import claim_next_job as claim_next_vault_job
+                from vaultops.services.sync import worker_identity
+
+                vault_claim = claim_next_vault_job(worker_id=worker_identity())
+            if vault_claim is not None:
+                from vaultops.services.sync import execute_claimed_job
+
+                vault_job, token = vault_claim
+                self.stdout.write(
+                    f"Running vault job {vault_job.public_id} "
+                    f"({vault_job.operation})"
+                )
+                finished = execute_claimed_job(vault_job, token)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Vault job {finished.public_id} {finished.status}"
+                    )
+                )
+                _write_heartbeat()
+                if options["once"]:
+                    return
+                continue
+
             job = claim_next_job()
             if job is None:
                 _write_heartbeat()
@@ -192,7 +200,37 @@ class Command(BaseCommand):
                 continue
 
             self.stdout.write(f"Running maintenance job {job.public_id} ({job.kind})")
-            finished = run_job(job)
+            if getattr(settings, "VAULT_MUTATION_TRACKING_ENABLED", False):
+                from vaultops.services.mutations import (
+                    SnapshotBarrierActive,
+                    mutation_scope,
+                )
+
+                try:
+                    with mutation_scope(
+                        category="maintenance",
+                        relative_path=str(job.public_id),
+                        operation=job.kind,
+                    ):
+                        finished = run_job(job)
+                except SnapshotBarrierActive:
+                    job.status = "queued"
+                    job.started_at = None
+                    job.save(update_fields=["status", "started_at"])
+                    MaintenanceAuditEvent.objects.create(
+                        job=job,
+                        event_type="retried",
+                        payload={
+                            "reason_code": "snapshot_barrier_active",
+                            "result": "deferred",
+                        },
+                    )
+                    _write_heartbeat()
+                    if options["once"]:
+                        return
+                    continue
+            else:
+                finished = run_job(job)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Job {finished.public_id} {finished.status}: "

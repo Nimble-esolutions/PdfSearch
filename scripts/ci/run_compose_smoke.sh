@@ -60,13 +60,14 @@ echo "=== Running admin UI smoke tests ==="
 "${compose[@]}" exec --no-TTY --user appuser web python -m pip check
 
 test_log="$(mktemp)"
-if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.test_artifact_vault --noinput --verbosity=2 >"$test_log" 2>&1; then
+if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.test_artifact_vault vaultops --noinput --verbosity=2 >"$test_log" 2>&1; then
     cat "$test_log"
     rm -f "$test_log"
     exit 1
 fi
 cat "$test_log"
 grep -q "core.test_artifact_vault" "$test_log"
+grep -q "vaultops.tests" "$test_log"
 rm -f "$test_log"
 
 "${compose[@]}" exec --no-TTY --user appuser web python /app/scripts/ci/data_release_gate.py

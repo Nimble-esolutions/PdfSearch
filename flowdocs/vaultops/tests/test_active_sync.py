@@ -1,0 +1,959 @@
+import hashlib
+import io
+import json
+import os
+import sqlite3
+import tempfile
+import uuid
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from django.test import TestCase, override_settings
+from django.utils import timezone
+
+from core import utils as core_utils
+from core.artifact_vault import ArtifactVault, VaultConfig
+from core.global_writer import GlobalWriterConflict, release_global_writer
+from core.registration import RegistrationError, get_authoritative_pointer
+from vaultops.models import (
+    ArtifactGeneration,
+    MutationJournalEntry,
+    SourceMutationState,
+    SourceSnapshot,
+    SyncPolicy,
+    VaultConnectionProfile,
+    VaultJob,
+)
+from vaultops.services.mutations import (
+    BarrierOwnershipLost,
+    SnapshotBarrierActive,
+    mutation_scope,
+    release_barrier,
+    request_barrier,
+)
+from vaultops.services.publication import (
+    PromotionError,
+    PublicationError,
+    promote_candidate,
+    publish_snapshot_candidate,
+)
+from vaultops.services.snapshot import SnapshotError, create_consistent_snapshot
+from vaultops.services import snapshot as snapshot_service
+from vaultops.services.sync import (
+    SyncPolicyError,
+    evaluate_sync_scheduler,
+    materialize_sync_policy,
+    queue_sync_job,
+)
+
+
+class FakeS3Error(Exception):
+    def __init__(self, code):
+        self.response = {"Error": {"Code": code}}
+        super().__init__(code)
+
+
+class FakeS3Client:
+    def __init__(self):
+        self.objects = {}
+        self.put_count = 0
+
+    def put_object(self, **kwargs):
+        key = kwargs["Key"]
+        current = self.objects.get(key)
+        if kwargs.get("IfNoneMatch") == "*" and current is not None:
+            raise FakeS3Error("PreconditionFailed")
+        if kwargs.get("IfMatch") is not None:
+            if current is None or current["etag"] != kwargs["IfMatch"]:
+                raise FakeS3Error("PreconditionFailed")
+        body = kwargs.get("Body", b"")
+        if hasattr(body, "read"):
+            body = body.read()
+        body = bytes(body)
+        self.put_count += 1
+        etag = f'"etag-{self.put_count}"'
+        self.objects[key] = {
+            "body": body,
+            "metadata": dict(kwargs.get("Metadata") or {}),
+            "content_type": kwargs.get(
+                "ContentType", "application/octet-stream"
+            ),
+            "etag": etag,
+        }
+        return {"ETag": etag}
+
+    def get_object(self, **kwargs):
+        try:
+            item = self.objects[kwargs["Key"]]
+        except KeyError as exc:
+            raise FakeS3Error("NoSuchKey") from exc
+        return {
+            "Body": io.BytesIO(item["body"]),
+            "Metadata": dict(item["metadata"]),
+            "ContentType": item["content_type"],
+            "ETag": item["etag"],
+        }
+
+    def head_object(self, **kwargs):
+        try:
+            item = self.objects[kwargs["Key"]]
+        except KeyError as exc:
+            raise FakeS3Error("NoSuchKey") from exc
+        return {
+            "ContentLength": len(item["body"]),
+            "Metadata": dict(item["metadata"]),
+            "ContentType": item["content_type"],
+            "ETag": item["etag"],
+        }
+
+    def delete_object(self, **kwargs):
+        self.objects.pop(kwargs["Key"], None)
+        return {}
+
+
+def fake_identity(**overrides):
+    values = {
+        "dataset_id": "ai-sahakar-test",
+        "production_source_id": "source-1",
+        "instance_id": "instance-1",
+        "deployment_id": "deployment-1",
+        "replica_id": "replica-1",
+        "app_release_version": "test-release",
+        "app_image_digest": "sha256:test",
+        "is_authoritative_writer": True,
+        "is_backup_writer": True,
+        "is_production": True,
+        "maintenance_scheduler_enabled": True,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def fake_capabilities():
+    return SimpleNamespace(authoritative_publication_allowed=True)
+
+
+def fake_writer():
+    return {
+        "writer_epoch": 7,
+        "owner_token_hash": hashlib.sha256(b"token").hexdigest(),
+        "_token": "token",
+        "_etag": '"writer-etag"',
+    }
+
+
+class ActiveSyncTestCase(TestCase):
+    databases = {"default", "control"}
+
+    def setUp(self):
+        self.profile = VaultConnectionProfile.objects.create(
+            key="production",
+            display_name="Environment",
+            source=VaultConnectionProfile.Source.ENVIRONMENT,
+            enabled=True,
+            read_only=False,
+            environment_locked=True,
+            endpoint_origin="https://vault.example",
+            bucket="artifacts",
+            region="test",
+            dataset_id="ai-sahakar-test",
+            production_source_id="source-1",
+            credential_alias="environment:ARTIFACT_VAULT",
+            fingerprint="f" * 64,
+        )
+
+    def make_job(self, operation="sync_publish"):
+        return VaultJob.objects.create(
+            operation=operation,
+            profile=self.profile,
+            profile_fingerprint=self.profile.fingerprint,
+            dataset_id=self.profile.dataset_id,
+            idempotency_key=f"{operation}:{uuid.uuid4()}",
+        )
+
+
+@override_settings(
+    VAULT_SYNC_ENABLED=True,
+    VAULT_MUTATION_TRACKING_ENABLED=True,
+    ENV_IDENTITY=fake_identity(),
+)
+class MutationBarrierTests(ActiveSyncTestCase):
+    def test_mutation_scope_increments_durable_epoch(self):
+        with mutation_scope(
+            category="media",
+            relative_path="pdfs/example.pdf",
+            operation="upload",
+        ):
+            pass
+
+        state = SourceMutationState.objects.get(deployment_id="deployment-1")
+        self.assertEqual(state.current_epoch, 1)
+        self.assertEqual(state.active_mutations, 0)
+        entry = MutationJournalEntry.objects.get(
+            deployment_id="deployment-1", epoch=1
+        )
+        self.assertEqual(entry.relative_path, "pdfs/example.pdf")
+
+    def test_active_barrier_blocks_new_mutations_and_checks_owner(self):
+        owner = uuid.uuid4()
+        state = request_barrier(owner_job_id=owner)
+        self.assertEqual(
+            state.barrier_state, SourceMutationState.BarrierState.ACTIVE
+        )
+
+        with self.assertRaises(SnapshotBarrierActive):
+            with mutation_scope(category="media", operation="upload"):
+                pass
+        with self.assertRaises(BarrierOwnershipLost):
+            release_barrier(owner_job_id=uuid.uuid4())
+
+        self.assertTrue(release_barrier(owner_job_id=owner))
+
+    def test_faiss_reads_do_not_create_epochs_but_promotion_does(self):
+        folder = SimpleNamespace(pk=9)
+        with patch.object(
+            core_utils,
+            "_build_or_load_faiss_index_for_folder",
+            return_value=(None, [], None),
+        ) as build:
+            core_utils.build_or_load_faiss_index_for_folder(folder)
+        self.assertFalse(SourceMutationState.objects.exists())
+
+        promote = build.call_args.kwargs["promote_index"]
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "candidate.index"
+            target = Path(directory) / "folder_9.index"
+            source.write_bytes(b"index")
+            promote(str(source), str(target))
+            self.assertEqual(target.read_bytes(), b"index")
+
+        state = SourceMutationState.objects.get(deployment_id="deployment-1")
+        self.assertEqual(state.current_epoch, 1)
+
+    def test_dashboard_upload_route_is_blocked_during_barrier(self):
+        owner = uuid.uuid4()
+        request_barrier(owner_job_id=owner)
+        try:
+            response = self.client.post("/dashboard/")
+        finally:
+            release_barrier(owner_job_id=owner)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["reason_code"],
+            "snapshot_barrier_active",
+        )
+
+
+@override_settings(
+    VAULT_SYNC_ENABLED=True,
+    VAULT_MUTATION_TRACKING_ENABLED=True,
+    ENV_IDENTITY=fake_identity(),
+)
+class SnapshotServiceTests(ActiveSyncTestCase):
+    def setUp(self):
+        super().setUp()
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.data = self.root / "data"
+        self.control = self.root / "control"
+        for name in (
+            "media/pdfs",
+            "pdf_cache",
+            "faiss_indexes",
+            "chroma_db",
+            "staticfiles",
+        ):
+            (self.data / name).mkdir(parents=True, exist_ok=True)
+        (self.data / "media/pdfs/example.pdf").write_bytes(b"%PDF-example")
+        (self.data / "pdf_cache/cache.bin").write_bytes(b"custody")
+        (self.data / "chroma_db/chroma.bin").write_bytes(b"chroma")
+        (self.data / "staticfiles/legacy.txt").write_text(
+            "custody", encoding="utf-8"
+        )
+        self.database = self.data / "db.sqlite3"
+        connection = sqlite3.connect(self.database)
+        connection.execute(
+            "CREATE TABLE core_pdffile ("
+            "id INTEGER PRIMARY KEY, folder_id INTEGER, title TEXT, file TEXT, "
+            "file_path TEXT, page_chunks TEXT, chunk_embeddings TEXT, "
+            "indexed INTEGER, extracted_text TEXT, text_content TEXT, "
+            "category TEXT, subject TEXT)"
+        )
+        connection.commit()
+        connection.close()
+
+    def tearDown(self):
+        for path in sorted(self.root.rglob("*"), reverse=True):
+            if path.exists():
+                path.chmod(0o700 if path.is_dir() else 0o600)
+        self.temporary.cleanup()
+        super().tearDown()
+
+    def test_snapshot_is_reconciled_frozen_and_evidenced(self):
+        job = self.make_job()
+        snapshot = create_consistent_snapshot(
+            job,
+            source_roots={
+                "media": self.data / "media",
+                "pdf_cache": self.data / "pdf_cache",
+                "faiss_indexes": self.data / "faiss_indexes",
+                "chroma_db": self.data / "chroma_db",
+                "staticfiles": self.data / "staticfiles",
+            },
+            database_path=self.database,
+            snapshot_root=self.control / "snapshots",
+        )
+
+        self.assertEqual(snapshot.state, SourceSnapshot.State.FINALIZED)
+        workspace = Path(snapshot.workspace_path)
+        self.assertTrue((workspace / "db.sqlite3").is_file())
+        self.assertTrue((workspace / "media/pdfs/example.pdf").is_file())
+        self.assertTrue((workspace / "pdf_cache/cache.bin").is_file())
+        self.assertTrue((workspace / "snapshot-evidence.json").is_file())
+        self.assertFalse(os.stat(workspace / "db.sqlite3").st_mode & 0o222)
+        state = SourceMutationState.objects.get(deployment_id="deployment-1")
+        self.assertEqual(
+            state.barrier_state, SourceMutationState.BarrierState.OPEN
+        )
+        check = sqlite3.connect(
+            f"file:{workspace / 'db.sqlite3'}?mode=ro", uri=True
+        )
+        try:
+            self.assertEqual(
+                check.execute("PRAGMA integrity_check").fetchone()[0], "ok"
+            )
+        finally:
+            check.close()
+
+    def test_untracked_source_mutation_fails_before_finalization(self):
+        job = self.make_job()
+        reconcile = snapshot_service._reconcile_tree
+        changed = False
+
+        def mutate_after_reconcile(
+            category, source_root, workspace, records
+        ):
+            nonlocal changed
+            result = reconcile(category, source_root, workspace, records)
+            if category == "media" and not changed:
+                changed = True
+                (self.data / "media/pdfs/example.pdf").write_bytes(
+                    b"%PDF-mutated-outside-barrier"
+                )
+            return result
+
+        with patch.object(
+            snapshot_service,
+            "_reconcile_tree",
+            side_effect=mutate_after_reconcile,
+        ):
+            with self.assertRaisesRegex(
+                SnapshotError,
+                "snapshot_untracked_source_mutation",
+            ):
+                create_consistent_snapshot(
+                    job,
+                    source_roots={
+                        "media": self.data / "media",
+                        "pdf_cache": self.data / "pdf_cache",
+                        "faiss_indexes": self.data / "faiss_indexes",
+                        "chroma_db": self.data / "chroma_db",
+                        "staticfiles": self.data / "staticfiles",
+                    },
+                    database_path=self.database,
+                    snapshot_root=self.control / "snapshots",
+                )
+
+        snapshot = SourceSnapshot.objects.get(job=job)
+        self.assertEqual(snapshot.state, SourceSnapshot.State.FAILED)
+        self.assertEqual(
+            snapshot.safe_error_code,
+            "snapshot_untracked_source_mutation",
+        )
+        state = SourceMutationState.objects.get(deployment_id="deployment-1")
+        self.assertEqual(
+            state.barrier_state, SourceMutationState.BarrierState.OPEN
+        )
+
+
+@override_settings(
+    VAULT_SYNC_ENABLED=True,
+    VAULT_MUTATION_TRACKING_ENABLED=True,
+    VAULT_VALIDATION_MAX_AGE_SECONDS=1800,
+    ENV_IDENTITY=fake_identity(),
+)
+class CandidatePublicationTests(ActiveSyncTestCase):
+    def setUp(self):
+        super().setUp()
+        self.temporary = tempfile.TemporaryDirectory()
+        self.workspace = Path(self.temporary.name)
+        payload = b"database snapshot"
+        (self.workspace / "db.sqlite3").write_bytes(payload)
+        self.job = self.make_job()
+        self.snapshot = SourceSnapshot.objects.create(
+            job=self.job,
+            deployment_id="deployment-1",
+            state=SourceSnapshot.State.FINALIZED,
+            initial_epoch=1,
+            included_epoch=2,
+            snapshot_digest="a" * 64,
+            workspace_path=str(self.workspace),
+            file_count=1,
+            byte_count=len(payload),
+            finalized_at=timezone.now(),
+        )
+        evidence = {
+            "snapshot_id": str(self.snapshot.public_id),
+            "files": [
+                {
+                    "path": "db.sqlite3",
+                    "size_bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                }
+            ],
+            "inventory": {
+                "schema": {"inventory_schema": "test/v1"},
+                "database": {"migrations": {"latest": "0019_sitesetting"}},
+                "counts": {"pdf_rows": 0},
+            },
+        }
+        (self.workspace / "snapshot-evidence.json").write_text(
+            json.dumps(evidence), encoding="utf-8"
+        )
+        self.client = FakeS3Client()
+        self.vault = ArtifactVault(
+            config=VaultConfig(
+                enabled=True,
+                endpoint="https://vault.example",
+                bucket="artifacts",
+                region="test",
+                access_key="access",
+                secret_key="secret",
+            ),
+            client=self.client,
+        )
+
+    def tearDown(self):
+        self.temporary.cleanup()
+        super().tearDown()
+
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.validate_writer_for_publication",
+        side_effect=lambda *args, writer_record=None, **kwargs: writer_record,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    def test_publication_is_idempotent_candidate_and_never_moves_pointer(
+        self, *_mocks
+    ):
+        candidate = publish_snapshot_candidate(
+            snapshot=self.snapshot,
+            profile=self.profile,
+            job=self.job,
+            vault=self.vault,
+        )
+        first_put_count = self.client.put_count
+        candidate_again = publish_snapshot_candidate(
+            snapshot=self.snapshot,
+            profile=self.profile,
+            job=self.job,
+            vault=self.vault,
+        )
+
+        self.assertEqual(
+            candidate.vault_state, ArtifactGeneration.VaultState.CANDIDATE
+        )
+        self.assertEqual(candidate.pk, candidate_again.pk)
+        self.assertEqual(self.client.put_count, first_put_count)
+        pointer_key = (
+            f"datasets/{self.profile.dataset_id}/control/authoritative.json"
+        )
+        self.assertNotIn(pointer_key, self.client.objects)
+
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    def test_cancellation_before_upload_does_not_publish_manifest(self, *_mocks):
+        with self.assertRaises(PublicationError):
+            publish_snapshot_candidate(
+                snapshot=self.snapshot,
+                profile=self.profile,
+                job=self.job,
+                vault=self.vault,
+                cancellation_check=lambda: True,
+            )
+        self.assertFalse(
+            any(key.endswith("/manifest.json") for key in self.client.objects)
+        )
+
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.validate_writer_for_publication",
+        side_effect=lambda *args, writer_record=None, **kwargs: writer_record,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    def test_promotion_requires_a_separate_confirmation(self, *_mocks):
+        candidate = publish_snapshot_candidate(
+            snapshot=self.snapshot,
+            profile=self.profile,
+            job=self.job,
+            vault=self.vault,
+        )
+        promote_job = self.make_job(operation="promote_generation")
+
+        with self.assertRaises(PromotionError) as raised:
+            promote_candidate(
+                generation=candidate,
+                job=promote_job,
+                profile=self.profile,
+                confirmed=False,
+                vault=self.vault,
+            )
+        self.assertEqual(
+            raised.exception.reason_code, "typed_confirmation_required"
+        )
+
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.validate_writer_for_publication",
+        side_effect=lambda *args, writer_record=None, **kwargs: writer_record,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    def test_confirmed_promotion_moves_only_the_pointer_by_cas(self, *_mocks):
+        candidate = publish_snapshot_candidate(
+            snapshot=self.snapshot,
+            profile=self.profile,
+            job=self.job,
+            vault=self.vault,
+        )
+        promote_job = self.make_job(operation="promote_generation")
+
+        promoted, pointer = promote_candidate(
+            generation=candidate,
+            job=promote_job,
+            profile=self.profile,
+            confirmed=True,
+            vault=self.vault,
+        )
+
+        self.assertEqual(
+            promoted.vault_state,
+            ArtifactGeneration.VaultState.AUTHORITATIVE,
+        )
+        self.assertEqual(pointer["generation_id"], candidate.generation_id)
+        pointer_key = (
+            f"datasets/{self.profile.dataset_id}/control/authoritative.json"
+        )
+        self.assertIn(pointer_key, self.client.objects)
+
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    def test_snapshot_digest_mismatch_stops_before_object_upload(
+        self, *_mocks
+    ):
+        (self.workspace / "db.sqlite3").write_bytes(b"changed after evidence")
+
+        with self.assertRaises(PublicationError) as raised:
+            publish_snapshot_candidate(
+                snapshot=self.snapshot,
+                profile=self.profile,
+                job=self.job,
+                vault=self.vault,
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "snapshot_artifact_digest_mismatch",
+        )
+        self.assertFalse(
+            any("/blobs/" in key for key in self.client.objects)
+        )
+        self.assertFalse(
+            any(key.endswith("/manifest.json") for key in self.client.objects)
+        )
+
+    def test_profile_reconfiguration_cannot_redirect_queued_job(self):
+        self.profile.fingerprint = "e" * 64
+        self.profile.endpoint_origin = "https://replacement.example"
+        self.profile.save(
+            update_fields=["fingerprint", "endpoint_origin", "updated_at"]
+        )
+
+        with (
+            patch(
+                "vaultops.services.publication.probe_capabilities",
+                return_value=fake_capabilities(),
+            ),
+            patch(
+                "vaultops.services.publication.acquire_global_writer",
+                return_value=fake_writer(),
+            ),
+            patch(
+                "vaultops.services.publication.release_global_writer",
+                return_value=None,
+            ),
+            self.assertRaises(PublicationError) as raised,
+        ):
+            publish_snapshot_candidate(
+                snapshot=self.snapshot,
+                profile=self.profile,
+                job=self.job,
+                vault=self.vault,
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "profile_fingerprint_changed",
+        )
+
+    def test_snapshot_symlink_is_rejected_before_vault_access(self):
+        database = self.workspace / "db.sqlite3"
+        target = self.workspace / "database-real.sqlite3"
+        database.rename(target)
+        database.symlink_to(target.name)
+
+        with (
+            patch(
+                "vaultops.services.publication.probe_capabilities",
+                return_value=fake_capabilities(),
+            ),
+            patch(
+                "vaultops.services.publication.acquire_global_writer",
+                return_value=fake_writer(),
+            ),
+            patch(
+                "vaultops.services.publication.release_global_writer",
+                return_value=None,
+            ),
+            self.assertRaises(PublicationError) as raised,
+        ):
+            publish_snapshot_candidate(
+                snapshot=self.snapshot,
+                profile=self.profile,
+                job=self.job,
+                vault=self.vault,
+            )
+
+        self.assertEqual(raised.exception.reason_code, "snapshot_path_unsafe")
+
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.validate_writer_for_publication",
+        side_effect=lambda *args, writer_record=None, **kwargs: writer_record,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    def test_interrupted_upload_resumes_from_verified_objects(self, *_mocks):
+        pdf = self.workspace / "media/example.pdf"
+        pdf.parent.mkdir()
+        pdf.write_bytes(b"%PDF-resume")
+        evidence_path = self.workspace / "snapshot-evidence.json"
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence["files"].append(
+            {
+                "path": "media/example.pdf",
+                "size_bytes": pdf.stat().st_size,
+                "sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
+            }
+        )
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+        original_put = self.client.put_object
+        data_puts = 0
+
+        def interrupt_second_object(**kwargs):
+            nonlocal data_puts
+            if "/blobs/" in kwargs["Key"]:
+                data_puts += 1
+                if data_puts == 2:
+                    raise FakeS3Error("SlowDown")
+            return original_put(**kwargs)
+
+        with patch.object(
+            self.client,
+            "put_object",
+            side_effect=interrupt_second_object,
+        ):
+            with self.assertRaises(PublicationError):
+                publish_snapshot_candidate(
+                    snapshot=self.snapshot,
+                    profile=self.profile,
+                    job=self.job,
+                    vault=self.vault,
+                )
+
+        checkpoint = self.job.steps.get(phase="uploading").checkpoint
+        self.assertEqual(len(checkpoint["objects"]), 1)
+        generation_id = VaultJob.objects.get(pk=self.job.pk).generation_id
+
+        candidate = publish_snapshot_candidate(
+            snapshot=self.snapshot,
+            profile=self.profile,
+            job=VaultJob.objects.get(pk=self.job.pk),
+            vault=self.vault,
+        )
+
+        self.assertEqual(candidate.generation_id, generation_id)
+        self.assertEqual(
+            len(self.job.steps.get(phase="uploading").checkpoint["objects"]),
+            2,
+        )
+        self.assertEqual(
+            sum(
+                key.endswith("/manifest.json")
+                for key in self.client.objects
+            ),
+            1,
+        )
+
+
+@override_settings(
+    VAULT_SYNC_ENABLED=True,
+    VAULT_MUTATION_TRACKING_ENABLED=True,
+    VAULT_SYNC_MODE="continuous_coalesced",
+    VAULT_SYNC_PROMOTION_MODE="manual",
+    VAULT_SYNC_QUIET_PERIOD_SECONDS=120,
+    VAULT_SYNC_INTERVAL_SECONDS=900,
+    VAULT_SYNC_MAX_LAG_SECONDS=3600,
+    VAULT_DEFAULT_PROFILE="production",
+    ENV_IDENTITY=fake_identity(),
+)
+class SchedulerTests(ActiveSyncTestCase):
+    @patch("vaultops.services.sync.materialize_environment_profile")
+    def test_same_epoch_coalesces_to_one_job(self, profile_factory):
+        profile_factory.return_value = self.profile
+        SourceMutationState.objects.create(
+            deployment_id="deployment-1",
+            current_epoch=4,
+            last_mutation_at=timezone.now()
+            - timezone.timedelta(minutes=5),
+        )
+
+        first = queue_sync_job(trigger="manual")
+        second = queue_sync_job(trigger="manual")
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(
+            VaultJob.objects.filter(operation="sync_publish").count(), 1
+        )
+
+    @patch("vaultops.services.sync.materialize_environment_profile")
+    def test_continuous_mode_waits_for_quiet_period(self, profile_factory):
+        profile_factory.return_value = self.profile
+        SourceMutationState.objects.create(
+            deployment_id="deployment-1",
+            current_epoch=2,
+            last_mutation_at=timezone.now(),
+        )
+
+        self.assertIsNone(evaluate_sync_scheduler())
+        policy = materialize_sync_policy(self.profile)
+        self.assertEqual(policy.pending_epoch, 2)
+
+    @override_settings(VAULT_SYNC_MODE="disabled")
+    @patch("vaultops.services.sync.materialize_environment_profile")
+    def test_disabled_policy_rejects_manual_queue(self, profile_factory):
+        profile_factory.return_value = self.profile
+
+        with self.assertRaises(SyncPolicyError) as raised:
+            queue_sync_job(trigger="manual")
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "vault_sync_policy_disabled",
+        )
+
+    def test_metrics_expose_control_plane_progress(self):
+        SourceMutationState.objects.create(
+            deployment_id="deployment-1",
+            current_epoch=6,
+            last_mutation_at=timezone.now(),
+        )
+        self.make_job()
+
+        response = self.client.get("/health/metrics/")
+        body = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("pdfsearch_vault_source_mutation_epoch 6.0", body)
+        self.assertIn("pdfsearch_vault_job_queue_depth 1.0", body)
+
+
+class GlobalWriterReleaseTests(ActiveSyncTestCase):
+    def test_release_is_conditional_and_cannot_delete_successor(self):
+        client = FakeS3Client()
+        vault = ArtifactVault(
+            config=VaultConfig(
+                enabled=True,
+                endpoint="https://vault.example",
+                bucket="artifacts",
+                region="test",
+                access_key="access",
+                secret_key="secret",
+            ),
+            client=client,
+        )
+        key = "datasets/ai-sahakar-test/control/writer.json"
+        token = "owner-token"
+        record = {
+            "dataset_id": "ai-sahakar-test",
+            "owner_token_hash": hashlib.sha256(token.encode()).hexdigest(),
+            "writer_epoch": 3,
+            "expires_at": timezone.now().timestamp() + 60,
+        }
+        data = json.dumps(record).encode()
+        response = client.put_object(
+            Bucket="artifacts",
+            Key=key,
+            Body=data,
+            Metadata={"sha256": hashlib.sha256(data).hexdigest()},
+        )
+        owner = {
+            **record,
+            "_token": token,
+            "_etag": response["ETag"],
+        }
+
+        release_global_writer(
+            vault,
+            "ai-sahakar-test",
+            writer_record=owner,
+        )
+        released = json.loads(client.objects[key]["body"])
+        self.assertEqual(released["expires_at"], 0)
+
+        successor = {
+            **record,
+            "owner_token_hash": hashlib.sha256(b"successor").hexdigest(),
+            "writer_epoch": 4,
+        }
+        successor_data = json.dumps(successor).encode()
+        client.put_object(
+            Bucket="artifacts",
+            Key=key,
+            Body=successor_data,
+            Metadata={"sha256": hashlib.sha256(successor_data).hexdigest()},
+        )
+        with self.assertRaises(GlobalWriterConflict):
+            release_global_writer(
+                vault,
+                "ai-sahakar-test",
+                writer_record=owner,
+            )
+
+    def test_release_fails_closed_when_writer_cannot_be_read(self):
+        client = FakeS3Client()
+        vault = ArtifactVault(
+            config=VaultConfig(
+                enabled=True,
+                endpoint="https://vault.example",
+                bucket="artifacts",
+                region="test",
+                access_key="access",
+                secret_key="secret",
+            ),
+            client=client,
+        )
+        with patch.object(
+            client,
+            "get_object",
+            side_effect=FakeS3Error("AccessDenied"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "global_writer_read_failed"
+            ):
+                release_global_writer(
+                    vault,
+                    "ai-sahakar-test",
+                    writer_record={
+                        "_token": "owner",
+                        "writer_epoch": 1,
+                    },
+                )
+
+    def test_pointer_read_distinguishes_missing_from_access_denied(self):
+        client = FakeS3Client()
+        vault = ArtifactVault(
+            config=VaultConfig(
+                enabled=True,
+                endpoint="https://vault.example",
+                bucket="artifacts",
+                region="test",
+                access_key="access",
+                secret_key="secret",
+            ),
+            client=client,
+        )
+        self.assertIsNone(
+            get_authoritative_pointer(vault, "ai-sahakar-test")
+        )
+
+        with patch.object(
+            client,
+            "get_object",
+            side_effect=FakeS3Error("AccessDenied"),
+        ):
+            with self.assertRaisesRegex(
+                RegistrationError,
+                "authoritative_pointer_read_failed",
+            ):
+                get_authoritative_pointer(vault, "ai-sahakar-test")
