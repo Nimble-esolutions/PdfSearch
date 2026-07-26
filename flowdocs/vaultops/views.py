@@ -103,6 +103,10 @@ def _enforce_mutation_rate_limit(request):
 
 
 def _request_idempotency_key(request):
+    if not settings.VAULT_ADMIN_MUTATIONS_ENABLED:
+        raise WorkbenchRequestError(
+            "vault_admin_mutations_disabled", status_code=409
+        )
     _enforce_mutation_rate_limit(request)
     value = (
         request.headers.get("Idempotency-Key")
