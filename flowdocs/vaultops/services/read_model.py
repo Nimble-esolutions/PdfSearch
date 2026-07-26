@@ -7,7 +7,9 @@ from django.utils import timezone
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
+    GarbageCollectionPlan,
     RestoreWorkspace,
+    RetentionHold,
     RuntimePointerObservation,
     SourceMutationState,
     SyncPolicy,
@@ -16,6 +18,7 @@ from vaultops.models import (
     VaultDatasetProjection,
     VaultJob,
 )
+from vaultops.services.retention import generation_protection_reasons
 
 
 ACTIVE_JOB_STATES = {
@@ -276,8 +279,10 @@ def _generation_records(profile, dataset_id, limit=50):
     queryset = ArtifactGeneration.objects.filter(
         profile=profile, dataset_id=dataset_id
     ).order_by("-created_at")[:limit]
-    return [
-        {
+    records = []
+    for generation in queryset:
+        protection_reasons = generation_protection_reasons(generation)
+        records.append({
             "public_id": generation.pk,
             "generation_id": generation.generation_id,
             "manifest_digest": generation.manifest_digest,
@@ -294,9 +299,29 @@ def _generation_records(profile, dataset_id, limit=50):
                 for item in generation.manifest.get("files", [])
                 if isinstance(item, dict)
             ),
-        }
-        for generation in queryset
-    ]
+            "protection_reasons": protection_reasons,
+            "retirement_allowed": (
+                generation.vault_state
+                in {
+                    ArtifactGeneration.VaultState.CANDIDATE,
+                    ArtifactGeneration.VaultState.LEGACY_READ_ONLY,
+                }
+                and not any(
+                    reason
+                    in {
+                        "generation_authoritative",
+                        "generation_runtime_referenced",
+                        "generation_job_in_progress",
+                    }
+                    for reason in protection_reasons
+                )
+            ),
+            "unretirement_allowed": (
+                generation.vault_state
+                == ArtifactGeneration.VaultState.RETIRED
+            ),
+        })
+    return records
 
 
 def _workspace_records(profile, dataset_id, limit=25):
@@ -374,6 +399,57 @@ def _audit_records(limit=50):
     ]
 
 
+def _retention_records(profile, dataset_id, limit=50):
+    now = timezone.now()
+    return [
+        {
+            "public_id": hold.pk,
+            "generation_id": hold.generation.generation_id,
+            "reason_code": hold.reason_code,
+            "owner_reference": hold.owner_reference,
+            "expires_at": hold.expires_at,
+            "released_at": hold.released_at,
+            "active": (
+                hold.released_at is None
+                and (hold.expires_at is None or hold.expires_at > now)
+            ),
+            "created_at": hold.created_at,
+            "updated_at": hold.updated_at,
+        }
+        for hold in RetentionHold.objects.select_related("generation")
+        .filter(
+            generation__profile=profile,
+            generation__dataset_id=dataset_id,
+        )
+        .order_by("-created_at")[:limit]
+    ]
+
+
+def _gc_plan_records(profile, dataset_id, limit=25):
+    return [
+        {
+            "public_id": str(plan.public_id),
+            "state": plan.state,
+            "plan_digest": plan.plan_digest,
+            "inventory_version": plan.inventory_version,
+            "pointer_version": plan.pointer_version,
+            "candidate_generation_ids": [
+                item.get("generation_id", "")
+                for item in plan.candidates
+                if isinstance(item, dict)
+            ],
+            "estimates": _safe_mapping(plan.estimates),
+            "expires_at": plan.expires_at,
+            "created_at": plan.created_at,
+            "updated_at": plan.updated_at,
+        }
+        for plan in GarbageCollectionPlan.objects.filter(
+            profile=profile,
+            dataset_id=dataset_id,
+        ).order_by("-created_at")[:limit]
+    ]
+
+
 def _lease_summary(dataset_id):
     try:
         from core.lease import get_lease_status
@@ -436,6 +512,8 @@ def build_workbench_state(*, profile_key=None):
             "workspaces": [],
             "jobs": [],
             "audit": _audit_records(),
+            "retention_holds": [],
+            "gc_plans": [],
             "sync": {"state": "disabled"},
             "lease": _lease_summary(identity.dataset_id),
             "feature_flags": _feature_flags(),
@@ -459,6 +537,8 @@ def build_workbench_state(*, profile_key=None):
     generations = _generation_records(profile, profile.dataset_id)
     workspaces = _workspace_records(profile, profile.dataset_id)
     jobs = _job_records(profile, profile.dataset_id)
+    retention_holds = _retention_records(profile, profile.dataset_id)
+    gc_plans = _gc_plan_records(profile, profile.dataset_id)
     sync_state = (
         next(
             (
@@ -498,6 +578,8 @@ def build_workbench_state(*, profile_key=None):
         "workspaces": workspaces,
         "jobs": jobs,
         "audit": _audit_records(),
+        "retention_holds": retention_holds,
+        "gc_plans": gc_plans,
         "sync": {
             "state": sync_state,
             "mode": policy.mode if policy else settings.VAULT_SYNC_MODE,
@@ -556,6 +638,23 @@ def build_workbench_state(*, profile_key=None):
             ],
             "job_versions": [
                 (item["public_id"], item["state_version"]) for item in jobs
+            ],
+            "retention_versions": [
+                (
+                    item["public_id"],
+                    item["active"],
+                    item["updated_at"],
+                )
+                for item in retention_holds
+            ],
+            "gc_plan_versions": [
+                (
+                    item["public_id"],
+                    item["state"],
+                    item["plan_digest"],
+                    item["expires_at"],
+                )
+                for item in gc_plans
             ],
         }
     )
