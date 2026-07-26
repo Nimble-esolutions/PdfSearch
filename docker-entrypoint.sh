@@ -6,6 +6,7 @@ echo "[entrypoint] Running as root — fixing persistent data permissions..."
 DATA_ROOT="${DATA_ROOT:-/app/data}"
 DATA_CONTROL_ROOT="${DATA_CONTROL_ROOT:-/app/data-control}"
 MEDIA_ROOT="${MEDIA_ROOT:-$DATA_ROOT/media}"
+PDF_CACHE_DIR="${PDF_CACHE_DIR:-$DATA_ROOT/pdf_cache}"
 CHROMA_DIR="${CHROMA_DIR:-$DATA_ROOT/chroma_db}"
 FAISS_INDEX_DIR="${FAISS_INDEX_DIR:-$DATA_ROOT/faiss_indexes}"
 BACKUP_DIR="${BACKUP_DIR:-$DATA_ROOT/backups}"
@@ -15,6 +16,7 @@ mkdir -p \
     "$DATA_ROOT" \
     "$DATA_CONTROL_ROOT" \
     "$MEDIA_ROOT/pdfs" \
+    "$PDF_CACHE_DIR" \
     "$CHROMA_DIR" \
     "$FAISS_INDEX_DIR" \
     "$BACKUP_DIR/json_backups" \

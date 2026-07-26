@@ -254,7 +254,7 @@ def _validate_index(index: Any, chunk_count: int, dimensions: int) -> None:
         )
 
 
-def build_or_load_faiss_index_for_folder(
+def _build_or_load_faiss_index_for_folder(
     folder: Folder,
     pdfs=None,
     force_rebuild: bool = False,
@@ -326,6 +326,40 @@ def build_or_load_faiss_index_for_folder(
         raise SearchDataIntegrityError(f"Unable to build FAISS index {idx_path}") from exc
 
 
+def build_or_load_faiss_index_for_folder(
+    folder: Folder,
+    pdfs=None,
+    force_rebuild: bool = False,
+    promote_index=None,
+) -> Tuple[Optional[faiss.Index], List[str], np.ndarray]:
+    if pdfs is not None:
+        return _build_or_load_faiss_index_for_folder(
+            folder,
+            pdfs=pdfs,
+            force_rebuild=force_rebuild,
+            promote_index=promote_index,
+        )
+    from vaultops.services.mutations import mutation_scope
+
+    def fenced_promotion(temp_path, index_path):
+        with mutation_scope(
+            category="faiss",
+            relative_path=f"folder_{folder.pk}.index",
+            operation="promote",
+        ):
+            if promote_index is None:
+                os.replace(temp_path, index_path)
+            else:
+                promote_index(temp_path, index_path)
+
+    return _build_or_load_faiss_index_for_folder(
+        folder,
+        pdfs=pdfs,
+        force_rebuild=force_rebuild,
+        promote_index=fenced_promotion,
+    )
+
+
 def search_chunks_with_faiss_or_numpy(
     query_embedding: np.ndarray,
     index: Optional[faiss.Index],
@@ -374,7 +408,7 @@ def search_chunks_with_faiss_or_numpy(
 
 
 # ----------------- Public: Precompute embeddings on upload -----------------
-def precompute_pdf_embeddings(pdf: PDFFile) -> None:
+def _precompute_pdf_embeddings(pdf: PDFFile) -> None:
     """
     Called when a PDF is added/updated.
     This extracts text, chunks it, creates embeddings, and stores them on the PDF model.
@@ -407,9 +441,15 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
     if transaction.get_connection().in_atomic_block:
         def defer_index_promotion(temp_path, idx_path):
             def promote():
+                from vaultops.services.mutations import mutation_scope
                 try:
-                    os.replace(temp_path, idx_path)
-                    PDFFile.objects.filter(pk=pdf.pk).update(indexed=True)
+                    with mutation_scope(
+                        category="faiss",
+                        relative_path=pathlib.Path(idx_path).name,
+                        operation="promote",
+                    ):
+                        os.replace(temp_path, idx_path)
+                        PDFFile.objects.filter(pk=pdf.pk).update(indexed=True)
                 except Exception:
                     logger.exception("Deferred FAISS promotion failed for folder id=%s", pdf.folder_id)
                     if os.path.exists(temp_path):
@@ -429,6 +469,17 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
     if promote_index is None:
         pdf.indexed = True
         pdf.save(update_fields=["indexed"])
+
+
+def precompute_pdf_embeddings(pdf: PDFFile) -> None:
+    from vaultops.services.mutations import mutation_scope
+
+    with mutation_scope(
+        category="pdf",
+        relative_path=str(pdf.file.name or pdf.pk),
+        operation="precompute_embeddings",
+    ):
+        _precompute_pdf_embeddings(pdf)
 
 
 # ------------------ Search PDFs (fast path) ------------------
