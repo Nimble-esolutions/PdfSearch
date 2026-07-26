@@ -529,6 +529,30 @@ class GarbageCollectionPlan(TimeStampedModel):
         ordering = ["-created_at"]
 
 
+class ConfirmationChallenge(models.Model):
+    """One-use typed confirmation bound to actor, action, and observed state."""
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    actor_id = models.PositiveBigIntegerField()
+    action = models.CharField(max_length=80)
+    target = models.CharField(max_length=200)
+    state_digest = models.CharField(max_length=64)
+    phrase_salt = models.CharField(max_length=64)
+    phrase_digest = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["actor_id", "action", "expires_at"],
+                name="vaultops_co_actor_i_c24ad8_idx",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+
 class AppendOnlyQuerySet(models.QuerySet):
     def update(self, **kwargs):
         raise TypeError("VaultAuditEvent records are append-only")

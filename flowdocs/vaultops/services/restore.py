@@ -12,6 +12,7 @@ import stat
 from pathlib import Path
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from core.compatibility import check_generation_compatibility
@@ -72,19 +73,42 @@ def queue_restore_job(
     fingerprint = profile_fingerprint(profile)
     if not profile.enabled or profile.fingerprint != fingerprint:
         raise RestoreError("profile_fingerprint_changed")
-    job, _ = VaultJob.objects.get_or_create(
-        operation="restore_generation",
-        idempotency_key=idempotency_key,
-        defaults={
-            "profile": profile,
-            "profile_fingerprint": fingerprint,
-            "dataset_id": profile.dataset_id,
-            "generation_id": generation_id,
-            "requested_by_id": requested_by_id,
-            "requested_by_name": requested_by_name,
-            "progress": {"requested_generation": generation_id or "authoritative"},
-        },
-    )
+    with transaction.atomic(using="control"):
+        job, created = VaultJob.objects.get_or_create(
+            operation="restore_generation",
+            idempotency_key=idempotency_key,
+            defaults={
+                "profile": profile,
+                "profile_fingerprint": fingerprint,
+                "dataset_id": profile.dataset_id,
+                "generation_id": generation_id,
+                "requested_by_id": requested_by_id,
+                "requested_by_name": requested_by_name,
+                "progress": {
+                    "requested_generation": (
+                        generation_id or "authoritative"
+                    )
+                },
+            },
+        )
+        if created:
+            append_event(
+                action="job_queued",
+                result="succeeded",
+                correlation_id=job.correlation_id,
+                actor_id=requested_by_id,
+                actor_name=requested_by_name,
+                job_public_id=job.public_id,
+                after_state={
+                    "job_state": job.status,
+                    "operation": job.operation,
+                },
+                evidence={
+                    "requested_generation": (
+                        generation_id or "authoritative"
+                    )
+                },
+            )
     return job
 
 

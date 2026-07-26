@@ -13,6 +13,7 @@ from vaultops.models import (
     SyncPolicy,
     VaultJob,
 )
+from vaultops.services.audit import append_event
 from vaultops.services.jobs import (
     cancellation_requested,
     complete_owned_job,
@@ -79,26 +80,48 @@ def queue_sync_job(*, trigger, requested_by_id=None, requested_by_name=""):
         f"sync:{settings.ENV_IDENTITY.deployment_id}:"
         f"{profile.fingerprint[:16]}:{state.current_epoch}"
     )
-    job, _ = VaultJob.objects.get_or_create(
-        operation="sync_publish",
-        idempotency_key=idempotency_key,
-        defaults={
-            "profile": profile,
-            "profile_fingerprint": profile.fingerprint,
-            "dataset_id": profile.dataset_id,
-            "requested_by_id": requested_by_id,
-            "requested_by_name": requested_by_name,
-            "progress": {
-                "trigger": trigger,
-                "source_epoch": state.current_epoch,
+    with transaction.atomic(using="control"):
+        job, created = VaultJob.objects.get_or_create(
+            operation="sync_publish",
+            idempotency_key=idempotency_key,
+            defaults={
+                "profile": profile,
+                "profile_fingerprint": profile.fingerprint,
+                "dataset_id": profile.dataset_id,
+                "requested_by_id": requested_by_id,
+                "requested_by_name": requested_by_name,
+                "progress": {
+                    "trigger": trigger,
+                    "source_epoch": state.current_epoch,
+                },
             },
-        },
-    )
-    policy.pending_epoch = max(policy.pending_epoch, state.current_epoch)
-    policy.last_evaluated_at = timezone.now()
-    policy.save(
-        update_fields=["pending_epoch", "last_evaluated_at", "updated_at"]
-    )
+        )
+        policy.pending_epoch = max(policy.pending_epoch, state.current_epoch)
+        policy.last_evaluated_at = timezone.now()
+        policy.save(
+            update_fields=[
+                "pending_epoch",
+                "last_evaluated_at",
+                "updated_at",
+            ]
+        )
+        if created:
+            append_event(
+                action="job_queued",
+                result="succeeded",
+                correlation_id=job.correlation_id,
+                actor_id=requested_by_id,
+                actor_name=requested_by_name,
+                job_public_id=job.public_id,
+                after_state={
+                    "job_state": job.status,
+                    "operation": job.operation,
+                },
+                evidence={
+                    "trigger": trigger,
+                    "source_epoch": state.current_epoch,
+                },
+            )
     return job
 
 
@@ -237,7 +260,7 @@ def _run_promotion(job, vault):
     confirmed = (
         policy.promotion_mode == SyncPolicy.PromotionMode.AUTO_AFTER_VALIDATION
         and job.progress.get("confirmation") == "policy:auto_after_validation"
-    )
+    ) or str(job.progress.get("confirmation", "")).startswith("operator:")
     generation, _ = promote_candidate(
         generation=generation,
         job=job,
