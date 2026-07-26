@@ -350,7 +350,7 @@ is rejected.
 |------|---------|-------------|
 | `docker-compose.ci.yml` | CI disposable stack | `APP_ENV=development`, `EXTERNAL_SIDE_EFFECTS_MODE=sandbox`, `DATA_BOOTSTRAP_MODE=empty`, `BACKUP_ROLE=disabled` |
 | `docker-compose.dev.yml` | Local development | `DEBUG=True`, `ALLOW_INSECURE_DEFAULTS=1`, build from local Dockerfile |
-| `docker-compose.integration.yml` | Intended integration stack with MinIO | Currently not a reliable gate: runner command/label and network wiring require repair |
+| `docker-compose.integration.yml` | Disposable MinIO/Redis lifecycle and staging runtime crash-recovery stack | Digest-pinned dependency images, isolated named volumes/network, separate candidate promotion, trust-chain restore, and shared-control-volume process-death recovery |
 | `docker-compose.yml` | Production template | `APP_ENV=production`, `BACKUP_ROLE=disabled` by default, `pull_policy: always`, Traefik network |
 
 ### CI Scripts
@@ -358,7 +358,8 @@ is rejected.
 | Script | Purpose |
 |--------|---------|
 | `scripts/ci/runtime_smoke.py` | End-to-end smoke: `/livez`, `/readyz`, login, dashboard, folder, PDF view, search |
-| `scripts/ci/real_runtime_proof.sh` | Docker death + Redis outage resilience tests |
+| `scripts/ci/run_vault_integration.sh` | Isolated MinIO/Redis lifecycle plus signed runtime pointer container-death/restart gate |
+| `scripts/ci/real_runtime_proof.sh` | Compatibility wrapper for `run_vault_integration.sh`; never targets existing containers |
 | `scripts/ci/validate_migrations.py` | Migration number collision guard (catches duplicate migration numbers across PRs) |
 | `scripts/ci/admin_ui_smoke.py` | Admin UI smoke tests |
 | `scripts/ci/seed_admin_ui_demo.py` | Seed demo data for admin UI |

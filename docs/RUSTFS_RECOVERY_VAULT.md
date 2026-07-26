@@ -37,9 +37,11 @@ Not yet operationally connected:
   not call `mark_data_dirty()`;
 - the production `maintenance` Compose service does not explicitly receive the
   complete vault, restore, scheduler, and release-identity environment contract;
-- the checked-in integration Compose command is not a reliable gate: the image
-  entrypoint ignores the runner command, its Django test label conflicts with
-  `core/tests.py`, and its services are split across networks.
+- the checked-in disposable integration gate now proves real MinIO conditional
+  operations, candidate-only publication, separate CAS promotion, trust-chain
+  inventory, quarantine/runtime preparation, Redis lease fencing, and signed
+  runtime rollback after a deliberate container kill. This is application
+  evidence, not a substitute for an environment-specific recovery drill.
 
 Until Plan 003 closes these gaps and a clean-volume restore drill passes, treat
 the vault as an **explicit, operator-controlled recovery component**, not as the

@@ -8,6 +8,7 @@ on:
       - docker-entrypoint.sh
       - docker-compose.yml
       - docker-compose.dev.yml
+      - docker-compose.integration.yml
       - requirements.txt
       - requirements-web.txt
       - requirements-web.lock
@@ -34,6 +35,7 @@ on:
       - docker-entrypoint.sh
       - docker-compose.yml
       - docker-compose.dev.yml
+      - docker-compose.integration.yml
       - requirements.txt
       - requirements-web.txt
       - requirements-web.lock
@@ -113,6 +115,13 @@ jobs:
           SECRET_KEY: ci-only-secret
         run: docker compose -f docker-compose.ci.yml config --quiet
 
+      - name: Validate disposable vault integration Compose
+        env:
+          PDFSEARCH_IMAGE: pdfsearch-ci:source
+          REDIS_IMAGE: redis@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          MINIO_IMAGE: minio/minio@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        run: docker compose -f docker-compose.integration.yml config --quiet
+
       - name: Build CI image with tested OCI revision
         env:
           LOCAL_IMAGE: pdfsearch-ci:source
@@ -138,6 +147,18 @@ jobs:
           esac
           echo "image=$redis_ref" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve immutable MinIO integration image
+        id: ci_minio
+        run: |
+          set -euo pipefail
+          docker pull minio/minio:latest >/dev/null
+          minio_ref="$(docker image inspect minio/minio:latest --format '{{ index .RepoDigests 0 }}')"
+          case "$minio_ref" in
+            minio/minio@sha256:*) ;;
+            *) echo "MinIO image did not resolve to a digest" >&2; exit 1 ;;
+          esac
+          echo "image=$minio_ref" >> "$GITHUB_OUTPUT"
+
       - name: Run disposable entrypoint and runtime gates
         env:
           PDFSEARCH_IMAGE: pdfsearch-ci:source
@@ -146,6 +167,14 @@ jobs:
           WEB_PORT: 18080
           COMPOSE_PROJECT_NAME: pdfsearch-ci-source
         run: bash scripts/ci/run_compose_smoke.sh
+
+      - name: Run vault lifecycle and process-death gates
+        env:
+          PDFSEARCH_IMAGE: pdfsearch-ci:source
+          REDIS_IMAGE: ${{ steps.ci_redis.outputs.image }}
+          MINIO_IMAGE: ${{ steps.ci_minio.outputs.image }}
+          COMPOSE_PROJECT_NAME: pdfsearch-vault-source
+        run: bash scripts/ci/run_vault_integration.sh
 
   release:
     name: Build and publish dev release
