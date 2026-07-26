@@ -11,6 +11,7 @@ from core.models import ArtifactGeneration as LegacyGeneration
 from core.models import CustomUser
 from vaultops.models import (
     ArtifactGeneration,
+    ConfirmationChallenge,
     VaultConnectionProfile,
     VaultDatasetProjection,
     VaultAuditEvent,
@@ -291,6 +292,28 @@ class VaultWorkbenchTests(TestCase):
             payload["reason_code"], "idempotency_key_required"
         )
         self.assertIn("correlation_id", payload)
+
+    @override_settings(VAULT_ADMIN_MUTATIONS_ENABLED=False)
+    def test_server_rejects_post_when_admin_mutations_are_disabled(self):
+        response = self.client.post(
+            reverse("vaultops:confirmation_issue"),
+            data=json.dumps(
+                {
+                    "idempotency_key": str(uuid.uuid4()),
+                    "action": "promote_generation",
+                    "target": self.candidate.generation_id,
+                }
+            ),
+            content_type="application/json",
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["reason_code"],
+            "vault_admin_mutations_disabled",
+        )
+        self.assertFalse(ConfirmationChallenge.objects.exists())
 
     def test_mutation_rate_limit_is_actor_and_route_scoped(self):
         url = reverse("vaultops:confirmation_issue")
