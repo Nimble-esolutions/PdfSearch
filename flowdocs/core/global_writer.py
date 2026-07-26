@@ -193,14 +193,42 @@ def release_global_writer(
     *,
     writer_record: dict[str, Any],
 ) -> None:
-    """Release global writer authority."""
+    """Expire this holder's writer record with ownership-checked CAS.
+
+    A blind delete can remove a successor that acquired authority after this
+    caller's lease expired. Re-read and validate the token/epoch, then replace
+    only the exact record observed by this holder.
+    """
     key = _writer_key(dataset_id)
     try:
-        vault.client.delete_object(
+        current = validate_writer_for_publication(
+            vault,
+            dataset_id,
+            writer_record=writer_record,
+            production_source_id=writer_record.get("production_source_id", ""),
+            instance_id=writer_record.get("instance_id", ""),
+            expected_epoch=writer_record.get("writer_epoch"),
+        )
+        expected_etag = current.pop("_etag", "")
+        if not expected_etag:
+            return
+        now = time.time()
+        current["heartbeat_at"] = now
+        current["expires_at"] = now
+        current["released_at"] = now
+        data = json.dumps(current, sort_keys=True).encode()
+        digest = hashlib.sha256(data).hexdigest()
+        vault.client.put_object(
             Bucket=vault.config.bucket,
             Key=key,
+            Body=data,
+            ContentType="application/json",
+            Metadata={"sha256": digest, "control": "writer"},
+            IfMatch=expected_etag,
         )
     except Exception:
+        # Ownership changed, the lease expired, or the endpoint rejected the
+        # CAS. Never fall back to deletion; bounded expiry is the safe outcome.
         pass
 
 

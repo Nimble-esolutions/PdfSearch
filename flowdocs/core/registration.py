@@ -117,20 +117,38 @@ def validate_registration(
             f"(supported: {REGISTRATION_VERSION})"
         )
 
-    registered_app = registration.get("app_identifier", "")
-    if registered_app and registered_app != app_identifier:
+    registered_app = registration.get("app_identifier")
+    if registered_app != app_identifier:
         raise RegistrationError(
             f"Registration app_identifier '{registered_app}' does not match "
             f"configured '{app_identifier}'"
         )
 
     if production_source_id:
-        registered_source = registration.get("production_source_id", "")
-        if registered_source and registered_source != production_source_id:
+        registered_source = registration.get("production_source_id")
+        if registered_source != production_source_id:
             raise RegistrationError(
                 f"Registration production_source_id '{registered_source}' "
                 f"does not match configured '{production_source_id}'"
             )
+
+    schema_range = registration.get("manifest_schema_range")
+    if not isinstance(schema_range, dict):
+        raise RegistrationError("Registration manifest_schema_range is missing")
+    minimum = schema_range.get("min")
+    maximum = schema_range.get("max")
+    if (
+        not isinstance(minimum, int)
+        or isinstance(minimum, bool)
+        or not isinstance(maximum, int)
+        or isinstance(maximum, bool)
+        or minimum > MANIFEST_SCHEMA_RANGE["min"]
+        or maximum < MANIFEST_SCHEMA_RANGE["max"]
+    ):
+        raise RegistrationError(
+            "Registration manifest_schema_range does not support "
+            f"{MANIFEST_SCHEMA_RANGE['min']}..{MANIFEST_SCHEMA_RANGE['max']}"
+        )
 
     return registration
 
@@ -187,14 +205,9 @@ def update_authoritative_pointer(
                 f"Cannot publish: current writer_epoch {prev_epoch} is greater than "
                 f"provided {writer_epoch}"
             )
-        if writer_epoch != prev_epoch and writer_epoch != prev_epoch + 1:
-            raise RegistrationError(
-                f"Writer epoch jump: {prev_epoch} → {writer_epoch} "
-                f"(only +1 increments are valid)"
-            )
-
     pointer = {
         "schema_version": 1,
+        "dataset_id": dataset_id,
         "generation_id": generation_id,
         "manifest_object_key": manifest_object_key,
         "manifest_sha256": manifest_sha256,
