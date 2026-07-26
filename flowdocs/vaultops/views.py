@@ -1,0 +1,642 @@
+import hashlib
+import json
+import re
+import uuid
+
+from django.conf import settings
+from django.contrib import messages
+from django.core.cache import cache
+from django.db import transaction
+from django.http import HttpResponseRedirect, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
+
+from core.views import superadmin_required
+from vaultops.models import (
+    ArtifactGeneration,
+    RestoreWorkspace,
+    VaultConnectionProfile,
+    VaultJob,
+)
+from vaultops.services.activation import schedule_activation
+from vaultops.services.audit import append_event
+from vaultops.services.confirmations import (
+    consume_confirmation,
+    issue_confirmation,
+)
+from vaultops.services.jobs import request_cancellation, requeue_job
+from vaultops.services.profiles import probe_restore_profile
+from vaultops.services.read_model import (
+    build_workbench_state,
+    generation_state_digest,
+    workspace_state_digest,
+)
+from vaultops.services.restore import queue_restore_job
+from vaultops.services.sync import queue_sync_job
+
+
+SECTIONS = {
+    "overview",
+    "sync",
+    "generations",
+    "restore",
+    "jobs",
+    "configuration",
+}
+IDEMPOTENCY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,159}$")
+MUTATION_RATE_LIMIT = 30
+MUTATION_RATE_WINDOW_SECONDS = 60
+
+
+class WorkbenchRequestError(RuntimeError):
+    reason_code = "request_invalid"
+    status_code = 400
+
+    def __init__(self, reason_code=None, *, status_code=None):
+        self.reason_code = reason_code or self.reason_code
+        if status_code is not None:
+            self.status_code = status_code
+        super().__init__(self.reason_code)
+
+
+def _request_data(request):
+    if hasattr(request, "_vaultops_request_data"):
+        return request._vaultops_request_data
+    if request.content_type == "application/json":
+        try:
+            data = json.loads(request.body or b"{}")
+        except (TypeError, ValueError, UnicodeDecodeError) as exc:
+            raise WorkbenchRequestError("request_json_invalid") from exc
+        if not isinstance(data, dict):
+            raise WorkbenchRequestError("request_json_invalid")
+    else:
+        data = request.POST
+    request._vaultops_request_data = data
+    return data
+
+
+def _request_value(request, key, default=""):
+    return _request_data(request).get(key, default)
+
+
+def _enforce_mutation_rate_limit(request):
+    actor = request.user.pk or 0
+    client_ip = request.META.get("REMOTE_ADDR", "unknown")
+    digest = hashlib.sha256(
+        f"{actor}:{client_ip}:{request.path}".encode("utf-8")
+    ).hexdigest()
+    cache_key = f"vaultops:rate:{digest}"
+    try:
+        if cache.add(
+            cache_key, 1, timeout=MUTATION_RATE_WINDOW_SECONDS
+        ):
+            return
+        attempts = cache.incr(cache_key)
+    except Exception as exc:
+        raise WorkbenchRequestError(
+            "control_plane_unavailable", status_code=503
+        ) from exc
+    if attempts > MUTATION_RATE_LIMIT:
+        raise WorkbenchRequestError("rate_limited", status_code=429)
+
+
+def _request_idempotency_key(request):
+    _enforce_mutation_rate_limit(request)
+    value = (
+        request.headers.get("Idempotency-Key")
+        or _request_value(request, "idempotency_key", "")
+    ).strip()
+    if not IDEMPOTENCY_RE.fullmatch(value):
+        raise WorkbenchRequestError("idempotency_key_required")
+    return value
+
+
+def _actor(request):
+    return request.user.pk, request.user.get_username()
+
+
+def _state_version_guard(request):
+    supplied = _request_value(request, "state_version", "")
+    if not supplied:
+        raise WorkbenchRequestError("state_version_required")
+    current = build_workbench_state()
+    if supplied != current["state_version"]:
+        raise WorkbenchRequestError("stale_state", status_code=409)
+    return current
+
+
+def _api_response(
+    *,
+    status,
+    reason_code="",
+    severity="info",
+    recommended_action="",
+    state_version="",
+    data=None,
+    correlation_id=None,
+    http_status=200,
+):
+    return JsonResponse(
+        {
+            "status": status,
+            "reason_code": reason_code,
+            "severity": severity,
+            "recommended_action": recommended_action,
+            "observed_at": timezone.now(),
+            "correlation_id": str(correlation_id or uuid.uuid4()),
+            "state_version": state_version,
+            "data": data if data is not None else {},
+        },
+        status=http_status,
+    )
+
+
+def _wants_json(request):
+    accept = request.headers.get("Accept", "")
+    return (
+        request.content_type == "application/json"
+        or (
+            "application/json" in accept
+            and "text/html" not in accept
+        )
+    )
+
+
+def _form_redirect(section):
+    response = HttpResponseRedirect(
+        f"{reverse('operations_panel')}?section={section}"
+    )
+    response.status_code = 303
+    return response
+
+
+def _mutation_success(
+    request,
+    *,
+    section,
+    reason_code,
+    message,
+    data=None,
+    state_version="",
+    correlation_id=None,
+):
+    if _wants_json(request):
+        return _api_response(
+            status="accepted",
+            reason_code=reason_code,
+            recommended_action=message,
+            state_version=state_version,
+            correlation_id=correlation_id,
+            data=data,
+            http_status=202,
+        )
+    messages.success(request, message)
+    return _form_redirect(section)
+
+
+def _mutation_error(request, exc, *, section="overview"):
+    reason_code = getattr(exc, "reason_code", "operation_failed")
+    http_status = getattr(exc, "status_code", 409)
+    if _wants_json(request):
+        return _api_response(
+            status="blocked",
+            reason_code=reason_code,
+            severity="warning",
+            recommended_action="Refresh state and review the blocking reason.",
+            http_status=http_status,
+        )
+    messages.error(request, reason_code.replace("_", " "))
+    return _form_redirect(section)
+
+
+@superadmin_required
+@require_GET
+def workbench(request):
+    section = request.GET.get("section", "overview")
+    if section not in SECTIONS:
+        section = "overview"
+    state = build_workbench_state(
+        profile_key=request.GET.get("profile") or None
+    )
+    return render(
+        request,
+        "vaultops/workbench.html",
+        {
+            "title": "Vault Operations Workbench",
+            "section": section,
+            "state": state,
+            "idempotency_key": str(uuid.uuid4()),
+            "breadcrumb_items": [
+                {"label": "Dashboard", "url": reverse("dashboard")},
+                {"label": "Operations", "url": None},
+            ],
+        },
+    )
+
+
+@superadmin_required
+@require_GET
+def state_api(request):
+    state = build_workbench_state(
+        profile_key=request.GET.get("profile") or None
+    )
+    return _api_response(
+        status=state["status"],
+        reason_code=state["reason_code"],
+        severity=state["severity"],
+        recommended_action=state["recommended_action"],
+        state_version=state["state_version"],
+        data=state,
+    )
+
+
+@superadmin_required
+@require_GET
+def profiles_api(request):
+    state = build_workbench_state()
+    return _api_response(
+        status="ok",
+        state_version=state["state_version"],
+        data={"profiles": state["profiles"]},
+    )
+
+
+@superadmin_required
+@require_GET
+def generations_api(request):
+    state = build_workbench_state()
+    return _api_response(
+        status="ok",
+        state_version=state["state_version"],
+        data={"generations": state["generations"]},
+    )
+
+
+@superadmin_required
+@require_GET
+def jobs_api(request):
+    state = build_workbench_state()
+    return _api_response(
+        status="ok",
+        state_version=state["state_version"],
+        data={"jobs": state["jobs"]},
+    )
+
+
+@superadmin_required
+@require_GET
+def audit_api(request):
+    state = build_workbench_state()
+    return _api_response(
+        status="ok",
+        state_version=state["state_version"],
+        data={"audit": state["audit"]},
+    )
+
+
+@superadmin_required
+@require_POST
+def sync_run(request):
+    try:
+        _request_idempotency_key(request)
+        _state_version_guard(request)
+        actor_id, actor_name = _actor(request)
+        job = queue_sync_job(
+            trigger="manual",
+            requested_by_id=actor_id,
+            requested_by_name=actor_name,
+        )
+        if job is None:
+            return _mutation_success(
+                request,
+                section="sync",
+                reason_code="no_source_changes",
+                message="No source changes require publication.",
+            )
+        else:
+            return _mutation_success(
+                request,
+                section="sync",
+                reason_code="sync_queued",
+                message=(
+                    f"Sync job {job.public_id} queued as "
+                    "publish-only candidate."
+                ),
+                data={"job_id": str(job.public_id)},
+                correlation_id=job.correlation_id,
+            )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="sync")
+
+
+@superadmin_required
+@require_POST
+def restore_start(request):
+    try:
+        idempotency_key = _request_idempotency_key(request)
+        _state_version_guard(request)
+        profile = get_object_or_404(
+            VaultConnectionProfile,
+            key=_request_value(request, "profile_key", ""),
+            enabled=True,
+        )
+        actor_id, actor_name = _actor(request)
+        job = queue_restore_job(
+            profile=profile,
+            generation_id=_request_value(
+                request, "generation_id", ""
+            ).strip(),
+            idempotency_key=idempotency_key,
+            requested_by_id=actor_id,
+            requested_by_name=actor_name,
+        )
+        return _mutation_success(
+            request,
+            section="restore",
+            reason_code="restore_queued",
+            message=(
+                f"Restore job {job.public_id} queued for "
+                "quarantine preparation."
+            ),
+            data={"job_id": str(job.public_id)},
+            correlation_id=job.correlation_id,
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="restore")
+
+
+@superadmin_required
+@require_POST
+def job_cancel(request, job_id):
+    try:
+        _request_idempotency_key(request)
+        job = get_object_or_404(VaultJob, public_id=job_id)
+        if str(job.state_version) != _request_value(
+            request, "job_state_version"
+        ):
+            raise WorkbenchRequestError("stale_state", status_code=409)
+        job = request_cancellation(job.public_id)
+        return _mutation_success(
+            request,
+            section="jobs",
+            reason_code="job_cancellation_requested",
+            message=f"Cancellation requested for job {job.public_id}.",
+            data={"job_id": str(job.public_id)},
+            state_version=str(job.state_version),
+            correlation_id=job.correlation_id,
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="jobs")
+
+
+@superadmin_required
+@require_POST
+def job_retry(request, job_id):
+    try:
+        _request_idempotency_key(request)
+        job = get_object_or_404(VaultJob, public_id=job_id)
+        if str(job.state_version) != _request_value(
+            request, "job_state_version"
+        ):
+            raise WorkbenchRequestError("stale_state", status_code=409)
+        job = requeue_job(job.public_id)
+        return _mutation_success(
+            request,
+            section="jobs",
+            reason_code="job_retry_queued",
+            message=f"Job {job.public_id} queued for retry.",
+            data={"job_id": str(job.public_id)},
+            state_version=str(job.state_version),
+            correlation_id=job.correlation_id,
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="jobs")
+
+
+@superadmin_required
+@require_POST
+def profile_probe(request, profile_key):
+    try:
+        _request_idempotency_key(request)
+        _state_version_guard(request)
+        profile = get_object_or_404(
+            VaultConnectionProfile, key=profile_key, enabled=True
+        )
+        evidence = probe_restore_profile(profile)
+        return _mutation_success(
+            request,
+            section="configuration",
+            reason_code="profile_probe_completed",
+            message=(
+                f"Profile probe completed: "
+                f"{'reachable' if evidence['reachable'] else 'unavailable'}."
+            ),
+            data={"evidence": evidence},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="configuration")
+
+
+def _default_generation_queryset():
+    identity = settings.ENV_IDENTITY
+    return ArtifactGeneration.objects.filter(
+        profile__key=settings.VAULT_DEFAULT_PROFILE,
+        dataset_id=identity.dataset_id,
+    )
+
+
+def _confirmation_target(action, target):
+    if action == "promote_generation":
+        generation = get_object_or_404(
+            _default_generation_queryset(), generation_id=target
+        )
+        if generation.vault_state != ArtifactGeneration.VaultState.CANDIDATE:
+            raise WorkbenchRequestError("generation_not_candidate")
+        return generation_state_digest(generation)
+    if action == "activate_workspace":
+        workspace = get_object_or_404(
+            RestoreWorkspace.objects.select_related("generation"),
+            public_id=target,
+        )
+        if workspace.state != RestoreWorkspace.State.ACTIVATION_READY:
+            raise WorkbenchRequestError("workspace_not_activation_ready")
+        if settings.ENV_IDENTITY.is_production:
+            raise WorkbenchRequestError(
+                "production_activation_disabled", status_code=409
+            )
+        return workspace_state_digest(workspace)
+    raise WorkbenchRequestError("confirmation_action_invalid")
+
+
+@superadmin_required
+@require_POST
+def confirmation_issue(request):
+    try:
+        _request_idempotency_key(request)
+        action = _request_value(request, "action", "")
+        target = _request_value(request, "target", "")
+        state_digest = _confirmation_target(action, target)
+        challenge, phrase = issue_confirmation(
+            actor_id=request.user.pk,
+            action=action,
+            target=target,
+            state_digest=state_digest,
+        )
+        if _wants_json(request):
+            return _api_response(
+                status="issued",
+                reason_code="confirmation_issued",
+                state_version=state_digest,
+                data={
+                    "challenge_id": str(challenge.public_id),
+                    "confirmation_phrase": phrase,
+                    "expires_at": challenge.expires_at,
+                    "action": action,
+                    "target": target,
+                },
+            )
+        return render(
+            request,
+            "vaultops/confirmation.html",
+            {
+                "challenge": challenge,
+                "phrase": phrase,
+                "action": action,
+                "target": target,
+                "state_digest": state_digest,
+                "idempotency_key": str(uuid.uuid4()),
+                "submit_url": (
+                    reverse(
+                        "vaultops:promote_generation",
+                        kwargs={"generation_id": target},
+                    )
+                    if action == "promote_generation"
+                    else reverse(
+                        "vaultops:schedule_activation",
+                        kwargs={"workspace_id": target},
+                    )
+                ),
+                "breadcrumb_items": [
+                    {"label": "Dashboard", "url": reverse("dashboard")},
+                    {
+                        "label": "Operations",
+                        "url": reverse("operations_panel"),
+                    },
+                    {"label": "Confirmation", "url": None},
+                ],
+            },
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="generations")
+
+
+def _consume(request, *, action, target, state_digest):
+    return consume_confirmation(
+        challenge_id=_request_value(request, "challenge_id", ""),
+        actor_id=request.user.pk,
+        action=action,
+        target=target,
+        state_digest=state_digest,
+        phrase=_request_value(request, "confirmation_phrase", ""),
+    )
+
+
+@superadmin_required
+@require_POST
+def promote_generation(request, generation_id):
+    try:
+        idempotency_key = _request_idempotency_key(request)
+        generation = get_object_or_404(
+            _default_generation_queryset().select_related("profile"),
+            generation_id=generation_id,
+        )
+        if generation.vault_state != ArtifactGeneration.VaultState.CANDIDATE:
+            raise WorkbenchRequestError("generation_not_candidate")
+        with transaction.atomic(using="control"):
+            digest = generation_state_digest(generation)
+            confirmation_digest = _consume(
+                request,
+                action="promote_generation",
+                target=generation_id,
+                state_digest=digest,
+            )
+            job, created = VaultJob.objects.get_or_create(
+                operation="promote_generation",
+                idempotency_key=idempotency_key,
+                defaults={
+                    "profile": generation.profile,
+                    "profile_fingerprint": generation.profile.fingerprint,
+                    "dataset_id": generation.dataset_id,
+                    "generation_id": generation.generation_id,
+                    "manifest_digest": generation.manifest_digest,
+                    "requested_by_id": request.user.pk,
+                    "requested_by_name": request.user.get_username(),
+                    "progress": {
+                        "confirmation": f"operator:{confirmation_digest}"
+                    },
+                },
+            )
+            if created:
+                append_event(
+                    action="job_queued",
+                    result="succeeded",
+                    correlation_id=job.correlation_id,
+                    actor_id=request.user.pk,
+                    actor_name=request.user.get_username(),
+                    job_public_id=job.public_id,
+                    confirmation_digest=confirmation_digest,
+                    after_state={
+                        "job_state": job.status,
+                        "operation": job.operation,
+                        "generation_id": generation.generation_id,
+                    },
+                )
+        return _mutation_success(
+            request,
+            section="generations",
+            reason_code="promotion_queued",
+            message=(
+                f"Promotion job {job.public_id} queued; "
+                "runtime is unchanged."
+            ),
+            data={"job_id": str(job.public_id)},
+            correlation_id=job.correlation_id,
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="generations")
+
+
+@superadmin_required
+@require_POST
+def schedule_activation_view(request, workspace_id):
+    try:
+        _request_idempotency_key(request)
+        workspace = get_object_or_404(
+            RestoreWorkspace.objects.select_related("generation"),
+            public_id=workspace_id,
+        )
+        with transaction.atomic(using="control"):
+            digest = workspace_state_digest(workspace)
+            _consume(
+                request,
+                action="activate_workspace",
+                target=str(workspace.public_id),
+                state_digest=digest,
+            )
+            intent = schedule_activation(
+                workspace,
+                actor_id=request.user.pk,
+                actor_name=request.user.get_username(),
+                confirmed=True,
+            )
+        return _mutation_success(
+            request,
+            section="restore",
+            reason_code="activation_scheduled",
+            message=f"Activation intent {intent.public_id} scheduled.",
+            data={"activation_intent_id": str(intent.public_id)},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="restore")

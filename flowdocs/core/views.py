@@ -63,12 +63,8 @@ from .metrics import metrics_view
 from .maintenance import (
     archive_pdf,
     deprecate_pdf,
-    promote_active_generation,
-    purge_expired_generations,
-    purge_generation,
     queue_job,
     restore_pdf,
-    rollback_to_generation,
 )
 from .forms import UploadForm
 from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
@@ -1206,52 +1202,41 @@ def generation_validations(request, generation_id):
 @superadmin_required
 @require_POST
 def promote_generation(request, generation_id):
-    """Promote a validated generation to active, superseding the prior active."""
-    try:
-        generation = promote_active_generation(generation_id, requested_by=request.user)
-    except Exception as exc:
-        messages.error(request, f"Promotion failed: {exc}")
-    else:
-        messages.success(request, f"Generation {generation.generation_id} promoted to active.")
-    return redirect("dashboard")
+    """Retired database-label action; require the workbench confirmation."""
+    messages.warning(request, "typed_confirmation_required")
+    return redirect(
+        f"{reverse('operations_panel')}?section=generations"
+    )
 
 
 @superadmin_required
 @require_POST
 def rollback_generation(request, generation_id):
-    """Roll back to a prior generation by re-staging and promoting it."""
-    try:
-        generation = rollback_to_generation(generation_id, requested_by=request.user)
-    except Exception as exc:
-        messages.error(request, f"Rollback failed: {exc}")
-    else:
-        messages.success(request, f"Rolled back to generation {generation.generation_id}.")
-    return redirect("dashboard")
+    """Retired local relabel action; rollback is a compensating operation."""
+    messages.warning(request, "operation_replaced")
+    return redirect(
+        f"{reverse('operations_panel')}?section=generations"
+    )
 
 
 @superadmin_required
 @require_POST
 def purge_generation_view(request, generation_id):
-    """Manually purge a single non-active generation."""
-    try:
-        generation = purge_generation(generation_id, requested_by=request.user)
-    except Exception as exc:
-        messages.error(request, f"Purge failed: {exc}")
-    else:
-        messages.success(request, f"Generation {generation.generation_id} purged.")
-    return redirect("dashboard")
+    """Retired misleading purge; no deletion or status mutation is performed."""
+    messages.warning(request, "operation_replaced")
+    return redirect(
+        f"{reverse('operations_panel')}?section=generations"
+    )
 
 
 @superadmin_required
 @require_POST
 def purge_expired_generations_view(request):
-    """Purge all generations past their retention window."""
-    purged_ids = purge_expired_generations(requested_by=request.user)
-    if purged_ids:
-        messages.success(request, f"Purged {len(purged_ids)} expired generation(s).")
-    else:
-        messages.info(request, "No expired generations to purge.")
-    return redirect("dashboard")
+    """Retired misleading bulk purge; GC remains feature-flagged off."""
+    messages.warning(request, "operation_replaced")
+    return redirect(
+        f"{reverse('operations_panel')}?section=generations"
+    )
 
 
 def _job_status_json(job):
@@ -1766,92 +1751,41 @@ def health_lease(request):
 
 @superadmin_required
 def operations_data(request):
-    """Superadmin: full dataset metadata."""
-    env_identity = getattr(settings, "ENV_IDENTITY", None)
-    local_gen = ArtifactGeneration.objects.filter(status="active").order_by("-promoted_at").first()
+    """Compatibility read endpoint backed by the redacted workbench model."""
+    from vaultops.services.read_model import build_workbench_state
+
+    state = build_workbench_state()
     return JsonResponse({
-        "app_env": env_identity.app_env.value if env_identity else "unknown",
-        "dataset_id": env_identity.dataset_id if env_identity else "",
-        "data_mode": env_identity.data_mode.value if env_identity else "",
-        "backup_role": env_identity.backup_role.value if env_identity else "",
-        "local_active_generation": local_gen.generation_id if local_gen else None,
-        "pdf_count": PDFFile.objects.count(),
-        "indexed_pdf_count": PDFFile.objects.filter(indexed=True).count(),
+        "status": state["status"],
+        "reason_code": state["reason_code"],
+        "observed_at": state["observed_at"],
+        "state_version": state["state_version"],
+        "environment": state["environment"],
+        "authority": state["authority"],
+        "sync": state["sync"],
     })
 
 
 @superadmin_required
 def operations_lease(request):
-    """Superadmin: full lease details."""
-    env_identity = getattr(settings, "ENV_IDENTITY", None)
-    ds_id = env_identity.dataset_id if env_identity else ""
-    try:
-        from .lease import get_lease_status
-        status = get_lease_status(ds_id)
-    except Exception:
-        status = None
-    return JsonResponse({"dataset_id": ds_id, "lease_held": status is not None, "lease": status})
+    """Compatibility lease endpoint; owner tokens never leave the server."""
+    from vaultops.services.read_model import build_workbench_state
+
+    state = build_workbench_state()
+    return JsonResponse({
+        "status": state["lease"]["state"],
+        "reason_code": state["lease"].get("reason_code", ""),
+        "dataset_id": state["environment"]["dataset_id"],
+        "lease": state["lease"],
+        "observed_at": state["observed_at"],
+        "state_version": state["state_version"],
+    })
 
 
 @superadmin_required
 def s3_operations_view(request):
-    """Dedicated S3 artifact vault and bulk operations page."""
-    from .models import ArtifactGeneration
-
-    generations = ArtifactGeneration.objects.all().order_by("-created_at")
-    active_gen = generations.filter(status="active").first()
-
-    vault_health = {"enabled": False, "configured": False, "reachable": False, "bucket_exists": False, "healthy": False, "error_code": ""}
-    vault_manifests = []
-    vault_config = {}
-    try:
-        vault = ArtifactVault()
-        health = vault.health_check()
-        vault_health = {
-            "enabled": health.enabled,
-            "configured": health.configured,
-            "reachable": health.reachable,
-            "bucket_exists": health.bucket_exists,
-            "healthy": health.healthy,
-            "error_code": health.error_code,
-        }
-        vault_config = {
-            "endpoint": vault.config.endpoint,
-            "bucket": vault.config.bucket,
-            "region": vault.config.region,
-        }
-        if health.healthy:
-            vault_manifests = [
-                {"key": m.key, "sha256": m.sha256[:16], "size": m.size}
-                for m in vault.list_manifests()
-            ]
-    except ArtifactVaultConfigurationError:
-        vault_health["error_code"] = "configuration_invalid"
-    except Exception:
-        vault_health["error_code"] = "probe_failed"
-
-    env_identity = getattr(settings, "ENV_IDENTITY", None)
-
-    context = {
-        "title": "S3 Artifact Vault & Operations",
-        "generations": generations,
-        "active_generation": active_gen,
-        "vault_health": vault_health,
-        "vault_healthy": vault_health["healthy"],
-        "vault_reachable": vault_health["reachable"],
-        "vault_bucket_exists": vault_health["bucket_exists"],
-        "vault_error": vault_health["error_code"],
-        "vault_manifests": vault_manifests,
-        "vault_config": vault_config,
-        "backup_role": env_identity.backup_role.value if env_identity else "unknown",
-        "vault_enabled": getattr(env_identity, "is_backup_writer", False),
-        "breadcrumb_items": [
-            {"label": gettext("Dashboard"), "url": reverse("dashboard")},
-            {"label": gettext("Operations"), "url": reverse("operations_panel")},
-            {"label": gettext("Artifact Vault"), "url": None},
-        ],
-    }
-    return render(request, "dashboard_s3ops.html", context)
+    """Redirect the retired mixed-control page to the truthful workbench."""
+    return redirect(f"{reverse('operations_panel')}?section=generations")
 
 
 ALLOWED_SETTING_KEYS = {
