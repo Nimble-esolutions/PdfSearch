@@ -15,6 +15,17 @@ async function login(page: Page, next = '/dashboard/operations/') {
   ]);
 }
 
+async function switchLanguage(page: Page, language: 'en' | 'mr') {
+  const form = page.locator(`form:has(input[name="language"][value="${language}"])`);
+  const button = form.locator('button[type="submit"]');
+  if (!(await button.isVisible())) {
+    await page.locator('.navbar-toggler').click();
+    await expect(button).toBeVisible();
+  }
+  await button.click();
+  await expect(page.locator('html')).toHaveAttribute('lang', language);
+}
+
 test.describe('Vault Operations Workbench', () => {
   test('passes authority, a11y, locale, no-JS, and zoom gates', async ({ browser, page }) => {
     const externalRequests: string[] = [];
@@ -37,13 +48,10 @@ test.describe('Vault Operations Workbench', () => {
       ),
     ).toEqual([]);
 
-    await page.getByRole('button', { name: 'मराठी' }).click();
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
+    await switchLanguage(page, 'mr');
     await expect(page.getByRole('heading', { name: 'तिजोरी संचालन कार्यपटल' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'अधिकृत स्थिती तुलना' })).toBeVisible();
-    await page.getByRole('button', { name: 'English' }).click();
-    await page.waitForLoadState('networkidle');
+    await switchLanguage(page, 'en');
 
     const storageState = await page.context().storageState();
     const origin = new URL(page.url()).origin;
