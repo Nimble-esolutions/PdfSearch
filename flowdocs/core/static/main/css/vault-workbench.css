@@ -6,7 +6,7 @@
   --vault-line: #d8cec0;
   --vault-maroon: #681f2a;
   --vault-maroon-dark: #43141c;
-  --vault-ochre: #a96d18;
+  --vault-ochre: #87520d;
   --vault-green: #21643d;
   --vault-warning: #8a5710;
   --vault-danger: #8b2531;
@@ -136,6 +136,7 @@ code { overflow-wrap: anywhere; color: var(--vault-maroon-dark); }
 .vault-panel .status--good, .vault-panel .status--ready, .vault-panel .status--held { color: var(--vault-green); }
 .status--unknown, .status--degraded { color: #ffd99d; }
 .status--disabled { color: var(--vault-muted); }
+.vault-summary .status--disabled { color: #dfd1c4; }
 
 .vault-action-block { margin-top: 1rem; padding: 1rem; background: var(--vault-canvas); border: 1px solid var(--vault-line); }
 .vault-action-block p { color: var(--vault-muted); font-size: .82rem; }
