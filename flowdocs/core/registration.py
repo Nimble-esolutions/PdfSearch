@@ -306,16 +306,34 @@ def update_authoritative_pointer_cas(
 def get_authoritative_pointer(
     vault: ArtifactVault, dataset_id: str
 ) -> dict[str, Any] | None:
-    """Read the authoritative generation pointer. Returns None if absent.
+    """Read the authoritative generation pointer. Returns None only if absent.
 
     Uses raw S3 client to also capture ETag for CAS operations."""
     keys = KeyBuilder(dataset_id)
     pointer_key = keys.control_authoritative()
     try:
         resp = vault.client.get_object(Bucket=vault.config.bucket, Key=pointer_key)
+    except Exception as exc:
+        response = getattr(exc, "response", {}) or {}
+        error = response.get("Error", {}) or {}
+        if str(error.get("Code", "")) in {
+            "404",
+            "NoSuchKey",
+            "NotFound",
+        }:
+            return None
+        raise RegistrationError("authoritative_pointer_read_failed") from exc
+    try:
         data = resp["Body"].read()
         result = json.loads(data)
-        result["_etag"] = resp.get("ETag", "")
-        return result
-    except Exception:
-        return None
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
+        raise RegistrationError("authoritative_pointer_malformed") from exc
+    if not isinstance(result, dict):
+        raise RegistrationError("authoritative_pointer_malformed")
+    digest = hashlib.sha256(data).hexdigest()
+    stored_digest = (resp.get("Metadata") or {}).get("sha256", "")
+    if stored_digest and stored_digest != digest:
+        raise RegistrationError("authoritative_pointer_digest_mismatch")
+    result["_etag"] = resp.get("ETag", "")
+    result["_digest"] = digest
+    return result
