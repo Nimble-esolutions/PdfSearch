@@ -70,6 +70,22 @@ class FakeS3:
             "ETag": value["etag"],
         }
 
+    def copy_object(self, **params):
+        source = self.objects[params["CopySource"]["Key"]]
+        if (
+            params.get("CopySourceIfMatch")
+            and params["CopySourceIfMatch"] != source["etag"]
+        ):
+            raise FakeS3Error("PreconditionFailed")
+        return self.put_object(
+            Bucket=params["Bucket"],
+            Key=params["Key"],
+            Body=source["body"],
+            ContentType=params.get("ContentType", ""),
+            Metadata=params.get("Metadata", {}),
+            IfNoneMatch="*",
+        )
+
     def delete_object(self, *, Bucket, Key):
         del Bucket
         self.objects.pop(Key, None)
@@ -114,6 +130,8 @@ def migration_args(
         include_backups=False,
         include_static=False,
         publish=publish,
+        repack_authoritative=False,
+        repair_registration_metadata=False,
         candidate_only=False,
         register_dataset=register_dataset,
         promote_generation=promote_generation,
@@ -282,6 +300,90 @@ class CandidatePublicationTests(unittest.TestCase):
                 ):
                     migration.migrate(args)
             self.assertEqual(len(client.objects), object_count)
+
+    def test_strict_repack_repairs_registration_and_copies_database_blob(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "source"
+            root.mkdir()
+            make_source(root)
+            checkpoint = Path(temp_dir) / "checkpoint.json"
+            client = FakeS3()
+            args = migration_args(
+                root, checkpoint, publish=True, register_dataset=True
+            )
+            with mock.patch.object(migration, "s3_client", return_value=client):
+                migration.migrate(args)
+
+            source_manifest_key = migration.manifest_key(
+                args.dataset_id, args.generation_id
+            )
+            source_manifest = json.loads(
+                client.objects[source_manifest_key]["body"]
+            )
+            database = next(
+                entry
+                for entry in source_manifest["files"]
+                if entry["path"] == "db.sqlite3"
+            )
+            current_database_key = database["object_key"]
+            legacy_database_key = (
+                f"datasets/{args.dataset_id}/generations/"
+                f"{args.generation_id}/database.sqlite3"
+            )
+            client.objects[legacy_database_key] = client.objects.pop(
+                current_database_key
+            )
+            database["object_key"] = legacy_database_key
+            source_manifest["database"]["entry"] = database
+            source_body = migration.canonical_json(source_manifest)
+            client.put_object(
+                Bucket=args.bucket,
+                Key=source_manifest_key,
+                Body=source_body,
+                Metadata={"sha256": hashlib.sha256(source_body).hexdigest()},
+            )
+            pointer = {
+                "dataset_id": args.dataset_id,
+                "generation_id": args.generation_id,
+                "manifest_object_key": source_manifest_key,
+                "manifest_sha256": hashlib.sha256(source_body).hexdigest(),
+                "production_source_id": args.production_source_id,
+                "writer_epoch": 0,
+            }
+            client.put_object(
+                Bucket=args.bucket,
+                Key=migration.pointer_key(args.dataset_id),
+                Body=migration.canonical_json(pointer),
+                Metadata={"sha256": "legacy"},
+            )
+            registration = client.objects[
+                migration.registration_key(args.dataset_id)
+            ]
+            registration["metadata"] = {}
+
+            repack_args = migration_args(None, None)
+            repack_args.generation_id = "repacked-20260727T000000Z-a1b2c3d4"
+            repack_args.repack_authoritative = True
+            repack_args.repair_registration_metadata = True
+            with mock.patch.object(migration, "s3_client", return_value=client):
+                result = migration.migrate(repack_args)
+
+            self.assertTrue(result["candidate_published"])
+            self.assertFalse(result["pointer_updated"])
+            self.assertIn(current_database_key, client.objects)
+            registration_head = client.head_object(
+                Bucket=args.bucket,
+                Key=migration.registration_key(args.dataset_id),
+            )
+            self.assertRegex(
+                registration_head["Metadata"]["sha256"], r"^[0-9a-f]{64}$"
+            )
+            self.assertTrue(
+                any(
+                    "/control/recovery/registration/" in key
+                    for key in client.objects
+                )
+            )
 
     def test_publication_requires_durable_checkpoint(self):
         with tempfile.TemporaryDirectory() as temp_dir:

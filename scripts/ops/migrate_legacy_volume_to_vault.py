@@ -93,10 +93,9 @@ def _validate_manifest_path(value: Any) -> str:
 
 
 def object_key(dataset_id: str, generation_id: str, relative_path: str, digest: str) -> str:
+    del generation_id
     if relative_path.lower().endswith(".pdf") and relative_path.startswith("media/"):
         return f"datasets/{dataset_id}/blobs/pdfs/sha256/{digest}.pdf"
-    if relative_path == "db.sqlite3":
-        return f"datasets/{dataset_id}/generations/{generation_id}/database.sqlite3"
     return f"datasets/{dataset_id}/blobs/files/{digest}"
 
 
@@ -351,6 +350,7 @@ def inventory_source(
     created_at: str | None = None,
     source_label: str = "",
     source_evidence: dict[str, Any] | None = None,
+    production_source_id: str = DEFAULT_PRODUCTION_SOURCE_ID,
 ) -> dict[str, Any]:
     files: list[dict[str, Any]] = []
 
@@ -402,6 +402,7 @@ def inventory_source(
         "read_only": True,
         "release_id": generation_id,
         "dataset_id": dataset_id,
+        "production_source_id": production_source_id,
         "schema": {
             "inventory_schema": "legacy-volume-port/v2",
             "django_app": "core",
@@ -465,6 +466,8 @@ def validate_manifest(
         raise MigrationError("Manifest version is unsupported")
     if manifest.get("dataset_id") != dataset_id:
         raise MigrationError("Manifest dataset identity does not match")
+    if not manifest.get("production_source_id"):
+        raise MigrationError("Manifest production source identity is missing")
     if manifest.get("release_id") != generation_id:
         raise MigrationError("Manifest generation identity does not match")
     if not isinstance(manifest.get("schema"), dict):
@@ -914,6 +917,270 @@ def ensure_registration(
     return validate_registration(created, dataset_id, production_source_id)
 
 
+def repair_registration_metadata(
+    client: Any,
+    bucket: str,
+    dataset_id: str,
+    production_source_id: str,
+) -> dict[str, Any]:
+    """Conditionally repair metadata while retaining the exact prior bytes."""
+    key = registration_key(dataset_id)
+    body, etag = read_object(client, bucket, key)
+    if body is None or not etag:
+        raise MigrationError("Destination registration is missing")
+    digest = hashlib.sha256(body).hexdigest()
+    registration = validate_registration(
+        json.loads(body), dataset_id, production_source_id
+    )
+    head = client.head_object(Bucket=bucket, Key=key)
+    if (head.get("Metadata") or {}).get("sha256") == digest:
+        return registration
+
+    recovery_key = (
+        f"datasets/{dataset_id}/control/recovery/registration/"
+        f"{digest}-{secrets.token_hex(8)}.json"
+    )
+    put_immutable_bytes(
+        client, bucket, recovery_key, body, "application/json"
+    )
+    try:
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body,
+            ContentType="application/json",
+            Metadata={
+                "sha256": digest,
+                "immutable": "true",
+                "recovery-copy": recovery_key,
+            },
+            IfMatch=etag,
+        )
+    except Exception as exc:
+        raise MigrationError(
+            "Registration metadata repair lost a compare-and-swap race"
+        ) from exc
+    repaired, _ = read_object(client, bucket, key)
+    if repaired != body:
+        raise MigrationError("Registration bytes changed during metadata repair")
+    verify_remote_object(client, bucket, key, digest, len(body))
+    return registration
+
+
+def _repack_file_entries(
+    client: Any,
+    bucket: str,
+    dataset_id: str,
+    generation_id: str,
+    files: Any,
+) -> list[dict[str, Any]]:
+    if not isinstance(files, list) or not files:
+        raise MigrationError("Legacy manifest contains no files")
+    repacked = []
+    for raw in files:
+        if not isinstance(raw, dict):
+            raise MigrationError("Legacy manifest file entry is invalid")
+        entry = dict(raw)
+        path = _validate_manifest_path(entry.get("path"))
+        digest = entry.get("sha256")
+        size = entry.get("bytes")
+        source_key = entry.get("object_key")
+        if (
+            not isinstance(digest, str)
+            or not SHA256_RE.fullmatch(digest)
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+            or not isinstance(source_key, str)
+            or not source_key.startswith(f"datasets/{dataset_id}/")
+        ):
+            raise MigrationError(f"Legacy manifest entry is invalid: {path}")
+        verify_remote_object(client, bucket, source_key, digest, size)
+        target_key = object_key(dataset_id, generation_id, path, digest)
+        if source_key != target_key:
+            if path != "db.sqlite3":
+                raise MigrationError(
+                    f"Legacy blob is not verifier-compatible: {path}"
+                )
+            try:
+                client.copy_object(
+                    Bucket=bucket,
+                    Key=target_key,
+                    CopySource={"Bucket": bucket, "Key": source_key},
+                    CopySourceIfMatch=client.head_object(
+                        Bucket=bucket, Key=source_key
+                    ).get("ETag", ""),
+                    Metadata={
+                        "sha256": digest,
+                        "immutable": "true",
+                        "repacked-from": source_key,
+                    },
+                    MetadataDirective="REPLACE",
+                    ContentType="application/octet-stream",
+                )
+            except Exception:
+                # An idempotent retry is safe only if the target already has
+                # the exact expected content metadata and length.
+                verify_remote_object(
+                    client, bucket, target_key, digest, size
+                )
+            verify_remote_object(client, bucket, target_key, digest, size)
+        entry["object_key"] = target_key
+        repacked.append(entry)
+    return repacked
+
+
+def repack_authoritative(args: argparse.Namespace) -> dict[str, Any]:
+    """Create a new immutable verifier-compatible candidate from legacy-v1."""
+    validate_id(args.dataset_id, "dataset id")
+    validate_id(args.bucket, "bucket")
+    validate_id(args.production_source_id, "production source id")
+    generation_id = validate_id(args.generation_id, "generation id")
+    client = s3_client()
+    probe_conditional_writes(client, args.bucket, args.dataset_id)
+    if args.repair_registration_metadata:
+        repair_registration_metadata(
+            client,
+            args.bucket,
+            args.dataset_id,
+            args.production_source_id,
+        )
+    else:
+        ensure_registration(
+            client,
+            args.bucket,
+            args.dataset_id,
+            args.production_source_id,
+            args.source_label,
+            allow_create=False,
+        )
+
+    pointer, _ = read_json_object(
+        client, args.bucket, pointer_key(args.dataset_id)
+    )
+    validate_pointer(
+        pointer,
+        args.dataset_id,
+        args.production_source_id,
+        allow_legacy_schema=True,
+    )
+    source_generation_id = pointer["generation_id"]
+    if source_generation_id == generation_id:
+        raise MigrationError("Repack generation must be new and immutable")
+    source_body, _ = read_object(
+        client, args.bucket, pointer["manifest_object_key"]
+    )
+    if (
+        source_body is None
+        or hashlib.sha256(source_body).hexdigest()
+        != pointer["manifest_sha256"]
+    ):
+        raise MigrationError("Legacy authoritative manifest digest mismatch")
+    try:
+        source_manifest = json.loads(source_body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise MigrationError("Legacy authoritative manifest is malformed") from exc
+    repacked_files = _repack_file_entries(
+        client,
+        args.bucket,
+        args.dataset_id,
+        generation_id,
+        source_manifest.get("files"),
+    )
+    manifest = dict(source_manifest)
+    manifest.update(
+        {
+            "manifest_version": MANIFEST_VERSION,
+            "read_only": True,
+            "release_id": generation_id,
+            "dataset_id": args.dataset_id,
+            "production_source_id": args.production_source_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "repacked_from_generation_id": source_generation_id,
+            "files": repacked_files,
+        }
+    )
+    database_entry = next(
+        entry for entry in repacked_files if entry["path"] == "db.sqlite3"
+    )
+    manifest["database"] = {
+        **(manifest.get("database") or {}),
+        "entry": database_entry,
+    }
+    for field, artifact_type in (
+        ("faiss", "faiss_indexes"),
+        ("chroma", "chroma_db"),
+    ):
+        entries = [
+            entry
+            for entry in repacked_files
+            if entry.get("artifact_type") == artifact_type
+        ]
+        manifest[field] = {
+            **(manifest.get(field) or {}),
+            "files": entries,
+            "count": len(entries),
+        }
+    pdfs = [
+        entry
+        for entry in repacked_files
+        if entry.get("artifact_type") == "media"
+        and entry["path"].lower().endswith(".pdf")
+    ]
+    manifest["pdf_storage"] = {
+        **(manifest.get("pdf_storage") or {}),
+        "files": pdfs,
+        "file_count": len(pdfs),
+    }
+    manifest["counts"] = {
+        "files": len(repacked_files),
+        "pdfs": len(pdfs),
+        "faiss": sum(
+            entry.get("artifact_type") == "faiss_indexes"
+            for entry in repacked_files
+        ),
+        "chroma": sum(
+            entry.get("artifact_type") == "chroma_db"
+            for entry in repacked_files
+        ),
+        "pdf_cache": sum(
+            entry.get("artifact_type") == "pdf_cache"
+            for entry in repacked_files
+        ),
+        "staticfiles": sum(
+            entry.get("artifact_type") == "staticfiles"
+            for entry in repacked_files
+        ),
+        "backups": sum(
+            entry.get("artifact_type") == "backup"
+            for entry in repacked_files
+        ),
+    }
+    validate_manifest(manifest, args.dataset_id, generation_id)
+    manifest_data = canonical_json(manifest)
+    status = put_immutable_bytes(
+        client,
+        args.bucket,
+        manifest_key(args.dataset_id, generation_id),
+        manifest_data,
+        "application/json",
+    )
+    verify_remote_generation(
+        client, args.bucket, args.dataset_id, generation_id
+    )
+    return {
+        "bucket": args.bucket,
+        "dataset_id": args.dataset_id,
+        "source_generation_id": source_generation_id,
+        "generation_id": generation_id,
+        "manifest_sha256": hashlib.sha256(manifest_data).hexdigest(),
+        "candidate_published": True,
+        "pointer_updated": False,
+        "manifest_status": status,
+        "object_count": len(repacked_files),
+    }
+
+
 def verify_remote_generation(
     client: Any,
     bucket: str,
@@ -1292,6 +1559,7 @@ def publish_candidate(args: argparse.Namespace) -> dict[str, Any]:
             created_at=created_at,
             source_label=args.source_label,
             source_evidence=evidence,
+            production_source_id=args.production_source_id,
         )
         validate_manifest(manifest, args.dataset_id, generation_id)
         manifest_data = canonical_json(manifest)
@@ -1459,6 +1727,8 @@ def promote_candidate(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def migrate(args: argparse.Namespace) -> dict[str, Any]:
+    if getattr(args, "repack_authoritative", False):
+        return repack_authoritative(args)
     if getattr(args, "promote_generation", None):
         return promote_candidate(args)
     return publish_candidate(args)
@@ -1491,6 +1761,14 @@ def parse_args() -> argparse.Namespace:
         metavar="GENERATION_ID",
         help="CAS-promote an already published and verified candidate",
     )
+    actions.add_argument(
+        "--repack-authoritative",
+        action="store_true",
+        help=(
+            "Read the existing authoritative legacy-v1 generation and publish "
+            "a new immutable verifier-compatible candidate"
+        ),
+    )
     parser.add_argument(
         "--candidate-only",
         action="store_true",
@@ -1506,12 +1784,26 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Exact DATASET_ID:GENERATION_ID confirmation for promotion",
     )
+    parser.add_argument(
+        "--repair-registration-metadata",
+        action="store_true",
+        help=(
+            "Conditionally repair only missing registration SHA-256 metadata, "
+            "retaining an immutable recovery copy"
+        ),
+    )
     parser.add_argument("--writer-ttl-seconds", type=int, default=120)
     args = parser.parse_args()
     if args.candidate_only and not args.publish:
         parser.error("--candidate-only is obsolete; --publish is always candidate-only")
     if args.writer_ttl_seconds < 30:
         parser.error("--writer-ttl-seconds must be at least 30")
+    if args.repack_authoritative and not args.generation_id:
+        parser.error("--repack-authoritative requires --generation-id")
+    if args.repair_registration_metadata and not args.repack_authoritative:
+        parser.error(
+            "--repair-registration-metadata requires --repack-authoritative"
+        )
     return args
 
 
