@@ -108,6 +108,13 @@ jobs:
           PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:ci
         run: docker compose -f docker-compose.yml config --quiet
 
+      - name: Assert web and maintenance security environment parity
+        env:
+          SECRET_KEY: ci-only-secret
+          OPENAI_API_KEY: ci-only-key
+          PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:ci
+        run: python3 scripts/ci/assert_compose_env_parity.py
+
       - name: Validate disposable CI Compose
         env:
           PDFSEARCH_IMAGE: pdfsearch-ci:source
