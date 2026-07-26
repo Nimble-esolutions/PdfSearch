@@ -136,7 +136,9 @@ jobs:
           test "$revision" = "$GITHUB_SHA"
 
       - name: Install browser gate dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
 
       - name: Resolve immutable Redis smoke image
         id: ci_redis
@@ -252,7 +254,9 @@ jobs:
           echo "image=$redis_ref" >> "$GITHUB_OUTPUT"
 
       - name: Install browser gate dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
 
       - name: Smoke-test published image through actual entrypoint
         env:
