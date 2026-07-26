@@ -135,6 +135,9 @@ jobs:
           revision="$(docker image inspect "$LOCAL_IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
           test "$revision" = "$GITHUB_SHA"
 
+      - name: Install browser gate dependencies
+        run: npm ci
+
       - name: Resolve immutable Redis smoke image
         id: ci_redis
         run: |
@@ -247,6 +250,9 @@ jobs:
             *) echo "Redis image did not resolve to a digest" >&2; exit 1 ;;
           esac
           echo "image=$redis_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Install browser gate dependencies
+        run: npm ci
 
       - name: Smoke-test published image through actual entrypoint
         env:

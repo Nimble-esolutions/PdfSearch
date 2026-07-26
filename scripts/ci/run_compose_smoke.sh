@@ -56,7 +56,10 @@ fi
 # Run admin UI smoke tests
 echo "=== Running admin UI smoke tests ==="
 "${compose[@]}" exec --no-TTY --user appuser web sh -lc "printf 'ci-only-password-not-for-production' > /tmp/codex-admin-password.txt"
-"${compose[@]}" exec --no-TTY --user appuser web env ADMIN_SMOKE_USERNAME=ci-admin python /app/scripts/ci/admin_ui_smoke.py || echo "[admin-smoke] non-blocking: some UI checks failed"
+"${compose[@]}" exec --no-TTY --user appuser web env ADMIN_SMOKE_USERNAME=ci-admin python /app/scripts/ci/admin_ui_smoke.py
+PLAYWRIGHT_BASE_URL="http://127.0.0.1:${web_port}" \
+    npx playwright test browser_tests/vault-workbench.spec.ts \
+    --project=desktop --project=mobile
 "${compose[@]}" exec --no-TTY --user appuser web python -m pip check
 
 test_log="$(mktemp)"
