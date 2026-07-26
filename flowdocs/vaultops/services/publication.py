@@ -443,6 +443,8 @@ def publish_snapshot_candidate(
             "profile_fingerprint": profile.fingerprint,
             "dataset_id": identity.dataset_id,
             "production_source_id": identity.production_source_id,
+            "app_release": identity.app_release_version,
+            "image_digest": identity.app_image_digest,
             "writer_epoch": writer["writer_epoch"],
             "snapshot_id": str(snapshot.public_id),
             "snapshot_digest": snapshot.snapshot_digest,
@@ -450,6 +452,14 @@ def publish_snapshot_candidate(
             "schema": inventory.get("schema", {}),
             "database": inventory.get("database", {}),
             "counts": inventory.get("counts", {}),
+            "embedding_index": {
+                **inventory.get("embedding_index", {}),
+                "model": settings.OPENAI_EMBED_MODEL,
+            },
+            "faiss": inventory.get("faiss", {}),
+            "pdf_storage": inventory.get("pdf_storage", {}),
+            "chroma": inventory.get("chroma", {}),
+            "static": inventory.get("static", {}),
             "files": uploaded_files,
         }
         manifest_data = _canonical_bytes(manifest)

@@ -2477,9 +2477,9 @@ class SideEffectsTests(TestCase):
 
 
 class CompatibilityTests(TestCase):
-    def test_empty_manifest_is_compatible(self):
+    def test_empty_manifest_is_incompatible(self):
         report = check_generation_compatibility({})
-        self.assertTrue(report.compatible)
+        self.assertFalse(report.compatible)
 
     def test_unsupported_manifest_version(self):
         report = check_generation_compatibility({"manifest_version": 2})
@@ -2489,6 +2489,8 @@ class CompatibilityTests(TestCase):
         with self.settings(OPENAI_EMBED_MODEL="text-embedding-3-large"):
             report = check_generation_compatibility({
                 "manifest_version": 1,
+                "database": {"migrations": {"latest": "0019_sitesetting"}},
+                "faiss": {"file_count": 0, "files": []},
                 "embedding_index": {"model": "text-embedding-3-small"},
             })
         self.assertFalse(report.compatible)
@@ -2496,6 +2498,8 @@ class CompatibilityTests(TestCase):
     def test_sanitized_generation_warns(self):
         report = check_generation_compatibility({
             "manifest_version": 1,
+            "database": {"migrations": {"latest": "0019_sitesetting"}},
+            "faiss": {"file_count": 0, "files": []},
             "sanitization": {"policy_version": "pdfsearch-sanitize/v1"},
         })
         self.assertTrue(report.compatible)
@@ -2505,6 +2509,8 @@ class CompatibilityTests(TestCase):
         with self.settings(OPENAI_EMBED_MODEL="text-embedding-3-small"):
             report = check_generation_compatibility({
                 "manifest_version": 1,
+                "database": {"migrations": {"latest": "0019_sitesetting"}},
+                "faiss": {"file_count": 0, "files": []},
                 "embedding_index": {"model": "text-embedding-3-small"},
             })
         self.assertTrue(report.compatible)

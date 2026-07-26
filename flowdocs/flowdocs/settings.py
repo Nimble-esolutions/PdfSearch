@@ -50,6 +50,17 @@ def _env_bool(name, default=False):
     raise ImproperlyConfigured(f'{name} must be a boolean')
 
 
+def _env_nonnegative_int(name, default=0):
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f'{name} must be an integer') from exc
+    if value < 0:
+        raise ImproperlyConfigured(f'{name} must be zero or greater')
+    return value
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -405,6 +416,61 @@ if not VAULT_DEFAULT_PROFILE:
     raise ImproperlyConfigured('VAULT_DEFAULT_PROFILE cannot be empty')
 VAULT_ADMIN_MUTATIONS_ENABLED = _env_bool('VAULT_ADMIN_MUTATIONS_ENABLED', False)
 VAULT_GC_ENABLED = _env_bool('VAULT_GC_ENABLED', False)
+VAULT_RESTORE_ENABLED = _env_bool('VAULT_RESTORE_ENABLED', False)
+VAULT_UI_PROFILE_CONFIGURATION_ENABLED = _env_bool(
+    'VAULT_UI_PROFILE_CONFIGURATION_ENABLED', False
+)
+VAULT_UI_SECRET_ENTRY_ENABLED = _env_bool(
+    'VAULT_UI_SECRET_ENTRY_ENABLED', False
+)
+VAULT_PROFILE_ENCRYPTION_KEY = os.getenv(
+    'VAULT_PROFILE_ENCRYPTION_KEY', ''
+).strip()
+VAULT_CREDENTIAL_ALIASES = os.getenv('VAULT_CREDENTIAL_ALIASES', '').strip()
+VAULT_ALLOWED_S3_ENDPOINTS = tuple(
+    value.strip().rstrip('/')
+    for value in os.getenv('VAULT_ALLOWED_S3_ENDPOINTS', '').split(',')
+    if value.strip()
+)
+VAULT_BLOCK_PRIVATE_S3_ENDPOINTS = _env_bool(
+    'VAULT_BLOCK_PRIVATE_S3_ENDPOINTS', True
+)
+VAULT_ALLOW_HTTP_S3_ENDPOINTS = _env_bool(
+    'VAULT_ALLOW_HTTP_S3_ENDPOINTS', False
+)
+VAULT_INVENTORY_CACHE_SECONDS = _env_positive_int(
+    'VAULT_INVENTORY_CACHE_SECONDS', 30
+)
+VAULT_MAX_MANIFEST_BYTES = _env_positive_int(
+    'VAULT_MAX_MANIFEST_BYTES', 8 * 1024 * 1024
+)
+VAULT_MAX_MANIFEST_OBJECTS = _env_positive_int(
+    'VAULT_MAX_MANIFEST_OBJECTS', 100000
+)
+VAULT_MAX_GENERATION_BYTES = _env_positive_int(
+    'VAULT_MAX_GENERATION_BYTES', 500 * 1024 * 1024 * 1024
+)
+VAULT_RESTORE_ROOT = Path(
+    os.getenv(
+        'VAULT_RESTORE_ROOT',
+        str(DATA_ROOT / 'restore-quarantine'),
+    )
+)
+RUNTIME_GENERATIONS_ROOT = Path(
+    os.getenv(
+        'RUNTIME_GENERATIONS_ROOT',
+        str(DATA_ROOT / 'runtime-generations'),
+    )
+)
+VAULT_RESTORE_REQUIRE_SANITIZATION = _env_bool(
+    'VAULT_RESTORE_REQUIRE_SANITIZATION', True
+)
+VAULT_RESTORE_MIN_FREE_BYTES = _env_nonnegative_int(
+    'VAULT_RESTORE_MIN_FREE_BYTES', 0
+)
+VAULT_RESTORE_MIN_FREE_INODES = _env_nonnegative_int(
+    'VAULT_RESTORE_MIN_FREE_INODES', 0
+)
 
 # ---- Environment Identity and Side-Effect Safety ----
 _env_identity = EnvironmentIdentity.from_env()
@@ -451,4 +517,12 @@ if (
 ):
     raise ImproperlyConfigured(
         'Automatic vault promotion is disabled in production'
+    )
+if VAULT_UI_SECRET_ENTRY_ENABLED and not VAULT_PROFILE_ENCRYPTION_KEY:
+    raise ImproperlyConfigured(
+        'VAULT_UI_SECRET_ENTRY_ENABLED requires VAULT_PROFILE_ENCRYPTION_KEY'
+    )
+if VAULT_RESTORE_ENABLED and not VAULT_ALLOWED_S3_ENDPOINTS:
+    raise ImproperlyConfigured(
+        'VAULT_RESTORE_ENABLED requires VAULT_ALLOWED_S3_ENDPOINTS'
     )
