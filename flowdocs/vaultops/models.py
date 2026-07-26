@@ -492,11 +492,19 @@ class RetentionHold(TimeStampedModel):
     reason_code = models.CharField(max_length=80)
     owner_reference = models.CharField(max_length=160)
     notes = models.TextField(blank=True, default="")
+    idempotency_key = models.CharField(max_length=160, blank=True, default="")
     expires_at = models.DateTimeField(null=True, blank=True)
     released_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=["generation", "released_at"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["generation", "idempotency_key"],
+                condition=~models.Q(idempotency_key=""),
+                name="vaultops_hold_generation_idempotency_uniq",
+            ),
+        ]
 
 
 class GarbageCollectionPlan(TimeStampedModel):

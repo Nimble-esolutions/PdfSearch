@@ -17,10 +17,10 @@ requires a one-use typed confirmation bound to the operator, generation, and
 observed state.
 
 Retirement fails closed when the generation is authoritative, runtime-active or
-previous, referenced by a live job or workspace, or protected by an active
-retention hold. Resolve the reported reason code and refresh the workbench
-before trying again. Unretire uses the same typed-confirmation protections and
-returns the generation to candidate state.
+previous, or referenced by a live job. Workspaces and retention holds continue
+to protect a retired generation from GC planning. Resolve the reported reason
+code and refresh the workbench before trying again. Unretire uses the same
+typed-confirmation protections and returns the generation to candidate state.
 
 ## Retention holds
 
@@ -77,8 +77,8 @@ queue warning only; it does not authorize deletion.
 | `generation_authoritative` | Remote projection still points to the generation | Promote a verified replacement through the separate authority flow |
 | `generation_runtime_referenced` | Runtime still uses or may roll back to it | Complete activation and runtime retention first |
 | `generation_job_in_progress` | A live job references it | Wait, cancel safely, or recover the job |
-| `generation_workspace_referenced` | A nonexpired workspace references it | Retain or expire the workspace through its lifecycle |
-| `generation_retention_hold` | An active hold protects it | Resolve the incident and explicitly release the hold |
+| `workspace_referenced` | A nonexpired workspace references it | Retain or expire the workspace through its lifecycle |
+| `retention_hold_active` | An active hold protects it | Resolve the incident and explicitly release the hold |
 | `gc_inventory_stale` | Inventory freshness cannot prove the reference graph | Refresh verified inventory |
 | `gc_no_eligible_candidates` | Nothing safely meets policy | Take no action |
 | `gc_execution_disabled` | Required initial-rollout safety block | Leave deletion disabled |

@@ -175,24 +175,39 @@ def create_retention_hold(
     owner_reference,
     notes="",
     expires_at=None,
+    idempotency_key="",
     actor_id=None,
     actor_name="",
 ):
     reason_code = str(reason_code).strip()
     owner_reference = str(owner_reference).strip()
+    idempotency_key = str(idempotency_key).strip()
     if not reason_code or not owner_reference:
         raise RetentionError("retention_hold_fields_required", status_code=400)
     if expires_at and expires_at <= timezone.now():
         raise RetentionError("retention_hold_expiry_invalid", status_code=400)
     correlation_id = uuid.uuid4()
     with transaction.atomic(using=CONTROL_DB):
-        hold = RetentionHold.objects.create(
-            generation=generation,
-            reason_code=reason_code[:80],
-            owner_reference=owner_reference[:160],
-            notes=str(notes)[:2000],
-            expires_at=expires_at,
-        )
+        values = {
+            "reason_code": reason_code[:80],
+            "owner_reference": owner_reference[:160],
+            "notes": str(notes)[:2000],
+            "expires_at": expires_at,
+        }
+        if idempotency_key:
+            hold, created = RetentionHold.objects.get_or_create(
+                generation=generation,
+                idempotency_key=idempotency_key[:160],
+                defaults=values,
+            )
+            if not created:
+                return hold
+        else:
+            hold = RetentionHold.objects.create(
+                generation=generation,
+                idempotency_key="",
+                **values,
+            )
         append_event(
             action="retention_hold_created",
             result="succeeded",
@@ -269,6 +284,7 @@ def _manifest_objects(generation):
     if not isinstance(files, list):
         raise RetentionError("gc_reference_graph_invalid")
     records = {}
+    key_builder = KeyBuilder(generation.dataset_id)
     for entry in files:
         if not isinstance(entry, dict):
             raise RetentionError("gc_reference_graph_invalid")
@@ -283,6 +299,7 @@ def _manifest_objects(generation):
             or isinstance(size, bool)
             or not isinstance(size, int)
             or size < 0
+            or not key_builder.is_scoped(key)
         ):
             raise RetentionError("gc_reference_graph_invalid")
         record = {"sha256": digest, "bytes": size}
