@@ -179,6 +179,13 @@ class RestoreWorkspace(TimeStampedModel):
         EXPIRED = "expired", "Expired"
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    job = models.ForeignKey(
+        "VaultJob",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="restore_workspaces",
+    )
     generation = models.ForeignKey(
         ArtifactGeneration,
         on_delete=models.PROTECT,
@@ -188,12 +195,21 @@ class RestoreWorkspace(TimeStampedModel):
         max_length=24, choices=State.choices, default=State.PLANNED
     )
     manifest_digest = models.CharField(max_length=64)
+    profile_fingerprint = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    pointer_digest = models.CharField(max_length=64, blank=True, default="")
     quarantine_path = models.CharField(max_length=1000, blank=True, default="")
     runtime_path = models.CharField(max_length=1000, blank=True, default="")
     capacity_plan = models.JSONField(default=dict, blank=True)
+    validation_evidence = models.JSONField(default=dict, blank=True)
     sanitization_evidence = models.JSONField(default=dict, blank=True)
     rehearsal_evidence = models.JSONField(default=dict, blank=True)
+    safe_error_code = models.CharField(max_length=80, blank=True, default="")
+    downloaded_objects = models.PositiveBigIntegerField(default=0)
+    downloaded_bytes = models.PositiveBigIntegerField(default=0)
     checkpoint_lineage = models.UUIDField(default=uuid.uuid4, editable=False)
+    prepared_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

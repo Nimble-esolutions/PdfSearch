@@ -27,6 +27,7 @@ from vaultops.services.publication import (
     promote_candidate,
     publish_snapshot_candidate,
 )
+from vaultops.services.restore import RestoreCancelled, run_restore_job
 from vaultops.services.snapshot import SnapshotCancelled, create_consistent_snapshot
 
 
@@ -258,6 +259,24 @@ TERMINAL_ERROR_CODES = {
     "typed_confirmation_required",
     "generation_not_candidate",
     "fresh_validation_required",
+    "vault_restore_disabled",
+    "vault_admin_mutations_disabled",
+    "profile_required",
+    "generation_compatibility_failed",
+    "production_restore_sanitization_required",
+    "restore_capacity_bytes_insufficient",
+    "restore_capacity_inodes_insufficient",
+    "restore_object_digest_mismatch",
+    "restore_checkpoint_digest_mismatch",
+    "restored_database_invalid",
+    "restored_database_integrity_failed",
+    "restored_database_foreign_keys_failed",
+    "restored_faiss_count_mismatch",
+    "restore_sanitization_validation_failed",
+    "migration_rehearsal_failed",
+    "migration_rehearsal_integrity_failed",
+    "migration_rehearsal_foreign_keys_failed",
+    "runtime_workspace_exists",
 }
 
 
@@ -275,15 +294,23 @@ def execute_claimed_job(job, token, *, vault=None):
         token=token,
         fencing_epoch=fencing_epoch,
     )
-    vault = vault or ArtifactVault()
     irreversible_completed = False
     try:
         if job.operation == "sync_publish":
+            vault = vault or ArtifactVault()
             result = _run_publish(job, token, fencing_epoch, vault)
             irreversible_completed = bool(result.manifest_digest)
         elif job.operation == "promote_generation":
+            vault = vault or ArtifactVault()
             result = _run_promotion(job, vault)
             irreversible_completed = True
+        elif job.operation == "restore_generation":
+            result = run_restore_job(
+                job,
+                vault=vault,
+                cancellation_check=lambda: _cancellation_check(job.public_id),
+                heartbeat=_heartbeat(job, token, fencing_epoch),
+            )
         else:
             raise SyncPolicyError("unsupported_vault_job_operation")
         return complete_owned_job(
@@ -292,7 +319,7 @@ def execute_claimed_job(job, token, *, vault=None):
             fencing_epoch=fencing_epoch,
             irreversible_completed=irreversible_completed,
         )
-    except (PublicationCancelled, SnapshotCancelled):
+    except (PublicationCancelled, SnapshotCancelled, RestoreCancelled):
         return complete_owned_job(
             job.public_id,
             token=token,
@@ -315,7 +342,11 @@ def execute_claimed_job(job, token, *, vault=None):
             token=token,
             fencing_epoch=fencing_epoch,
             safe_error_code=safe_error_code,
-            retryable=safe_error_code not in TERMINAL_ERROR_CODES,
+            retryable=getattr(
+                exc,
+                "retryable",
+                safe_error_code not in TERMINAL_ERROR_CODES,
+            ),
         )
 
 

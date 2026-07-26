@@ -136,13 +136,13 @@ def validate_sanitization(database_path: Path) -> list[str]:
             _, _, host = email.partition("@")
             if host and host not in (DEFAULT_SANITIZED_DOMAIN,):
                 if not host.endswith(".internal"):
-                    issues.append(f"Non-sanitized email domain found: {email}")
+                    issues.append("non_sanitized_email_domain")
 
         c.execute(
             "SELECT session_key FROM django_session LIMIT 1"
         )
         if c.fetchone():
-            issues.append("Active sessions found in sanitized database")
+            issues.append("active_sessions_present")
 
     finally:
         conn.close()

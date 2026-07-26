@@ -1,25 +1,63 @@
-"""Isolated migration rehearsal against a restored database copy.
-
-Never modifies the immutable downloaded source or the currently active
-database. Runs Django migrations, integrity checks, ORM reads, and
-representative search tests against an isolated copy.
-"""
+"""Isolated, fail-closed migration rehearsal for restored SQLite databases."""
 
 from __future__ import annotations
 
+import os
+import shutil
 import sqlite3
+import subprocess
+import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from django.conf import settings
-from django.core.management import call_command
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
 
 class RehearsalError(RuntimeError):
-    """Raised when migration rehearsal cannot proceed or fails."""
+    reason_code = "migration_rehearsal_failed"
+
+    def __init__(self, reason_code: str | None = None):
+        self.reason_code = reason_code or self.reason_code
+        super().__init__(self.reason_code)
+
+
+def _migration_leaf(database_path: Path) -> str:
+    connection_value = sqlite3.connect(
+        f"file:{database_path}?mode=ro", uri=True
+    )
+    try:
+        rows = connection_value.execute(
+            "SELECT app, name FROM django_migrations ORDER BY id"
+        ).fetchall()
+    except sqlite3.Error as exc:
+        raise RehearsalError("migration_evidence_missing") from exc
+    finally:
+        connection_value.close()
+    if not rows:
+        raise RehearsalError("migration_evidence_missing")
+    return f"{rows[-1][0]}.{rows[-1][1]}"
+
+
+def _validate_database(database_path: Path) -> tuple[bool, bool]:
+    connection_value = sqlite3.connect(
+        f"file:{database_path}?mode=ro", uri=True
+    )
+    try:
+        integrity = connection_value.execute(
+            "PRAGMA integrity_check"
+        ).fetchone()
+        foreign_keys = connection_value.execute(
+            "PRAGMA foreign_key_check"
+        ).fetchall()
+    except sqlite3.Error as exc:
+        raise RehearsalError("migration_rehearsal_database_invalid") from exc
+    finally:
+        connection_value.close()
+    return bool(integrity and integrity[0] == "ok"), not foreign_keys
 
 
 def rehearse_migrations(
@@ -28,160 +66,137 @@ def rehearse_migrations(
     workspace_path: str | Path = "",
     timeout_seconds: int = 120,
 ) -> dict[str, Any]:
-    """Run migrations against an isolated copy of the restored database.
+    """Migrate a private database copy in another Python process.
 
-    Returns a report with success status, migration details, integrity results,
-    and whether image rollback is considered safe.
+    The returned evidence contains only bounded, operator-safe fields. The
+    subprocess output is deliberately excluded so provider or database errors
+    cannot leak into browser-facing control-plane state.
     """
     source = Path(source_db_path).resolve()
-    if not source.is_file():
-        raise RehearsalError(f"Source database not found: {source}")
-
-    workspace = Path(workspace_path) if workspace_path else Path(tempfile.mkdtemp(prefix="pdfsearch-rehearsal-"))
-    rehearsal_db = workspace / "rehearsal" / "db.sqlite3"
-    rehearsal_db.parent.mkdir(parents=True, exist_ok=True)
-
-    import shutil
+    if not source.is_file() or source.is_symlink():
+        raise RehearsalError("migration_rehearsal_source_invalid")
+    workspace = (
+        Path(workspace_path).resolve()
+        if workspace_path
+        else Path(tempfile.mkdtemp(prefix="pdfsearch-rehearsal-")).resolve()
+    )
+    rehearsal_root = workspace / "rehearsal"
+    rehearsal_root.mkdir(parents=True, exist_ok=True)
+    rehearsal_db = rehearsal_root / "db.sqlite3"
+    if rehearsal_db.exists():
+        raise RehearsalError("migration_rehearsal_workspace_not_empty")
     shutil.copy2(source, rehearsal_db)
-
-    report: dict[str, Any] = {
-        "success": False,
-        "source_db": str(source),
-        "rehearsal_db": str(rehearsal_db),
-        "workspace": str(workspace),
-        "migrations_applied": [],
-        "migration_leaf_before": "",
-        "migration_leaf_after": "",
-        "integrity_ok": False,
-        "foreign_keys_ok": True,
-        "image_rollback_safe": "unknown",
-        "duration_seconds": 0,
-        "error": None,
-    }
-
-    import time
+    before = _migration_leaf(rehearsal_db)
     started = time.monotonic()
-
+    manage_py = Path(settings.BASE_DIR) / "manage.py"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "SQLITE_DB_PATH": str(rehearsal_db),
+            "ALLOW_INSECURE_DEFAULTS": "1",
+            "VAULT_ADMIN_MUTATIONS_ENABLED": "0",
+            "VAULT_RESTORE_ENABLED": "0",
+            "STAGING_RUNTIME_ACTIVATION_ENABLED": "0",
+        }
+    )
     try:
-        conn = sqlite3.connect(f"file:{rehearsal_db}?mode=rw", uri=True)
-        try:
-
-            applied = conn.execute(
-                "SELECT app, name FROM django_migrations ORDER BY id"
-            ).fetchall()
-            report["migration_leaf_before"] = (
-                f"{applied[-1][0]}.{applied[-1][1]}" if applied else ""
-            )
-        except sqlite3.Error:
-            pass
-        conn.close()
-
-        with self._settings_override(rehearsal_db):
-            try:
-                call_command("migrate", interactive=False, verbosity=0)
-            except Exception as exc:
-                report["error"] = str(exc)
-                return report
-
-        conn = sqlite3.connect(f"file:{rehearsal_db}?mode=ro", uri=True)
-        try:
-            integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
-            report["integrity_ok"] = integrity == "ok"
-
-            fk_checks = conn.execute("PRAGMA foreign_key_check").fetchall()
-            report["foreign_keys_ok"] = len(fk_checks) == 0
-            if fk_checks:
-                report["foreign_key_violations"] = len(fk_checks)
-
-            applied_after = conn.execute(
-                "SELECT app, name FROM django_migrations ORDER BY id"
-            ).fetchall()
-            report["migration_leaf_after"] = (
-                f"{applied_after[-1][0]}.{applied_after[-1][1]}" if applied_after else ""
-            )
-            report["migrations_applied"] = [
-                f"{a}.{n}" for a, n in applied_after
-            ]
-        finally:
-            conn.close()
-
-        leaf_before = report["migration_leaf_before"]
-        leaf_after = report["migration_leaf_after"]
-        if leaf_before == leaf_after:
-            report["image_rollback_safe"] = "image_rollback_safe"
-        elif leaf_before and leaf_after:
-            report["image_rollback_safe"] = "image_rollback_requires_data_rollback"
-
-        report["success"] = report["integrity_ok"] and report["error"] is None
-
-    except Exception as exc:
-        report["error"] = str(exc)
-    finally:
-        report["duration_seconds"] = round(time.monotonic() - started, 2)
-
-    return report
-
-
-class _settings_override:
-    """Temporarily point DATABASES at the rehearsal copy."""
-
-    def __init__(self, db_path: Path):
-        self.path = db_path
-        self.original = None
-
-    def __enter__(self):
-        self.original = settings.DATABASES["default"].copy()
-        settings.DATABASES["default"]["NAME"] = str(self.path)
-        return self
-
-    def __exit__(self, *args):
-        settings.DATABASES["default"] = self.original
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(manage_py),
+                "migrate",
+                "--noinput",
+                "--verbosity",
+                "0",
+            ],
+            cwd=settings.BASE_DIR,
+            env=environment,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RehearsalError("migration_rehearsal_timeout") from exc
+    if result.returncode != 0:
+        raise RehearsalError("migration_rehearsal_failed")
+    integrity_ok, foreign_keys_ok = _validate_database(rehearsal_db)
+    if not integrity_ok:
+        raise RehearsalError("migration_rehearsal_integrity_failed")
+    if not foreign_keys_ok:
+        raise RehearsalError("migration_rehearsal_foreign_keys_failed")
+    after = _migration_leaf(rehearsal_db)
+    return {
+        "success": True,
+        "migration_leaf_before": before,
+        "migration_leaf_after": after,
+        "integrity_ok": integrity_ok,
+        "foreign_keys_ok": foreign_keys_ok,
+        "image_rollback_safe": (
+            "image_rollback_safe"
+            if before == after
+            else "image_rollback_requires_data_rollback"
+        ),
+        "app_release": settings.ENV_IDENTITY.app_release_version,
+        "image_digest": settings.ENV_IDENTITY.app_image_digest,
+        "duration_seconds": round(time.monotonic() - started, 2),
+    }
 
 
 def detect_schema_incompatibility(
     restored_leaf: str, current_leaf: str
 ) -> dict[str, Any]:
-    """Compare migration leaf nodes between restored and running code."""
+    """Compare a restored migration leaf with migrations known to this image."""
     if not restored_leaf:
-        return {"compatible": True, "direction": "unknown"}
+        return {
+            "compatible": False,
+            "direction": "unknown",
+            "reason": "migration_evidence_missing",
+        }
 
     executor = MigrationExecutor(connection)
-    current_applied = set(
-        f"{m.app_label}.{m.name}"
-        for m in executor.loader.applied_migrations
-    )
-
+    current_applied = {
+        f"{app_label}.{name}"
+        for app_label, name in executor.loader.applied_migrations
+    }
     if restored_leaf in current_applied:
         return {"compatible": True, "direction": "same_or_earlier"}
 
     restored_parts = restored_leaf.split(".", 1)
     if len(restored_parts) != 2:
-        return {"compatible": False, "direction": "newer", "reason": "Cannot parse migration leaf"}
-
+        return {
+            "compatible": False,
+            "direction": "newer",
+            "reason": "migration_leaf_invalid",
+        }
     restored_app, restored_name = restored_parts
     try:
         restored_number = int(restored_name.split("_")[0])
     except (ValueError, IndexError):
-        return {"compatible": False, "direction": "newer", "reason": f"Cannot parse {restored_name}"}
+        return {
+            "compatible": False,
+            "direction": "newer",
+            "reason": "migration_leaf_invalid",
+        }
 
     latest_current = 0
-    for m_name in current_applied:
-        if m_name.startswith(f"{restored_app}."):
+    for migration_name in current_applied:
+        if migration_name.startswith(f"{restored_app}."):
             try:
-                num = int(m_name.split(".")[1].split("_")[0])
-                latest_current = max(latest_current, num)
+                number = int(
+                    migration_name.split(".")[1].split("_")[0]
+                )
+                latest_current = max(latest_current, number)
             except (ValueError, IndexError):
-                pass
-
+                continue
     if restored_number > latest_current:
         return {
             "compatible": False,
             "direction": "newer",
-            "reason": f"Restored {restored_leaf} is newer than current latest {restored_app}.{latest_current:04d}_*"
+            "reason": "restored_schema_newer",
         }
-
     return {
-        "compatible": True,
-        "direction": "migrations_missing",
-        "reason": f"Restored {restored_leaf} has migrations not in current applied set"
+        "compatible": False,
+        "direction": "unknown",
+        "reason": "migration_leaf_unknown",
     }
