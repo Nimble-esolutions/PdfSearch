@@ -312,7 +312,7 @@ class RegistrationSecurityTests(TestCase):
         self.assertContains(response, 'href="/dashboard/"')
         self.assertContains(response, "Create user")
 
-    def test_vault_page_has_shared_breadcrumb(self):
+    def test_legacy_vault_page_redirects_to_workbench(self):
         superadmin = get_user_model().objects.create_user(
             username="breadcrumb-superadmin",
             password="test-password",
@@ -320,10 +320,11 @@ class RegistrationSecurityTests(TestCase):
         )
         self.client.force_login(superadmin)
         response = self.client.get(reverse("vault_operations"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'aria-label="breadcrumb"')
-        self.assertContains(response, 'href="/dashboard/operations/"')
-        self.assertContains(response, "Artifact Vault")
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=generations",
+            fetch_redirect_response=False,
+        )
 
     def test_superadmin_registration_can_grant_superadmin(self):
         superadmin = get_user_model().objects.create_user(
@@ -1827,19 +1828,31 @@ class GenerationLifecycleTests(TestCase):
         response = self.client.post(reverse("promote_generation", args=["gen-x"]))
         self.assertEqual(response.status_code, 403)
 
-    def test_rollback_endpoint_redirects_on_success(self):
-        self._make_generation(gen_id="gen-rollback-test", status="validated")
+    def test_legacy_rollback_endpoint_does_not_relabel_generation(self):
+        generation = self._make_generation(
+            gen_id="gen-rollback-test", status="validated"
+        )
         self.client.force_login(self.superadmin)
         response = self.client.post(reverse("rollback_generation", args=["gen-rollback-test"]))
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=generations",
+            fetch_redirect_response=False,
+        )
+        generation.refresh_from_db()
+        self.assertEqual(generation.status, "validated")
 
-    def test_purge_endpoint_redirects_on_success(self):
+    def test_legacy_purge_endpoint_does_not_claim_deletion(self):
         gen = self._make_generation(gen_id="gen-purge-test", status="superseded")
         self.client.force_login(self.superadmin)
         response = self.client.post(reverse("purge_generation", args=["gen-purge-test"]))
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=generations",
+            fetch_redirect_response=False,
+        )
         gen.refresh_from_db()
-        self.assertEqual(gen.status, "purged")
+        self.assertEqual(gen.status, "superseded")
 
     def test_dashboard_renders_generation_lifecycle_table(self):
         self._make_generation(gen_id="gen-visible-001", status="validated")
@@ -1850,14 +1863,13 @@ class GenerationLifecycleTests(TestCase):
         self.assertContains(response, "Data Generations")
         self.assertContains(response, reverse("vault_operations"))
 
-        # Verify generations render on the dedicated vault page
+        # The retired mixed-control page now routes to the guarded workbench.
         vault_response = self.client.get(reverse("vault_operations"))
-        self.assertEqual(vault_response.status_code, 200)
-        self.assertContains(vault_response, "Generation Lifecycle")
-        self.assertContains(vault_response, "gen-visible-001")
-        self.assertContains(vault_response, "gen-visible-002")
-        self.assertContains(vault_response, "Promote")
-        self.assertContains(vault_response, "Purge Expired")
+        self.assertRedirects(
+            vault_response,
+            f"{reverse('operations_panel')}?section=generations",
+            fetch_redirect_response=False,
+        )
 class BulkFilterTests(TestCase):
     def setUp(self):
         self.superadmin = get_user_model().objects.create_user(
