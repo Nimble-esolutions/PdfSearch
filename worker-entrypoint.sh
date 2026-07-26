@@ -7,10 +7,13 @@ DATA_ROOT="${DATA_ROOT:-/app/data}"
 DATA_CONTROL_ROOT="${DATA_CONTROL_ROOT:-/app/data-control}"
 CONTROL_DB_PATH="${CONTROL_DB_PATH:-$DATA_CONTROL_ROOT/control.sqlite3}"
 PDF_CACHE_DIR="${PDF_CACHE_DIR:-$DATA_ROOT/pdf_cache}"
-export DATA_CONTROL_ROOT CONTROL_DB_PATH PDF_CACHE_DIR
+VAULT_RESTORE_ROOT="${VAULT_RESTORE_ROOT:-$DATA_ROOT/restore-quarantine}"
+RUNTIME_GENERATIONS_ROOT="${RUNTIME_GENERATIONS_ROOT:-$DATA_ROOT/runtime-generations}"
+export DATA_CONTROL_ROOT CONTROL_DB_PATH PDF_CACHE_DIR VAULT_RESTORE_ROOT RUNTIME_GENERATIONS_ROOT
 mkdir -p "$DATA_ROOT" "$DATA_ROOT/media/pdfs" "$DATA_ROOT/faiss_indexes" \
   "$PDF_CACHE_DIR" "$DATA_ROOT/chroma_db" \
-  "$DATA_ROOT/backups/json_backups" "$DATA_CONTROL_ROOT"
+  "$DATA_ROOT/backups/json_backups" "$DATA_CONTROL_ROOT" \
+  "$VAULT_RESTORE_ROOT" "$RUNTIME_GENERATIONS_ROOT"
 chown -R appuser:appuser "$DATA_ROOT" 2>/dev/null || true
 chown -R appuser:appuser "$DATA_CONTROL_ROOT" 2>/dev/null || true
 
