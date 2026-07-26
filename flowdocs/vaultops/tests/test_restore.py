@@ -34,6 +34,7 @@ from vaultops.services.profiles import (
 )
 from vaultops.services.restore import (
     RestoreError,
+    _capacity,
     queue_restore_job,
     run_restore_job,
 )
@@ -203,6 +204,39 @@ class ProfileSecurityTests(SimpleTestCase):
             VaultProfileError, "credential_alias_not_approved"
         ):
             resolve_credentials("browser-supplied", environ=environment)
+
+
+class RestoreCapacityTests(SimpleTestCase):
+    @patch("vaultops.services.restore.shutil.disk_usage")
+    @patch("vaultops.services.restore.os.statvfs")
+    @override_settings(
+        VAULT_RESTORE_MIN_FREE_BYTES=0,
+        VAULT_RESTORE_MIN_FREE_INODES=0,
+    )
+    def test_unreported_inode_counts_are_not_treated_as_exhaustion(
+        self, statvfs, disk_usage
+    ):
+        statvfs.return_value = SimpleNamespace(f_files=0, f_favail=0)
+        disk_usage.return_value = SimpleNamespace(free=1024)
+        evidence = _capacity(Path("/unused"), 10)
+        self.assertIsNone(evidence["available_inodes"])
+        self.assertEqual(evidence["inode_check"], "not_reported")
+
+    @patch("vaultops.services.restore.shutil.disk_usage")
+    @patch("vaultops.services.restore.os.statvfs")
+    @override_settings(
+        VAULT_RESTORE_MIN_FREE_BYTES=0,
+        VAULT_RESTORE_MIN_FREE_INODES=10,
+    )
+    def test_configured_inode_reserve_fails_closed_when_unreported(
+        self, statvfs, disk_usage
+    ):
+        statvfs.return_value = SimpleNamespace(f_files=0, f_favail=0)
+        disk_usage.return_value = SimpleNamespace(free=1024)
+        with self.assertRaisesMessage(
+            RestoreError, "restore_capacity_inodes_unknown"
+        ):
+            _capacity(Path("/unused"), 10)
 
 
 @override_settings(

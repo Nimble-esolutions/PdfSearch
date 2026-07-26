@@ -100,24 +100,35 @@ def _safe_root(configured_root):
 def _capacity(root, required_bytes):
     usage = shutil.disk_usage(root)
     stat_value = os.statvfs(root)
-    free_inodes = stat_value.f_favail
+    inode_reporting_available = int(stat_value.f_files) > 0
+    free_inodes = (
+        int(stat_value.f_favail) if inode_reporting_available else None
+    )
     required_free_bytes = max(
         int(settings.VAULT_RESTORE_MIN_FREE_BYTES),
         int(required_bytes),
     )
-    required_free_inodes = max(
-        int(settings.VAULT_RESTORE_MIN_FREE_INODES),
-        1,
+    configured_free_inodes = int(
+        settings.VAULT_RESTORE_MIN_FREE_INODES
     )
+    required_free_inodes = max(configured_free_inodes, 1)
     evidence = {
         "required_bytes": required_free_bytes,
         "available_bytes": usage.free,
         "required_inodes": required_free_inodes,
         "available_inodes": free_inodes,
+        "inode_check": (
+            "reported" if inode_reporting_available else "not_reported"
+        ),
     }
     if usage.free < required_free_bytes:
         raise RestoreError("restore_capacity_bytes_insufficient")
-    if free_inodes < required_free_inodes:
+    if not inode_reporting_available and configured_free_inodes > 0:
+        raise RestoreError("restore_capacity_inodes_unknown")
+    if (
+        inode_reporting_available
+        and free_inodes < required_free_inodes
+    ):
         raise RestoreError("restore_capacity_inodes_insufficient")
     return evidence
 
