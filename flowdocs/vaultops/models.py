@@ -226,6 +226,9 @@ class VaultJob(TimeStampedModel):
         on_delete=models.PROTECT,
         related_name="jobs",
     )
+    profile_fingerprint = models.CharField(
+        max_length=64, blank=True, default=""
+    )
     dataset_id = models.CharField(max_length=120, blank=True, default="")
     generation_id = models.CharField(max_length=160, blank=True, default="")
     manifest_digest = models.CharField(max_length=64, blank=True, default="")
@@ -291,6 +294,79 @@ class VaultJobStep(TimeStampedModel):
         ordering = ["created_at"]
 
 
+class SourceMutationState(TimeStampedModel):
+    class BarrierState(models.TextChoices):
+        OPEN = "open", "Open"
+        REQUESTED = "requested", "Requested"
+        ACTIVE = "active", "Active"
+
+    deployment_id = models.CharField(max_length=120, unique=True)
+    current_epoch = models.PositiveBigIntegerField(default=0)
+    active_mutations = models.PositiveIntegerField(default=0)
+    barrier_state = models.CharField(
+        max_length=16, choices=BarrierState.choices, default=BarrierState.OPEN
+    )
+    barrier_owner_job = models.UUIDField(null=True, blank=True)
+    barrier_requested_at = models.DateTimeField(null=True, blank=True)
+    barrier_activated_at = models.DateTimeField(null=True, blank=True)
+    last_mutation_at = models.DateTimeField(null=True, blank=True)
+
+
+class MutationJournalEntry(models.Model):
+    deployment_id = models.CharField(max_length=120)
+    epoch = models.PositiveBigIntegerField()
+    category = models.CharField(max_length=40)
+    relative_path = models.CharField(max_length=1000, blank=True, default="")
+    operation = models.CharField(max_length=40)
+    correlation_id = models.UUIDField(default=uuid.uuid4)
+    observed_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["deployment_id", "epoch"],
+                name="vaultops_unique_mutation_epoch",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["deployment_id", "epoch"]),
+            models.Index(fields=["deployment_id", "-observed_at"]),
+        ]
+        ordering = ["epoch"]
+
+
+class SourceSnapshot(TimeStampedModel):
+    class State(models.TextChoices):
+        PLANNED = "planned", "Planned"
+        COPYING = "copying", "Copying"
+        BARRIER = "barrier", "Barrier"
+        FINALIZED = "finalized", "Finalized"
+        FAILED = "failed", "Failed"
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    job = models.ForeignKey(
+        VaultJob,
+        on_delete=models.PROTECT,
+        related_name="source_snapshots",
+    )
+    deployment_id = models.CharField(max_length=120)
+    state = models.CharField(
+        max_length=16, choices=State.choices, default=State.PLANNED
+    )
+    initial_epoch = models.PositiveBigIntegerField(default=0)
+    included_epoch = models.PositiveBigIntegerField(default=0)
+    snapshot_digest = models.CharField(max_length=64, blank=True, default="")
+    workspace_path = models.CharField(max_length=1000, blank=True, default="")
+    file_count = models.PositiveBigIntegerField(default=0)
+    byte_count = models.PositiveBigIntegerField(default=0)
+    evidence = models.JSONField(default=dict, blank=True)
+    safe_error_code = models.CharField(max_length=80, blank=True, default="")
+    finalized_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
 class SyncPolicy(TimeStampedModel):
     class Mode(models.TextChoices):
         DISABLED = "disabled", "Disabled"
@@ -321,6 +397,11 @@ class SyncPolicy(TimeStampedModel):
     interval_seconds = models.PositiveIntegerField(default=900)
     max_lag_seconds = models.PositiveIntegerField(default=3600)
     environment_locked = models.BooleanField(default=False)
+    pending_epoch = models.PositiveBigIntegerField(default=0)
+    last_completed_epoch = models.PositiveBigIntegerField(default=0)
+    last_evaluated_at = models.DateTimeField(null=True, blank=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    warning_code = models.CharField(max_length=80, blank=True, default="")
 
     class Meta:
         constraints = [

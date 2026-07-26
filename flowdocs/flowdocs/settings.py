@@ -41,6 +41,15 @@ def _env_positive_decimal(name, default):
     return value
 
 
+def _env_bool(name, default=False):
+    raw_value = os.getenv(name, "1" if default else "0").strip().lower()
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    raise ImproperlyConfigured(f'{name} must be a boolean')
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -110,6 +119,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'vaultops.middleware.SourceMutationBarrierMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -330,6 +340,71 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 FAISS_INDEX_DIR = Path(os.getenv('FAISS_INDEX_DIR', str(DATA_ROOT / 'faiss_indexes')))
 CHROMA_DIR = Path(os.getenv('CHROMA_DIR', str(DATA_ROOT / 'chroma_db')))
 BACKUP_DIR = Path(os.getenv('BACKUP_DIR', str(DATA_ROOT / 'backups')))
+PDF_CACHE_DIR = Path(os.getenv('PDF_CACHE_DIR', str(DATA_ROOT / 'pdf_cache')))
+
+# Vault Active Sync remains disabled unless every required switch is explicit.
+VAULT_SYNC_ENABLED = _env_bool('VAULT_SYNC_ENABLED', False)
+VAULT_MUTATION_TRACKING_ENABLED = VAULT_SYNC_ENABLED
+_vault_sync_mode = os.getenv(
+    'VAULT_SYNC_MODE',
+    os.getenv('BACKUP_SYNC_MODE', 'manual'),
+).strip().lower()
+if _vault_sync_mode in {'event-driven', 'hybrid'}:
+    import warnings
+    warnings.warn(
+        f'VAULT_SYNC_MODE={_vault_sync_mode} is deprecated; using continuous_coalesced',
+        RuntimeWarning,
+    )
+    _vault_sync_mode = 'continuous_coalesced'
+if _vault_sync_mode not in {
+    'disabled', 'manual', 'scheduled', 'continuous_coalesced'
+}:
+    raise ImproperlyConfigured(
+        'VAULT_SYNC_MODE must be disabled, manual, scheduled, or continuous_coalesced'
+    )
+VAULT_SYNC_MODE = _vault_sync_mode
+VAULT_SYNC_PROMOTION_MODE = os.getenv(
+    'VAULT_SYNC_PROMOTION_MODE', 'manual'
+).strip().lower()
+if VAULT_SYNC_PROMOTION_MODE not in {
+    'publish_only', 'manual', 'auto_after_validation'
+}:
+    raise ImproperlyConfigured(
+        'VAULT_SYNC_PROMOTION_MODE must be publish_only, manual, or auto_after_validation'
+    )
+VAULT_SYNC_INTERVAL_SECONDS = _env_positive_int(
+    'VAULT_SYNC_INTERVAL_SECONDS', 900
+)
+VAULT_SYNC_QUIET_PERIOD_SECONDS = _env_positive_int(
+    'VAULT_SYNC_QUIET_PERIOD_SECONDS', 120
+)
+VAULT_SYNC_MAX_LAG_SECONDS = _env_positive_int(
+    'VAULT_SYNC_MAX_LAG_SECONDS', 3600
+)
+VAULT_SYNC_MAX_PARALLEL_UPLOADS = _env_positive_int(
+    'VAULT_SYNC_MAX_PARALLEL_UPLOADS', 4
+)
+VAULT_SYNC_MAX_PARALLEL_HASHERS = _env_positive_int(
+    'VAULT_SYNC_MAX_PARALLEL_HASHERS', 2
+)
+VAULT_JOB_HEARTBEAT_SECONDS = _env_positive_int(
+    'VAULT_JOB_HEARTBEAT_SECONDS', 15
+)
+VAULT_JOB_STALE_SECONDS = _env_positive_int('VAULT_JOB_STALE_SECONDS', 90)
+VAULT_VALIDATION_MAX_AGE_SECONDS = _env_positive_int(
+    'VAULT_VALIDATION_MAX_AGE_SECONDS', 1800
+)
+VAULT_SNAPSHOT_BARRIER_TIMEOUT_SECONDS = _env_positive_int(
+    'VAULT_SNAPSHOT_BARRIER_TIMEOUT_SECONDS', 30
+)
+VAULT_SNAPSHOT_ROOT = Path(
+    os.getenv('VAULT_SNAPSHOT_ROOT', str(DATA_CONTROL_ROOT / 'snapshots'))
+)
+VAULT_DEFAULT_PROFILE = os.getenv('VAULT_DEFAULT_PROFILE', 'production').strip()
+if not VAULT_DEFAULT_PROFILE:
+    raise ImproperlyConfigured('VAULT_DEFAULT_PROFILE cannot be empty')
+VAULT_ADMIN_MUTATIONS_ENABLED = _env_bool('VAULT_ADMIN_MUTATIONS_ENABLED', False)
+VAULT_GC_ENABLED = _env_bool('VAULT_GC_ENABLED', False)
 
 # ---- Environment Identity and Side-Effect Safety ----
 _env_identity = EnvironmentIdentity.from_env()
@@ -350,3 +425,30 @@ if _resolved_email_backend:
     EMAIL_BACKEND = _resolved_email_backend
 
 ENV_IDENTITY = _env_identity
+
+if (
+    ENV_IDENTITY.is_production
+    and not _allow_insecure_defaults
+    and (
+        ENV_IDENTITY.dataset_id != 'ai-sahakar-prod'
+        or ENV_IDENTITY.authoritative_dataset_id != 'ai-sahakar-prod'
+        or (
+            ENV_IDENTITY.restore_source_dataset_id
+            and ENV_IDENTITY.restore_source_dataset_id != 'ai-sahakar-prod'
+        )
+    )
+):
+    raise ImproperlyConfigured(
+        'Production dataset identities must use ai-sahakar-prod'
+    )
+if VAULT_SYNC_ENABLED and not ENV_IDENTITY.is_authoritative_writer:
+    raise ImproperlyConfigured(
+        'VAULT_SYNC_ENABLED requires an authoritative writer environment'
+    )
+if (
+    ENV_IDENTITY.is_production
+    and VAULT_SYNC_PROMOTION_MODE == 'auto_after_validation'
+):
+    raise ImproperlyConfigured(
+        'Automatic vault promotion is disabled in production'
+    )
