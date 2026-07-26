@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load static i18n %}
+
+{% block title %}{% trans "Confirm vault operation — CC & RCS Maharashtra" %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'main/css/vault-workbench.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="vault-confirmation" aria-labelledby="confirmation-heading">
+  <p class="vault-kicker">{% trans "Authority-changing operation" %}</p>
+  <h2 id="confirmation-heading">{% trans "Type the confirmation phrase" %}</h2>
+  <p>{% trans "Review the action and observed-state binding. This challenge can be used once and expires shortly." %}</p>
+  <dl class="vault-facts">
+    <div><dt>{% trans "Action" %}</dt><dd>{{ action }}</dd></div>
+    <div><dt>{% trans "Target" %}</dt><dd><code>{{ target }}</code></dd></div>
+    <div><dt>{% trans "Observed state" %}</dt><dd><code>{{ state_digest|slice:":16" }}…</code></dd></div>
+    <div><dt>{% trans "Expires" %}</dt><dd>{{ challenge.expires_at|date:"Y-m-d H:i:s T" }}</dd></div>
+  </dl>
+  <div class="vault-phrase" aria-label="{% trans 'Required confirmation phrase' %}">{{ phrase }}</div>
+  <form class="vault-form" method="post" action="{{ submit_url }}">
+    {% csrf_token %}
+    <input type="hidden" name="challenge_id" value="{{ challenge.public_id }}">
+    <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+    <label for="confirmation-phrase">{% trans "Confirmation phrase" %}</label>
+    <input id="confirmation-phrase" name="confirmation_phrase" autocomplete="off" required>
+    <button class="vault-button vault-button--danger" type="submit">{% trans "Submit confirmed operation" %}</button>
+    <a class="vault-cancel-link" href="{% url 'operations_panel' %}">{% trans "Cancel and return to workbench" %}</a>
+  </form>
+</section>
+{% endblock %}

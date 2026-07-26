@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% load static i18n %}
+
+{% block title %}{% trans "Vault Operations Workbench — CC & RCS Maharashtra" %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'main/css/vault-workbench.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="vault-workbench" data-state-url="{% url 'vaultops:state' %}">
+  <header class="vault-heading">
+    <div>
+      <p class="vault-kicker">{% trans "Operations / Vault Workbench" %}</p>
+      <h2>{% trans "Vault Operations Workbench" %}</h2>
+      <p>{% trans "Remote authority, restore preparation, runtime state, jobs, and configuration are shown as separate evidence." %}</p>
+    </div>
+    <p class="vault-observed">
+      {% trans "Observed" %}<br>
+      <time datetime="{{ state.observed_at|date:'c' }}">{{ state.observed_at|date:"Y-m-d H:i:s T" }}</time>
+    </p>
+  </header>
+
+  <section class="vault-summary" aria-label="{% trans 'Persistent operations summary' %}" aria-live="polite">
+    <dl>
+      <div><dt>{% trans "Environment" %}</dt><dd>{{ state.environment.app_env|default:"unknown" }}</dd></div>
+      <div><dt>{% trans "Deployment" %}</dt><dd>{{ state.environment.deployment_id|default:"—" }}</dd></div>
+      <div><dt>{% trans "Runtime generation" %}</dt><dd data-summary="runtime">{{ state.authority.runtime.active_generation_id|default:"—" }}</dd></div>
+      <div><dt>{% trans "Remote authoritative" %}</dt><dd data-summary="remote">{{ state.authority.remote.authoritative_generation_id|default:"—" }}</dd></div>
+      <div><dt>{% trans "Drift" %}</dt><dd class="status status--{% if state.authority.runtime.active_generation_id and state.authority.runtime.active_generation_id == state.authority.remote.authoritative_generation_id %}good{% else %}unknown{% endif %}">
+        {% if state.authority.runtime.active_generation_id and state.authority.runtime.active_generation_id == state.authority.remote.authoritative_generation_id %}{% trans "Aligned" %}{% else %}{% trans "Unknown or different" %}{% endif %}
+      </dd></div>
+      <div><dt>{% trans "Active Sync" %}</dt><dd data-summary="sync" class="status status--{{ state.sync.state }}">{{ state.sync.state }}</dd></div>
+      <div><dt>{% trans "Writer lease" %}</dt><dd data-summary="lease" class="status status--{{ state.lease.state }}">{{ state.lease.state }}</dd></div>
+      <div><dt>{% trans "Critical job" %}</dt><dd>{% if state.authority.critical_job %}{{ state.authority.critical_job.status }}{% else %}{% trans "None" %}{% endif %}</dd></div>
+    </dl>
+  </section>
+
+  <nav class="vault-section-nav" aria-label="{% trans 'Workbench sections' %}">
+    <a href="?section=overview"{% if section == "overview" %} aria-current="page"{% endif %}>{% trans "Overview" %}</a>
+    <a href="?section=sync"{% if section == "sync" %} aria-current="page"{% endif %}>{% trans "Active Sync" %}</a>
+    <a href="?section=generations"{% if section == "generations" %} aria-current="page"{% endif %}>{% trans "Generations" %}</a>
+    <a href="?section=restore"{% if section == "restore" %} aria-current="page"{% endif %}>{% trans "Restore & Activation" %}</a>
+    <a href="?section=jobs"{% if section == "jobs" %} aria-current="page"{% endif %}>{% trans "Jobs & Audit" %}</a>
+    <a href="?section=configuration"{% if section == "configuration" %} aria-current="page"{% endif %}>{% trans "Configuration" %}</a>
+  </nav>
+
+  {% if state.authority.blocking_reasons %}
+  <section class="vault-alert vault-alert--warning" role="status" aria-labelledby="vault-alert-heading">
+    <h3 id="vault-alert-heading">{% trans "Evidence requires attention" %}</h3>
+    <ul>
+      {% for reason in state.authority.blocking_reasons %}
+      <li><code>{{ reason }}</code></li>
+      {% endfor %}
+    </ul>
+    <p>{{ state.recommended_action }}</p>
+  </section>
+  {% endif %}
+
+  {% if section == "overview" %}
+  <div class="vault-grid">
+    <section class="vault-panel" aria-labelledby="authority-heading">
+      <header><p>{% trans "Trust chain" %}</p><h3 id="authority-heading">{% trans "Authority comparison" %}</h3></header>
+      <div class="authority-flow" role="list">
+        <article role="listitem">
+          <span>1</span><div><h4>{% trans "Remote authority" %}</h4><p>{{ state.authority.remote.state }}</p><code>{{ state.authority.remote.authoritative_generation_id|default:"unknown" }}</code></div>
+        </article>
+        <article role="listitem">
+          <span>2</span><div><h4>{% trans "Prepared locally" %}</h4><p>{% blocktrans count count=state.workspaces|length %}{{ count }} workspace{% plural %}{{ count }} workspaces{% endblocktrans %}</p></div>
+        </article>
+        <article role="listitem">
+          <span>3</span><div><h4>{% trans "Runtime authority" %}</h4><p>{{ state.authority.runtime.state }}</p><code>{{ state.authority.runtime.active_generation_id|default:"unknown" }}</code></div>
+        </article>
+      </div>
+      <p class="vault-note">{% trans "Database projections never move the remote pointer or runtime pointer implicitly." %}</p>
+    </section>
+
+    <section class="vault-panel" aria-labelledby="readiness-heading">
+      <header><p>{% trans "Current posture" %}</p><h3 id="readiness-heading">{% trans "Readiness and controls" %}</h3></header>
+      <dl class="vault-facts">
+        <div><dt>{% trans "Dataset" %}</dt><dd>{{ state.profile.dataset_id|default:state.environment.dataset_id }}</dd></div>
+        <div><dt>{% trans "Profile" %}</dt><dd>{{ state.profile.display_name|default:"Unavailable" }}</dd></div>
+        <div><dt>{% trans "Remote inventory" %}</dt><dd>{{ state.authority.remote.state }}</dd></div>
+        <div><dt>{% trans "Runtime readiness" %}</dt><dd>{{ state.authority.runtime.state }}</dd></div>
+        <div><dt>{% trans "Admin mutations" %}</dt><dd>{{ state.feature_flags.admin_mutations_enabled|yesno:_("Enabled,Disabled") }}</dd></div>
+        <div><dt>{% trans "Production activation" %}</dt><dd class="status status--disabled">{% trans "Disabled" %}</dd></div>
+        <div><dt>{% trans "Garbage collection" %}</dt><dd>{{ state.feature_flags.gc_enabled|yesno:_("Enabled,Disabled") }}</dd></div>
+      </dl>
+    </section>
+  </div>
+  {% endif %}
+
+  {% if section == "sync" %}
+  <section class="vault-panel" aria-labelledby="sync-heading">
+    <header><p>{% trans "Source to candidate" %}</p><h3 id="sync-heading">{% trans "Active Sync" %}</h3></header>
+    <dl class="vault-facts vault-facts--wide">
+      <div><dt>{% trans "State" %}</dt><dd>{{ state.sync.state }}</dd></div>
+      <div><dt>{% trans "Policy" %}</dt><dd>{{ state.sync.mode }}</dd></div>
+      <div><dt>{% trans "Promotion policy" %}</dt><dd>{{ state.sync.promotion_mode }}</dd></div>
+      <div><dt>{% trans "Source epoch" %}</dt><dd>{{ state.sync.source_epoch }}</dd></div>
+      <div><dt>{% trans "Completed epoch" %}</dt><dd>{{ state.sync.last_completed_epoch }}</dd></div>
+      <div><dt>{% trans "Pending epoch" %}</dt><dd>{{ state.sync.pending_epoch }}</dd></div>
+    </dl>
+    <div class="vault-action-block">
+      <h4>{% trans "Publish a candidate" %}</h4>
+      <p>{% trans "This queues a consistent snapshot and immutable candidate. It does not move the authoritative pointer." %}</p>
+      <form method="post" action="{% url 'vaultops:sync_run' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+        <input type="hidden" name="state_version" value="{{ state.state_version }}">
+        <button class="vault-button" type="submit"{% if not state.feature_flags.sync_enabled or not state.feature_flags.admin_mutations_enabled %} disabled{% endif %}>{% trans "Queue publish-only sync" %}</button>
+      </form>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if section == "generations" %}
+  <section class="vault-panel" aria-labelledby="generations-heading">
+    <header><p>{% trans "Independent projections" %}</p><h3 id="generations-heading">{% trans "Generations" %}</h3></header>
+    <div class="vault-records" role="list">
+      {% for generation in state.generations %}
+      <article class="vault-record" role="listitem">
+        <div class="vault-record__primary">
+          <h4>{{ generation.generation_id }}</h4>
+          <p>{{ generation.created_at|date:"Y-m-d H:i" }}</p>
+        </div>
+        <dl>
+          <div><dt>{% trans "Vault" %}</dt><dd>{{ generation.vault_state }}</dd></div>
+          <div><dt>{% trans "Runtime" %}</dt><dd>{{ generation.runtime_state }}</dd></div>
+          <div><dt>{% trans "Local" %}</dt><dd>{{ generation.local_presence }}</dd></div>
+          <div><dt>{% trans "Objects" %}</dt><dd>{{ generation.file_count }}</dd></div>
+          <div><dt>{% trans "Bytes" %}</dt><dd>{{ generation.byte_count|filesizeformat }}</dd></div>
+        </dl>
+        {% if generation.vault_state == "candidate" and state.feature_flags.admin_mutations_enabled %}
+        <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
+          {% csrf_token %}
+          <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:{{ forloop.counter }}">
+          <input type="hidden" name="action" value="promote_generation">
+          <input type="hidden" name="target" value="{{ generation.generation_id }}">
+          <button class="vault-button vault-button--secondary" type="submit">{% trans "Prepare promotion confirmation" %}</button>
+        </form>
+        {% endif %}
+      </article>
+      {% empty %}
+      <p class="vault-empty">{% trans "No verified generation projections are available." %}</p>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if section == "restore" %}
+  <div class="vault-grid">
+    <section class="vault-panel" aria-labelledby="restore-heading">
+      <header><p>{% trans "Remote to quarantine" %}</p><h3 id="restore-heading">{% trans "Plan a restore" %}</h3></header>
+      <form class="vault-form" method="post" action="{% url 'vaultops:restore_start' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+        <input type="hidden" name="state_version" value="{{ state.state_version }}">
+        <label for="profile-key">{% trans "Approved profile" %}</label>
+        <select id="profile-key" name="profile_key" required>
+          {% for profile in state.profiles %}
+          {% if profile.enabled %}<option value="{{ profile.key }}">{{ profile.display_name }} — {{ profile.dataset_id }}</option>{% endif %}
+          {% endfor %}
+        </select>
+        <label for="generation-id">{% trans "Generation ID" %}</label>
+        <input id="generation-id" name="generation_id" maxlength="160" placeholder="{% trans 'Leave blank for authoritative' %}">
+        <p class="vault-field-help">{% trans "Restore prepares quarantine and an immutable runtime workspace. It never activates automatically." %}</p>
+        <button class="vault-button" type="submit"{% if not state.feature_flags.restore_enabled or not state.feature_flags.admin_mutations_enabled %} disabled{% endif %}>{% trans "Queue restore preparation" %}</button>
+      </form>
+    </section>
+
+    <section class="vault-panel" aria-labelledby="workspaces-heading">
+      <header><p>{% trans "Local evidence" %}</p><h3 id="workspaces-heading">{% trans "Restore workspaces" %}</h3></header>
+      <div class="vault-records" role="list">
+        {% for workspace in state.workspaces %}
+        <article class="vault-record vault-record--compact" role="listitem">
+          <h4>{{ workspace.generation_id }}</h4>
+          <p>{{ workspace.state }} · {{ workspace.downloaded_objects }} {% trans "objects" %}</p>
+          {% if workspace.safe_error_code %}<code>{{ workspace.safe_error_code }}</code>{% endif %}
+          {% if workspace.activation_allowed and state.feature_flags.admin_mutations_enabled %}
+          <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:workspace:{{ forloop.counter }}">
+            <input type="hidden" name="action" value="activate_workspace">
+            <input type="hidden" name="target" value="{{ workspace.public_id }}">
+            <button class="vault-button vault-button--danger" type="submit">{% trans "Prepare staging activation" %}</button>
+          </form>
+          {% endif %}
+        </article>
+        {% empty %}
+        <p class="vault-empty">{% trans "No restore workspaces are projected." %}</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+  {% endif %}
+
+  {% if section == "jobs" %}
+  <div class="vault-grid">
+    <section class="vault-panel" aria-labelledby="jobs-heading">
+      <header><p>{% trans "Durable queue" %}</p><h3 id="jobs-heading">{% trans "Vault jobs" %}</h3></header>
+      <div class="vault-records" role="list">
+        {% for job in state.jobs %}
+        <article class="vault-record vault-record--compact" role="listitem">
+          <h4>{{ job.operation }}</h4>
+          <p><code>{{ job.public_id }}</code></p>
+          <p>{{ job.status }}{% if job.phase %} · {{ job.phase }}{% endif %}</p>
+          {% if job.safe_error_code %}<code>{{ job.safe_error_code }}</code>{% endif %}
+          {% if job.cancellable %}
+          <form method="post" action="{% url 'vaultops:job_cancel' job.public_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:cancel:{{ forloop.counter }}">
+            <input type="hidden" name="job_state_version" value="{{ job.state_version }}">
+            <button class="vault-button vault-button--secondary" type="submit">{% trans "Request cancellation" %}</button>
+          </form>
+          {% elif job.status == "retryable_failed" or job.status == "stale" %}
+          <form method="post" action="{% url 'vaultops:job_retry' job.public_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:retry:{{ forloop.counter }}">
+            <input type="hidden" name="job_state_version" value="{{ job.state_version }}">
+            <button class="vault-button vault-button--secondary" type="submit">{% trans "Retry from checkpoint" %}</button>
+          </form>
+          {% endif %}
+        </article>
+        {% empty %}<p class="vault-empty">{% trans "No vault jobs are recorded." %}</p>{% endfor %}
+      </div>
+    </section>
+
+    <section class="vault-panel" aria-labelledby="audit-heading">
+      <header><p>{% trans "Append-only evidence" %}</p><h3 id="audit-heading">{% trans "Audit trail" %}</h3></header>
+      <ol class="vault-timeline">
+        {% for event in state.audit %}
+        <li><time datetime="{{ event.created_at|date:'c' }}">{{ event.created_at|date:"Y-m-d H:i:s" }}</time><strong>{{ event.action }}</strong><span>{{ event.result }}</span>{% if event.safe_error_code %}<code>{{ event.safe_error_code }}</code>{% endif %}</li>
+        {% empty %}<li>{% trans "No control-plane audit events are recorded." %}</li>{% endfor %}
+      </ol>
+    </section>
+  </div>
+  {% endif %}
+
+  {% if section == "configuration" %}
+  <div class="vault-grid">
+    <section class="vault-panel" aria-labelledby="profiles-heading">
+      <header><p>{% trans "Server-approved sources" %}</p><h3 id="profiles-heading">{% trans "Vault profiles" %}</h3></header>
+      <div class="vault-records" role="list">
+        {% for profile in state.profiles %}
+        <article class="vault-record vault-record--compact" role="listitem">
+          <h4>{{ profile.display_name }}</h4>
+          <dl>
+            <div><dt>{% trans "Key" %}</dt><dd>{{ profile.key }}</dd></div>
+            <div><dt>{% trans "Dataset" %}</dt><dd>{{ profile.dataset_id }}</dd></div>
+            <div><dt>{% trans "Posture" %}</dt><dd>{% if profile.read_only %}{% trans "Read only" %}{% else %}{% trans "Write capable" %}{% endif %}</dd></div>
+            <div><dt>{% trans "Credentials" %}</dt><dd>{{ profile.credential_alias }}</dd></div>
+            <div><dt>{% trans "Locked" %}</dt><dd>{{ profile.environment_locked|yesno:_("Yes,No") }}</dd></div>
+          </dl>
+          <form method="post" action="{% url 'vaultops:profile_probe' profile.key %}">
+            {% csrf_token %}
+            <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:probe:{{ forloop.counter }}">
+            <input type="hidden" name="state_version" value="{{ state.state_version }}">
+            <button class="vault-button vault-button--secondary" type="submit">{% trans "Run read-only probe" %}</button>
+          </form>
+        </article>
+        {% empty %}<p class="vault-empty">{% trans "No approved profiles are available." %}</p>{% endfor %}
+      </div>
+    </section>
+
+    <section class="vault-panel" aria-labelledby="lease-heading">
+      <header><p>{% trans "Redacted ownership" %}</p><h3 id="lease-heading">{% trans "Writer lease" %}</h3></header>
+      <dl class="vault-facts">
+        <div><dt>{% trans "State" %}</dt><dd>{{ state.lease.state }}</dd></div>
+        <div><dt>{% trans "Holder fingerprint" %}</dt><dd>{{ state.lease.holder_fingerprint|default:"—" }}</dd></div>
+        <div><dt>{% trans "Fencing epoch" %}</dt><dd>{{ state.lease.writer_epoch|default:"—" }}</dd></div>
+        <div><dt>{% trans "Reason" %}</dt><dd>{{ state.lease.reason_code|default:"—" }}</dd></div>
+      </dl>
+      <p class="vault-note">{% trans "Owner tokens and raw lease records are never sent to the browser. Recovery requires a separately guarded operator flow." %}</p>
+    </section>
+  </div>
+  {% endif %}
+
+  <noscript>
+    <p class="vault-alert">{% trans "JavaScript is disabled. All critical forms remain available; refresh the page to update evidence." %}</p>
+  </noscript>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'main/js/vault-workbench.js' %}" defer></script>
+{% endblock %}
