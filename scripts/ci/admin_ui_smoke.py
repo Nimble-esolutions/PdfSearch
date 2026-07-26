@@ -117,6 +117,22 @@ def main():
             and "owner_token" not in state.text,
             "workbench state contract or redaction failed",
         )
+        retention = client.get("/dashboard/operations/?section=retention")
+        require(
+            retention.status_code == 200
+            and "It does not delete manifests" in retention.text
+            and "Create GC dry-run" in retention.text
+            and "Permanently delete" not in retention.text,
+            "truthful retention and GC controls missing",
+        )
+        diagnostics = client.get("/dashboard/operations/api/v1/diagnostics/")
+        require(
+            diagnostics.status_code == 200
+            and "credential_alias" not in diagnostics.text
+            and "owner_token" not in diagnostics.text
+            and "object_key" not in diagnostics.text,
+            "diagnostic export contract or redaction failed",
+        )
         token = csrf_token(operations.text)
         marathi = client.post(
             "/i18n/setlang/",

@@ -53,6 +53,11 @@ test.describe('Vault Operations Workbench', () => {
     await expect(page.getByRole('heading', { name: 'अधिकृत स्थिती तुलना' })).toBeVisible();
     await switchLanguage(page, 'en');
 
+    await page.goto('/dashboard/operations/?section=retention');
+    await expect(page.getByRole('heading', { name: 'Generation retirement' })).toBeVisible();
+    await expect(page.getByText('It does not delete manifests', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create GC dry-run' })).toBeVisible();
+
     const storageState = await page.context().storageState();
     const origin = new URL(page.url()).origin;
     const noJsContext = await browser.newContext({

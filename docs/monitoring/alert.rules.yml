@@ -63,3 +63,21 @@ groups:
         annotations:
           summary: "PdfSearch vault sync failures"
           description: "{{ $value }} vault sync failures in last 24h on {{ $labels.instance }}."
+
+      - alert: PdfSearchVaultGcUnexpectedlyEnabled
+        expr: pdfsearch_vault_gc_execution_enabled != 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Vault object deletion is unexpectedly enabled"
+          description: "Initial rollout requires GC execution to remain disabled on {{ $labels.instance }}."
+
+      - alert: PdfSearchVaultGcPlanBacklog
+        expr: pdfsearch_vault_gc_ready_plan_count > 10
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Vault GC dry-run plans require review"
+          description: "{{ $value }} unexpired GC plans have remained ready for 24 hours on {{ $labels.instance }}."
