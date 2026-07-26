@@ -17,6 +17,10 @@ from django.core.exceptions import ImproperlyConfigured
 from core.runtime_config import validate_redis_url
 from core.environment import EnvironmentIdentity
 from core.side_effects import resolve_email_backend, validate_production_safety
+from vaultops.runtime_control import (
+    RuntimeControlError,
+    resolve_runtime_from_env,
+)
 
 
 def _env_positive_int(name, default):
@@ -71,6 +75,22 @@ DATA_CONTROL_ROOT = Path(
 )
 CONTROL_DB_PATH = Path(
     os.getenv('CONTROL_DB_PATH', str(DATA_CONTROL_ROOT / 'control.sqlite3'))
+)
+RUNTIME_GENERATIONS_ROOT = Path(
+    os.getenv(
+        'RUNTIME_GENERATIONS_ROOT',
+        str(DATA_ROOT / 'runtime-generations'),
+    )
+)
+try:
+    ACTIVE_RUNTIME = resolve_runtime_from_env()
+except RuntimeControlError as exc:
+    raise ImproperlyConfigured(exc.reason_code) from exc
+RUNTIME_GENERATION_ID = (
+    ACTIVE_RUNTIME.generation_id if ACTIVE_RUNTIME else ''
+)
+RUNTIME_MANIFEST_DIGEST = (
+    ACTIVE_RUNTIME.manifest_digest if ACTIVE_RUNTIME else ''
 )
 #--------------for gemini Model---------------------
 # GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
@@ -162,7 +182,11 @@ WSGI_APPLICATION = 'flowdocs.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.getenv('SQLITE_DB_PATH', str(DATA_ROOT / 'db.sqlite3')),
+        'NAME': str(
+            ACTIVE_RUNTIME.database_path
+            if ACTIVE_RUNTIME
+            else os.getenv('SQLITE_DB_PATH', str(DATA_ROOT / 'db.sqlite3'))
+        ),
     },
     'control': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -216,7 +240,11 @@ STATIC_ROOT = Path(os.getenv('STATIC_ROOT', str(DATA_ROOT / 'staticfiles')))
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = Path(os.getenv('MEDIA_ROOT', str(DATA_ROOT / 'media')))
+MEDIA_ROOT = (
+    ACTIVE_RUNTIME.media_root
+    if ACTIVE_RUNTIME
+    else Path(os.getenv('MEDIA_ROOT', str(DATA_ROOT / 'media')))
+)
 
 AUTH_USER_MODEL = 'core.CustomUser'
 # OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -348,10 +376,22 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 
-FAISS_INDEX_DIR = Path(os.getenv('FAISS_INDEX_DIR', str(DATA_ROOT / 'faiss_indexes')))
-CHROMA_DIR = Path(os.getenv('CHROMA_DIR', str(DATA_ROOT / 'chroma_db')))
+FAISS_INDEX_DIR = (
+    ACTIVE_RUNTIME.faiss_index_dir
+    if ACTIVE_RUNTIME
+    else Path(os.getenv('FAISS_INDEX_DIR', str(DATA_ROOT / 'faiss_indexes')))
+)
+CHROMA_DIR = (
+    ACTIVE_RUNTIME.chroma_dir
+    if ACTIVE_RUNTIME
+    else Path(os.getenv('CHROMA_DIR', str(DATA_ROOT / 'chroma_db')))
+)
 BACKUP_DIR = Path(os.getenv('BACKUP_DIR', str(DATA_ROOT / 'backups')))
-PDF_CACHE_DIR = Path(os.getenv('PDF_CACHE_DIR', str(DATA_ROOT / 'pdf_cache')))
+PDF_CACHE_DIR = (
+    ACTIVE_RUNTIME.pdf_cache_dir
+    if ACTIVE_RUNTIME
+    else Path(os.getenv('PDF_CACHE_DIR', str(DATA_ROOT / 'pdf_cache')))
+)
 
 # Vault Active Sync remains disabled unless every required switch is explicit.
 VAULT_SYNC_ENABLED = _env_bool('VAULT_SYNC_ENABLED', False)
@@ -456,12 +496,6 @@ VAULT_RESTORE_ROOT = Path(
         str(DATA_ROOT / 'restore-quarantine'),
     )
 )
-RUNTIME_GENERATIONS_ROOT = Path(
-    os.getenv(
-        'RUNTIME_GENERATIONS_ROOT',
-        str(DATA_ROOT / 'runtime-generations'),
-    )
-)
 VAULT_RESTORE_REQUIRE_SANITIZATION = _env_bool(
     'VAULT_RESTORE_REQUIRE_SANITIZATION', True
 )
@@ -470,6 +504,37 @@ VAULT_RESTORE_MIN_FREE_BYTES = _env_nonnegative_int(
 )
 VAULT_RESTORE_MIN_FREE_INODES = _env_nonnegative_int(
     'VAULT_RESTORE_MIN_FREE_INODES', 0
+)
+STAGING_RUNTIME_ACTIVATION_ENABLED = _env_bool(
+    'STAGING_RUNTIME_ACTIVATION_ENABLED', False
+)
+STAGING_ACTIVATION_APPLY_MODE = os.getenv(
+    'STAGING_ACTIVATION_APPLY_MODE', 'auto'
+).strip().lower()
+if STAGING_ACTIVATION_APPLY_MODE not in {'auto', 'pending'}:
+    raise ImproperlyConfigured(
+        'STAGING_ACTIVATION_APPLY_MODE must be auto or pending'
+    )
+ACTIVATION_INTENT_SIGNING_KEY = os.getenv(
+    'ACTIVATION_INTENT_SIGNING_KEY', ''
+)
+ACTIVATION_SMOKE_QUERIES_FILE = Path(
+    os.getenv(
+        'ACTIVATION_SMOKE_QUERIES_FILE',
+        str(DATA_CONTROL_ROOT / 'config/activation-smoke-queries.json'),
+    )
+)
+ACTIVATION_RECOVERY_SUPERADMIN_USERNAME = os.getenv(
+    'ACTIVATION_RECOVERY_SUPERADMIN_USERNAME', ''
+).strip()
+ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD = os.getenv(
+    'ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD', ''
+)
+ACTIVATION_SUPERVISOR_POLL_SECONDS = _env_positive_int(
+    'ACTIVATION_SUPERVISOR_POLL_SECONDS', 2
+)
+ACTIVATION_READINESS_TIMEOUT_SECONDS = _env_positive_int(
+    'ACTIVATION_READINESS_TIMEOUT_SECONDS', 120
 )
 
 # ---- Environment Identity and Side-Effect Safety ----
@@ -491,6 +556,26 @@ if _resolved_email_backend:
     EMAIL_BACKEND = _resolved_email_backend
 
 ENV_IDENTITY = _env_identity
+
+if ENV_IDENTITY.is_production and STAGING_RUNTIME_ACTIVATION_ENABLED:
+    raise ImproperlyConfigured('production_activation_disabled')
+if STAGING_RUNTIME_ACTIVATION_ENABLED:
+    if ENV_IDENTITY.app_env.value != 'staging':
+        raise ImproperlyConfigured(
+            'STAGING_RUNTIME_ACTIVATION_ENABLED requires APP_ENV=staging'
+        )
+    if len(ACTIVATION_INTENT_SIGNING_KEY) < 32:
+        raise ImproperlyConfigured(
+            'ACTIVATION_INTENT_SIGNING_KEY must contain at least 32 characters'
+        )
+    if not ACTIVATION_RECOVERY_SUPERADMIN_USERNAME:
+        raise ImproperlyConfigured(
+            'ACTIVATION_RECOVERY_SUPERADMIN_USERNAME is required'
+        )
+    if not ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD:
+        raise ImproperlyConfigured(
+            'ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD is required'
+        )
 
 if (
     ENV_IDENTITY.is_production

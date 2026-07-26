@@ -438,6 +438,13 @@ class ActivationIntent(TimeStampedModel):
         EXPIRED = "expired", "Expired"
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    workspace = models.ForeignKey(
+        RestoreWorkspace,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="activation_intents",
+    )
     deployment_id = models.CharField(max_length=120)
     target_generation_id = models.CharField(max_length=160)
     previous_generation_id = models.CharField(max_length=160)
@@ -450,6 +457,9 @@ class ActivationIntent(TimeStampedModel):
     state_version = models.PositiveBigIntegerField(default=1)
     actor_id = models.PositiveBigIntegerField(null=True, blank=True)
     actor_name = models.CharField(max_length=150, blank=True, default="")
+    safe_error_code = models.CharField(max_length=80, blank=True, default="")
+    applied_at = models.DateTimeField(null=True, blank=True)
+    committed_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField()
 
     class Meta:
