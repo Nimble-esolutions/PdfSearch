@@ -28,6 +28,16 @@ ACTIVATION_LOCK = "/app/data-control/activation.lock"
 class ActivationError(RuntimeError):
     """Raised when activation cannot proceed."""
 
+    reason_code = "activation_failed"
+
+    def __init__(self, message=None, *, reason_code=None):
+        self.reason_code = reason_code or (
+            message
+            if isinstance(message, str) and "_" in message and " " not in message
+            else self.reason_code
+        )
+        super().__init__(message or self.reason_code)
+
 
 def _active_pointer_path() -> Path:
     return Path(ACTIVE_POINTER)
@@ -140,6 +150,13 @@ def activate_generation(
 
     Returns a result dict with success status and details.
     """
+    if getattr(settings, "ENV_IDENTITY", None) is not None and (
+        settings.ENV_IDENTITY.is_production
+    ):
+        raise ActivationError(
+            "production_activation_disabled",
+            reason_code="production_activation_disabled",
+        )
     workspace_path = Path(workspace_path).resolve()
     if not workspace_path.is_dir():
         raise ActivationError(f"Workspace path is not a directory: {workspace_path}")

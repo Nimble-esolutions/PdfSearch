@@ -356,6 +356,12 @@ def readyz(request):
 
     ready = all(value in ("ok", "not_configured", "empty") for value in checks.values())
     response = {"status": "ready" if ready else "not_ready", "checks": checks}
+    response["runtime_generation_id"] = getattr(
+        settings, "RUNTIME_GENERATION_ID", ""
+    )
+    response["runtime_manifest_digest"] = getattr(
+        settings, "RUNTIME_MANIFEST_DIGEST", ""
+    )
 
     env_identity = getattr(settings, "ENV_IDENTITY", None)
     if env_identity is not None:
