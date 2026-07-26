@@ -6,6 +6,7 @@ import time as time_module
 from pathlib import Path
 
 from django.conf import settings
+from django.db import models as django_models
 from django.http import HttpResponse
 
 from .models import ArtifactGeneration, MaintenanceJob, PDFFile
@@ -163,6 +164,57 @@ def metrics_view(request):
             gauge("pdfsearch_vault_source_mutation_lag_seconds", 0)
             gauge("pdfsearch_vault_job_queue_depth", 0)
             gauge("pdfsearch_vault_snapshot_last_success_timestamp", 0)
+
+    try:
+        from vaultops.models import (
+            ArtifactGeneration as VaultArtifactGeneration,
+            GarbageCollectionPlan,
+            RetentionHold,
+        )
+
+        now = django_timezone.now()
+        ready_plans = GarbageCollectionPlan.objects.filter(
+            state=GarbageCollectionPlan.State.READY,
+            expires_at__gt=now,
+        )
+        gauge(
+            "pdfsearch_vault_retired_generation_count",
+            VaultArtifactGeneration.objects.filter(vault_state="retired").count(),
+            "Retired generation projections; retirement is reversible and is not deletion",
+        )
+        gauge(
+            "pdfsearch_vault_active_retention_hold_count",
+            RetentionHold.objects.filter(
+                released_at__isnull=True,
+            ).filter(
+                django_models.Q(expires_at__isnull=True)
+                | django_models.Q(expires_at__gt=now)
+            ).count(),
+            "Active retention holds protecting generations from GC planning",
+        )
+        gauge(
+            "pdfsearch_vault_gc_ready_plan_count",
+            ready_plans.count(),
+            "Unexpired GC dry-run plans ready for operator review",
+        )
+        gauge(
+            "pdfsearch_vault_gc_planned_exclusive_bytes",
+            sum(
+                int(plan.estimates.get("exclusive_bytes", 0))
+                for plan in ready_plans.only("estimates")
+            ),
+            "Exclusive bytes identified by unexpired GC dry-run plans",
+        )
+    except Exception:
+        gauge("pdfsearch_vault_retired_generation_count", 0)
+        gauge("pdfsearch_vault_active_retention_hold_count", 0)
+        gauge("pdfsearch_vault_gc_ready_plan_count", 0)
+        gauge("pdfsearch_vault_gc_planned_exclusive_bytes", 0)
+    gauge(
+        "pdfsearch_vault_gc_execution_enabled",
+        1 if getattr(settings, "VAULT_GC_ENABLED", False) else 0,
+        "Whether object deletion is enabled; initial rollout requires zero",
+    )
 
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain; charset=utf-8")
 
