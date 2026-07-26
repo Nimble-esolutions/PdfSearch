@@ -224,6 +224,31 @@ class RetentionServiceTests(TestCase):
 
         self.assertEqual(raised.exception.reason_code, "gc_inventory_stale")
 
+    def test_gc_plan_rejects_cross_dataset_object_key(self):
+        generation = self.make_generation(
+            "generation-retired",
+            state="retired",
+            files=[
+                {
+                    "object_key": "datasets/other-dataset/objects/pdf/" + "8" * 64,
+                    "sha256": "8" * 64,
+                    "bytes": 10,
+                }
+            ],
+        )
+        self.age_generation(generation)
+
+        with self.assertRaises(RetentionError) as raised:
+            create_gc_plan(
+                self.profile,
+                dataset_id=self.profile.dataset_id,
+                now=self.now,
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code, "gc_reference_graph_invalid"
+        )
+
     def test_gc_execution_remains_hard_disabled(self):
         generation = self.make_generation(
             "generation-retired", state="retired"

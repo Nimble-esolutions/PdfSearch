@@ -829,12 +829,27 @@ def unretire_generation_view(request, generation_id):
 @require_POST
 def retention_hold_create(request, generation_id):
     try:
-        _request_idempotency_key(request)
-        _state_version_guard(request)
+        idempotency_key = _request_idempotency_key(request)
         generation = get_object_or_404(
             _default_generation_queryset(),
             generation_id=generation_id,
         )
+        existing = RetentionHold.objects.filter(
+            generation=generation,
+            idempotency_key=idempotency_key,
+        ).first()
+        if existing is not None:
+            return _mutation_success(
+                request,
+                section="retention",
+                reason_code="retention_hold_created",
+                message=(
+                    f"Retention hold {existing.pk} protects "
+                    f"{generation.generation_id}."
+                ),
+                data={"hold_id": existing.pk},
+            )
+        _state_version_guard(request)
         expires_at = None
         raw_expiry = _request_value(request, "expires_at", "").strip()
         if raw_expiry:
@@ -850,6 +865,7 @@ def retention_hold_create(request, generation_id):
             owner_reference=_request_value(request, "owner_reference", ""),
             notes=_request_value(request, "notes", ""),
             expires_at=expires_at,
+            idempotency_key=idempotency_key,
             actor_id=actor_id,
             actor_name=actor_name,
         )

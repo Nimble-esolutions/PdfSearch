@@ -282,13 +282,14 @@ class VaultWorkbenchTests(TestCase):
 
     def test_retention_hold_create_and_release_use_fresh_state(self):
         state = self.client.get(reverse("vaultops:state")).json()
+        idempotency_key = str(uuid.uuid4())
         created = self.client.post(
             reverse(
                 "vaultops:retention_hold_create",
                 kwargs={"generation_id": self.candidate.generation_id},
             ),
             {
-                "idempotency_key": str(uuid.uuid4()),
+                "idempotency_key": idempotency_key,
                 "state_version": state["state_version"],
                 "reason_code": "incident",
                 "owner_reference": "INC-42",
@@ -297,6 +298,28 @@ class VaultWorkbenchTests(TestCase):
         self.assertEqual(created.status_code, 303)
         hold = RetentionHold.objects.get()
         self.assertIsNone(hold.released_at)
+
+        replayed = self.client.post(
+            reverse(
+                "vaultops:retention_hold_create",
+                kwargs={"generation_id": self.candidate.generation_id},
+            ),
+            {
+                "idempotency_key": idempotency_key,
+                "state_version": state["state_version"],
+                "reason_code": "different-replay-value",
+                "owner_reference": "INC-99",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(replayed.status_code, 202, replayed.content)
+        self.assertEqual(RetentionHold.objects.count(), 1)
+        self.assertEqual(
+            replayed.json()["data"]["hold_id"],
+            hold.pk,
+        )
+        hold.refresh_from_db()
+        self.assertEqual(hold.owner_reference, "INC-42")
 
         state = self.client.get(reverse("vaultops:state")).json()
         released = self.client.post(
