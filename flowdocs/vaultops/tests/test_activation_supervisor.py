@@ -676,6 +676,13 @@ class SupervisorProtocolTests(SimpleTestCase):
                 self.intent["document_digest"],
             ),
         )
+        atomic_write_json(
+            self.paths["lock"],
+            {
+                "intent_id": self.intent["intent_id"],
+                "process_id": 999999,
+            },
+        )
         restarted_web = self._supervisor(
             "web", maintenance=maintenance
         )
@@ -691,6 +698,42 @@ class SupervisorProtocolTests(SimpleTestCase):
         self.assertEqual(
             self._result()["safe_error_code"],
             "activation_incomplete_recovered",
+        )
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_restart_does_not_reconcile_through_another_intent_lock(self):
+        maintenance = self._quiesce()
+        atomic_write_json(
+            self.paths["previous"], self.current_pointer_document
+        )
+        atomic_write_json(
+            self.paths["active"],
+            make_pointer(
+                self.target_runtime,
+                TARGET_GENERATION,
+                TARGET_DIGEST,
+                self.intent["document_digest"],
+            ),
+        )
+        atomic_write_json(
+            self.paths["lock"],
+            {"intent_id": str(uuid.uuid4()), "process_id": 5150},
+        )
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, TARGET_GENERATION)
+        self.assertFalse(
+            self.paths["results"]
+            .joinpath(f"{self.intent['intent_id']}.json")
+            .exists()
         )
 
     def test_production_supervisor_never_touches_pointer(self):

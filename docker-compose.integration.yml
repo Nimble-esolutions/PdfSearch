@@ -1,211 +1,152 @@
-# Integration Test Stack — Distributed Publication and Restore Testing
-
+# Disposable vault lifecycle and runtime process-death proof.
+#
+# The caller must resolve every dependency image to an immutable digest before
+# starting this stack. No production volume, network, or container is reused.
 services:
   minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+    image: ${MINIO_IMAGE:?MINIO_IMAGE must be an immutable digest reference}
+    pull_policy: never
+    command: server /data
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+    networks:
+      integration:
+        aliases:
+          - pdfsearch-minio
 
-  redis-prod-a:
-    image: redis:7-alpine
-    ports:
-      - "6380:6379"
-
-  redis-prod-b:
-    image: redis:7-alpine
-    ports:
-      - "6381:6379"
-
-  redis-staging:
-    image: redis:7-alpine
-    ports:
-      - "6382:6379"
-
-  app-prod-a:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - prod_a_data:/app/data
-      - prod_a_control:/app/data-control
-    environment:
-      APP_ENV: production
-      DATASET_ID: ai-sahakar-test
-      AUTHORITATIVE_DATASET_ID: ai-sahakar-test
-      PRODUCTION_SOURCE_ID: prod-primary
-      DEPLOYMENT_ID: prod-a
-      INSTANCE_ID: prod-a-instance
-      BACKUP_ROLE: writer
-      BACKUP_SYNC_MODE: manual
-      DATA_MODE: local
-      EXTERNAL_SIDE_EFFECTS_MODE: enabled
-      REDIS_URL: redis://redis-prod-a:6379/0
-      ARTIFACT_VAULT_ENABLED: "1"
-      ARTIFACT_VAULT_ENDPOINT: http://minio:9000
-      VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
-      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
-      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
-      ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
-      ARTIFACT_VAULT_REGION: us-east-1
-      ARTIFACT_VAULT_ACCESS_KEY: minioadmin
-      ARTIFACT_VAULT_SECRET_KEY: minioadmin
-      ALLOW_INSECURE_DEFAULTS: "1"
-      SECRET_KEY: integration-test-key-not-for-production
-      DEBUG: "True"
-      CREATE_SUPERUSER: "1"
-      DJANGO_SUPERUSER_USERNAME: admin
-      DJANGO_SUPERUSER_EMAIL: admin@test.local
-      DJANGO_SUPERUSER_PASSWORD: admin123
-      DATA_BOOTSTRAP_MODE: empty
-    depends_on:
-      redis-prod-a:
-        condition: service_started
-      minio:
-        condition: service_healthy
-    ports:
-      - "8001:8000"
+  redis:
+    image: ${REDIS_IMAGE:?REDIS_IMAGE must be an immutable digest reference}
+    pull_policy: never
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
     networks:
       - integration
 
-  app-prod-b:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - prod_b_data:/app/data
-      - prod_b_control:/app/data-control
+  lifecycle:
+    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be provided}
+    pull_policy: never
+    entrypoint: ["bash", "/app/scripts/ci/run_vault_lifecycle_in_container.sh"]
     environment:
+      DJANGO_SETTINGS_MODULE: flowdocs.settings_integration
+      PYTHONPATH: /app:/app/flowdocs
+      PDFSEARCH_INTEGRATION_ROOT: /app/integration-data
+      DATA_CONTROL_ROOT: /app/data-control
+      CONTROL_DB_PATH: /app/data-control/control.sqlite3
+      VAULT_RESTORE_ROOT: /app/integration-data/restore-quarantine
+      RUNTIME_GENERATIONS_ROOT: /app/integration-data/runtime-generations
       APP_ENV: production
-      DATASET_ID: ai-sahakar-test
-      AUTHORITATIVE_DATASET_ID: ai-sahakar-test
-      PRODUCTION_SOURCE_ID: prod-primary
-      DEPLOYMENT_ID: prod-b
-      INSTANCE_ID: prod-b-instance
+      DATASET_ID: ai-sahakar-prod
+      AUTHORITATIVE_DATASET_ID: ai-sahakar-prod
+      RESTORE_SOURCE_DATASET_ID: ai-sahakar-prod
+      PRODUCTION_SOURCE_ID: ai-sahakar-prod
+      DEPLOYMENT_ID: vaultops-ci-deployment
+      INSTANCE_ID: vaultops-ci-instance
+      REPLICA_ID: vaultops-ci-replica
+      APP_RELEASE_VERSION: vaultops-ci-release
+      APP_IMAGE_DIGEST: sha256:1111111111111111111111111111111111111111111111111111111111111111
       BACKUP_ROLE: writer
-      BACKUP_SYNC_MODE: manual
       DATA_MODE: local
       EXTERNAL_SIDE_EFFECTS_MODE: enabled
-      REDIS_URL: redis://redis-prod-b:6379/0
+      DATA_BOOTSTRAP_MODE: empty
+      ALLOW_INSECURE_DEFAULTS: "1"
+      SECRET_KEY: integration-only-secret-key-with-more-than-fifty-characters-not-for-production
       ARTIFACT_VAULT_ENABLED: "1"
-      ARTIFACT_VAULT_ENDPOINT: http://minio:9000
-      VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
-      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
-      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
-      ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
+      ARTIFACT_VAULT_ENDPOINT: http://pdfsearch-minio:9000
+      ARTIFACT_VAULT_BUCKET: pdfsearch-test
       ARTIFACT_VAULT_REGION: us-east-1
       ARTIFACT_VAULT_ACCESS_KEY: minioadmin
       ARTIFACT_VAULT_SECRET_KEY: minioadmin
-      ALLOW_INSECURE_DEFAULTS: "1"
-      SECRET_KEY: integration-test-key-not-for-production
-      DEBUG: "True"
-      DATA_BOOTSTRAP_MODE: empty
+      VAULT_ALLOWED_S3_ENDPOINTS: http://pdfsearch-minio:9000
+      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
+      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
+      VAULT_SYNC_ENABLED: "1"
+      VAULT_SYNC_MODE: manual
+      VAULT_SYNC_PROMOTION_MODE: manual
+      VAULT_RESTORE_ENABLED: "1"
+      VAULT_RESTORE_REQUIRE_SANITIZATION: "1"
+      VAULT_RESTORE_MIN_FREE_BYTES: "0"
+      VAULT_RESTORE_MIN_FREE_INODES: "0"
+      REDIS_URL: redis://redis:6379/1
+      OPENAI_API_KEY: ""
+      PDFSEARCH_TEST_EMBEDDINGS: "1"
+    volumes:
+      - lifecycle_data:/app/integration-data
+      - lifecycle_control:/app/data-control
     depends_on:
-      redis-prod-b:
-        condition: service_started
       minio:
         condition: service_healthy
-    ports:
-      - "8002:8000"
+      redis:
+        condition: service_healthy
     networks:
       - integration
 
-  app-staging:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - staging_data:/app/data
-      - staging_control:/app/data-control
-    environment:
+  runtime-cutover:
+    profiles: ["process-death"]
+    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be provided}
+    pull_policy: never
+    entrypoint:
+      - python
+      - /app/scripts/ci/runtime_process_death_probe.py
+      - cutover
+    environment: &runtime_environment
+      DATA_CONTROL_ROOT: /app/data-control
+      RUNTIME_GENERATIONS_ROOT: /app/data/runtime-generations
       APP_ENV: staging
-      DATASET_ID: ai-sahakar-staging
-      RESTORE_SOURCE_DATASET_ID: ai-sahakar-test
-      PRODUCTION_SOURCE_ID: ""
-      DEPLOYMENT_ID: staging-01
-      BACKUP_ROLE: reader
-      DATA_MODE: s3-restore
-      EXTERNAL_SIDE_EFFECTS_MODE: disabled
-      REDIS_URL: redis://redis-staging:6379/0
-      ARTIFACT_VAULT_ENABLED: "1"
-      ARTIFACT_VAULT_ENDPOINT: http://minio:9000
-      VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
-      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
-      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
-      ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
-      ARTIFACT_VAULT_REGION: us-east-1
-      ARTIFACT_VAULT_ACCESS_KEY: minioadmin
-      ARTIFACT_VAULT_SECRET_KEY: minioadmin
-      ALLOW_INSECURE_DEFAULTS: "1"
-      SECRET_KEY: integration-test-key-not-for-production
-      DEBUG: "True"
-      DATA_BOOTSTRAP_MODE: empty
-    depends_on:
-      redis-staging:
-        condition: service_started
-      minio:
-        condition: service_healthy
-    ports:
-      - "8003:8000"
+      DEPLOYMENT_ID: vaultops-process-death
+      STAGING_RUNTIME_ACTIVATION_ENABLED: "1"
+      STAGING_ACTIVATION_APPLY_MODE: auto
+      ACTIVATION_INTENT_SIGNING_KEY: process-death-signing-key-with-at-least-32-characters
+      ACTIVATION_READINESS_TIMEOUT_SECONDS: "10"
+    volumes: &runtime_volumes
+      - runtime_data:/app/data
+      - runtime_control:/app/data-control
     networks:
       - integration
 
-  test-runner:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - ./flowdocs/core/tests/integration:/app/flowdocs/core/tests/integration
-    environment:
-      APP_ENV: test
-      DATA_MODE: empty
-      BACKUP_ROLE: disabled
-      ARTIFACT_VAULT_ENABLED: "1"
-      ARTIFACT_VAULT_ENDPOINT: http://minio:9000
-      VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
-      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
-      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
-      ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
-      ARTIFACT_VAULT_REGION: us-east-1
-      ARTIFACT_VAULT_ACCESS_KEY: minioadmin
-      ARTIFACT_VAULT_SECRET_KEY: minioadmin
-      ALLOW_INSECURE_DEFAULTS: "1"
-      SECRET_KEY: integration-test-key-not-for-production
-      DEBUG: "True"
-      DATA_BOOTSTRAP_MODE: empty
-      REDIS_URL: redis://redis-prod-a:6379/0
-    depends_on:
-      minio:
-        condition: service_healthy
-      redis-prod-a:
-        condition: service_started
-      redis-prod-b:
-        condition: service_started
-      redis-staging:
-        condition: service_started
-    command: sh -lc "cd /app/flowdocs && python manage.py test core.tests.integration --no-input -v2"
+  runtime-recovery:
+    profiles: ["process-death"]
+    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be provided}
+    pull_policy: never
+    entrypoint:
+      - python
+      - /app/scripts/ci/runtime_process_death_probe.py
+      - recover
+    environment: *runtime_environment
+    volumes: *runtime_volumes
+    networks:
+      - integration
+
+  runtime-verify:
+    profiles: ["process-death"]
+    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be provided}
+    pull_policy: never
+    entrypoint:
+      - python
+      - /app/scripts/ci/runtime_process_death_probe.py
+      - verify
+    environment: *runtime_environment
+    volumes: *runtime_volumes
     networks:
       - integration
 
 volumes:
   minio_data:
-  prod_a_data:
-  prod_a_control:
-  prod_b_data:
-  prod_b_control:
-  staging_data:
-  staging_control:
+  lifecycle_data:
+  lifecycle_control:
+  runtime_data:
+  runtime_control:
 
 networks:
   integration:

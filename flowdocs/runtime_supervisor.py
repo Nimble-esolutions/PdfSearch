@@ -336,6 +336,31 @@ class RuntimeSupervisor:
         if value.get("intent_id") == intent["intent_id"]:
             path.unlink(missing_ok=True)
 
+    def _claim_recovery_lock(self, intent):
+        """Fence restart reconciliation to the interrupted intent only."""
+        path = self.paths["lock"]
+        if not path.exists():
+            self._acquire_lock(intent)
+            return
+        if path.is_symlink() or not path.is_file():
+            raise SupervisorError("runtime_activation_lock_invalid")
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise SupervisorError(
+                "runtime_activation_lock_invalid"
+            ) from exc
+        if value.get("intent_id") != intent["intent_id"]:
+            raise SupervisorError("runtime_activation_in_progress")
+        atomic_write_json(
+            path,
+            {
+                "intent_id": intent["intent_id"],
+                "process_id": os.getpid(),
+                "recovery": True,
+            },
+        )
+
     def _run_manage(self, arguments, *, timeout):
         result = self.run_command(
             [sys.executable, "manage.py", *arguments],
@@ -543,8 +568,15 @@ class RuntimeSupervisor:
             or current.generation_id
             != intent.get("previous_generation_id")
         ):
-            if self._recover_incomplete_cutover(intent, current):
+            try:
+                self._claim_recovery_lock(intent)
+            except SupervisorError:
                 return
+            try:
+                if self._recover_incomplete_cutover(intent, current):
+                    return
+            finally:
+                self._release_lock(intent)
             self._write_failed_without_cutover(
                 intent, "activation_previous_pointer_changed"
             )
