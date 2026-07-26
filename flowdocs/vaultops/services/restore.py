@@ -16,7 +16,11 @@ from django.utils import timezone
 
 from core.compatibility import check_generation_compatibility
 from core.rehearsal import RehearsalError, rehearse_migrations
-from core.sanitize import sanitize_database, validate_sanitization
+from core.sanitize import (
+    provision_recovery_superadmin,
+    sanitize_database,
+    validate_sanitization,
+)
 from vaultops.models import (
     ArtifactGeneration,
     ArtifactValidation,
@@ -529,7 +533,28 @@ def run_restore_job(
                 dataset_id=verified.manifest["dataset_id"],
             )
             os.replace(sanitized_database, prepared_database)
-            issues = validate_sanitization(prepared_database)
+            recovery_username = (
+                settings.ACTIVATION_RECOVERY_SUPERADMIN_USERNAME
+            )
+            recovery_password = (
+                settings.ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD
+            )
+            if recovery_username or recovery_password:
+                try:
+                    recovery_evidence = provision_recovery_superadmin(
+                        prepared_database,
+                        username=recovery_username,
+                        password=recovery_password,
+                    )
+                except ValueError as exc:
+                    raise RestoreError(str(exc)) from exc
+                sanitization["stats"][
+                    "recovery_superadmin_provisioned"
+                ] = bool(recovery_evidence["provisioned"])
+            issues = validate_sanitization(
+                prepared_database,
+                recovery_username=recovery_username,
+            )
             if issues:
                 raise RestoreError("restore_sanitization_validation_failed")
             workspace.sanitization_evidence = {
@@ -550,10 +575,20 @@ def run_restore_job(
             rehearsal = rehearse_migrations(
                 prepared_database,
                 workspace_path=rehearsal_root,
+                promote_to=prepared_database,
             )
             workspace.rehearsal_evidence = rehearsal
             workspace.save(
                 update_fields=["rehearsal_evidence", "updated_at"]
+            )
+        for directory_name in (
+            "media",
+            "pdf_cache",
+            "faiss_indexes",
+            "chroma_db",
+        ):
+            (incomplete / directory_name).mkdir(
+                parents=True, exist_ok=True, mode=0o700
             )
         evidence = {
             "generation_id": verified.generation_id,
