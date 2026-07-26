@@ -54,6 +54,9 @@ services:
       REDIS_URL: redis://redis-prod-a:6379/0
       ARTIFACT_VAULT_ENABLED: "1"
       ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+      VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
+      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
+      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
       ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
       ARTIFACT_VAULT_REGION: us-east-1
       ARTIFACT_VAULT_ACCESS_KEY: minioadmin
@@ -97,6 +100,9 @@ services:
       REDIS_URL: redis://redis-prod-b:6379/0
       ARTIFACT_VAULT_ENABLED: "1"
       ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+      VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
+      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
+      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
       ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
       ARTIFACT_VAULT_REGION: us-east-1
       ARTIFACT_VAULT_ACCESS_KEY: minioadmin
@@ -134,6 +140,9 @@ services:
       REDIS_URL: redis://redis-staging:6379/0
       ARTIFACT_VAULT_ENABLED: "1"
       ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+      VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
+      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
+      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
       ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
       ARTIFACT_VAULT_REGION: us-east-1
       ARTIFACT_VAULT_ACCESS_KEY: minioadmin
@@ -164,6 +173,9 @@ services:
       BACKUP_ROLE: disabled
       ARTIFACT_VAULT_ENABLED: "1"
       ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+      VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
+      VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
+      VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
       ARTIFACT_VAULT_BUCKET: pdfsearch-integration-test
       ARTIFACT_VAULT_REGION: us-east-1
       ARTIFACT_VAULT_ACCESS_KEY: minioadmin

@@ -11,6 +11,8 @@ CHROMA_DIR="${CHROMA_DIR:-$DATA_ROOT/chroma_db}"
 FAISS_INDEX_DIR="${FAISS_INDEX_DIR:-$DATA_ROOT/faiss_indexes}"
 BACKUP_DIR="${BACKUP_DIR:-$DATA_ROOT/backups}"
 STATIC_ROOT="${STATIC_ROOT:-$DATA_ROOT/staticfiles}"
+VAULT_RESTORE_ROOT="${VAULT_RESTORE_ROOT:-$DATA_ROOT/restore-quarantine}"
+RUNTIME_GENERATIONS_ROOT="${RUNTIME_GENERATIONS_ROOT:-$DATA_ROOT/runtime-generations}"
 
 mkdir -p \
     "$DATA_ROOT" \
@@ -21,7 +23,9 @@ mkdir -p \
     "$FAISS_INDEX_DIR" \
     "$BACKUP_DIR/json_backups" \
     "$BACKUP_DIR/chroma_backup" \
-    "$STATIC_ROOT"
+    "$STATIC_ROOT" \
+    "$VAULT_RESTORE_ROOT" \
+    "$RUNTIME_GENERATIONS_ROOT"
 
 chown -R appuser:appuser "$DATA_ROOT" 2>/dev/null || true
 chown -R appuser:appuser "$DATA_CONTROL_ROOT" 2>/dev/null || true
