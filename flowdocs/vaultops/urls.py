@@ -20,6 +20,16 @@ urlpatterns = [
     path("retention/", views.retention_api, name="retention"),
     path("gc-plans/", views.gc_plans_api, name="gc_plans"),
     path("sync/run/", views.sync_run, name="sync_run"),
+    path(
+        "maintenance/plans/",
+        views.maintenance_plan_create,
+        name="maintenance_plan_create",
+    ),
+    path(
+        "maintenance/plans/<uuid:plan_id>/queue/",
+        views.maintenance_plan_queue,
+        name="maintenance_plan_queue",
+    ),
     path("restores/start/", views.restore_start, name="restore_start"),
     path(
         "jobs/<uuid:job_id>/cancel/",

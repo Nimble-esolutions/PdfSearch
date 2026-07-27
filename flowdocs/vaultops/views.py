@@ -15,6 +15,14 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from core.views import superadmin_required
+from core.maintenance_plans import (
+    MaintenancePlanError,
+    create_plan as create_maintenance_plan,
+    queue_plan as queue_maintenance_plan,
+    workbench_maintenance_state,
+)
+from core.models import MaintenancePlan
+from core.emergency_recovery import create_set as create_recovery_set
 from vaultops.models import (
     ArtifactGeneration,
     GarbageCollectionPlan,
@@ -62,6 +70,7 @@ SECTIONS = {
     "jobs",
     "retention",
     "configuration",
+    "maintenance",
 }
 IDEMPOTENCY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,159}$")
 MUTATION_RATE_LIMIT = 30
@@ -284,6 +293,7 @@ def workbench(request):
     state = build_workbench_state(
         profile_key=request.GET.get("profile") or None
     )
+    state["maintenance"] = workbench_maintenance_state()
     return render(
         request,
         "vaultops/workbench.html",
@@ -306,6 +316,7 @@ def state_api(request):
     state = build_workbench_state(
         profile_key=request.GET.get("profile") or None
     )
+    state["maintenance"] = workbench_maintenance_state()
     return _api_response(
         status=state["status"],
         reason_code=state["reason_code"],
@@ -314,6 +325,72 @@ def state_api(request):
         state_version=state["state_version"],
         data=state,
     )
+
+
+@superadmin_required
+@require_POST
+def maintenance_plan_create(request):
+    try:
+        idempotency_key = _request_idempotency_key(
+            request, require_admin_gate=False
+        )
+        plan = create_maintenance_plan(
+            operation=_request_value(request, "operation", "").strip(),
+            data=_request_data(request),
+            actor=request.user,
+            idempotency_key=idempotency_key,
+        )
+        if _wants_json(request):
+            return _api_response(
+                status="previewed",
+                reason_code="maintenance_plan_created",
+                state_version=plan.state_version,
+                data={
+                    "plan_id": str(plan.public_id),
+                    "operation": plan.operation,
+                    "preview": plan.preview,
+                    "expires_at": plan.expires_at,
+                    "external_embeddings_required": (
+                        plan.external_embeddings_required
+                    ),
+                },
+            )
+        messages.success(
+            request,
+            f"Preview ready: {plan.preview['pdf_count']} document(s), "
+            f"{plan.preview['folder_count']} folder(s).",
+        )
+        return HttpResponseRedirect(
+            f"{reverse('operations_panel')}?section=maintenance"
+            f"&plan={plan.public_id}"
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="maintenance")
+
+
+@superadmin_required
+@require_POST
+def maintenance_plan_queue(request, plan_id):
+    try:
+        _enforce_mutation_rate_limit(request)
+        plan = get_object_or_404(MaintenancePlan, public_id=plan_id)
+        supplied_version = _request_value(request, "state_version", "")
+        if supplied_version != plan.state_version:
+            raise MaintenancePlanError("stale_state_version")
+        job = queue_maintenance_plan(
+            plan=plan,
+            actor=request.user,
+            confirmation=_request_value(request, "typed_confirmation", ""),
+        )
+        return _mutation_success(
+            request,
+            section="maintenance",
+            reason_code="maintenance_job_queued",
+            message=f"Local maintenance job {job.public_id} queued.",
+            data={"job_id": str(job.public_id), "plan_id": str(plan.public_id)},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="maintenance")
 
 
 @superadmin_required
@@ -1053,6 +1130,7 @@ def schedule_activation_view(request, workspace_id):
             RestoreWorkspace.objects.select_related("generation"),
             public_id=workspace_id,
         )
+        recovery_set = create_recovery_set("pre-activation")
         with transaction.atomic(using="control"):
             digest = workspace_state_digest(workspace)
             _consume(
@@ -1066,6 +1144,17 @@ def schedule_activation_view(request, workspace_id):
                 actor_id=request.user.pk,
                 actor_name=request.user.get_username(),
                 confirmed=True,
+            )
+            append_event(
+                action="activation_recovery_set_verified",
+                result="verified",
+                correlation_id=uuid.uuid4(),
+                actor_id=request.user.pk,
+                actor_name=request.user.get_username(),
+                evidence={
+                    "workspace_id": str(workspace.public_id),
+                    "recovery_set_id": recovery_set["set_id"],
+                },
             )
         return _mutation_success(
             request,

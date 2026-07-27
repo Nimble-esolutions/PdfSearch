@@ -26,8 +26,9 @@ from .forms import UploadForm
 from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
-from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation, SiteSetting
+from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
+from .maintenance_plans import queue_plan
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat, HEARTBEAT_FILE
 from .views import _parse_bulk_filters
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
@@ -1271,19 +1272,29 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
-        response = self.client.post(
-            reverse("folder_operations", args=[folder.pk]),
-            {"operation": "repair_stored_index"},
-            follow=True,
-        )
-        job = MaintenanceJob.objects.get(kind="repair_indexes")
+        with override_settings(
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True, ACTIVE_RUNTIME=None
+        ):
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "repair_stored_index"},
+            )
+            plan = MaintenancePlan.objects.get(operation="repair_indexes")
+            with patch(
+                "core.maintenance_plans.create_set",
+                return_value={"set_id": "rs-test"},
+            ):
+                job = queue_plan(plan=plan, actor=superadmin)
         with patch("core.maintenance.build_or_load_faiss_index_for_folder", return_value=(object(), [], [])):
             run_job(job)
 
-        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            fetch_redirect_response=False,
+        )
         pdf.refresh_from_db()
         self.assertTrue(pdf.indexed)
-        self.assertContains(response, "Repair job queued")
 
     def test_superadmin_can_reprocess_needed_documents(self):
         superadmin = get_user_model().objects.create_user(
@@ -1308,19 +1319,32 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
-        response = self.client.post(
-            reverse("folder_operations", args=[folder.pk]),
-            {"operation": "reprocess_needed"},
-            follow=True,
-        )
-        job = MaintenanceJob.objects.get(kind="reindex_needed")
+        with override_settings(
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            EXTERNAL_EMBEDDINGS_ENABLED=True,
+            ACTIVE_RUNTIME=None,
+        ):
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "reprocess_needed"},
+            )
+            plan = MaintenancePlan.objects.get(operation="reindex_needed")
+            with patch(
+                "core.maintenance_plans.create_set",
+                return_value={"set_id": "rs-test"},
+            ):
+                job = queue_plan(plan=plan, actor=superadmin)
         with patch("core.maintenance.precompute_pdf_embeddings") as precompute:
-            run_job(job)
+            with patch("core.maintenance._repair_folder"):
+                run_job(job)
 
-        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
-        precompute.assert_called_once_with(needed_pdf)
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            fetch_redirect_response=False,
+        )
+        precompute.assert_called_once_with(needed_pdf, rebuild_index=False)
         self.assertNotEqual(precompute.call_args.args[0].pk, indexed_pdf.pk)
-        self.assertContains(response, "Reindex job queued")
 
     def test_reprocess_needed_preserves_ocr_artifacts_when_pdf_has_no_text(self):
         superadmin = get_user_model().objects.create_user(
@@ -1340,12 +1364,21 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
-        response = self.client.post(
-            reverse("folder_operations", args=[folder.pk]),
-            {"operation": "reprocess_needed"},
-            follow=True,
-        )
-        job = MaintenanceJob.objects.get(kind="reindex_needed")
+        with override_settings(
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            EXTERNAL_EMBEDDINGS_ENABLED=True,
+            ACTIVE_RUNTIME=None,
+        ):
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "reprocess_needed"},
+            )
+            plan = MaintenancePlan.objects.get(operation="reindex_needed")
+            with patch(
+                "core.maintenance_plans.create_set",
+                return_value={"set_id": "rs-test"},
+            ):
+                job = queue_plan(plan=plan, actor=superadmin)
         with patch(
             "core.maintenance.precompute_pdf_embeddings",
             side_effect=SearchDataIntegrityError("PDF has no extractable text"),
@@ -1355,11 +1388,14 @@ class DashboardTests(TestCase):
         ) as rebuild:
             run_job(job)
 
-        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            fetch_redirect_response=False,
+        )
         rebuild.assert_called_once_with(folder, force_rebuild=True)
         pdf.refresh_from_db()
         self.assertTrue(pdf.indexed)
-        self.assertContains(response, "Reindex job queued")
 
     def test_pdf_rename_redirects_back_to_its_folder(self):
         self.client.force_login(self.user)

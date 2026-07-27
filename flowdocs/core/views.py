@@ -3,6 +3,7 @@ import functools
 import hashlib
 import logging
 import os
+import uuid
 import time
 from functools import wraps
 
@@ -65,6 +66,10 @@ from .maintenance import (
     deprecate_pdf,
     queue_job,
     restore_pdf,
+)
+from .maintenance_plans import (
+    MaintenancePlanError,
+    create_plan as create_maintenance_plan,
 )
 from .forms import UploadForm
 from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
@@ -832,36 +837,32 @@ def restore_pdf_view(request, pdf_id):
 def folder_operations(request, folder_id):
     folder = get_object_or_404(Folder, pk=folder_id)
     operation = request.POST.get("operation", "").strip()
-
-    if operation == "repair_stored_index":
-        job = queue_job(
-            kind="repair_indexes",
-            requested_by=request.user,
-            folders=[folder],
-            scope={"folder_id": folder.pk},
-        )
-        messages.success(request, f"Repair job queued: {job.public_id}.")
+    mapped = {
+        "repair_stored_index": "repair_indexes",
+        "reprocess_needed": "reindex_needed",
+        "reprocess_all": "reindex_selected",
+    }.get(operation)
+    if mapped is None:
+        messages.error(request, "Unknown folder maintenance action.")
         return redirect("dashboard_folder", folder_id=folder.pk)
-
-    if operation in {"reprocess_needed", "reprocess_all"}:
-        candidates = PDFFile.objects.filter(folder=folder).order_by("pk")
-        if operation == "reprocess_needed":
-            candidates = candidates.filter(indexed=False)
-        candidates = list(candidates)
-        if not candidates:
-            messages.info(request, "No documents matched that maintenance action.")
-            return redirect("dashboard_folder", folder_id=folder.pk)
-        job = queue_job(
-            kind={"reprocess_needed": "reindex_needed", "reprocess_all": "reindex_all"}[operation],
-            requested_by=request.user,
-            pdfs=candidates,
-            scope={"folder_id": folder.pk},
+    try:
+        plan = create_maintenance_plan(
+            operation=mapped,
+            data={"folder_ids": [folder.pk]},
+            actor=request.user,
+            idempotency_key=f"folder:{folder.pk}:{uuid.uuid4()}",
         )
-        messages.success(request, f"Reindex job queued for {len(candidates)} document(s): {job.public_id}.")
+    except MaintenancePlanError as exc:
+        messages.error(request, exc.reason_code.replace("_", " "))
         return redirect("dashboard_folder", folder_id=folder.pk)
-
-    messages.error(request, "Unknown folder maintenance action.")
-    return redirect("dashboard_folder", folder_id=folder.pk)
+    messages.success(
+        request,
+        f"Maintenance preview created for {plan.preview['pdf_count']} "
+        "document(s); confirm it in Documents & Indexes.",
+    )
+    return redirect(
+        f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}"
+    )
 
 # ---------------- DPDA / Legal Pages ----------------
 LEGAL_NAVIGATION = (
@@ -1060,53 +1061,20 @@ def _parse_bulk_filters(request):
 @superadmin_required
 @require_POST
 def bulk_maintenance(request):
-    """Queue one bulk operation from the cockpit without doing work in Gunicorn."""
+    """Reject the retired direct-mutation and generation control path."""
     operation = request.POST.get("operation", "").strip()
-    if operation not in {"reindex_needed", "reindex_all", "repair_indexes", "validate", "sync_generation", "restore_generation"}:
-        messages.error(request, "Unknown maintenance operation.")
-        return redirect("dashboard")
-
-    folder_ids = [int(value) for value in request.POST.getlist("folder_ids") if value.isdigit()]
-    folders = Folder.objects.filter(pk__in=folder_ids)
-
-    filter_q, filter_params = _parse_bulk_filters(request)
-
-    if operation == "sync_generation":
-        job = queue_job(kind=operation, requested_by=request.user, scope={"folder_ids": folder_ids, "filters": filter_params})
-        messages.success(request, f"S3 generation sync queued: {job.public_id}.")
-        return redirect("dashboard")
-    if operation == "restore_generation":
-        generation_id = (
-            request.POST.get("generation_id", "").strip()
-            or request.POST.get("generation_choice", "").strip()
+    if operation in {"sync_generation", "restore_generation"}:
+        messages.error(
+            request,
+            "operation_replaced: use Vault Operations for publication or restore.",
         )
-        if not generation_id:
-            messages.error(request, "Enter an immutable generation id before staging a restore.")
-            return redirect("dashboard")
-        job = queue_job(
-            kind=operation,
-            requested_by=request.user,
-            scope={},
-            options={"generation_id": generation_id},
+        return redirect(f"{reverse('operations_panel')}?section=overview")
+    else:
+        messages.error(
+            request,
+            "operation_replaced: create and confirm a Documents & Indexes preview.",
         )
-        messages.success(request, f"Generation pull queued for staging: {job.public_id}.")
-        return redirect("dashboard")
-    if operation == "repair_indexes":
-        items = list(folders)
-        job = queue_job(kind=operation, requested_by=request.user, folders=items, scope={"folder_ids": folder_ids, "filters": filter_params})
-    else:
-        pdfs = PDFFile.objects.filter(folder_id__in=folder_ids).order_by("pk")
-        if filter_q:
-            pdfs = pdfs.filter(filter_q)
-        if operation == "reindex_needed":
-            pdfs = pdfs.filter(indexed=False)
-        items = list(pdfs)
-        job = queue_job(kind=operation, requested_by=request.user, pdfs=items, scope={"folder_ids": folder_ids, "filters": filter_params})
-    if not items:
-        messages.info(request, "No documents or categories matched that maintenance operation.")
-    else:
-        messages.success(request, f"{operation.replace('_', ' ').title()} job queued for {len(items)} item(s).")
-    return redirect("dashboard")
+        return redirect(f"{reverse('operations_panel')}?section=maintenance")
 
 
 @superadmin_required

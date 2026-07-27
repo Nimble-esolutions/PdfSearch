@@ -408,7 +408,9 @@ def search_chunks_with_faiss_or_numpy(
 
 
 # ----------------- Public: Precompute embeddings on upload -----------------
-def _precompute_pdf_embeddings(pdf: PDFFile) -> None:
+def _precompute_pdf_embeddings(
+    pdf: PDFFile, *, rebuild_index: bool = True
+) -> None:
     """
     Called when a PDF is added/updated.
     This extracts text, chunks it, creates embeddings, and stores them on the PDF model.
@@ -436,6 +438,11 @@ def _precompute_pdf_embeddings(pdf: PDFFile) -> None:
     pdf.page_chunks = chunks
     pdf.chunk_embeddings = embeddings
     pdf.save(update_fields=["extracted_text", "text_content", "page_chunks", "chunk_embeddings"])
+
+    if not rebuild_index:
+        pdf.indexed = False
+        pdf.save(update_fields=["indexed"])
+        return
 
     promote_index = None
     if transaction.get_connection().in_atomic_block:
@@ -471,7 +478,9 @@ def _precompute_pdf_embeddings(pdf: PDFFile) -> None:
         pdf.save(update_fields=["indexed"])
 
 
-def precompute_pdf_embeddings(pdf: PDFFile) -> None:
+def precompute_pdf_embeddings(
+    pdf: PDFFile, *, rebuild_index: bool = True
+) -> None:
     from vaultops.services.mutations import mutation_scope
 
     with mutation_scope(
@@ -479,7 +488,7 @@ def precompute_pdf_embeddings(pdf: PDFFile) -> None:
         relative_path=str(pdf.file.name or pdf.pk),
         operation="precompute_embeddings",
     ):
-        _precompute_pdf_embeddings(pdf)
+        _precompute_pdf_embeddings(pdf, rebuild_index=rebuild_index)
 
 
 # ------------------ Search PDFs (fast path) ------------------

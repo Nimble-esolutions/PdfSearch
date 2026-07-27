@@ -34,5 +34,6 @@ else
   gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py migrate --noinput'
 fi
 gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py migrate --database control --noinput'
+gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py maintenance_preflight'
 
 exec gosu appuser:appuser bash -lc 'cd /app/flowdocs && python runtime_supervisor.py --role maintenance'

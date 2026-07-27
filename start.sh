@@ -172,6 +172,7 @@ else
 fi
 echo "[migrate] Running stable control database migrations"
 python manage.py migrate --database control --noinput
+python manage.py maintenance_preflight
 
 echo "[db] Running post-migration integrity check..."
 POST_INTEGRITY=$(sqlite3 "$DB_PATH" "PRAGMA integrity_check")
