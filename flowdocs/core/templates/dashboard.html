@@ -4,27 +4,13 @@
 {% block title %}{% trans "Operations Cockpit - CC & RCS Maharashtra" %}{% endblock %}
 
 {% block content %}
-{% if role == 'superadmin' %}
-<button type="button" id="job-drawer-toggle" class="job-drawer-toggle" aria-label="{% trans 'Active jobs' %}" aria-expanded="false" aria-controls="job-drawer">
-  <span aria-hidden="true">&#128276;</span>
-  <span class="job-drawer-badge" id="job-drawer-badge" hidden>0</span>
-</button>
-<aside id="job-drawer" class="job-drawer" hidden role="complementary" aria-label="{% trans 'Active maintenance jobs' %}">
-  <div class="job-drawer-header">
-    <h2>{% trans "Active Jobs" %}</h2>
-    <button type="button" class="btn-close" id="job-drawer-close" aria-label="{% trans 'Close' %}"></button>
-  </div>
-  <div id="job-drawer-content" class="job-drawer-content" role="status" aria-live="polite">
-    <p class="small text-muted">{% trans "Loading..." %}</p>
-  </div>
-</aside>
-{% endif %}
 <section class="cockpit-hero">
   <div class="admin-page-heading admin-page-heading--split">
     <div>
       <p class="admin-kicker">{% trans "Document operations" %}</p>
       <h2>{% trans "Operations Cockpit" %}</h2>
-      <p>{% trans "Triage categories, document readiness, uploads, and access work from one screen." %}</p>
+      <p>{% trans "Triage document intake, search readiness, provenance, and active work from one evidence-led screen." %}</p>
+      <p class="cockpit-observed">{% trans "Observed" %}: <time datetime="{{ cockpit.observed_at|date:'c' }}">{{ cockpit.observed_at|date:"Y-m-d H:i:s T" }}</time></p>
     </div>
 
     {% if role == 'admin' or role == 'superadmin' %}
@@ -34,68 +20,135 @@
     {% endif %}
   </div>
 
-  <div class="cockpit-metrics" aria-label="{% trans 'Operations summary' %}">
-    <div class="cockpit-metric">
-      <span class="cockpit-metric__label">{% trans "Categories" %}</span>
-      <strong>{{ cockpit.folder_count }}</strong>
-      <span>{% blocktrans count counter=cockpit.empty_folders %}{{ counter }} empty{% plural %}{{ counter }} empty{% endblocktrans %}</span>
+  <div class="cockpit-posture cockpit-posture--{{ cockpit.posture.severity }}" role="status">
+    <div>
+      <span class="cockpit-posture__code">{{ cockpit.posture.reason_code }}</span>
+      <strong>{{ cockpit.posture.message }}</strong>
     </div>
+    {% if cockpit.posture.recommended_action %}
+      <a class="btn btn-primary btn-sm" href="{{ cockpit.posture.recommended_action.action_url }}">{{ cockpit.posture.recommended_action.action_label }}</a>
+    {% endif %}
+  </div>
+
+  <div class="cockpit-metrics cockpit-metrics--decisions" aria-label="{% trans 'Operations summary' %}">
     <div class="cockpit-metric">
-      <span class="cockpit-metric__label">{% trans "PDF rows" %}</span>
+      <span class="cockpit-metric__label">{% trans "Documents" %}</span>
       <strong>{{ cockpit.total_pdfs }}</strong>
       <span>{% trans "visible to this role" %}</span>
     </div>
-    <div class="cockpit-metric {% if cockpit.needs_index_pdfs %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
+    <div class="cockpit-metric">
       <span class="cockpit-metric__label">{% trans "Search readiness" %}</span>
       <strong>{{ cockpit.indexed_pdfs }}/{{ cockpit.total_pdfs }}</strong>
-      <span>{% trans "indexed PDFs" %}</span>
+      <span>{% trans "documents searchable" %}</span>
+    </div>
+    <div class="cockpit-metric {% if cockpit.needs_index_pdfs %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
+      <span class="cockpit-metric__label">{% trans "Index review" %}</span>
+      <strong>{{ cockpit.needs_index_pdfs }}</strong>
+      <span>{% trans "documents need attention" %}</span>
     </div>
     <div class="cockpit-metric {% if cockpit.unknown_uploaders %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
-      <span class="cockpit-metric__label">{% trans "Provenance" %}</span>
+      <span class="cockpit-metric__label">{% trans "Provenance review" %}</span>
       <strong>{{ cockpit.unknown_uploaders }}</strong>
       <span>{% trans "unknown uploaders" %}</span>
     </div>
-    {% if cockpit.user_count is not None %}
-      <div class="cockpit-metric">
-        <span class="cockpit-metric__label">{% trans "Users" %}</span>
-        <strong>{{ cockpit.active_user_count }}/{{ cockpit.user_count }}</strong>
-        <span>{% trans "active accounts" %}</span>
-      </div>
-    {% endif %}
   </div>
 </section>
 
 <section class="cockpit-layout">
   <div class="cockpit-main">
+    <section class="admin-panel cockpit-attention" aria-labelledby="attention-heading">
+      <div class="admin-page-heading admin-page-heading--split">
+        <div>
+          <p class="admin-kicker">{% trans "Prioritized work" %}</p>
+          <h2 id="attention-heading">{% trans "Needs attention" %}</h2>
+          <p>{% trans "Conditions are ordered by operational impact and link to the correct authority." %}</p>
+        </div>
+        {% if role == 'superadmin' %}
+          <div class="cockpit-primary-actions">
+            <a class="btn btn-primary btn-sm" href="{% url 'operations_panel' %}?section=maintenance">{% trans "Maintain Documents & Indexes" %}</a>
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'operations_panel' %}">{% trans "Open Vault Operations" %}</a>
+          </div>
+        {% endif %}
+      </div>
+      <div class="cockpit-attention-list">
+        {% for item in cockpit.attention_items %}
+          <article class="cockpit-attention-item cockpit-attention-item--{{ item.severity }}">
+            <strong class="cockpit-attention-item__count">{{ item.count }}</strong>
+            <div>
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.detail }}</p>
+              <code>{{ item.reason_code }}</code>
+            </div>
+            <a href="{{ item.action_url }}" class="btn btn-outline-primary btn-sm">{{ item.action_label }}</a>
+          </article>
+        {% empty %}
+          <div class="admin-empty-state admin-empty-state--compact">
+            <h3>{% trans "No immediate action required" %}</h3>
+            <p>{% trans "Document intake, indexing, and provenance have no visible debt." %}</p>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
     <div class="admin-panel">
       <div class="admin-page-heading admin-page-heading--split">
         <div>
           <h2>{% trans "Category Yard" %}</h2>
           <p>{% trans "Each category is a loading bay: open it to inspect PDFs, readiness, and upload state." %}</p>
         </div>
-        <form method="get" class="admin-row-actions" role="search" aria-label="{% trans 'Filter categories' %}">
-          <label class="visually-hidden" for="category-filter">{% trans "Find category" %}</label>
-          <input id="category-filter" name="category_q" value="{{ category_query }}" class="form-control form-control-sm" type="search" maxlength="100" placeholder="{% trans 'Find category' %}">
-          <button type="submit" class="btn btn-outline-primary btn-sm">{% trans "Filter" %}</button>
-          {% if category_query %}<a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-sm">{% trans "Clear" %}</a>{% endif %}
-        </form>
       </div>
 
-      {% if category_query %}
-        <p class="admin-meta-strip" role="status">{% blocktrans with query=category_query count counter=cockpit.folder_count %}Showing {{ counter }} category matching &quot;{{ query }}&quot;.{% plural %}Showing {{ counter }} categories matching &quot;{{ query }}&quot;.{% endblocktrans %}</p>
-      {% endif %}
+      <form method="get" class="cockpit-category-filters" role="search" aria-label="{% trans 'Filter categories' %}">
+        <label>{% trans "Find category" %}
+          <input id="category-filter" name="category_q" value="{{ category_query }}" class="form-control form-control-sm" type="search" maxlength="100">
+        </label>
+        <label>{% trans "Search readiness" %}
+          <select name="readiness" class="form-select form-select-sm">
+            <option value="">{% trans "Any" %}</option>
+            <option value="ready"{% if cockpit.filters.readiness == "ready" %} selected{% endif %}>{% trans "Ready" %}</option>
+            <option value="needs_index"{% if cockpit.filters.readiness == "needs_index" %} selected{% endif %}>{% trans "Needs index" %}</option>
+          </select>
+        </label>
+        <label>{% trans "Provenance" %}
+          <select name="provenance" class="form-select form-select-sm">
+            <option value="">{% trans "Any" %}</option>
+            <option value="complete"{% if cockpit.filters.provenance == "complete" %} selected{% endif %}>{% trans "Complete" %}</option>
+            <option value="unknown"{% if cockpit.filters.provenance == "unknown" %} selected{% endif %}>{% trans "Needs review" %}</option>
+          </select>
+        </label>
+        <label>{% trans "Occupancy" %}
+          <select name="occupancy" class="form-select form-select-sm">
+            <option value="">{% trans "Any" %}</option>
+            <option value="with_documents"{% if cockpit.filters.occupancy == "with_documents" %} selected{% endif %}>{% trans "With documents" %}</option>
+            <option value="empty"{% if cockpit.filters.occupancy == "empty" %} selected{% endif %}>{% trans "Empty" %}</option>
+          </select>
+        </label>
+        <label>{% trans "Sort" %}
+          <select name="ordering" class="form-select form-select-sm">
+            <option value="name"{% if cockpit.filters.ordering == "name" %} selected{% endif %}>{% trans "Name" %}</option>
+            <option value="-latest_upload"{% if cockpit.filters.ordering == "-latest_upload" %} selected{% endif %}>{% trans "Latest intake" %}</option>
+            <option value="-pdf_count"{% if cockpit.filters.ordering == "-pdf_count" %} selected{% endif %}>{% trans "Document count" %}</option>
+            <option value="-index_debt"{% if cockpit.filters.ordering == "-index_debt" %} selected{% endif %}>{% trans "Index debt" %}</option>
+          </select>
+        </label>
+        <div class="cockpit-filter-actions">
+          <button type="submit" class="btn btn-primary btn-sm">{% trans "Apply filters" %}</button>
+          {% if cockpit.has_active_filters %}<a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-sm">{% trans "Clear all" %}</a>{% endif %}
+        </div>
+      </form>
+      <p class="admin-meta-strip" role="status">{% blocktrans count counter=cockpit.category_result_count %}{{ counter }} category matches the current scope.{% plural %}{{ counter }} categories match the current scope.{% endblocktrans %}</p>
 
       {% if role == 'superadmin' %}
         <div class="admin-panel admin-panel--inset mb-3">
           <div class="ops-card">
             <h3>{% trans "Bulk Operations" %}</h3>
-            <p>{% trans "Reindex, validate, and sync data to S3." %}</p>
-            <a href="{% url 'vault_operations' %}?section=maintenance" class="btn btn-primary">{% trans "Open Documents & Indexes" %}</a>
+            <p>{% trans "Validate files, repair stored indexes, or prepare a bounded local reindex candidate." %}</p>
+            <a href="{% url 'operations_panel' %}?section=maintenance" class="btn btn-primary">{% trans "Open Documents & Indexes" %}</a>
           </div>
           <div class="ops-card mt-3">
             <h3>{% trans "Data Generations" %}</h3>
             <p>{% trans "Manage generation lifecycle: promote, rollback, purge." %}</p>
-            <a href="{% url 'vault_operations' %}#generations" class="btn btn-outline-primary">{% trans "Manage Generations" %}</a>
+            <a href="{% url 'operations_panel' %}?section=generations" class="btn btn-outline-primary">{% trans "Manage Generations" %}</a>
           </div>
         </div>
       {% endif %}
@@ -152,6 +205,18 @@
         {% endfor %}
       </div>
 
+      {% if cockpit.category_page.paginator.num_pages > 1 %}
+        <nav class="cockpit-pagination" aria-label="{% trans 'Category pages' %}">
+          {% if cockpit.category_page.has_previous %}
+            <a class="btn btn-outline-primary btn-sm" href="?category_q={{ cockpit.filters.query|urlencode }}&readiness={{ cockpit.filters.readiness }}&provenance={{ cockpit.filters.provenance }}&occupancy={{ cockpit.filters.occupancy }}&ordering={{ cockpit.filters.ordering }}&page={{ cockpit.category_page.previous_page_number }}">{% trans "Previous" %}</a>
+          {% endif %}
+          <span>{% blocktrans with current=cockpit.category_page.number total=cockpit.category_page.paginator.num_pages %}Page {{ current }} of {{ total }}{% endblocktrans %}</span>
+          {% if cockpit.category_page.has_next %}
+            <a class="btn btn-outline-primary btn-sm" href="?category_q={{ cockpit.filters.query|urlencode }}&readiness={{ cockpit.filters.readiness }}&provenance={{ cockpit.filters.provenance }}&occupancy={{ cockpit.filters.occupancy }}&ordering={{ cockpit.filters.ordering }}&page={{ cockpit.category_page.next_page_number }}">{% trans "Next" %}</a>
+          {% endif %}
+        </nav>
+      {% endif %}
+
     </div>
 
     <div class="admin-panel">
@@ -195,8 +260,8 @@
     {% if role == 'superadmin' %}
       <section class="admin-panel">
         <div class="admin-page-heading">
-          <h2>{% trans "Maintenance Jobs" %}</h2>
-          <p>{% trans "Queued and recent background work." %}</p>
+          <h2>{% trans "Active Work" %}</h2>
+          <p>{% trans "A concise projection of local maintenance. Full evidence and controls remain in Vault Operations." %}</p>
         </div>
         <div class="ops-lane-list">
           {% for job in cockpit.maintenance_jobs %}
@@ -207,17 +272,7 @@
               </span>
               <span>
                 <b>{{ job.completed_items }}/{{ job.total_items }}</b>
-                {% if job.status == 'queued' or job.status == 'running' %}
-                  <form method="post" action="{% url 'maintenance_job_action' job_id=job.public_id %}">
-                    {% csrf_token %}<input type="hidden" name="action" value="cancel">
-                    <button type="submit" class="admin-button admin-button--quiet">{% trans "Cancel" %}</button>
-                  </form>
-                {% elif job.status == 'failed' %}
-                  <form method="post" action="{% url 'maintenance_job_action' job_id=job.public_id %}">
-                    {% csrf_token %}<input type="hidden" name="action" value="retry">
-                    <button type="submit" class="admin-button admin-button--quiet">{% trans "Retry" %}</button>
-                  </form>
-                {% endif %}
+                <a href="{% url 'operations_panel' %}?section=maintenance&job={{ job.public_id }}" class="admin-button admin-button--quiet">{% trans "Review" %}</a>
               </span>
             </div>
           {% empty %}
@@ -225,71 +280,22 @@
           {% endfor %}
         </div>
         <div class="mt-3">
-          <a href="{% url 'vault_operations' %}" class="btn btn-outline-primary btn-sm">{% trans "View Full Job Status" %}</a>
+          <a href="{% url 'operations_panel' %}?section=jobs" class="btn btn-outline-primary btn-sm">{% trans "View Full Job Status" %}</a>
         </div>
       </section>
     {% endif %}
-    <section class="admin-panel">
-      <div class="admin-page-heading">
-        <h2>{% trans "Dispatch Board" %}</h2>
-        <p>{% trans "Manual work queues derived from current data." %}</p>
-      </div>
-      <div class="cockpit-queue">
-        <div class="cockpit-queue-item {% if cockpit.needs_index_pdfs %}cockpit-queue-item--warn{% endif %}">
-          <strong>{{ cockpit.needs_index_pdfs }}</strong>
-          <span>{% trans "PDFs need index review" %}</span>
+    {% if role == 'superadmin' %}
+      <section class="admin-panel">
+        <div class="admin-page-heading">
+          <h2>{% trans "Vault posture" %}</h2>
+          <p>{% trans "Remote authority and local maintenance stay separate. Open the Workbench for verified evidence and controls." %}</p>
         </div>
-        <div class="cockpit-queue-item {% if cockpit.unknown_uploaders %}cockpit-queue-item--warn{% endif %}">
-          <strong>{{ cockpit.unknown_uploaders }}</strong>
-          <span>{% trans "PDFs need owner review" %}</span>
+        <div class="d-grid gap-2">
+          <a href="{% url 'operations_panel' %}" class="btn btn-outline-primary btn-sm">{% trans "Open Vault Operations" %}</a>
+          <a href="{% url 'operations_panel' %}?section=maintenance" class="btn btn-outline-primary btn-sm">{% trans "Maintain Documents & Indexes" %}</a>
         </div>
-        <div class="cockpit-queue-item {% if cockpit.empty_folders %}cockpit-queue-item--muted{% endif %}">
-          <strong>{{ cockpit.empty_folders }}</strong>
-          <span>{% trans "empty category bays" %}</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="admin-panel">
-      <div class="admin-page-heading">
-        <h2>{% trans "Index Debt Queue" %}</h2>
-        <p>{% trans "Open the category that needs the next operator action." %}</p>
-      </div>
-      <div class="ops-lane-list">
-        {% for folder in cockpit.index_debt_folders %}
-          <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="ops-lane-item ops-lane-item--warn">
-            <span>
-              <strong>{{ folder.name }}</strong>
-              <small>{% trans "Index review" %}</small>
-            </span>
-            <b>{{ folder.indexed_count }}/{{ folder.pdf_count }}</b>
-          </a>
-        {% endfor %}
-        {% for folder in cockpit.owner_review_folders %}
-          <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="ops-lane-item">
-            <span>
-              <strong>{{ folder.name }}</strong>
-              <small>{% trans "Owner review" %}</small>
-            </span>
-            <b>{{ folder.unknown_uploader_count }}</b>
-          </a>
-        {% endfor %}
-        {% for folder in cockpit.empty_folder_lanes %}
-          <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="ops-lane-item ops-lane-item--muted">
-            <span>
-              <strong>{{ folder.name }}</strong>
-              <small>{% trans "Empty bay" %}</small>
-            </span>
-            <b>0</b>
-          </a>
-        {% endfor %}
-        {% if not cockpit.index_debt_folders and not cockpit.owner_review_folders and not cockpit.empty_folder_lanes %}
-          <div class="ops-control-note">
-            {% trans "No category-level index, owner, or intake debt is visible right now." %}
-          </div>
-        {% endif %}
-      </div>
-    </section>
+      </section>
+    {% endif %}
   </aside>
 </section>
 
@@ -349,6 +355,8 @@
   </div>
 {% endif %}
 
+{% comment %}Retired duplicate job drawer. Active work now links to the guarded Workbench.{% endcomment %}
+{% comment %}
 <script>
 (function () {
   {% if role == 'superadmin' %}
@@ -360,6 +368,7 @@
   var pollTimer = null;
   var isOpen = false;
   var returnFocusTo = null;
+  if (!drawer || !toggle || !closeBtn || !content || !badge) return;
 
   function focusableElements() {
     return Array.prototype.slice.call(drawer.querySelectorAll(
@@ -483,4 +492,5 @@
   {% endif %}
 })();
 </script>
+{% endcomment %}
 {% endblock %}

@@ -73,6 +73,7 @@ from .maintenance_plans import (
 )
 from .forms import UploadForm
 from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
+from .services.dashboard_read_model import build_dashboard_state
 from datetime import datetime
 from .utils import (
     detect_language,
@@ -974,22 +975,8 @@ def dashboard(request, folder_id=None):
         )
 
     # else: folders list
-    category_query = (request.GET.get("category_q") or "").strip()[:100]
-    folders, cockpit = admin_cockpit_context(request.user, category_query=category_query)
-    cockpit["maintenance_jobs"] = list(
-        MaintenanceJob.objects.select_related("requested_by").order_by("-created_at")[:8]
-    ) if is_superadmin_user(request.user) else []
-    cockpit["generations"] = list(ArtifactGeneration.objects.order_by("-created_at")[:12]) if is_superadmin_user(request.user) else []
-    if is_superadmin_user(request.user) and os.getenv("ARTIFACT_VAULT_ENABLED", "0").lower() in {"1", "true", "yes"}:
-        try:
-            cockpit["vault_generations"] = [
-                item.key.rsplit("/", 1)[-1][:-5]
-                for item in ArtifactVault().list_manifests()
-            ]
-        except ArtifactVaultError:
-            cockpit["vault_generations"] = []
-    else:
-        cockpit["vault_generations"] = []
+    cockpit = build_dashboard_state(user=request.user, data=request.GET)
+    folders = cockpit["category_page"].object_list
     return render(
         request,
         "dashboard.html",
@@ -997,7 +984,7 @@ def dashboard(request, folder_id=None):
             "folders": folders,
             "cockpit": cockpit,
             "role": role,
-            "category_query": category_query,
+            "category_query": cockpit["filters"].query,
             "breadcrumb_items": [
                 {"label": gettext("Dashboard"), "url": None},
             ],

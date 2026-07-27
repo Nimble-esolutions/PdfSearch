@@ -983,10 +983,10 @@ class DashboardTests(TestCase):
         response = self.client.get(reverse("dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Categories")
         self.assertContains(response, "Operations Cockpit")
-        self.assertContains(response, "Dispatch Board")
-        self.assertContains(response, "Index Debt Queue")
+        self.assertContains(response, "Needs attention")
+        self.assertContains(response, "Category Yard")
+        self.assertContains(response, "No immediate action required")
         self.assertNotContains(response, "Safety Gates")
 
     def test_dashboard_renders_marathi_cockpit_labels(self):
@@ -1002,9 +1002,6 @@ class DashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "संचालन नियंत्रण कक्ष")
         self.assertContains(response, "श्रेणी कार्यक्षेत्र")
-        self.assertContains(response, "प्रेषण फलक")
-        self.assertContains(response, "अनुक्रमण थकबाकी रांग")
-        self.assertContains(response, "रिकामा विभाग")
 
     def test_dashboard_renders_flash_messages_with_accessible_dismissal(self):
         self.client.force_login(self.user)
@@ -1079,10 +1076,13 @@ class DashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("dashboard_folder", args=[folders[0].pk]))
-        self.assertContains(response, "Folder 24")
+        self.assertNotContains(response, "Folder 24")
+        self.assertContains(response, "Page 1 of 2")
+        page_two = self.client.get(reverse("dashboard"), {"page": 2})
+        self.assertContains(page_two, "Folder 24")
         self.assertContains(response, "Category Yard")
         self.assertContains(response, "Search readiness")
-        self.assertContains(response, 'aria-label="Close"', count=26)
+        self.assertContains(response, 'aria-label="Close"', count=25)
         self.assertContains(response, "Delete this category and all PDFs inside it")
 
     def test_dashboard_filters_categories_server_side(self):
@@ -1095,10 +1095,10 @@ class DashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Audit records")
         self.assertNotContains(response, "Housing records")
-        self.assertContains(response, "Showing 1 category matching")
+        self.assertContains(response, "1 category matches the current scope")
         self.assertContains(response, 'value="audit"')
 
-    def test_dashboard_index_debt_queue_links_actionable_categories(self):
+    def test_dashboard_prioritizes_actionable_conditions(self):
         self.client.force_login(self.user)
         index_folder = Folder.objects.create(name="Needs index lane", created_by=self.user)
         PDFFile.objects.create(
@@ -1121,17 +1121,58 @@ class DashboardTests(TestCase):
         response = self.client.get(reverse("dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Index Debt Queue")
+        self.assertContains(response, "Documents need index review")
+        self.assertContains(response, "index_debt_present")
         self.assertContains(response, "Needs index lane")
         self.assertContains(response, "Index review")
         self.assertContains(response, "Owner review lane")
-        self.assertContains(response, "Owner review")
+        self.assertContains(response, "Document provenance needs review")
+        self.assertContains(response, "provenance_review_required")
         self.assertContains(response, "Empty lane")
-        self.assertContains(response, "Empty bay")
+        self.assertContains(response, "Categories are awaiting intake")
         self.assertContains(response, reverse("dashboard_folder", args=[index_folder.pk]))
         self.assertContains(response, reverse("dashboard_folder", args=[owner_folder.pk]))
         self.assertContains(response, reverse("dashboard_folder", args=[empty_folder.pk]))
         self.assertNotContains(response, "Prefer rename or quarantine over delete")
+
+    def test_dashboard_filters_readiness_provenance_and_occupancy(self):
+        self.client.force_login(self.user)
+        ready = Folder.objects.create(name="Ready lane", created_by=self.user)
+        PDFFile.objects.create(
+            title="Ready",
+            file="pdfs/ready.pdf",
+            folder=ready,
+            uploaded_by=self.user,
+            indexed=True,
+        )
+        debt = Folder.objects.create(name="Debt lane", created_by=self.user)
+        PDFFile.objects.create(
+            title="Debt",
+            file="pdfs/debt.pdf",
+            folder=debt,
+            uploaded_by=None,
+            indexed=False,
+        )
+        Folder.objects.create(name="Empty lane", created_by=self.user)
+
+        response = self.client.get(
+            reverse("dashboard"),
+            {"readiness": "needs_index", "provenance": "unknown"},
+        )
+        category_names = [
+            folder.name
+            for folder in response.context["cockpit"]["category_page"].object_list
+        ]
+        self.assertEqual(category_names, ["Debt lane"])
+        self.assertContains(response, 'option value="needs_index" selected')
+        self.assertContains(response, 'option value="unknown" selected')
+
+        empty = self.client.get(reverse("dashboard"), {"occupancy": "empty"})
+        empty_names = [
+            folder.name
+            for folder in empty.context["cockpit"]["category_page"].object_list
+        ]
+        self.assertEqual(empty_names, ["Empty lane"])
 
     def test_folder_navigation_renders_pdfs_and_nullable_uploader(self):
         self.client.force_login(self.user)
@@ -2056,13 +2097,22 @@ class JobDrawerTests(TestCase):
         response = self.client.get(reverse("active_jobs"))
         self.assertEqual(response.status_code, 403)
 
-    def test_dashboard_renders_job_drawer_toggle(self):
+    def test_dashboard_renders_single_active_work_projection(self):
+        MaintenanceJob.objects.create(
+            kind="validate",
+            status="running",
+            total_items=2,
+            completed_items=1,
+            requested_by=self.superadmin,
+        )
         self.client.force_login(self.superadmin)
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "job-drawer-toggle")
-        self.assertContains(response, "Active Jobs")
-        self.assertContains(response, "job-drawer-content")
+        self.assertContains(response, "Active Work")
+        self.assertContains(response, "1/2")
+        self.assertContains(response, "?section=maintenance&job=")
+        self.assertNotContains(response, "job-drawer-toggle")
+        self.assertNotContains(response, "/dashboard/maintenance/")
 
     def test_dashboard_does_not_render_drawer_for_admin(self):
         admin = get_user_model().objects.create_user(
