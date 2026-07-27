@@ -122,37 +122,30 @@ def _safe_root(configured_root):
 
 
 def _capacity(root, required_bytes):
-    usage = shutil.disk_usage(root)
-    stat_value = os.statvfs(root)
-    inode_reporting_available = int(stat_value.f_files) > 0
-    free_inodes = (
-        int(stat_value.f_favail) if inode_reporting_available else None
+    from core.artifact_cleanup import capacity_report
+
+    evidence = capacity_report(
+        source_bytes=int(required_bytes),
+        operation="restore",
+        target_root=root,
+        minimum_free_bytes=int(settings.VAULT_RESTORE_MIN_FREE_BYTES),
+        minimum_free_inodes=int(settings.VAULT_RESTORE_MIN_FREE_INODES),
     )
-    required_free_bytes = max(
-        int(settings.VAULT_RESTORE_MIN_FREE_BYTES),
-        int(required_bytes),
+    evidence.update(
+        {
+            "available_bytes": evidence["free_bytes"],
+            "required_inodes": evidence["inode_reserve"],
+            "available_inodes": evidence["free_inodes"],
+        }
     )
-    configured_free_inodes = int(
-        settings.VAULT_RESTORE_MIN_FREE_INODES
-    )
-    required_free_inodes = max(configured_free_inodes, 1)
-    evidence = {
-        "required_bytes": required_free_bytes,
-        "available_bytes": usage.free,
-        "required_inodes": required_free_inodes,
-        "available_inodes": free_inodes,
-        "inode_check": (
-            "reported" if inode_reporting_available else "not_reported"
-        ),
-    }
-    if usage.free < required_free_bytes:
+    if not evidence["byte_capacity_ok"]:
         raise RestoreError("restore_capacity_bytes_insufficient")
-    if not inode_reporting_available and configured_free_inodes > 0:
-        raise RestoreError("restore_capacity_inodes_unknown")
     if (
-        inode_reporting_available
-        and free_inodes < required_free_inodes
+        evidence["inode_check"] == "not_reported"
+        and int(settings.VAULT_RESTORE_MIN_FREE_INODES) > 0
     ):
+        raise RestoreError("restore_capacity_inodes_unknown")
+    if not evidence["inode_capacity_ok"]:
         raise RestoreError("restore_capacity_inodes_insufficient")
     return evidence
 
@@ -441,7 +434,7 @@ def run_restore_job(
     try:
         capacity = _capacity(
             quarantine_root,
-            max(verified.byte_count * 2, verified.byte_count + 1),
+            max(verified.byte_count, 1),
         )
         workspace.capacity_plan = capacity
         workspace.save(update_fields=["capacity_plan", "updated_at"])

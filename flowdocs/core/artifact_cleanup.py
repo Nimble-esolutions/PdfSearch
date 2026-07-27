@@ -70,9 +70,11 @@ def _records(root: Path, category: str, manifests=()) -> list[dict]:
 def _runtime_protections() -> set[str]:
     protected = set()
     try:
-        from vaultops.runtime_control import read_runtime_pointer
+        from vaultops.models import RuntimePointerObservation
 
-        pointer = read_runtime_pointer()
+        pointer = RuntimePointerObservation.objects.filter(
+            deployment_id=settings.ENV_IDENTITY.deployment_id
+        ).order_by("-observed_at").first()
         for key in ("active_generation_id", "previous_generation_id"):
             value = getattr(pointer, key, "") if pointer else ""
             if value:
@@ -116,6 +118,8 @@ def inventory_local_artifacts() -> list[dict]:
         if record["category"] == "runtime_generation":
             generation = manifest.get("generation_id", record["name"])
             if generation in protected_runtime:
+                reasons.append("active_or_previous_runtime")
+            if manifest.get("runtime_state") in {"active", "previous"}:
                 reasons.append("active_or_previous_runtime")
         if (
             record["category"] == "maintenance_workspace"
@@ -232,7 +236,14 @@ def apply_cleanup(plan_id: str) -> dict:
     return {**plan, "removed": removed}
 
 
-def capacity_report(*, source_bytes: int, operation: str) -> dict:
+def capacity_report(
+    *,
+    source_bytes: int,
+    operation: str,
+    target_root: Path | str | None = None,
+    minimum_free_bytes: int = 0,
+    minimum_free_inodes: int = 0,
+) -> dict:
     factors = {
         "source_copy": source_bytes,
         "quarantine": source_bytes if operation == "restore" else 0,
@@ -243,17 +254,28 @@ def capacity_report(*, source_bytes: int, operation: str) -> dict:
         "filesystem_overhead": int(source_bytes * 0.1),
         "operational_reserve": 256 * 1024**2,
     }
-    required = sum(factors.values())
-    target = Path(settings.DATA_CONTROL_ROOT)
+    required = max(sum(factors.values()), int(minimum_free_bytes))
+    target = Path(target_root or settings.DATA_CONTROL_ROOT)
     target.mkdir(parents=True, exist_ok=True)
     usage = shutil.disk_usage(target)
     try:
         filesystem = os.statvfs(target)
         free_inodes = filesystem.f_favail
-        inode_reserve = max(1024, int(filesystem.f_files * 0.01))
+        inode_reporting_available = int(filesystem.f_files) > 0
+        free_inodes = (
+            int(filesystem.f_favail)
+            if inode_reporting_available
+            else None
+        )
+        inode_reserve = max(
+            int(minimum_free_inodes),
+            1024 if inode_reporting_available else 0,
+            int(filesystem.f_files * 0.01),
+        )
     except (AttributeError, OSError):
         free_inodes = None
-        inode_reserve = 1024
+        inode_reporting_available = False
+        inode_reserve = int(minimum_free_inodes)
     return {
         "operation": operation,
         "phases": factors,
@@ -262,7 +284,17 @@ def capacity_report(*, source_bytes: int, operation: str) -> dict:
         "byte_capacity_ok": usage.free >= required,
         "free_inodes": free_inodes,
         "inode_reserve": inode_reserve,
+        "inode_check": (
+            "reported" if inode_reporting_available else "not_reported"
+        ),
         "inode_capacity_ok": (
-            free_inodes is not None and free_inodes >= inode_reserve
+            (
+                free_inodes is not None
+                and free_inodes >= inode_reserve
+            )
+            or (
+                free_inodes is None
+                and int(minimum_free_inodes) == 0
+            )
         ),
     }

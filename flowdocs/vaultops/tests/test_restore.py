@@ -207,8 +207,8 @@ class ProfileSecurityTests(SimpleTestCase):
 
 
 class RestoreCapacityTests(SimpleTestCase):
-    @patch("vaultops.services.restore.shutil.disk_usage")
-    @patch("vaultops.services.restore.os.statvfs")
+    @patch("core.artifact_cleanup.shutil.disk_usage")
+    @patch("core.artifact_cleanup.os.statvfs")
     @override_settings(
         VAULT_RESTORE_MIN_FREE_BYTES=0,
         VAULT_RESTORE_MIN_FREE_INODES=0,
@@ -217,13 +217,13 @@ class RestoreCapacityTests(SimpleTestCase):
         self, statvfs, disk_usage
     ):
         statvfs.return_value = SimpleNamespace(f_files=0, f_favail=0)
-        disk_usage.return_value = SimpleNamespace(free=1024)
+        disk_usage.return_value = SimpleNamespace(free=1024**3)
         evidence = _capacity(Path("/unused"), 10)
         self.assertIsNone(evidence["available_inodes"])
         self.assertEqual(evidence["inode_check"], "not_reported")
 
-    @patch("vaultops.services.restore.shutil.disk_usage")
-    @patch("vaultops.services.restore.os.statvfs")
+    @patch("core.artifact_cleanup.shutil.disk_usage")
+    @patch("core.artifact_cleanup.os.statvfs")
     @override_settings(
         VAULT_RESTORE_MIN_FREE_BYTES=0,
         VAULT_RESTORE_MIN_FREE_INODES=10,
@@ -232,7 +232,7 @@ class RestoreCapacityTests(SimpleTestCase):
         self, statvfs, disk_usage
     ):
         statvfs.return_value = SimpleNamespace(f_files=0, f_favail=0)
-        disk_usage.return_value = SimpleNamespace(free=1024)
+        disk_usage.return_value = SimpleNamespace(free=1024**3)
         with self.assertRaisesMessage(
             RestoreError, "restore_capacity_inodes_unknown"
         ):

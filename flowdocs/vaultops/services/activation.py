@@ -186,6 +186,25 @@ def schedule_activation(
     if expires_seconds < 30 or expires_seconds > 900:
         raise ActivationCoordinatorError("activation_intent_expiry_invalid")
     runtime = _verify_workspace(workspace)
+    from core.artifact_cleanup import capacity_report
+
+    runtime_bytes = sum(
+        path.stat().st_size
+        for path in runtime.rglob("*")
+        if path.is_file()
+    )
+    activation_capacity = capacity_report(
+        source_bytes=runtime_bytes,
+        operation="activation",
+        target_root=settings.RUNTIME_GENERATIONS_ROOT,
+    )
+    if not (
+        activation_capacity["byte_capacity_ok"]
+        and activation_capacity["inode_capacity_ok"]
+    ):
+        raise ActivationCoordinatorError(
+            "activation_capacity_insufficient"
+        )
     smoke_queries_digest = _read_smoke_queries()
     paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
     try:
@@ -260,6 +279,7 @@ def schedule_activation(
                 "target_runtime_path": str(runtime),
                 "smoke_queries_digest": smoke_queries_digest,
                 "protocol_state": "scheduled",
+                "capacity_plan": activation_capacity,
             },
             actor_id=actor_id,
             actor_name=actor_name,
