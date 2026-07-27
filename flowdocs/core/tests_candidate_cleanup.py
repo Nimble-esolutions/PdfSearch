@@ -192,6 +192,55 @@ class ArtifactCleanupPlannerTests(SimpleTestCase):
                 }
             )
         )
+        held = roots["VAULT_SNAPSHOT_ROOT"] / "incident-held"
+        held.mkdir()
+        (held / "payload.bin").write_bytes(b"held")
+        (held / "snapshot.json").write_text(
+            json.dumps(
+                {
+                    "state": "failed",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "retention": {"incident_hold": True},
+                }
+            )
+        )
+        referenced = roots["VAULT_RESTORE_ROOT"] / "activation-reference"
+        referenced.mkdir()
+        (referenced / "workspace.json").write_text(
+            json.dumps(
+                {
+                    "state": "failed",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "activation_reference": "intent-1",
+                }
+            )
+        )
+        resumable = roots["VAULT_SNAPSHOT_ROOT"] / "resumable"
+        resumable.mkdir()
+        (resumable / "snapshot.json").write_text(
+            json.dumps(
+                {
+                    "state": "failed",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "resumable_checkpoint": "checkpoint-1",
+                }
+            )
+        )
+        for generation, state in (
+            ("active-runtime", "active"),
+            ("previous-runtime", "previous"),
+        ):
+            runtime = roots["RUNTIME_GENERATIONS_ROOT"] / generation
+            runtime.mkdir()
+            (runtime / "runtime-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "generation_id": generation,
+                        "runtime_state": state,
+                        "created_at": "2020-01-01T00:00:00+00:00",
+                    }
+                )
+            )
 
     def tearDown(self):
         self.settings.disable()
@@ -204,12 +253,33 @@ class ArtifactCleanupPlannerTests(SimpleTestCase):
             plan["candidates"][0]["reason_code"],
             "failed_diagnostic_payload_expired",
         )
+        protections = {
+            item["name"]: item["protection_reasons"]
+            for item in plan["protected"]
+        }
+        self.assertEqual(protections["candidate"], ["maintenance_candidate"])
+        self.assertEqual(protections["incident-held"], ["incident_hold"])
         self.assertEqual(
-            plan["protected"][0]["protection_reasons"],
-            ["maintenance_candidate"],
+            protections["activation-reference"], ["activation_reference"]
+        )
+        self.assertEqual(protections["resumable"], ["resumable_checkpoint"])
+        self.assertEqual(
+            protections["active-runtime"], ["active_or_previous_runtime"]
+        )
+        self.assertEqual(
+            protections["previous-runtime"], ["active_or_previous_runtime"]
         )
         with self.assertRaisesRegex(CleanupError, "stale_cleanup_plan"):
             apply_cleanup("wrong")
         result = apply_cleanup(plan["plan_id"])
         self.assertEqual(len(result["removed"]), 1)
         self.assertFalse(Path(result["removed"][0]["path"]).exists())
+
+    @patch("core.artifact_cleanup.MAX_APPLY_BYTES", 1)
+    def test_apply_is_blocked_above_approval_boundary(self):
+        plan = cleanup_plan()
+        self.assertFalse(plan["apply_allowed"])
+        with self.assertRaisesRegex(
+            CleanupError, "cleanup_exceeds_20_gib_approval_boundary"
+        ):
+            apply_cleanup(plan["plan_id"])

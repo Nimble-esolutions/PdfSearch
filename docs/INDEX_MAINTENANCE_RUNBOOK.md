@@ -82,3 +82,9 @@ python manage.py artifact_cleanup apply --confirm <plan-id>
 Application is rejected when the inventory changes or the proposed deletion
 exceeds the separately approved 20 GiB boundary. The command never follows
 symlinks or removes paths outside the declared artifact roots.
+
+The Workbench reports local recovery health, verified Vault generation count,
+maintenance candidate state, the latest persisted restore-rehearsal result,
+held/prunable bytes, and the current byte/inode reserve independently. Restore,
+maintenance workspace creation, and activation use phase-aware capacity plans;
+an insufficient reserve blocks the risky operation before mutation.

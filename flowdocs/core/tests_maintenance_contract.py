@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.maintenance import queue_job, run_job
+from core.management.commands.run_maintenance_jobs import _execute_local_job
 from core.maintenance_plans import (
     FORCE_CONFIRMATION,
     MaintenancePlanError,
@@ -260,6 +261,21 @@ class MaintenanceWorkerGroupingTests(TestCase):
         self.pdfs[0].refresh_from_db()
         self.assertEqual(finished.status, "failed")
         self.assertEqual(self.pdfs[0].lifecycle, "uploaded")
+
+    @patch("core.candidate_maintenance.execute_candidate_job")
+    def test_candidate_jobs_route_to_isolated_executor(self, execute):
+        job = queue_job(
+            kind="reindex_selected",
+            requested_by=self.user,
+            pdfs=[self.pdfs[0]],
+            options={
+                "candidate_required": True,
+                "recovery_set_id": "rs-test",
+            },
+        )
+        execute.return_value = job
+        self.assertIs(_execute_local_job(job), job)
+        execute.assert_called_once_with(job)
 
 
 class MaintenanceDeploymentPreflightTests(TestCase):

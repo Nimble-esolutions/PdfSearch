@@ -11,12 +11,14 @@ from django.utils import timezone
 
 from core.lease import acquire_lease, release_lease
 from core.models import ArtifactGeneration as LegacyGeneration
-from core.models import CustomUser
+from core.models import CustomUser, MaintenanceJob
 from vaultops.models import (
     ArtifactGeneration,
+    ArtifactValidation,
     ConfirmationChallenge,
     GarbageCollectionPlan,
     RetentionHold,
+    RestoreWorkspace,
     VaultConnectionProfile,
     VaultDatasetProjection,
     VaultAuditEvent,
@@ -93,6 +95,38 @@ class VaultWorkbenchTests(TestCase):
         self.assertContains(response, "vault-workbench.css")
         self.assertContains(response, "<noscript>", html=False)
         self.assertNotContains(response, "cdn.jsdelivr.net")
+
+    def test_maintenance_health_and_candidate_publication_are_evidenced(self):
+        ArtifactValidation.objects.create(
+            generation=self.candidate,
+            validation_type="full",
+            status=ArtifactValidation.Status.PASSED,
+            manifest_digest=self.candidate.manifest_digest,
+        )
+        workspace = RestoreWorkspace.objects.create(
+            generation=self.candidate,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=self.candidate.manifest_digest,
+            rehearsal_evidence={"success": True},
+            prepared_at=timezone.now(),
+        )
+        MaintenanceJob.objects.create(
+            kind="reindex_selected",
+            status="completed",
+            options={
+                "candidate_workspace_id": "mw-evidence",
+                "candidate_state": "activation_ready",
+            },
+        )
+        response = self.client.get(
+            f"{reverse('operations_panel')}?section=maintenance"
+        )
+        self.assertContains(response, "Verified Vault generations")
+        self.assertContains(response, "Free-space reserve")
+        self.assertContains(response, "passed")
+        self.assertContains(response, str(workspace.public_id))
+        self.assertContains(response, "mw-evidence")
+        self.assertContains(response, "Vault publication required")
         self.assertContains(response, "vendor/bootstrap/5.3.0")
         sync_response = self.client.get(
             reverse("operations_panel"), {"section": "sync"}

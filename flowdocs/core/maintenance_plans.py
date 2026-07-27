@@ -12,7 +12,11 @@ from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from .emergency_recovery import create_set, list_sets, plan_prune
-from .artifact_cleanup import cleanup_plan, inventory_local_artifacts
+from .artifact_cleanup import (
+    capacity_report,
+    cleanup_plan,
+    inventory_local_artifacts,
+)
 from .maintenance import queue_job
 from .models import Folder, MaintenanceJob, MaintenancePlan, PDFFile
 
@@ -29,6 +33,58 @@ class MaintenancePlanError(RuntimeError):
     def __init__(self, reason_code: str, detail: str = ""):
         self.reason_code = reason_code
         super().__init__(detail or reason_code)
+
+
+def _vault_health() -> tuple[dict, dict]:
+    from vaultops.models import (
+        ArtifactGeneration,
+        ArtifactValidation,
+        RestoreWorkspace,
+    )
+
+    now = timezone.now()
+    verified_generation_ids = set(
+        ArtifactValidation.objects.filter(
+            status=ArtifactValidation.Status.PASSED,
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .values_list("generation_id", flat=True)
+    )
+    generations = ArtifactGeneration.objects.filter(
+        pk__in=verified_generation_ids,
+    ).exclude(
+        vault_state__in=[
+            ArtifactGeneration.VaultState.INVALID,
+            ArtifactGeneration.VaultState.UNKNOWN,
+            ArtifactGeneration.VaultState.LEGACY_READ_ONLY,
+        ]
+    )
+    latest_drill = (
+        RestoreWorkspace.objects.exclude(rehearsal_evidence={})
+        .order_by("-updated_at")
+        .first()
+    )
+    drill = {"state": "unknown", "observed_at": None, "workspace_id": ""}
+    if latest_drill:
+        drill = {
+            "state": (
+                "passed"
+                if latest_drill.rehearsal_evidence.get("success")
+                else "failed"
+            ),
+            "observed_at": latest_drill.updated_at,
+            "workspace_id": str(latest_drill.public_id),
+        }
+    return (
+        {
+            "state": "healthy" if generations.exists() else "unknown",
+            "verified_count": generations.count(),
+            "authoritative_count": generations.filter(
+                vault_state=ArtifactGeneration.VaultState.AUTHORITATIVE
+            ).count(),
+        },
+        drill,
+    )
 
 
 def capability_reasons() -> dict[str, str]:
@@ -305,6 +361,14 @@ def workbench_maintenance_state() -> dict:
         item for item in local_inventory
         if item["category"] == "maintenance_workspace"
     ]
+    verified_vault_generations, last_restore_drill = _vault_health()
+    free_space = capacity_report(source_bytes=0, operation="health")
+    jobs = list(
+        MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).values(
+            "public_id", "kind", "status", "total_items", "completed_items",
+            "failed_items", "error_summary", "created_at", "options",
+        )[:20]
+    )
     return {
         "capabilities": {
             operation: {"enabled": not reason, "reason_code": reason}
@@ -322,12 +386,7 @@ def workbench_maintenance_state() -> dict:
                 "job__public_id", "job__status",
             )[:20]
         ),
-        "jobs": list(
-            MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).values(
-                "public_id", "kind", "status", "total_items", "completed_items",
-                "failed_items", "error_summary", "created_at",
-            )[:20]
-        ),
+        "jobs": jobs,
         "confirmation_phrase": FORCE_CONFIRMATION,
         "health": {
             "local_recovery_sets": {
@@ -365,6 +424,21 @@ def workbench_maintenance_state() -> dict:
                     for item in maintenance_workspaces
                 ),
             },
+            "verified_vault_generations": verified_vault_generations,
+            "free_space_reserve": {
+                "state": (
+                    "healthy"
+                    if (
+                        free_space["byte_capacity_ok"]
+                        and free_space["inode_capacity_ok"]
+                    )
+                    else "degraded"
+                ),
+                "free_bytes": free_space["free_bytes"],
+                "required_bytes": free_space["required_bytes"],
+                "free_inodes": free_space["free_inodes"],
+                "required_inodes": free_space["inode_reserve"],
+            },
             "cleanup": {
                 "state": (
                     "blocked"
@@ -375,6 +449,6 @@ def workbench_maintenance_state() -> dict:
                 "prunable_bytes": local_cleanup["candidate_bytes"],
                 "protected_bytes": local_cleanup["protected_bytes"],
             },
-            "last_restore_drill": {"state": "unknown"},
+            "last_restore_drill": last_restore_drill,
         },
     }
