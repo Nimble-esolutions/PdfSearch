@@ -98,6 +98,9 @@ jobs:
       - name: Compile Python source
         run: python3 -m compileall -q flowdocs
 
+      - name: Validate active operator documentation
+        run: python3 scripts/ci/docs_contract.py
+
       - name: Validate Dockerfile
         run: docker build --check -f Dockerfile .
 
