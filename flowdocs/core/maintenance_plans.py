@@ -351,7 +351,20 @@ def queue_plan(*, plan: MaintenancePlan, actor, confirmation: str = "") -> Maint
         return job
 
 
-def workbench_maintenance_state() -> dict:
+def _job_state_version(job: dict) -> str:
+    payload = {
+        "public_id": str(job["public_id"]),
+        "status": job["status"],
+        "completed_items": job["completed_items"],
+        "failed_items": job["failed_items"],
+        "updated_at": job["updated_at"].isoformat(),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def workbench_maintenance_state(*, selected_plan_id="") -> dict:
     reasons = capability_reasons()
     recovery_sets = list_sets()
     cleanup = plan_prune()
@@ -362,14 +375,59 @@ def workbench_maintenance_state() -> dict:
         if item["category"] == "maintenance_workspace"
     ]
     verified_vault_generations, last_restore_drill = _vault_health()
-    free_space = capacity_report(source_bytes=0, operation="health")
+    try:
+        free_space = capacity_report(source_bytes=0, operation="health")
+    except (FileNotFoundError, OSError):
+        free_space = {
+            "byte_capacity_ok": False,
+            "inode_capacity_ok": False,
+            "free_bytes": 0,
+            "required_bytes": 0,
+            "free_inodes": 0,
+            "inode_reserve": 0,
+        }
     jobs = list(
         MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).values(
             "public_id", "kind", "status", "total_items", "completed_items",
-            "failed_items", "error_summary", "created_at", "options",
+            "failed_items", "error_summary", "created_at", "updated_at", "options",
         )[:20]
     )
+    for job in jobs:
+        job["state_version"] = _job_state_version(job)
+        job["allowed_actions"] = {
+            "cancel": job["status"] in {"queued", "running"},
+            "retry": job["status"] == "failed",
+        }
+    plans = list(
+        MaintenancePlan.objects.select_related("job").values(
+            "public_id", "operation", "state", "preview", "state_version",
+            "expires_at", "external_embeddings_required",
+            "job__public_id", "job__status",
+        )[:20]
+    )
+    selected_plan = next(
+        (
+            plan for plan in plans
+            if selected_plan_id and str(plan["public_id"]) == str(selected_plan_id)
+        ),
+        None,
+    )
+    version_payload = {
+        "plans": [
+            (str(plan["public_id"]), plan["state"], plan["state_version"])
+            for plan in plans
+        ],
+        "jobs": [
+            (str(job["public_id"]), job["state_version"])
+            for job in jobs
+        ],
+        "capabilities": reasons,
+    }
+    state_version = hashlib.sha256(
+        json.dumps(version_payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
     return {
+        "state_version": state_version,
         "capabilities": {
             operation: {"enabled": not reason, "reason_code": reason}
             for operation, reason in reasons.items()
@@ -379,13 +437,8 @@ def workbench_maintenance_state() -> dict:
                 "id", "name", "pdf_count"
             )
         ),
-        "plans": list(
-            MaintenancePlan.objects.select_related("job").values(
-                "public_id", "operation", "state", "preview", "state_version",
-                "expires_at",
-                "job__public_id", "job__status",
-            )[:20]
-        ),
+        "plans": plans,
+        "selected_plan": selected_plan,
         "jobs": jobs,
         "confirmation_phrase": FORCE_CONFIRMATION,
         "health": {

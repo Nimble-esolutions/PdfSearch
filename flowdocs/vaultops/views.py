@@ -21,7 +21,7 @@ from core.maintenance_plans import (
     queue_plan as queue_maintenance_plan,
     workbench_maintenance_state,
 )
-from core.models import MaintenancePlan
+from core.models import MaintenanceAuditEvent, MaintenanceJob, MaintenancePlan
 from core.emergency_recovery import create_set as create_recovery_set
 from vaultops.models import (
     ArtifactGeneration,
@@ -293,7 +293,18 @@ def workbench(request):
     state = build_workbench_state(
         profile_key=request.GET.get("profile") or None
     )
-    state["maintenance"] = workbench_maintenance_state()
+    state["maintenance"] = workbench_maintenance_state(
+        selected_plan_id=request.GET.get("plan", ""),
+    )
+    state["vault_state_version"] = state["state_version"]
+    state["maintenance_state_version"] = state["maintenance"]["state_version"]
+    state["combined_state_version"] = hashlib.sha256(
+        (
+            state["vault_state_version"]
+            + ":"
+            + state["maintenance_state_version"]
+        ).encode("utf-8")
+    ).hexdigest()
     return render(
         request,
         "vaultops/workbench.html",
@@ -316,7 +327,18 @@ def state_api(request):
     state = build_workbench_state(
         profile_key=request.GET.get("profile") or None
     )
-    state["maintenance"] = workbench_maintenance_state()
+    state["maintenance"] = workbench_maintenance_state(
+        selected_plan_id=request.GET.get("plan", ""),
+    )
+    state["vault_state_version"] = state["state_version"]
+    state["maintenance_state_version"] = state["maintenance"]["state_version"]
+    state["combined_state_version"] = hashlib.sha256(
+        (
+            state["vault_state_version"]
+            + ":"
+            + state["maintenance_state_version"]
+        ).encode("utf-8")
+    ).hexdigest()
     return _api_response(
         status=state["status"],
         reason_code=state["reason_code"],
@@ -391,6 +413,87 @@ def maintenance_plan_queue(request, plan_id):
         )
     except Exception as exc:
         return _mutation_error(request, exc, section="maintenance")
+
+
+def _local_job_state_version(job):
+    payload = {
+        "public_id": str(job.public_id),
+        "status": job.status,
+        "completed_items": job.completed_items,
+        "failed_items": job.failed_items,
+        "updated_at": job.updated_at.isoformat(),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _local_job_action(request, job_id, *, action):
+    try:
+        _enforce_mutation_rate_limit(request)
+        job = get_object_or_404(
+            MaintenanceJob,
+            public_id=job_id,
+            kind__in={"validate", "repair_indexes", "reindex_needed", "reindex_selected"},
+        )
+        supplied_version = _request_value(request, "state_version", "")
+        if supplied_version != _local_job_state_version(job):
+            raise MaintenancePlanError("stale_state_version")
+        if action == "cancel" and job.status in {"queued", "running"}:
+            job.status = (
+                "cancel_requested" if job.status == "running" else "cancelled"
+            )
+            if job.status == "cancelled":
+                job.finished_at = timezone.now()
+            job.save(update_fields=["status", "finished_at", "updated_at"])
+            event_type = "cancelled"
+            reason_code = "maintenance_job_cancellation_recorded"
+        elif action == "retry" and job.status == "failed":
+            job.status = "queued"
+            job.error_summary = ""
+            job.finished_at = None
+            job.failed_items = 0
+            job.items.filter(status="failed").update(
+                status="queued",
+                error_code="",
+                error_message="",
+                finished_at=None,
+            )
+            job.save(update_fields=[
+                "status", "error_summary", "finished_at", "failed_items",
+                "updated_at",
+            ])
+            event_type = "retried"
+            reason_code = "maintenance_job_requeued"
+        else:
+            raise MaintenancePlanError("maintenance_job_action_not_allowed")
+        MaintenanceAuditEvent.objects.create(
+            job=job,
+            actor=request.user,
+            event_type=event_type,
+            payload={"source": "vault_workbench"},
+        )
+        return _mutation_success(
+            request,
+            section="maintenance",
+            reason_code=reason_code,
+            message=f"Local maintenance job {job.public_id} updated.",
+            data={"job_id": str(job.public_id), "status": job.status},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="maintenance")
+
+
+@superadmin_required
+@require_POST
+def maintenance_job_cancel(request, job_id):
+    return _local_job_action(request, job_id, action="cancel")
+
+
+@superadmin_required
+@require_POST
+def maintenance_job_retry(request, job_id):
+    return _local_job_action(request, job_id, action="retry")
 
 
 @superadmin_required

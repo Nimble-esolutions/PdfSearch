@@ -184,6 +184,82 @@ class MaintenancePlanningTests(TestCase):
             self.assertContains(disabled, "bulk_reindex_disabled")
             self.assertContains(disabled, "disabled")
 
+    def test_workbench_renders_guided_authority_scope_and_preview_contract(self):
+        self.client.force_login(self.superadmin)
+        plan = self._plan("validate")
+        response = self.client.get(
+            reverse("operations_panel"),
+            {"section": "maintenance", "plan": plan.public_id},
+        )
+        self.assertContains(response, "Choose the outcome you need")
+        self.assertContains(response, "Local maintenance")
+        self.assertContains(response, "Unchanged during processing")
+        self.assertContains(response, "Unchanged until explicit publication")
+        self.assertContains(response, "Document filters")
+        self.assertContains(response, "Selected preview")
+        self.assertContains(response, str(plan.public_id))
+        self.assertEqual(
+            response.context["state"]["maintenance"]["selected_plan"]["public_id"],
+            plan.public_id,
+        )
+        self.assertTrue(response.context["state"]["maintenance_state_version"])
+        self.assertTrue(response.context["state"]["combined_state_version"])
+
+    def test_vault_workbench_owns_local_job_cancel_and_retry_actions(self):
+        self.client.force_login(self.superadmin)
+        running = MaintenanceJob.objects.create(
+            kind="validate",
+            status="running",
+            requested_by=self.superadmin,
+        )
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "maintenance"}
+        )
+        job_state = next(
+            job for job in response.context["state"]["maintenance"]["jobs"]
+            if job["public_id"] == running.public_id
+        )
+        cancelled = self.client.post(
+            reverse(
+                "vaultops:maintenance_job_cancel",
+                kwargs={"job_id": running.public_id},
+            ),
+            {"state_version": job_state["state_version"]},
+        )
+        self.assertEqual(cancelled.status_code, 303)
+        self.assertEqual(
+            cancelled["Location"],
+            f"{reverse('operations_panel')}?section=maintenance",
+        )
+        running.refresh_from_db()
+        self.assertEqual(running.status, "cancel_requested")
+
+        failed = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="failed",
+            failed_items=1,
+            error_summary="typed_failure",
+            requested_by=self.superadmin,
+        )
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "maintenance"}
+        )
+        job_state = next(
+            job for job in response.context["state"]["maintenance"]["jobs"]
+            if job["public_id"] == failed.public_id
+        )
+        retried = self.client.post(
+            reverse(
+                "vaultops:maintenance_job_retry",
+                kwargs={"job_id": failed.public_id},
+            ),
+            {"state_version": job_state["state_version"]},
+        )
+        self.assertEqual(retried.status_code, 303)
+        failed.refresh_from_db()
+        self.assertEqual(failed.status, "queued")
+        self.assertEqual(failed.failed_items, 0)
+
     def test_legacy_generation_operations_are_rejected(self):
         self.client.force_login(self.superadmin)
         for operation in ("sync_generation", "restore_generation"):

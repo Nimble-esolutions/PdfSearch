@@ -30,6 +30,16 @@ urlpatterns = [
         views.maintenance_plan_queue,
         name="maintenance_plan_queue",
     ),
+    path(
+        "maintenance/jobs/<uuid:job_id>/cancel/",
+        views.maintenance_job_cancel,
+        name="maintenance_job_cancel",
+    ),
+    path(
+        "maintenance/jobs/<uuid:job_id>/retry/",
+        views.maintenance_job_retry,
+        name="maintenance_job_retry",
+    ),
     path("restores/start/", views.restore_start, name="restore_start"),
     path(
         "jobs/<uuid:job_id>/cancel/",
