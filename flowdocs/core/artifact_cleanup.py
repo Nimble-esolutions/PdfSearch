@@ -256,7 +256,6 @@ def capacity_report(
     }
     required = max(sum(factors.values()), int(minimum_free_bytes))
     target = Path(target_root or settings.DATA_CONTROL_ROOT)
-    target.mkdir(parents=True, exist_ok=True)
     usage = shutil.disk_usage(target)
     try:
         filesystem = os.statvfs(target)
