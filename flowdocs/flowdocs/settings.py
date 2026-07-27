@@ -387,6 +387,9 @@ CHROMA_DIR = (
     else Path(os.getenv('CHROMA_DIR', str(DATA_ROOT / 'chroma_db')))
 )
 BACKUP_DIR = Path(os.getenv('BACKUP_DIR', str(DATA_ROOT / 'backups')))
+RECOVERY_SET_ROOT = Path(
+    os.getenv('RECOVERY_SET_ROOT', str(BACKUP_DIR / 'recovery-sets'))
+)
 PDF_CACHE_DIR = (
     ACTIVE_RUNTIME.pdf_cache_dir
     if ACTIVE_RUNTIME
