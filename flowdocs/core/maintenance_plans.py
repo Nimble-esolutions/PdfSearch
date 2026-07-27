@@ -12,6 +12,7 @@ from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from .emergency_recovery import create_set, list_sets, plan_prune
+from .artifact_cleanup import cleanup_plan, inventory_local_artifacts
 from .maintenance import queue_job
 from .models import Folder, MaintenanceJob, MaintenancePlan, PDFFile
 
@@ -270,7 +271,11 @@ def queue_plan(*, plan: MaintenancePlan, actor, confirmation: str = "") -> Maint
                 requested_by=actor,
                 folders=folders,
                 scope={"maintenance_plan": str(plan.public_id), **plan.selection},
-                options={"recovery_set_id": recovery["set_id"] if recovery else ""},
+                options={
+                    "recovery_set_id": recovery["set_id"] if recovery else "",
+                    "candidate_required": True,
+                    "external_embeddings_required": False,
+                },
             )
         else:
             job = queue_job(
@@ -294,6 +299,12 @@ def workbench_maintenance_state() -> dict:
     reasons = capability_reasons()
     recovery_sets = list_sets()
     cleanup = plan_prune()
+    local_cleanup = cleanup_plan()
+    local_inventory = inventory_local_artifacts()
+    maintenance_workspaces = [
+        item for item in local_inventory
+        if item["category"] == "maintenance_workspace"
+    ]
     return {
         "capabilities": {
             operation: {"enabled": not reason, "reason_code": reason}
@@ -348,11 +359,22 @@ def workbench_maintenance_state() -> dict:
                     if reasons.get("reindex_needed") == "runtime_read_only"
                     else "available"
                 ),
-                "active_count": 0,
+                "active_count": len(maintenance_workspaces),
+                "activation_ready_count": sum(
+                    item["state"] == "activation_ready"
+                    for item in maintenance_workspaces
+                ),
             },
             "cleanup": {
-                "state": "blocked" if cleanup["blocked"] else "planned",
-                "plan_id": cleanup["plan_id"],
+                "state": (
+                    "blocked"
+                    if cleanup["blocked"] or not local_cleanup["apply_allowed"]
+                    else "planned"
+                ),
+                "plan_id": local_cleanup["plan_id"],
+                "prunable_bytes": local_cleanup["candidate_bytes"],
+                "protected_bytes": local_cleanup["protected_bytes"],
             },
+            "last_restore_drill": {"state": "unknown"},
         },
     }

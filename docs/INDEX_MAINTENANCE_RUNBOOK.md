@@ -40,9 +40,12 @@ original job.
 
 ## Execution, retry, and rollback
 
-Document extraction and embeddings checkpoint per item. A retry does not
-recompute completed items. After every selected document in one folder is
-finished, the worker performs one final temporary FAISS build for that folder.
+Repair and reindex snapshot the application database, media, and stored indexes
+under `MAINTENANCE_WORKSPACE_ROOT`, then run in a separate process whose
+database and artifact paths point only at that workspace. Document extraction
+and embeddings checkpoint per item. A retry does not recompute completed items.
+After every selected document in one folder is finished, the worker performs
+one final temporary FAISS build for that folder.
 An item failure restores the document from `processing` to a valid prior
 lifecycle state. Failure codes and append-only audit events remain visible with
 job progress; superadmins can cancel active work or retry failed jobs.
@@ -58,3 +61,24 @@ Successful reindexing makes the prior Vault generation stale. Publish and
 verify a new immutable Vault candidate before remote authority reflects the
 new searchable artifacts. Publication and promotion are separate explicit
 operations.
+
+## Local artifact cleanup
+
+Preview cleanup without changing disk state:
+
+```bash
+python manage.py artifact_cleanup plan
+```
+
+The plan inventories recovery sets, source snapshots, quarantine, maintenance
+workspaces, and runtime generations. Active/previous runtimes, incident holds,
+activation references, resumable checkpoints, and activation-ready maintenance
+candidates are protected. Apply only the current plan identifier:
+
+```bash
+python manage.py artifact_cleanup apply --confirm <plan-id>
+```
+
+Application is rejected when the inventory changes or the proposed deletion
+exceeds the separately approved 20 GiB boundary. The command never follows
+symlinks or removes paths outside the declared artifact roots.

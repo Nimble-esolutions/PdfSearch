@@ -102,8 +102,9 @@
         <div><dt>{% trans "Recovery bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.bytes|filesizeformat }}</dd></div>
         <div><dt>{% trans "Held bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.held_bytes|filesizeformat }}</dd></div>
         <div><dt>{% trans "Prunable bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.prunable_bytes|filesizeformat }}</dd></div>
-        <div><dt>{% trans "Maintenance workspaces" %}</dt><dd>{{ state.maintenance.health.maintenance_workspaces.state }}</dd></div>
-        <div><dt>{% trans "Cleanup status" %}</dt><dd>{{ state.maintenance.health.cleanup.state }}</dd></div>
+        <div><dt>{% trans "Maintenance workspaces" %}</dt><dd>{{ state.maintenance.health.maintenance_workspaces.state }} · {{ state.maintenance.health.maintenance_workspaces.active_count }} ({{ state.maintenance.health.maintenance_workspaces.activation_ready_count }} {% trans "activation-ready" %})</dd></div>
+        <div><dt>{% trans "Last restore drill" %}</dt><dd>{{ state.maintenance.health.last_restore_drill.state }}</dd></div>
+        <div><dt>{% trans "Cleanup status" %}</dt><dd>{{ state.maintenance.health.cleanup.state }} · {{ state.maintenance.health.cleanup.prunable_bytes|filesizeformat }} {% trans "prunable" %}</dd></div>
       </dl>
       <form class="vault-form" method="post" action="{% url 'vaultops:maintenance_plan_create' %}">
         {% csrf_token %}
