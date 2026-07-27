@@ -2,7 +2,7 @@
 
 **Status:** Active
 **Audience:** Authorized administrators and superadmins
-**Last verified:** 2026-07-26
+**Last verified:** 2026-07-28
 **Related:** [`CLIENT_USER_MANUAL.md`](CLIENT_USER_MANUAL.md), [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md)
 
 ## What the console is for
@@ -13,8 +13,10 @@ maintenance, and review role-appropriate system controls. It is not a public
 search page and it does not replace source review.
 
 The current composition is the **Operations Cockpit**: official header, dark
-console navigation, operational metrics, Category Yard, Recent Intake, and a
-right-side action rail.
+console navigation, an observed operational posture, prioritized attention,
+Category Yard, Recent Intake, Active Work, and a compact Vault posture. It is
+the daily triage surface; the Vault Operations Workbench remains the specialist
+control plane.
 
 ## Sign in and navigation
 
@@ -43,12 +45,16 @@ Create or select the correct category, upload an approved PDF, and wait for its
 processing/indexing state before relying on search. Use descriptive titles and
 retain the original official file through the approved document policy.
 
+The attention queue is ordered by operational impact. Category filters are
+server-calculated and can be combined for readiness, provenance, occupancy, and
+ordering. Clear the filters before assuming that a category is missing. Large
+category sets are paginated; changing pages does not change document state.
+
 ## Operations and maintenance
 
-Use Operations and Maintenance Jobs to inspect queued, active, failed, or
-retryable work. Bulk indexing and OCR repair are durable maintenance jobs; do
-not turn them into repeated browser submissions. Preserve cancellation,
-retry, and per-item failure evidence.
+Use the Dashboard's **Active Work** projection for quick triage, then open the
+Workbench for full progress, cancellation, retry, checkpoints, failures, and
+candidate evidence. Dashboard links never queue index mutations directly.
 
 Superadmins use the **Vault Operations Workbench** under Operations for vault
 and runtime custody. Its persistent summary deliberately shows remote
@@ -73,6 +79,19 @@ the deployment and data-custody runbooks before any restore or promotion.
 Legacy Promote, Rollback, and Purge controls no longer relabel or delete data;
 use the guarded Workbench flow. Never run production cleanup from a local
 browser session.
+
+Under **Documents & Indexes**, the guided sequence is:
+
+```text
+choose operation → define scope → preview → confirm → monitor job
+→ review candidate → activate separately → publish separately
+```
+
+Validate and Repair Stored Indexes never call external embedding services.
+Reindex Needed and Reindex Selected may call them; force reindexing requires
+typed confirmation. The active runtime and remote Vault remain unchanged while
+maintenance runs. A successful reindex creates a derived candidate and makes
+the prior published generation stale.
 
 ## Destructive actions and support
 

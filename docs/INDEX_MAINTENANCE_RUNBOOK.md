@@ -4,7 +4,7 @@ Status: Active
 
 Owner: Operations
 
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-28
 
 Use **Vault Operations → Documents & Indexes**. This section changes or checks
 local content/search artifacts; it never publishes, promotes, restores, or
@@ -21,6 +21,11 @@ All controls remain visible. A disabled control shows a machine-readable reason:
 `runtime_read_only`, `bulk_reindex_disabled`, `external_embeddings_disabled`,
 `snapshot_in_progress`, or `recovery_point_required`.
 
+The Dashboard only summarizes local maintenance under **Active Work** and
+**Needs attention**. Use those links to enter this Workbench. The Dashboard
+does not publish Vault generations, inspect remote manifests, or directly
+cancel/retry jobs.
+
 ## Preview and confirmation
 
 1. Select categories and optionally explicit documents.
@@ -33,6 +38,11 @@ All controls remain visible. A disabled control shows a machine-readable reason:
    confirmation.
 6. Queue. The server recalculates selection and authority first; `stale_plan`
    requires a new preview.
+
+The selected preview is addressed by its public plan identifier and displays
+matching documents, affected folders, estimated work, expiry, and external
+embedding posture. Refreshing or following the post/redirect/get response keeps
+that preview in focus without trusting client-supplied document identities.
 
 Repair and reindex require a verified `pre-bulk-maintenance` recovery set.
 Failure to create it blocks the job. Duplicate confirmation returns the
@@ -49,6 +59,9 @@ one final temporary FAISS build for that folder.
 An item failure restores the document from `processing` to a valid prior
 lifecycle state. Failure codes and append-only audit events remain visible with
 job progress; superadmins can cancel active work or retry failed jobs.
+The Workbench calculates allowed actions from the current job lifecycle and
+binds each action to a job state version. A stale browser submission is rejected
+instead of applying an action to a newer job state.
 
 A signed/read-only active runtime is never an eligible mutation target
 (`runtime_read_only`). Maintenance must operate from a mutable source snapshot
