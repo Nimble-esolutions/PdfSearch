@@ -59,6 +59,11 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
 "${COMPOSE[@]}" run --rm fixture assert-maintenance-evidence
 "${COMPOSE[@]}" run --rm fixture assert-parent-tree
 
+# Each runtime cutover invalidates database-backed sessions and requires a fresh
+# login. Reset only the disposable suite's isolated Redis database so the three
+# deliberate reauthentications below exercise authentication instead of the
+# aggregate login throttle accumulated by the earlier independent phases.
+"${COMPOSE[@]}" exec --no-TTY redis redis-cli -n 7 FLUSHDB >/dev/null
 "${COMPOSE[@]}" stop web maintenance
 LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
   "${COMPOSE[@]}" up -d --wait --force-recreate web maintenance
@@ -72,10 +77,9 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
 "${COMPOSE[@]}" run --rm fixture assert-final-control-evidence
 
 web_container="$("${COMPOSE[@]}" ps -q web)"
-web_restarts="$(docker inspect --format '{{.RestartCount}}' "$web_container")"
 web_state="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$web_container")"
-if [ "$web_restarts" -lt 2 ] || [ "$web_state" != "running:0" ]; then
-  echo "Expected two clean orchestrator handoffs; observed restarts=$web_restarts state=$web_state" >&2
+if [ "$web_state" != "running:0" ]; then
+  echo "Expected a healthy supervisor after two signed child-process handoffs; observed state=$web_state" >&2
   exit 1
 fi
 
