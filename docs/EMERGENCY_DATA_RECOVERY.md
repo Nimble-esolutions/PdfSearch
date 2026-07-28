@@ -52,3 +52,33 @@ Before activation, validate recovery authentication in the isolated workspace
 and reconcile referenced media. A database-only workspace always reports that
 indexes require rebuilding. Do not activate it merely because SQLite integrity
 passes.
+
+### Validation and readiness
+
+`prepare` copies the verified databases into a new isolated workspace and
+reports its initial state. It does not make the workspace activation-ready.
+`validate` then performs read-only checks against those copied SQLite files:
+
+- database integrity, foreign keys, and recovery-set hashes;
+- application and control migration leaves against the running immutable
+  image;
+- deployment, dataset, and image identity compatibility without printing
+  identity values;
+- the configured recovery-superadmin login without printing credentials,
+  password hashes, or user records;
+- referenced-media completeness without printing document paths; and
+- whether indexes still require rebuilding.
+
+The JSON result deliberately separates `database_verified` from
+`recovery_ready`. `verification_state: verified` proves only the copied
+database bytes and SQLite checks. Typed entries in `blockers` explain why the
+workspace is not ready, including `required_migrations_unapplied`,
+`migration_evidence_incompatible`, `recovery_superadmin_unproven`,
+`referenced_media_missing`, and `index_rebuild_required`.
+
+`emergency_db validate` prints this secret-free report and exits nonzero while
+any blocker remains. The prepared workspace is preserved for investigation and
+approved reconciliation; validation never migrates it, overwrites it, or opens
+the configured live Django database aliases. Rebuild indexes through the local
+Documents & Indexes workflow and use the existing signed runtime
+activation/rollback workflow for any eventual cutover.
