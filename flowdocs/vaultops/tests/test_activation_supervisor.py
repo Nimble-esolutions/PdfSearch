@@ -16,6 +16,10 @@ from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
+from core.candidate_maintenance import (
+    CandidateMaintenanceError,
+    _verified_mutable_source_runtime_identity,
+)
 from runtime_supervisor import RuntimeSupervisor
 from vaultops.models import (
     ActivationIntent,
@@ -364,6 +368,73 @@ class ActivationCoordinatorTests(TestCase):
         self.assertEqual(
             intent_document["target_generation_id"], TARGET_GENERATION
         )
+
+    def _observe_current_source_pointer(self):
+        pointer = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id=DEPLOYMENT_ID,
+            active_generation_id=CURRENT_GENERATION,
+            pointer_digest=pointer.pointer_digest,
+            status="ready",
+            observed_at=timezone.now(),
+        )
+        return pointer
+
+    def test_mutable_writer_source_identity_uses_verified_signed_pointer(self):
+        pointer = self._observe_current_source_pointer()
+        database = self.current_runtime / "db.sqlite3"
+        before = hashlib.sha256(database.read_bytes()).hexdigest()
+
+        with override_settings(
+            ACTIVE_RUNTIME=None,
+            MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+        ):
+            identity = _verified_mutable_source_runtime_identity()
+
+        self.assertEqual(identity, (CURRENT_GENERATION, CURRENT_DIGEST))
+        self.assertEqual(
+            hashlib.sha256(database.read_bytes()).hexdigest(), before
+        )
+        self.assertEqual(pointer.generation_id, identity[0])
+
+    def test_mutable_writer_source_rejects_tampered_pointer(self):
+        self._observe_current_source_pointer()
+        document = json.loads(
+            self.paths["active"].read_text(encoding="utf-8")
+        )
+        document["generation_id"] = "tampered-generation"
+        self.paths["active"].write_text(
+            json.dumps(document), encoding="utf-8"
+        )
+
+        with override_settings(
+            ACTIVE_RUNTIME=None,
+            MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+        ):
+            with self.assertRaisesMessage(
+                CandidateMaintenanceError,
+                "maintenance_source_pointer_unverified",
+            ):
+                _verified_mutable_source_runtime_identity()
+
+    def test_mutable_writer_source_rejects_stale_observation(self):
+        self._observe_current_source_pointer()
+        RuntimePointerObservation.objects.update(pointer_digest="0" * 64)
+
+        with override_settings(
+            ACTIVE_RUNTIME=None,
+            MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+        ):
+            with self.assertRaisesMessage(
+                CandidateMaintenanceError,
+                "maintenance_source_observation_stale",
+            ):
+                _verified_mutable_source_runtime_identity()
 
     def test_exact_activation_request_reuses_the_same_intent(self):
         first = schedule_activation(

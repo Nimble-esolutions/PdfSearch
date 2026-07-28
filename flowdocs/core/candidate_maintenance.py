@@ -69,13 +69,79 @@ def _copy_tree(source: Path, target: Path) -> None:
 
 def _source_identity(job: MaintenanceJob) -> dict:
     database = Path(settings.DATABASES["default"]["NAME"]).resolve()
+    runtime_generation_id = getattr(
+        settings, "RUNTIME_GENERATION_ID", ""
+    )
+    runtime_manifest_digest = getattr(
+        settings, "RUNTIME_MANIFEST_DIGEST", ""
+    )
+    if (
+        settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED
+        and getattr(settings, "ACTIVE_RUNTIME", None) is None
+    ):
+        (
+            runtime_generation_id,
+            runtime_manifest_digest,
+        ) = _verified_mutable_source_runtime_identity()
     return {
         "job_id": str(job.public_id),
         "database_sha256": _sha256(database),
-        "runtime_generation_id": getattr(settings, "RUNTIME_GENERATION_ID", ""),
-        "runtime_manifest_digest": getattr(settings, "RUNTIME_MANIFEST_DIGEST", ""),
+        "runtime_generation_id": runtime_generation_id,
+        "runtime_manifest_digest": runtime_manifest_digest,
         "recovery_set_id": job.options.get("recovery_set_id", ""),
     }
+
+
+def _verified_mutable_source_runtime_identity():
+    """Bind a mutable writer snapshot to the verified signed runtime parent."""
+    from vaultops.models import (
+        ArtifactGeneration,
+        RuntimePointerObservation,
+    )
+    from vaultops.runtime_control import (
+        RuntimeControlError,
+        read_runtime_pointer,
+        runtime_control_paths,
+    )
+
+    paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    try:
+        pointer = read_runtime_pointer(
+            paths["active"],
+            deployment_id=settings.ENV_IDENTITY.deployment_id,
+            signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+            runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+        )
+    except RuntimeControlError as exc:
+        raise CandidateMaintenanceError(
+            "maintenance_source_pointer_unverified"
+        ) from exc
+    generation = ArtifactGeneration.objects.using("control").filter(
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        generation_id=pointer.generation_id,
+        manifest_digest=pointer.manifest_digest,
+        runtime_state=ArtifactGeneration.RuntimeState.ACTIVE,
+    ).first()
+    if generation is None:
+        raise CandidateMaintenanceError(
+            "maintenance_source_generation_unprojected"
+        )
+    observation = (
+        RuntimePointerObservation.objects.using("control")
+        .filter(deployment_id=settings.ENV_IDENTITY.deployment_id)
+        .order_by("-observed_at")
+        .first()
+    )
+    if (
+        observation is None
+        or observation.active_generation_id != pointer.generation_id
+        or observation.pointer_digest != pointer.pointer_digest
+        or observation.status != "ready"
+    ):
+        raise CandidateMaintenanceError(
+            "maintenance_source_observation_stale"
+        )
+    return pointer.generation_id, pointer.manifest_digest
 
 
 def estimate_workspace_bytes(job: MaintenanceJob) -> int:
