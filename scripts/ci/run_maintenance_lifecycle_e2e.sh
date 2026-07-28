@@ -62,7 +62,8 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
 "${COMPOSE[@]}" stop web maintenance
 LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
   "${COMPOSE[@]}" up -d --wait --force-recreate web maintenance
-"${COMPOSE[@]}" up -d --wait browser-proxy
+LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
+  "${COMPOSE[@]}" up -d --wait browser-proxy
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=activate \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
