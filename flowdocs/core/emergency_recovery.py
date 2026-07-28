@@ -22,6 +22,11 @@ from pathlib import Path
 from django.conf import settings
 from django.db.migrations.loader import MigrationLoader
 
+from core.recovery_auth import (
+    RecoveryAuthenticationError,
+    verify_recovery_superadmin_database,
+)
+
 MANIFEST = "recovery-set.json"
 REASONS = {"pre-migration", "pre-activation", "pre-bulk-maintenance", "manual"}
 DEFAULT_KEEP = 3
@@ -125,6 +130,19 @@ def migration_leaves() -> dict[str, list[str]]:
             if (alias == "control") == (app == "vaultops")
         ]
     return leaves
+
+
+def required_migrations() -> dict[str, list[str]]:
+    """Return every migration the current image routes to each SQLite alias."""
+    loader = MigrationLoader(None, ignore_no_migrations=True)
+    required = {}
+    for alias in ("default", "control"):
+        required[alias] = sorted(
+            f"{app}.{name}"
+            for app, name in loader.graph.nodes
+            if (alias == "control") == (app == "vaultops")
+        )
+    return required
 
 
 def _identity() -> dict:
@@ -366,23 +384,186 @@ def prepare_set(set_id: str, target_root: Path) -> dict:
     return validate_workspace(target)
 
 
+def _applied_migrations(path: Path) -> set[str]:
+    connection = sqlite3.connect(
+        f"file:{path.resolve()}?mode=ro&immutable=1", uri=True
+    )
+    try:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if "django_migrations" not in tables:
+            return set()
+        return {
+            f"{app}.{name}"
+            for app, name in connection.execute(
+                "SELECT app, name FROM django_migrations"
+            )
+        }
+    finally:
+        connection.close()
+
+
+def _migration_compatibility(
+    *,
+    alias: str,
+    database_path: Path,
+    recorded_leaves: object,
+    expected_leaves: list[str],
+    required_nodes: list[str],
+) -> tuple[dict, list[dict]]:
+    recorded = (
+        sorted(set(recorded_leaves))
+        if isinstance(recorded_leaves, list)
+        and all(isinstance(item, str) for item in recorded_leaves)
+        else []
+    )
+    expected = sorted(set(expected_leaves))
+    applied = _applied_migrations(database_path)
+    blockers = []
+    if not recorded:
+        blockers.append({"code": "migration_evidence_missing", "scope": alias})
+    elif recorded != expected:
+        blockers.append(
+            {"code": "migration_evidence_incompatible", "scope": alias}
+        )
+    missing = sorted(set(required_nodes) - applied)
+    if missing:
+        blockers.append(
+            {
+                "code": "required_migrations_unapplied",
+                "scope": alias,
+                "count": len(missing),
+            }
+        )
+    return (
+        {
+            "state": "compatible" if not blockers else "blocked",
+            "recorded_leaf_count": len(recorded),
+            "expected_leaf_count": len(expected),
+            "required_migration_count": len(required_nodes),
+            "unapplied_migration_count": len(missing),
+        },
+        blockers,
+    )
+
+
+def _identity_compatibility(recorded: object) -> tuple[dict, list[dict]]:
+    current = _identity()
+    recorded = recorded if isinstance(recorded, dict) else {}
+    blockers = []
+    report = {}
+    for field in ("deployment_id", "dataset_id", "image_digest"):
+        expected = current.get(field) or ""
+        actual = recorded.get(field) or ""
+        if not expected or not actual:
+            state = "missing"
+            blockers.append({"code": f"{field}_missing", "scope": "identity"})
+        elif actual != expected:
+            state = "incompatible"
+            blockers.append(
+                {"code": f"{field}_incompatible", "scope": "identity"}
+            )
+        else:
+            state = "compatible"
+        report[field] = {"state": state}
+    return report, blockers
+
+
+def _workspace_database_path(root: Path, record: object) -> Path:
+    if not isinstance(record, dict):
+        raise RecoverySetError("workspace_manifest_invalid")
+    filename = record.get("file")
+    if (
+        not isinstance(filename, str)
+        or not filename
+        or filename != Path(filename).name
+    ):
+        raise RecoverySetError("workspace_database_path_unsafe")
+    path = root / filename
+    configured = configured_paths()
+    if (
+        path.is_symlink()
+        or not path.is_file()
+        or path.resolve() in {configured.application, configured.control}
+    ):
+        raise RecoverySetError("workspace_database_path_unsafe")
+    return path
+
+
 def validate_workspace(workspace: Path) -> dict:
-    root = Path(workspace).resolve()
-    if not root.is_dir() or root.is_symlink():
+    candidate = Path(workspace)
+    if candidate.is_symlink() or not candidate.is_dir():
         raise RecoverySetError("workspace_not_found")
+    root = candidate.resolve()
+    configured = configured_paths()
+    live_roots = {
+        Path(settings.DATA_ROOT).resolve(),
+        configured.root,
+        configured.application.parent,
+        configured.control.parent,
+    }
+    if root in live_roots or any(
+        live_root in root.parents for live_root in live_roots
+    ):
+        raise RecoverySetError("workspace_is_active_volume")
     manifest_path = root / MANIFEST
-    if not manifest_path.is_file():
+    if manifest_path.is_symlink() or not manifest_path.is_file():
         raise RecoverySetError("workspace_manifest_missing")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        database_records = manifest["databases"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise RecoverySetError("workspace_manifest_invalid") from exc
+    if not isinstance(database_records, dict):
+        raise RecoverySetError("workspace_manifest_invalid")
     checks = {}
-    for key, record in manifest["databases"].items():
-        path = root / record["file"]
+    database_paths = {}
+    for key, record in database_records.items():
+        path = _workspace_database_path(root, record)
         checks[key] = _sqlite_checks(path)
-        if _sha256(path) != record["sha256"]:
+        if (
+            not isinstance(record.get("sha256"), str)
+            or _sha256(path) != record["sha256"]
+        ):
             raise RecoverySetError("workspace_hash_mismatch", key)
+        database_paths[key] = path
+    if "application" not in database_paths:
+        raise RecoverySetError("workspace_application_database_missing")
+
+    blockers = []
+    expected_migrations = migration_leaves()
+    required_migration_nodes = required_migrations()
+    migration_report = {}
+    for alias, database_key in (("default", "application"), ("control", "control")):
+        database_path = database_paths.get(database_key)
+        if database_path is None:
+            migration_report[alias] = {"state": "blocked"}
+            blockers.append(
+                {"code": "required_database_missing", "scope": alias}
+            )
+            continue
+        report, migration_blockers = _migration_compatibility(
+            alias=alias,
+            database_path=database_path,
+            recorded_leaves=manifest.get("migration_leaves", {}).get(alias),
+            expected_leaves=expected_migrations.get(alias, []),
+            required_nodes=required_migration_nodes.get(alias, []),
+        )
+        migration_report[alias] = report
+        blockers.extend(migration_blockers)
+
+    identity_report, identity_blockers = _identity_compatibility(
+        manifest.get("identity")
+    )
+    blockers.extend(identity_blockers)
+
     media_root = Path(settings.MEDIA_ROOT)
     media_missing = []
-    app_db = root / manifest["databases"]["application"]["file"]
+    app_db = database_paths["application"]
     connection = sqlite3.connect(f"file:{app_db}?mode=ro", uri=True)
     try:
         tables = {
@@ -399,16 +580,49 @@ def validate_workspace(workspace: Path) -> dict:
             ]
     finally:
         connection.close()
+    if media_missing:
+        blockers.append(
+            {
+                "code": "referenced_media_missing",
+                "scope": "media",
+                "count": len(media_missing),
+            }
+        )
+
+    try:
+        recovery_authentication = verify_recovery_superadmin_database(app_db)
+    except RecoveryAuthenticationError:
+        recovery_authentication = {
+            "state": "blocked",
+            "reason_code": "recovery_superadmin_unproven",
+        }
+        blockers.append(
+            {
+                "code": "recovery_superadmin_unproven",
+                "scope": "authentication",
+            }
+        )
+
+    blockers.append(
+        {"code": "index_rebuild_required", "scope": "indexes"}
+    )
     return {
         "workspace": str(root),
         "verification_state": "verified",
+        "database_verified": True,
+        "recovery_ready": not blockers,
+        "blockers": blockers,
         "database_checks": checks,
-        "migration_leaves": manifest.get("migration_leaves", {}),
-        "recovery_authentication": "must-be-validated-before-activation",
+        "migrations": migration_report,
+        "identity_compatibility": identity_report,
+        "recovery_authentication": recovery_authentication,
         "referenced_media": {
             "missing_count": len(media_missing),
             "state": "complete" if not media_missing else "incomplete",
         },
-        "indexes": {"state": "rebuild-required"},
+        "indexes": {
+            "state": "rebuild-required",
+            "reason_code": "index_rebuild_required",
+        },
         "database_only": True,
     }

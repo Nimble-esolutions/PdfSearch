@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 import uuid
 from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
-from django.contrib.auth.hashers import check_password
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from core.recovery_auth import (
+    RecoveryAuthenticationError,
+    verify_recovery_superadmin_database,
+)
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -95,51 +97,16 @@ def _read_smoke_queries():
 
 
 def verify_recovery_superadmin(database_path):
-    username = settings.ACTIVATION_RECOVERY_SUPERADMIN_USERNAME
-    password = settings.ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD
     try:
-        connection = sqlite3.connect(
-            f"file:{Path(database_path)}?mode=ro", uri=True
+        verify_recovery_superadmin_database(
+            Path(database_path),
+            username=settings.ACTIVATION_RECOVERY_SUPERADMIN_USERNAME,
+            password=settings.ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD,
         )
-        columns = {
-            row[1]
-            for row in connection.execute(
-                'PRAGMA table_info("core_customuser")'
-            ).fetchall()
-        }
-        required = {
-            "username",
-            "password",
-            "is_active",
-            "is_superuser",
-            "role",
-        }
-        if not required.issubset(columns):
-            raise ActivationCoordinatorError(
-                "activation_recovery_superadmin_unproven"
-            )
-        row = connection.execute(
-            "SELECT password, is_active, is_superuser, role "
-            "FROM core_customuser WHERE username=? LIMIT 1",
-            (username,),
-        ).fetchone()
-    except sqlite3.Error as exc:
+    except RecoveryAuthenticationError as exc:
         raise ActivationCoordinatorError(
             "activation_recovery_superadmin_unproven"
         ) from exc
-    finally:
-        if "connection" in locals():
-            connection.close()
-    if (
-        not row
-        or not check_password(password, row[0])
-        or not bool(row[1])
-        or not bool(row[2])
-        or row[3] != "superadmin"
-    ):
-        raise ActivationCoordinatorError(
-            "activation_recovery_superadmin_unproven"
-        )
 
 
 def _verify_workspace(workspace):
