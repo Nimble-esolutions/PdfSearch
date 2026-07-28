@@ -591,6 +591,52 @@ class ActivationCoordinatorTests(TestCase):
         self.assertEqual(
             intent_document["previous_generation_id"], TARGET_GENERATION
         )
+        self.assertEqual(intent_document["activation_mode"], "rollback")
+        self.assertEqual(
+            intent_document["rollback_previous_generation_id"],
+            CURRENT_GENERATION,
+        )
+        self.assertEqual(
+            intent_document["rollback_previous_manifest_digest"],
+            CURRENT_DIGEST,
+        )
+        self.assertEqual(
+            intent.checkpoint["rollback_previous_pointer_digest"],
+            intent_document["rollback_previous_pointer_digest"],
+        )
+
+    def test_scheduling_reauthorizes_previous_pointer_after_capacity_work(self):
+        self._configure_signed_local_candidate_as_active()
+        workspace = prepare_previous_runtime_rollback()
+
+        def change_previous_authority(**kwargs):
+            atomic_write_json(
+                self.paths["previous"],
+                make_pointer(
+                    self.target_runtime,
+                    TARGET_GENERATION,
+                    TARGET_DIGEST,
+                    "concurrent-authority-change",
+                ),
+            )
+            return {
+                "byte_capacity_ok": True,
+                "inode_capacity_ok": True,
+            }
+
+        with patch(
+            "core.artifact_cleanup.capacity_report",
+            side_effect=change_previous_authority,
+        ):
+            with self.assertRaisesMessage(
+                ActivationCoordinatorError,
+                "rollback_authority_changed",
+            ):
+                schedule_activation(
+                    workspace, confirmed=True, rollback=True
+                )
+
+        self.assertFalse(self.paths["intents"].exists())
 
     def test_rollback_rejects_stale_runtime_observation(self):
         self._configure_signed_local_candidate_as_active()
@@ -1054,6 +1100,84 @@ class SupervisorProtocolTests(SimpleTestCase):
         self.assertEqual(
             self._result()["safe_error_code"],
             "production_activation_disabled",
+        )
+
+    def test_rollback_supervisor_rejects_changed_previous_pointer(self):
+        self.paths["intents"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).unlink()
+        active_document = make_pointer(
+            self.target_runtime,
+            TARGET_GENERATION,
+            TARGET_DIGEST,
+            "active-local-candidate",
+        )
+        atomic_write_json(self.paths["active"], active_document)
+        atomic_write_json(
+            self.paths["previous"], self.current_pointer_document
+        )
+        rollback_id = str(uuid.uuid4())
+        rollback_intent = sign_document(
+            {
+                "schema_version": 1,
+                "kind": "activation_intent",
+                "intent_id": rollback_id,
+                "deployment_id": DEPLOYMENT_ID,
+                "target_generation_id": CURRENT_GENERATION,
+                "target_manifest_digest": CURRENT_DIGEST,
+                "target_runtime_path": str(self.current_runtime),
+                "previous_generation_id": TARGET_GENERATION,
+                "previous_pointer_digest": active_document[
+                    "document_digest"
+                ],
+                "activation_mode": "rollback",
+                "rollback_previous_generation_id": CURRENT_GENERATION,
+                "rollback_previous_manifest_digest": CURRENT_DIGEST,
+                "rollback_previous_pointer_digest": (
+                    self.current_pointer_document["document_digest"]
+                ),
+                "smoke_queries_digest": "c" * 64,
+                "expires_at_unix": int(time.time()) + 300,
+                "state_version": 1,
+            },
+            SIGNING_KEY,
+        )
+        atomic_write_json(
+            self.paths["intents"] / f"{rollback_id}.json",
+            rollback_intent,
+        )
+        atomic_write_json(
+            self.paths["previous"],
+            make_pointer(
+                self.target_runtime,
+                TARGET_GENERATION,
+                TARGET_DIGEST,
+                "changed-previous-authority",
+            ),
+        )
+        web = self._supervisor("web")
+        web.stop_child = lambda timeout=30: self.fail(
+            "invalid rollback stopped the application"
+        )
+
+        web.web_tick()
+
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        result = read_signed_document(
+            self.paths["results"] / f"{rollback_id}.json",
+            signing_key=SIGNING_KEY,
+            expected_kind="activation_result",
+            deployment_id=DEPLOYMENT_ID,
+        )
+        self.assertEqual(active.generation_id, TARGET_GENERATION)
+        self.assertEqual(
+            result["safe_error_code"],
+            "rollback_previous_pointer_changed",
         )
 
 

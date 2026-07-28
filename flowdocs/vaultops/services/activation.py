@@ -456,6 +456,21 @@ def schedule_activation(
             "activation_previous_runtime_unverified"
         )
     target_generation = workspace.generation
+    rollback_previous_pointer = None
+    if rollback:
+        # Runtime verification and capacity planning can be non-trivial. Fence
+        # the rollback against both signed authority pointers again at the
+        # last possible point before the intent is created and signed.
+        current_pointer, rollback_previous_pointer = (
+            validate_previous_runtime_rollback(workspace)
+        )
+        if (
+            target_generation.generation_id
+            != rollback_previous_pointer.generation_id
+            or target_generation.manifest_digest
+            != rollback_previous_pointer.manifest_digest
+        ):
+            raise ActivationCoordinatorError("rollback_lineage_invalid")
     if (
         target_generation.origin
         == ArtifactGeneration.Origin.LOCAL_MAINTENANCE
@@ -489,12 +504,27 @@ def schedule_activation(
         "target_runtime_path": str(runtime),
         "previous_generation_id": current_pointer.generation_id,
         "previous_pointer_digest": current_pointer.pointer_digest,
+        "activation_mode": "rollback" if rollback else "activate",
         "smoke_queries_digest": smoke_queries_digest,
         "actor_id": actor_id,
         "actor_name": actor_name,
         "expires_at_unix": int(expires_at.timestamp()),
         "state_version": 1,
     }
+    if rollback_previous_pointer is not None:
+        payload.update(
+            {
+                "rollback_previous_generation_id": (
+                    rollback_previous_pointer.generation_id
+                ),
+                "rollback_previous_manifest_digest": (
+                    rollback_previous_pointer.manifest_digest
+                ),
+                "rollback_previous_pointer_digest": (
+                    rollback_previous_pointer.pointer_digest
+                ),
+            }
+        )
     signed_intent = sign_document(
         payload, settings.ACTIVATION_INTENT_SIGNING_KEY
     )
@@ -522,6 +552,21 @@ def schedule_activation(
                 request_state_digest=request_state_digest,
                 checkpoint={
                     "previous_pointer_digest": current_pointer.pointer_digest,
+                    "rollback_previous_generation_id": (
+                        rollback_previous_pointer.generation_id
+                        if rollback_previous_pointer is not None
+                        else ""
+                    ),
+                    "rollback_previous_manifest_digest": (
+                        rollback_previous_pointer.manifest_digest
+                        if rollback_previous_pointer is not None
+                        else ""
+                    ),
+                    "rollback_previous_pointer_digest": (
+                        rollback_previous_pointer.pointer_digest
+                        if rollback_previous_pointer is not None
+                        else ""
+                    ),
                     "target_runtime_path": str(runtime),
                     "smoke_queries_digest": smoke_queries_digest,
                     "protocol_state": "scheduled",

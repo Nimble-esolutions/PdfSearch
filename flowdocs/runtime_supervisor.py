@@ -297,6 +297,14 @@ class RuntimeSupervisor:
             runtime_root=self.runtime_root,
         )
 
+    def _previous_pointer(self):
+        return read_runtime_pointer(
+            self.paths["previous"],
+            deployment_id=self.deployment_id,
+            signing_key=self.signing_key,
+            runtime_root=self.runtime_root,
+        )
+
     def _current_pointer_document(self):
         return read_signed_document(
             self.paths["active"],
@@ -562,6 +570,30 @@ class RuntimeSupervisor:
             )
             return
         current = self._current_pointer()
+        if intent.get("activation_mode") == "rollback":
+            try:
+                previous = self._previous_pointer()
+            except RuntimeControlError:
+                self._write_failed_without_cutover(
+                    intent, "rollback_previous_pointer_changed"
+                )
+                return
+            if (
+                previous.pointer_digest
+                != intent.get("rollback_previous_pointer_digest")
+                or previous.generation_id
+                != intent.get("rollback_previous_generation_id")
+                or previous.manifest_digest
+                != intent.get("rollback_previous_manifest_digest")
+                or previous.generation_id
+                != intent.get("target_generation_id")
+                or previous.manifest_digest
+                != intent.get("target_manifest_digest")
+            ):
+                self._write_failed_without_cutover(
+                    intent, "rollback_previous_pointer_changed"
+                )
+                return
         if (
             current.pointer_digest
             != intent.get("previous_pointer_digest")
