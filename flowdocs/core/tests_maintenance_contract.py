@@ -110,7 +110,7 @@ class MaintenancePlanningTests(TestCase):
             )
 
         original.refresh_from_db()
-        self.assertEqual(original.selection["filter_subject"], "housing")
+        self.assertEqual(original.selection["filters"]["subject"], "housing")
         self.assertEqual(MaintenancePlan.objects.count(), 1)
 
     def test_capability_matrix_applies_independent_prerequisites(self):
@@ -313,7 +313,7 @@ class MaintenancePlanningTests(TestCase):
         )
         job_state = next(
             job for job in response.context["state"]["maintenance"]["jobs"]
-            if job["public_id"] == running.public_id
+            if job["public_id"] == str(running.public_id)
         )
         cancelled = self.client.post(
             reverse(
@@ -342,7 +342,7 @@ class MaintenancePlanningTests(TestCase):
         )
         job_state = next(
             job for job in response.context["state"]["maintenance"]["jobs"]
-            if job["public_id"] == failed.public_id
+            if job["public_id"] == str(failed.public_id)
         )
         retried = self.client.post(
             reverse(

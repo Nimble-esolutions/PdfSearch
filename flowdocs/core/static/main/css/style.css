@@ -526,6 +526,7 @@ body {
   color: var(--admin-primary-strong);
   background: #fff;
   border-color: #fff;
+  transition: none;
 }
 
 .admin-nav .btn-outline-light:hover,

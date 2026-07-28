@@ -514,7 +514,7 @@ def workbench_maintenance_state(
         _serialize_local_job_payload(job)
         for job in list(
             MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).order_by(
-                "-created_at"
+                "-created_at", "-pk"
             )[:20]
         )
     ]
