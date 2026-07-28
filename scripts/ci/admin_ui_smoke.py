@@ -114,15 +114,18 @@ def main():
             "no-JavaScript Active Sync form missing",
         )
         maintenance = client.get("/dashboard/operations/?section=maintenance")
-        require(
-            maintenance.status_code == 200
-            and "Documents & Indexes" in maintenance.text
-            and "Choose the outcome you need" in maintenance.text
-            and "Unchanged during processing" in maintenance.text
-            and "Preview Repair Stored Indexes" in maintenance.text
-            and 'name="filter_indexed"' in maintenance.text,
-            "guided Documents & Indexes workbench missing",
-        )
+        require(maintenance.status_code == 200, "maintenance workbench GET failed")
+        for expected in (
+            "Documents",
+            "Choose the outcome you need",
+            "Unchanged during processing",
+            "Preview Repair Stored Indexes",
+            'name="filter_indexed"',
+        ):
+            require(
+                expected in maintenance.text,
+                f"guided maintenance workbench missing: {expected}",
+            )
         state = client.get("/dashboard/operations/api/v1/state/")
         require(state.status_code == 200, "workbench state API failed")
         state_payload = state.json()

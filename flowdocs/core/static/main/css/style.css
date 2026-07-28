@@ -522,6 +522,11 @@ body {
   font-size: .75rem;
 }
 
+.admin-nav .btn-outline-light {
+  color: #fff;
+  border-color: #fff;
+}
+
 .cockpit-observed time {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }

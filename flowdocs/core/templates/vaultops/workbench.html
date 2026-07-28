@@ -239,7 +239,7 @@
           <p><code>{{ plan.job__public_id }}</code> · {{ plan.job__status }}</p>
           {% endif %}
         </article>
-        {% empty %}<p class="vault-empty">{% trans "No maintenance previews are recorded." %}</p>{% endfor %}
+        {% empty %}<p class="vault-empty" role="listitem">{% trans "No maintenance previews are recorded." %}</p>{% endfor %}
       </div>
     </section>
 
@@ -282,7 +282,7 @@
             {% endif %}
           </div>
         </article>
-        {% empty %}<p class="vault-empty">{% trans "No local maintenance jobs are recorded." %}</p>{% endfor %}
+        {% empty %}<p class="vault-empty" role="listitem">{% trans "No local maintenance jobs are recorded." %}</p>{% endfor %}
       </div>
     </section>
   </div>
