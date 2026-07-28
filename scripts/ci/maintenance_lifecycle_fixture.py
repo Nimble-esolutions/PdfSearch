@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import sqlite3
@@ -32,6 +33,7 @@ from vaultops.runtime_control import (
     atomic_write_json,
     build_runtime_pointer,
     runtime_control_paths,
+    read_signed_document,
 )
 
 
@@ -208,6 +210,50 @@ def repair_retry_file() -> None:
     print("retry_file_restored")
 
 
+def activation_evidence() -> None:
+    """Print bounded, secret-free role/barrier evidence for a failed run."""
+    paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    evidence = {"intents": [], "acks": [], "results": [], "lock": {}}
+    for kind, key in (
+        ("activation_intent", "intents"),
+        ("activation_ack", "acks"),
+        ("activation_result", "results"),
+    ):
+        for path in sorted(paths[key].glob("*.json")):
+            try:
+                document = read_signed_document(
+                    path,
+                    signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+                    expected_kind=kind,
+                    deployment_id=settings.ENV_IDENTITY.deployment_id,
+                )
+                evidence[key].append(
+                    {
+                        "file": path.name,
+                        "intent_id": document.get("intent_id", ""),
+                        "role": document.get("role", ""),
+                        "state": document.get("state", ""),
+                        "status": document.get("status", ""),
+                        "safe_error_code": document.get("safe_error_code", ""),
+                    }
+                )
+            except Exception as exc:
+                evidence[key].append(
+                    {"file": path.name, "error": type(exc).__name__}
+                )
+    lock = paths["lock"]
+    if lock.exists() and lock.is_file() and not lock.is_symlink():
+        try:
+            value = json.loads(lock.read_text(encoding="utf-8"))
+            evidence["lock"] = {
+                "intent_id": value.get("intent_id", ""),
+                "present": True,
+            }
+        except (OSError, ValueError):
+            evidence["lock"] = {"present": True, "state": "unreadable"}
+    print(json.dumps(evidence, sort_keys=True))
+
+
 if __name__ == "__main__":
     operation = sys.argv[1] if len(sys.argv) > 1 else ""
     if operation == "seed-and-freeze":
@@ -216,8 +262,10 @@ if __name__ == "__main__":
         remove_retry_file()
     elif operation == "repair-retry-file":
         repair_retry_file()
+    elif operation == "activation-evidence":
+        activation_evidence()
     else:
         raise SystemExit(
             "expected seed-and-freeze, remove-retry-file, "
-            "or repair-retry-file"
+            "repair-retry-file, or activation-evidence"
         )

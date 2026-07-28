@@ -10,6 +10,7 @@ export WEB_PORT="${WEB_PORT:-18020}"
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then
+    "${COMPOSE[@]}" run --rm fixture activation-evidence >&2 || true
     "${COMPOSE[@]}" logs --no-color --tail=120 web maintenance >&2 || true
   fi
   LIFECYCLE_ACTIVATION_ENABLED=0 "${COMPOSE[@]}" down --volumes --remove-orphans
