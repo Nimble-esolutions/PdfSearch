@@ -1,6 +1,6 @@
 # Plan 017 — Human-centred operator evidence
 
-**Status:** Implemented as successor to Plan 015 presentation work
+**Status:** RECONCILE — implementation exists; Plans 018-021 close audited gaps
 **Boundary:** Dashboard and Vault Operations Workbench
 **Backend impact:** Additive presentation only; stable reason and state values unchanged
 
@@ -23,4 +23,8 @@ superadmins can reveal bounded codes in collapsed Technical details.
   evidence verification.
 
 Plan 015 remains authoritative for readiness computation. This plan supersedes
-only its incomplete presentation-quality outcome.
+only its incomplete presentation-quality outcome. The 2026-07-28 completion
+audit found incomplete known-reason coverage, raw maintenance exception text
+entering expanded evidence, broad English fallback in Marathi, and incomplete
+rendered/accessibility enforcement. Do not mark this plan DONE until Plans
+018-021 pass and Plan 022 reconciles the stack.

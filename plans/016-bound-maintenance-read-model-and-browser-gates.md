@@ -5,12 +5,18 @@
 
 ## Status
 
+- **Roadmap status**: DONE in PR #102; lifecycle evidence verified 2026-07-28
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED
 - **Depends on**: 014, 015
 - **Category**: perf
 - **Planned at**: commit `6c9a262`, 2026-07-28
+
+The implementation bounds preview materialization and the disposable lifecycle
+now proves preview, queue, progress, failure/retry, candidate preparation,
+signed activation, English/Marathi search, rollback, and content custody. Keep
+this plan as the maintenance contract; do not execute it again.
 
 ## Why this matters
 
