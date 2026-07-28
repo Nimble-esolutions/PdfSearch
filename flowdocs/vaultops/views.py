@@ -35,6 +35,7 @@ from vaultops.services.activation import (
     activation_request_replay,
     prepare_previous_runtime_rollback,
     schedule_activation,
+    validate_previous_runtime_rollback,
 )
 from vaultops.services.audit import append_event
 from vaultops.services.confirmations import (
@@ -1363,6 +1364,8 @@ def _schedule_workspace_activation(
         != "one_step_runtime_rollback"
     ):
         raise WorkbenchRequestError("rollback_workspace_invalid")
+    if confirmation_action == "rollback_runtime":
+        validate_previous_runtime_rollback(workspace)
     digest = workspace_state_digest(workspace)
     replay = activation_request_replay(
         deployment_id=settings.ENV_IDENTITY.deployment_id,
@@ -1396,6 +1399,7 @@ def _schedule_workspace_activation(
             confirmed=True,
             idempotency_key=idempotency_key,
             request_state_digest=digest,
+            rollback=confirmation_action == "rollback_runtime",
         )
         append_event(
             action=f"{reason_code}_recovery_set_verified",

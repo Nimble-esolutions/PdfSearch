@@ -39,6 +39,7 @@ from vaultops.services.read_model import (
     enrich_workbench_readiness,
     workspace_state_digest,
 )
+from vaultops.services.activation import ActivationCoordinatorError
 
 
 @override_settings(
@@ -138,6 +139,41 @@ class VaultWorkbenchTests(TestCase):
             html=True,
         )
         self.assertNotContains(response, "staging_activation_disabled")
+
+    @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
+    @patch("vaultops.views.create_recovery_set")
+    @patch("vaultops.views.validate_previous_runtime_rollback")
+    def test_stale_rollback_is_rejected_before_recovery_or_confirmation_use(
+        self, revalidate, create_recovery
+    ):
+        revalidate.side_effect = ActivationCoordinatorError(
+            "rollback_authority_changed"
+        )
+        workspace = RestoreWorkspace.objects.create(
+            generation=self.candidate,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=self.candidate.manifest_digest,
+            runtime_path="/isolated/runtime",
+            validation_evidence={"purpose": "one_step_runtime_rollback"},
+            rehearsal_evidence={"success": True},
+            prepared_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            reverse(
+                "vaultops:schedule_rollback",
+                kwargs={"workspace_id": workspace.public_id},
+            ),
+            {"idempotency_key": str(uuid.uuid4())},
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["reason_code"], "rollback_authority_changed"
+        )
+        create_recovery.assert_not_called()
+        self.assertFalse(ConfirmationChallenge.objects.exists())
 
     def test_maintenance_health_and_candidate_publication_are_evidenced(self):
         ArtifactValidation.objects.create(

@@ -504,7 +504,9 @@ class ActivationCoordinatorTests(TestCase):
         self._configure_signed_local_candidate_as_active()
         workspace = prepare_previous_runtime_rollback()
 
-        intent = schedule_activation(workspace, confirmed=True)
+        intent = schedule_activation(
+            workspace, confirmed=True, rollback=True
+        )
         intent_document = read_signed_document(
             self.paths["intents"] / f"{intent.public_id}.json",
             signing_key=SIGNING_KEY,
@@ -528,6 +530,59 @@ class ActivationCoordinatorTests(TestCase):
             "rollback_pointer_observation_stale",
         ):
             prepare_previous_runtime_rollback()
+
+    def test_scheduling_rejects_pointer_change_after_rollback_preparation(self):
+        self._configure_signed_local_candidate_as_active()
+        workspace = prepare_previous_runtime_rollback()
+        changed_active = make_pointer(
+            self.target_runtime,
+            TARGET_GENERATION,
+            TARGET_DIGEST,
+            "changed-active-pointer",
+        )
+        atomic_write_json(self.paths["active"], changed_active)
+
+        with self.assertRaisesMessage(
+            ActivationCoordinatorError,
+            "rollback_authority_changed",
+        ):
+            schedule_activation(
+                workspace, confirmed=True, rollback=True
+            )
+        self.assertFalse(self.paths["intents"].exists())
+
+    def test_consecutive_local_candidates_can_rollback_exactly_one_step(self):
+        self._configure_signed_local_candidate_as_active()
+        self.current_generation.origin = (
+            ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        )
+        self.current_generation.vault_state = (
+            ArtifactGeneration.VaultState.UNKNOWN
+        )
+        self.current_generation.lineage_job_public_id = uuid.uuid4()
+        self.current_generation.parent_generation_id = "older-generation"
+        self.current_generation.parent_manifest_digest = "c" * 64
+        self.current_generation.save(
+            update_fields=[
+                "origin",
+                "vault_state",
+                "lineage_job_public_id",
+                "parent_generation_id",
+                "parent_manifest_digest",
+            ]
+        )
+        workspace = prepare_previous_runtime_rollback()
+
+        intent = schedule_activation(
+            workspace, confirmed=True, rollback=True
+        )
+
+        self.assertEqual(
+            intent.target_generation_id, CURRENT_GENERATION
+        )
+        self.assertEqual(
+            intent.previous_generation_id, TARGET_GENERATION
+        )
 
     def test_rollback_rejects_non_maintenance_active_runtime(self):
         self._configure_signed_local_candidate_as_active()
