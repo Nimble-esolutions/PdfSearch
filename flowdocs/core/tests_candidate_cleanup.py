@@ -595,25 +595,54 @@ class ArtifactCleanupPlannerTests(TestCase):
         ):
             cleanup_plan()
 
-    @patch(
-        "core.artifact_cleanup._manifest",
-        side_effect=PermissionError("private runtime path"),
-    )
-    def test_unreadable_inventory_returns_typed_bounded_failure(self, _mock):
-        with self.assertRaisesRegex(
-            CleanupError, "^cleanup_inventory_unavailable$"
-        ) as raised:
-            cleanup_plan()
+    def test_unreadable_manifest_blocks_plan_and_apply_without_deletion(self):
+        workspace = (
+            Path(settings.MAINTENANCE_WORKSPACE_ROOT)
+            / "unreadable-workspace"
+        )
+        workspace.mkdir()
+        manifest = workspace / WORKSPACE_MANIFEST
+        manifest.write_text(
+            json.dumps(
+                {
+                    "state": "activation_ready",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                }
+            ),
+            encoding="utf-8",
+        )
+        manifest.chmod(0)
+        try:
+            with self.assertRaisesRegex(
+                CleanupError, "^cleanup_inventory_unavailable$"
+            ) as raised:
+                cleanup_plan()
+            self.assertNotIn(str(manifest), str(raised.exception))
 
-        self.assertNotIn("private runtime path", str(raised.exception))
+            with self.assertRaisesRegex(
+                CleanupError, "^cleanup_inventory_unavailable$"
+            ):
+                apply_cleanup("untrusted-plan")
+            self.assertTrue(workspace.exists())
+        finally:
+            manifest.chmod(0o600)
 
-    @patch(
-        "core.maintenance_plans.cleanup_plan",
-        side_effect=CleanupError("cleanup_inventory_unavailable"),
-    )
-    def test_workbench_blocks_cleanup_without_crashing_or_candidates(
-        self, _mock
+    def test_malformed_manifest_blocks_workbench_without_leaking_or_candidates(
+        self,
     ):
+        workspace = (
+            Path(settings.MAINTENANCE_WORKSPACE_ROOT)
+            / "malformed-private-workspace"
+        )
+        workspace.mkdir()
+        manifest = workspace / WORKSPACE_MANIFEST
+        private_detail = "private-document-name.pdf"
+        manifest.write_text(
+            '{"state":"activation_ready","private":"'
+            + private_detail,
+            encoding="utf-8",
+        )
+
         state = workbench_maintenance_state()
 
         cleanup = state["health"]["cleanup"]
@@ -624,3 +653,10 @@ class ArtifactCleanupPlannerTests(TestCase):
         self.assertEqual(cleanup["prunable_bytes"], 0)
         self.assertEqual(cleanup["protected_bytes"], 0)
         self.assertEqual(cleanup["plan_id"], "")
+        self.assertNotIn(private_detail, json.dumps(state, default=str))
+
+        with self.assertRaisesRegex(
+            CleanupError, "^cleanup_inventory_unavailable$"
+        ):
+            apply_cleanup("untrusted-plan")
+        self.assertTrue(workspace.exists())

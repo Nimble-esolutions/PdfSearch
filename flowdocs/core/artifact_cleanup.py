@@ -39,9 +39,12 @@ def _manifest(path: Path, names: tuple[str, ...]) -> dict:
         candidate = path / name
         if candidate.is_file():
             try:
-                return json.loads(candidate.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                return {}
+                manifest = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, ValueError) as exc:
+                raise CleanupError("cleanup_inventory_unavailable") from exc
+            if not isinstance(manifest, dict):
+                raise CleanupError("cleanup_inventory_unavailable")
+            return manifest
     return {}
 
 
