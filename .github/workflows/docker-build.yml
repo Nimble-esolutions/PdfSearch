@@ -284,7 +284,7 @@ jobs:
 
       - name: Install browser gate dependencies
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npx playwright install --with-deps chromium
 
       - name: Smoke-test published image through actual entrypoint
