@@ -14,7 +14,7 @@
     </div>
 
     {% if role == 'admin' or role == 'superadmin' %}
-      <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
         {% trans "Add Category" %}
       </button>
     {% endif %}
@@ -63,12 +63,6 @@
           <h2 id="attention-heading">{% trans "Needs attention" %}</h2>
           <p>{% trans "Conditions are ordered by operational impact and link to the correct authority." %}</p>
         </div>
-        {% if role == 'superadmin' %}
-          <div class="cockpit-primary-actions">
-            <a class="btn btn-primary btn-sm" href="{% url 'operations_panel' %}?section=maintenance">{% trans "Maintain Documents & Indexes" %}</a>
-            <a class="btn btn-outline-primary btn-sm" href="{% url 'operations_panel' %}">{% trans "Open Vault Operations" %}</a>
-          </div>
-        {% endif %}
       </div>
       <div class="cockpit-attention-list">
         {% for item in cockpit.attention_items %}
@@ -79,7 +73,9 @@
               <p>{{ item.detail }}</p>
               <code>{{ item.reason_code }}</code>
             </div>
-            <a href="{{ item.action_url }}" class="btn btn-outline-primary btn-sm">{{ item.action_label }}</a>
+            {% if item.reason_code != cockpit.posture.reason_code %}
+              <a href="{{ item.action_url }}" class="btn btn-outline-primary btn-sm cockpit-attention-item__action">{{ item.action_label }}</a>
+            {% endif %}
           </article>
         {% empty %}
           <div class="admin-empty-state admin-empty-state--compact">

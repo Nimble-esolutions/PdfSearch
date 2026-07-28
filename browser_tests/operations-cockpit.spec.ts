@@ -21,6 +21,19 @@ test.describe('Operations Cockpit', () => {
     await expect(page.getByRole('heading', { name: 'Active Work' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Vault posture' })).toBeVisible();
 
+    // The posture banner owns the primary action for the highest-priority
+    // condition. The corresponding attention row must not repeat it.
+    const postureReason = (await page.locator('.cockpit-posture__code').textContent())?.trim();
+    const firstAttention = page.locator('.cockpit-attention-item').first();
+    if (await firstAttention.count()) {
+      const firstReason = (await firstAttention.locator('code').textContent())?.trim();
+      if (postureReason && firstReason === postureReason) {
+        await expect(firstAttention.getByRole('link')).toHaveCount(0);
+      }
+    }
+
+    await expect(page.locator('.cockpit-metric')).toHaveCount(4);
+
     const maintenance = page.getByRole('link', { name: 'Maintain Documents & Indexes' }).first();
     await expect(maintenance).toHaveAttribute('href', /section=maintenance/);
     const vault = page.getByRole('link', { name: 'Open Vault Operations' }).first();

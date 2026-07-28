@@ -508,8 +508,8 @@ body {
 .access-form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 
 .cockpit-hero {
-  margin-bottom: 1rem;
-  padding: 1rem;
+  margin-bottom: .75rem;
+  padding: .85rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
   background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
@@ -582,6 +582,10 @@ body {
   padding: .8rem;
   background: #fffdf8;
   border: 1px solid #d8cec0;
+}
+
+.cockpit-attention-item__action {
+  min-width: 9rem;
 }
 
 .cockpit-attention-item--danger,
@@ -683,6 +687,12 @@ body {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+/* There are four decision metrics in the cockpit. Keep each value legible
+   instead of reserving a fifth, empty column at desktop widths. */
+.cockpit-metrics.cockpit-metrics--decisions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .cockpit-metric {
@@ -1039,6 +1049,7 @@ body {
   }
 
   .cockpit-metrics,
+  .cockpit-metrics.cockpit-metrics--decisions,
   .cockpit-layout {
     grid-template-columns: 1fr;
   }
@@ -1054,7 +1065,8 @@ body {
 }
 
 @media (min-width: 769px) and (max-width: 1100px) {
-  .cockpit-metrics {
+  .cockpit-metrics,
+  .cockpit-metrics.cockpit-metrics--decisions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
