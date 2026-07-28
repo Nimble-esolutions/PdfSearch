@@ -1,9 +1,15 @@
 import hashlib
 import json
+from pathlib import Path
 
 from django.conf import settings
+from django.db import DatabaseError
 from django.utils import timezone
 
+from core.recovery_auth import (
+    RecoveryAuthenticationError,
+    verify_recovery_superadmin_database,
+)
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -19,6 +25,11 @@ from vaultops.models import (
     VaultJob,
 )
 from vaultops.services.retention import generation_protection_reasons
+from vaultops.runtime_control import (
+    RuntimeControlError,
+    read_runtime_pointer,
+    runtime_control_paths,
+)
 
 
 ACTIVE_JOB_STATES = {
@@ -64,10 +75,22 @@ REMEDIATION_DESTINATIONS = {
         "label": "Verify inventory",
         "section": "configuration",
     },
+    "inventory_observation_stale": {
+        "title": "Remote inventory observation is stale",
+        "detail": "Refresh the approved profile inventory before relying on remote authority evidence.",
+        "label": "Refresh inventory evidence",
+        "section": "configuration",
+    },
     "runtime_observation_unavailable": {
         "title": "Runtime authority is not observed",
         "detail": "Review runtime and job evidence before making any activation decision.",
         "label": "Review jobs and audit",
+        "section": "jobs",
+    },
+    "runtime_observation_stale": {
+        "title": "Runtime authority observation is stale",
+        "detail": "Refresh runtime evidence before changing activation state.",
+        "label": "Review runtime evidence",
         "section": "jobs",
     },
     "runtime_not_ready": {
@@ -217,6 +240,26 @@ def workspace_state_digest(workspace):
     )
 
 
+def _observation_is_fresh(value, *, observed_at):
+    if value is None:
+        return False
+    age_seconds = (observed_at - value).total_seconds()
+    return age_seconds <= settings.VAULT_VALIDATION_MAX_AGE_SECONDS
+
+
+def _job_summary(job):
+    if job is None:
+        return None
+    return {
+        "public_id": str(job.public_id),
+        "operation": job.operation,
+        "phase": job.phase,
+        "status": job.status,
+        "heartbeat_at": job.heartbeat_at,
+        "safe_error_code": job.safe_error_code,
+    }
+
+
 def _authority_state(profile, dataset_id, deployment_id):
     observed_at = timezone.now()
     projection = (
@@ -233,15 +276,25 @@ def _authority_state(profile, dataset_id, deployment_id):
         .order_by("-observed_at")
         .first()
     )
-    critical_job = (
+    unhealthy_job = (
         VaultJob.objects.filter(
             profile=profile,
             dataset_id=dataset_id,
-            status__in=ACTIVE_JOB_STATES | UNHEALTHY_JOB_STATES,
+            status__in=UNHEALTHY_JOB_STATES,
         )
         .order_by("-updated_at")
         .first()
     )
+    active_job = (
+        VaultJob.objects.filter(
+            profile=profile,
+            dataset_id=dataset_id,
+            status__in=ACTIVE_JOB_STATES,
+        )
+        .order_by("-updated_at")
+        .first()
+    )
+    critical_job = unhealthy_job or active_job
     runtime_generation = None
     if runtime and runtime.active_generation_id:
         runtime_generation = ArtifactGeneration.objects.filter(
@@ -255,15 +308,32 @@ def _authority_state(profile, dataset_id, deployment_id):
         blocking_reasons.append("inventory_unavailable")
     elif projection.inventory_state != "verified":
         blocking_reasons.append("inventory_unverified")
+    elif not _observation_is_fresh(
+        projection.inventory_observed_at,
+        observed_at=observed_at,
+    ):
+        blocking_reasons.append("inventory_observation_stale")
     if runtime is None:
         blocking_reasons.append("runtime_observation_unavailable")
     elif runtime.status != "ready":
         blocking_reasons.append("runtime_not_ready")
-    if critical_job and critical_job.status in UNHEALTHY_JOB_STATES:
+    elif not _observation_is_fresh(
+        runtime.observed_at,
+        observed_at=observed_at,
+    ):
+        blocking_reasons.append("runtime_observation_stale")
+    if unhealthy_job:
         blocking_reasons.append("critical_job_unhealthy")
 
     allowed_actions = ["refresh_inventory"]
-    if projection and projection.inventory_state == "verified":
+    if (
+        projection
+        and projection.inventory_state == "verified"
+        and _observation_is_fresh(
+            projection.inventory_observed_at,
+            observed_at=observed_at,
+        )
+    ):
         allowed_actions.extend(["plan_restore", "compare_generations"])
     return {
         "status": "healthy" if not blocking_reasons else "degraded",
@@ -302,18 +372,8 @@ def _authority_state(profile, dataset_id, deployment_id):
             ),
             "observed_at": runtime.observed_at if runtime else None,
         },
-        "critical_job": (
-            {
-                "public_id": str(critical_job.public_id),
-                "operation": critical_job.operation,
-                "phase": critical_job.phase,
-                "status": critical_job.status,
-                "heartbeat_at": critical_job.heartbeat_at,
-                "safe_error_code": critical_job.safe_error_code,
-            }
-            if critical_job
-            else None
-        ),
+        "critical_job": _job_summary(critical_job),
+        "active_job": _job_summary(active_job),
         "allowed_actions": allowed_actions,
         "blocking_reasons": blocking_reasons,
     }
@@ -332,6 +392,7 @@ def build_authority_state(*, profile_key, dataset_id, deployment_id):
             "remote": {"state": "unknown"},
             "runtime": {"state": "unknown"},
             "critical_job": None,
+            "active_job": None,
             "allowed_actions": [],
             "blocking_reasons": ["profile_unavailable"],
         }
@@ -343,6 +404,86 @@ def build_authority_state(*, profile_key, dataset_id, deployment_id):
         "fingerprint": profile.fingerprint,
     }
     return state
+
+
+def build_dashboard_authority_summary():
+    """Return bounded, redacted Vault authority evidence for the Dashboard."""
+    observed_at = timezone.now()
+    try:
+        profile = VaultConnectionProfile.objects.get(
+            key=settings.VAULT_DEFAULT_PROFILE,
+            enabled=True,
+        )
+        authority = _authority_state(
+            profile,
+            profile.dataset_id,
+            settings.ENV_IDENTITY.deployment_id,
+        )
+    except VaultConnectionProfile.DoesNotExist:
+        authority = {
+            "status": "unknown",
+            "reason_code": "profile_unavailable",
+            "observed_at": observed_at,
+            "remote": {"state": "unknown", "observed_at": None},
+            "runtime": {"state": "unknown", "observed_at": None},
+            "critical_job": None,
+            "active_job": None,
+            "blocking_reasons": ["profile_unavailable"],
+        }
+    except DatabaseError:
+        authority = {
+            "status": "unknown",
+            "reason_code": "control_database_unavailable",
+            "observed_at": observed_at,
+            "remote": {"state": "unknown", "observed_at": None},
+            "runtime": {"state": "unknown", "observed_at": None},
+            "critical_job": None,
+            "active_job": None,
+            "blocking_reasons": ["control_database_unavailable"],
+        }
+
+    remote = authority.get("remote") or {}
+    runtime = authority.get("runtime") or {}
+    critical_job = authority.get("critical_job")
+    active_job = authority.get("active_job")
+    summary = {
+        "status": authority.get("status") or "unknown",
+        "reason_code": authority.get("reason_code") or "",
+        "observed_at": authority.get("observed_at") or observed_at,
+        "remote": {
+            "state": remote.get("state") or "unknown",
+            "authoritative_generation_id": (
+                remote.get("authoritative_generation_id") or ""
+            ),
+            "observed_at": remote.get("observed_at"),
+        },
+        "runtime": {
+            "state": runtime.get("state") or "unknown",
+            "active_generation_id": runtime.get("active_generation_id") or "",
+            "observed_at": runtime.get("observed_at"),
+        },
+        "critical_job": (
+            {
+                "operation": critical_job.get("operation") or "",
+                "status": critical_job.get("status") or "",
+                "safe_error_code": critical_job.get("safe_error_code") or "",
+            }
+            if critical_job
+            else None
+        ),
+        "active_job": (
+            {
+                "operation": active_job.get("operation") or "",
+                "status": active_job.get("status") or "",
+                "safe_error_code": active_job.get("safe_error_code") or "",
+            }
+            if active_job
+            else None
+        ),
+        "blocking_reasons": list(authority.get("blocking_reasons") or []),
+    }
+    summary["state_version"] = _state_digest(summary)
+    return summary
 
 
 def _environment_summary(identity):
@@ -590,6 +731,118 @@ def _lease_summary(dataset_id):
     }
 
 
+def _rollback_capability(*, pending_activation=None):
+    """Project bounded, secret-free rollback eligibility for the Workbench."""
+    identity = settings.ENV_IDENTITY
+    reason_code = ""
+    if not settings.VAULT_ADMIN_MUTATIONS_ENABLED:
+        reason_code = "vault_admin_mutations_disabled"
+    elif identity.is_production:
+        reason_code = "production_activation_disabled"
+    elif (
+        identity.app_env.value != "staging"
+        or not settings.STAGING_RUNTIME_ACTIVATION_ENABLED
+    ):
+        reason_code = "staging_activation_disabled"
+    elif pending_activation is not None:
+        reason_code = "runtime_activation_in_progress"
+
+    active_pointer = previous_pointer = None
+    paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    if not reason_code and (
+        not paths["active"].is_file() or not paths["previous"].is_file()
+    ):
+        reason_code = "rollback_pointer_missing"
+    if not reason_code:
+        try:
+            active_pointer = read_runtime_pointer(
+                paths["active"],
+                deployment_id=identity.deployment_id,
+                signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+                runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+            )
+            previous_pointer = read_runtime_pointer(
+                paths["previous"],
+                deployment_id=identity.deployment_id,
+                signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+                runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+            )
+        except RuntimeControlError:
+            reason_code = "rollback_pointer_unverified"
+
+    active_generation = previous_generation = None
+    if not reason_code:
+        projected = {
+            generation.generation_id: generation
+            for generation in ArtifactGeneration.objects.using("control").filter(
+                deployment_id=identity.deployment_id,
+                generation_id__in=[
+                    active_pointer.generation_id,
+                    previous_pointer.generation_id,
+                ],
+            )
+        }
+        active_generation = projected.get(active_pointer.generation_id)
+        previous_generation = projected.get(previous_pointer.generation_id)
+        if active_generation is None or previous_generation is None:
+            reason_code = "rollback_generation_unprojected"
+    if not reason_code and (
+        active_generation.origin
+        != ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        or active_generation.runtime_state
+        != ArtifactGeneration.RuntimeState.ACTIVE
+    ):
+        reason_code = "rollback_active_generation_ineligible"
+    if not reason_code and (
+        previous_generation.runtime_state
+        != ArtifactGeneration.RuntimeState.PREVIOUS
+        or active_generation.parent_generation_id
+        != previous_generation.generation_id
+        or active_generation.parent_manifest_digest
+        != previous_generation.manifest_digest
+        or active_pointer.manifest_digest
+        != active_generation.manifest_digest
+        or previous_pointer.manifest_digest
+        != previous_generation.manifest_digest
+    ):
+        reason_code = "rollback_lineage_invalid"
+    if not reason_code:
+        observation = RuntimePointerObservation.objects.using("control").filter(
+            deployment_id=identity.deployment_id
+        ).order_by("-observed_at").first()
+        if (
+            observation is None
+            or not _observation_is_fresh(
+                observation.observed_at, observed_at=timezone.now()
+            )
+            or observation.active_generation_id
+            != active_pointer.generation_id
+            or observation.previous_generation_id
+            != previous_pointer.generation_id
+            or observation.pointer_digest != active_pointer.pointer_digest
+        ):
+            reason_code = "rollback_pointer_observation_stale"
+    if not reason_code:
+        try:
+            verify_recovery_superadmin_database(
+                Path(previous_pointer.database_path),
+                username=settings.ACTIVATION_RECOVERY_SUPERADMIN_USERNAME,
+                password=settings.ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD,
+            )
+        except RecoveryAuthenticationError:
+            reason_code = "activation_recovery_superadmin_unproven"
+
+    return {
+        "enabled": not reason_code,
+        "reason_code": reason_code,
+        "target_generation_id": (
+            previous_pointer.generation_id
+            if not reason_code and previous_pointer is not None
+            else ""
+        ),
+    }
+
+
 def build_workbench_state(*, profile_key=None):
     identity = settings.ENV_IDENTITY
     profile_key = profile_key or settings.VAULT_DEFAULT_PROFILE
@@ -629,6 +882,7 @@ def build_workbench_state(*, profile_key=None):
             "sync": {"state": "disabled"},
             "lease": _lease_summary(identity.dataset_id),
             "feature_flags": _feature_flags(),
+            "rollback_capability": _rollback_capability(),
         }
     authority = _authority_state(
         profile, profile.dataset_id, identity.deployment_id
@@ -639,7 +893,7 @@ def build_workbench_state(*, profile_key=None):
     mutation = SourceMutationState.objects.filter(
         deployment_id=identity.deployment_id
     ).first()
-    pending_activation = ActivationIntent.objects.filter(
+    pending_activation = ActivationIntent.objects.using("control").filter(
         deployment_id=identity.deployment_id,
         state__in=[
             ActivationIntent.State.PENDING,
@@ -722,6 +976,9 @@ def build_workbench_state(*, profile_key=None):
             else None
         ),
         "feature_flags": _feature_flags(),
+        "rollback_capability": _rollback_capability(
+            pending_activation=pending_activation
+        ),
     }
     payload["state_version"] = _state_digest(
         {
@@ -731,6 +988,7 @@ def build_workbench_state(*, profile_key=None):
                 "remote": authority["remote"],
                 "runtime": authority["runtime"],
                 "critical_job": authority["critical_job"],
+                "active_job": authority["active_job"],
                 "allowed_actions": authority["allowed_actions"],
                 "blocking_reasons": authority["blocking_reasons"],
             },
@@ -742,6 +1000,7 @@ def build_workbench_state(*, profile_key=None):
             },
             "sync": payload["sync"],
             "pending_activation": payload["pending_activation"],
+            "rollback_capability": payload["rollback_capability"],
             "generation_states": [
                 item["state_digest"] for item in generations
             ],

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -12,6 +14,7 @@ import sys
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.db import transaction
@@ -65,15 +68,145 @@ def _copy_tree(source: Path, target: Path) -> None:
         target.mkdir(parents=True)
 
 
-def _source_identity(job: MaintenanceJob) -> dict:
-    database = Path(settings.DATABASES["default"]["NAME"]).resolve()
+def _tree_identity(root: Path) -> dict:
+    """Return a content identity without exposing document names."""
+    digest = hashlib.sha256()
+    file_count = 0
+    byte_count = 0
+    if not root.is_dir() or root.is_symlink():
+        raise CandidateMaintenanceError("maintenance_source_runtime_unsafe")
+    for path in sorted(root.rglob("*"), key=lambda value: value.as_posix()):
+        if path.is_symlink():
+            raise CandidateMaintenanceError("maintenance_source_runtime_unsafe")
+        relative = path.relative_to(root).as_posix()
+        if path.is_dir():
+            digest.update(f"d\\0{relative}\\0".encode())
+            continue
+        if not path.is_file():
+            raise CandidateMaintenanceError("maintenance_source_runtime_unsafe")
+        size = path.stat().st_size
+        file_hash = _sha256(path)
+        digest.update(
+            f"f\\0{relative}\\0{size}\\0{file_hash}\\0".encode()
+        )
+        file_count += 1
+        byte_count += size
+    return {
+        "sha256": digest.hexdigest(),
+        "files": file_count,
+        "bytes": byte_count,
+    }
+
+
+def _mutable_source_identities() -> dict:
+    return {
+        "media": _tree_identity(Path(settings.MEDIA_ROOT).resolve()),
+        "faiss": _tree_identity(Path(settings.FAISS_INDEX_DIR).resolve()),
+        "chroma": _tree_identity(Path(settings.CHROMA_DIR).resolve()),
+    }
+
+
+def _source_identity(
+    job: MaintenanceJob,
+    parent,
+    *,
+    snapshot_database: Path,
+    mutation_epoch: int,
+    source_trees: dict,
+) -> dict:
     return {
         "job_id": str(job.public_id),
-        "database_sha256": _sha256(database),
-        "runtime_generation_id": getattr(settings, "RUNTIME_GENERATION_ID", ""),
-        "runtime_manifest_digest": getattr(settings, "RUNTIME_MANIFEST_DIGEST", ""),
+        "database_sha256": _sha256(snapshot_database),
+        "mutation_epoch": mutation_epoch,
+        "source_trees": source_trees,
+        "runtime_generation_id": parent.generation_id,
+        "runtime_manifest_digest": parent.manifest_digest,
+        "runtime_pointer_digest": parent.pointer_digest,
+        "parent_tree": _tree_identity(Path(parent.runtime_path)),
         "recovery_set_id": job.options.get("recovery_set_id", ""),
     }
+
+
+def _verified_mutable_source_runtime_identity():
+    """Bind a mutable writer snapshot to the verified signed runtime parent."""
+    from vaultops.models import (
+        ArtifactGeneration,
+        RuntimePointerObservation,
+    )
+    from vaultops.runtime_control import (
+        RuntimeControlError,
+        read_runtime_pointer,
+        runtime_control_paths,
+    )
+
+    paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    try:
+        pointer = read_runtime_pointer(
+            paths["active"],
+            deployment_id=settings.ENV_IDENTITY.deployment_id,
+            signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+            runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+        )
+    except (RuntimeControlError, OSError) as exc:
+        raise CandidateMaintenanceError(
+            "maintenance_source_pointer_unverified"
+        ) from exc
+    generation = ArtifactGeneration.objects.using("control").filter(
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        generation_id=pointer.generation_id,
+        manifest_digest=pointer.manifest_digest,
+        runtime_state=ArtifactGeneration.RuntimeState.ACTIVE,
+    ).first()
+    if generation is None:
+        raise CandidateMaintenanceError(
+            "maintenance_source_generation_unprojected"
+        )
+    observation = (
+        RuntimePointerObservation.objects.using("control")
+        .filter(deployment_id=settings.ENV_IDENTITY.deployment_id)
+        .order_by("-observed_at")
+        .first()
+    )
+    if (
+        observation is None
+        or observation.active_generation_id != pointer.generation_id
+        or observation.pointer_digest != pointer.pointer_digest
+        or observation.status != "ready"
+    ):
+        raise CandidateMaintenanceError(
+            "maintenance_source_observation_stale"
+        )
+    return pointer.generation_id, pointer.manifest_digest
+
+
+def _verified_mutable_source_runtime():
+    """Return the verified parent pointer while preserving the public helper."""
+    from vaultops.runtime_control import read_runtime_pointer, runtime_control_paths
+
+    _verified_mutable_source_runtime_identity()
+    return read_runtime_pointer(
+        runtime_control_paths(settings.DATA_CONTROL_ROOT)["active"],
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+    )
+
+
+def _maintenance_source_parent():
+    if settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:
+        return _verified_mutable_source_runtime()
+    generation_id = getattr(settings, "RUNTIME_GENERATION_ID", "")
+    manifest_digest = getattr(settings, "RUNTIME_MANIFEST_DIGEST", "")
+    if not generation_id or not manifest_digest:
+        raise CandidateMaintenanceError("maintenance_source_pointer_unverified")
+    return SimpleNamespace(
+        generation_id=generation_id,
+        manifest_digest=manifest_digest,
+        pointer_digest=hashlib.sha256(
+            f"{generation_id}:{manifest_digest}".encode()
+        ).hexdigest(),
+        runtime_path=str(Path(settings.DATA_ROOT).resolve()),
+    )
 
 
 def estimate_workspace_bytes(job: MaintenanceJob) -> int:
@@ -102,20 +235,73 @@ def create_workspace(job: MaintenanceJob) -> Path:
     workspace = root / f"mw-{job.public_id}-{uuid.uuid4().hex[:8]}"
     temporary = root / f".{workspace.name}.tmp"
     temporary.mkdir(mode=0o700)
+    barrier_acquired = False
     try:
-        _copy_sqlite(
-            Path(settings.DATABASES["default"]["NAME"]).resolve(),
-            temporary / "db.sqlite3",
+        from vaultops.services.mutations import (
+            assert_barrier_owner,
+            release_barrier,
+            request_barrier,
         )
+
+        deployment_id = settings.ENV_IDENTITY.deployment_id
+        barrier = request_barrier(
+            owner_job_id=job.public_id,
+            source_deployment=deployment_id,
+        )
+        barrier_acquired = True
+        barrier = assert_barrier_owner(
+            owner_job_id=job.public_id,
+            source_deployment=deployment_id,
+        )
+        mutation_epoch = barrier.current_epoch
+        parent = _maintenance_source_parent()
+        parent_tree_before = _tree_identity(Path(parent.runtime_path))
+        live_database = Path(settings.DATABASES["default"]["NAME"]).resolve()
+        live_database_before = _sha256(live_database)
+        source_trees_before = _mutable_source_identities()
+        _copy_sqlite(live_database, temporary / "db.sqlite3")
         _copy_tree(Path(settings.MEDIA_ROOT).resolve(), temporary / "media")
         _copy_tree(
             Path(settings.FAISS_INDEX_DIR).resolve(),
             temporary / "faiss_indexes",
         )
-        _copy_tree(Path(settings.CHROMA_DIR).resolve(), temporary / "chroma_db")
+        _copy_tree(
+            Path(settings.CHROMA_DIR).resolve(), temporary / "chroma_db"
+        )
         (temporary / "pdf_cache").mkdir()
         (temporary / "backups").mkdir()
-        source = _source_identity(job)
+        parent_after = _maintenance_source_parent()
+        parent_tree_after = _tree_identity(Path(parent_after.runtime_path))
+        source_trees_after = _mutable_source_identities()
+        live_database_after = _sha256(live_database)
+        barrier_after = assert_barrier_owner(
+            owner_job_id=job.public_id,
+            source_deployment=deployment_id,
+        )
+        source = _source_identity(
+            job,
+            parent,
+            snapshot_database=temporary / "db.sqlite3",
+            mutation_epoch=mutation_epoch,
+            source_trees=source_trees_before,
+        )
+        if (
+            parent_after.pointer_digest != parent.pointer_digest
+            or parent_tree_after != parent_tree_before
+            or source["parent_tree"] != parent_tree_before
+        ):
+            raise CandidateMaintenanceError(
+                "maintenance_source_authority_changed"
+            )
+        if (
+            barrier_after.current_epoch != mutation_epoch
+            or live_database_after != live_database_before
+            or source_trees_after != source_trees_before
+        ):
+            raise CandidateMaintenanceError(
+                "maintenance_source_snapshot_changed"
+            )
+        source["snapshot"] = _tree_identity(temporary)
         (temporary / WORKSPACE_MANIFEST).write_text(
             json.dumps(
                 {
@@ -153,6 +339,13 @@ def create_workspace(job: MaintenanceJob) -> Path:
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
+    finally:
+        if barrier_acquired:
+            release_barrier(
+                owner_job_id=job.public_id,
+                source_deployment=settings.ENV_IDENTITY.deployment_id,
+                tolerate_lost=True,
+            )
 
 
 def _candidate_environment(workspace: Path) -> dict:
@@ -169,27 +362,47 @@ def _candidate_environment(workspace: Path) -> dict:
     return environment
 
 
-def _embedding_validation(database: Path, folder_ids: list[int]) -> dict:
+def _embedding_validation(database: Path) -> dict:
     connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
-        placeholders = ",".join("?" for _ in folder_ids) or "NULL"
         rows = connection.execute(
             "SELECT id, folder_id, page_chunks, chunk_embeddings FROM core_pdffile "
-            f"WHERE folder_id IN ({placeholders}) AND lifecycle != 'archived'",
-            folder_ids,
+            "WHERE lifecycle != 'archived'",
         )
         dimensions = set()
         vectors = 0
         folders = {}
         for pdf_id, folder_id, chunks_raw, embeddings_raw in rows:
-            chunks = json.loads(chunks_raw or "[]")
-            embeddings = json.loads(embeddings_raw or "[]")
-            if chunks and len(chunks) != len(embeddings):
+            if not isinstance(folder_id, int) or folder_id <= 0:
+                raise CandidateMaintenanceError(
+                    "candidate_folder_invalid", str(pdf_id)
+                )
+            try:
+                chunks = json.loads(chunks_raw or "[]")
+                embeddings = json.loads(embeddings_raw or "[]")
+            except (TypeError, ValueError) as exc:
+                raise CandidateMaintenanceError(
+                    "candidate_embedding_metadata_invalid", str(pdf_id)
+                ) from exc
+            if not isinstance(chunks, list) or not isinstance(embeddings, list):
+                raise CandidateMaintenanceError(
+                    "candidate_embedding_metadata_invalid", str(pdf_id)
+                )
+            if len(chunks) != len(embeddings):
                 raise CandidateMaintenanceError(
                     "candidate_embedding_count_mismatch", str(pdf_id)
                 )
             for embedding in embeddings:
-                if not isinstance(embedding, list) or not embedding:
+                if (
+                    not isinstance(embedding, list)
+                    or not embedding
+                    or any(
+                        isinstance(value, bool)
+                        or not isinstance(value, (int, float))
+                        or not math.isfinite(value)
+                        for value in embedding
+                    )
+                ):
                     raise CandidateMaintenanceError(
                         "candidate_embedding_invalid", str(pdf_id)
                     )
@@ -221,7 +434,23 @@ def _embedding_validation(database: Path, folder_ids: list[int]) -> dict:
 
 def validate_candidate(workspace: Path) -> dict:
     manifest_path = workspace / WORKSPACE_MANIFEST
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = {}
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError) as exc:
+            raise CandidateMaintenanceError(
+                "candidate_manifest_invalid"
+            ) from exc
+    try:
+        affected_folder_ids = sorted(
+            {
+                int(folder_id)
+                for folder_id in manifest.get("affected_folder_ids", [])
+            }
+        )
+    except (TypeError, ValueError) as exc:
+        raise CandidateMaintenanceError("candidate_manifest_invalid") from exc
     database = workspace / "db.sqlite3"
     connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
@@ -239,28 +468,44 @@ def validate_candidate(workspace: Path) -> dict:
         raise CandidateMaintenanceError("candidate_sqlite_integrity_failed")
     if foreign_keys:
         raise CandidateMaintenanceError("candidate_foreign_keys_failed")
-    missing_media = [
-        pdf_id for pdf_id, value in media_rows
-        if not (workspace / "media" / value).is_file()
-    ]
+    media_root = (workspace / "media").resolve()
+    missing_media = []
+    for pdf_id, value in media_rows:
+        media_path = workspace / "media" / value
+        try:
+            resolved_media = media_path.resolve(strict=True)
+            resolved_media.relative_to(media_root)
+        except (OSError, RuntimeError, ValueError):
+            missing_media.append(pdf_id)
+            continue
+        if media_path.is_symlink() or not resolved_media.is_file():
+            missing_media.append(pdf_id)
     if missing_media:
         raise CandidateMaintenanceError(
             "candidate_media_missing", str(len(missing_media))
         )
-    embedding = _embedding_validation(
-        database, manifest["affected_folder_ids"]
+    embedding = _embedding_validation(database)
+    validated_folder_ids = sorted(
+        int(folder_id)
+        for folder_id, record in embedding["folders"].items()
+        if record["vectors"]
     )
     faiss_records = {}
     try:
         import faiss as faiss_module
 
-        for folder_id in manifest["affected_folder_ids"]:
+        for folder_id in validated_folder_ids:
             path = workspace / "faiss_indexes" / f"folder_{folder_id}.index"
             if not path.is_file():
                 raise CandidateMaintenanceError(
                     "candidate_faiss_missing", str(folder_id)
                 )
-            index = faiss_module.read_index(str(path))
+            try:
+                index = faiss_module.read_index(str(path))
+            except Exception as exc:
+                raise CandidateMaintenanceError(
+                    "candidate_faiss_invalid", str(folder_id)
+                ) from exc
             faiss_records[str(folder_id)] = {
                 "vectors": int(index.ntotal),
                 "dimension": int(index.d),
@@ -268,6 +513,22 @@ def validate_candidate(workspace: Path) -> dict:
             }
     except ImportError as exc:
         raise CandidateMaintenanceError("candidate_faiss_unavailable") from exc
+    actual_folder_ids = set()
+    index_root = workspace / "faiss_indexes"
+    if not index_root.is_dir() or index_root.is_symlink():
+        raise CandidateMaintenanceError("candidate_faiss_directory_invalid")
+    for path in index_root.iterdir():
+        match = re.fullmatch(r"folder_(\d+)\.index", path.name)
+        if not match:
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise CandidateMaintenanceError("candidate_faiss_unsafe", path.name)
+        actual_folder_ids.add(int(match.group(1)))
+    unexpected = sorted(actual_folder_ids - set(validated_folder_ids))
+    if unexpected:
+        raise CandidateMaintenanceError(
+            "candidate_faiss_orphaned", ",".join(map(str, unexpected))
+        )
     dimensions = embedding["dimensions"]
     if dimensions and any(
         record["dimension"] != dimensions[0]
@@ -294,6 +555,8 @@ def validate_candidate(workspace: Path) -> dict:
         "media": {"referenced": len(media_rows), "missing": 0},
         "embeddings": embedding,
         "faiss": faiss_records,
+        "affected_folder_ids": affected_folder_ids,
+        "validated_folder_ids": validated_folder_ids,
     }
 
 
@@ -335,9 +598,23 @@ def _mirror_job(candidate_db: Path, source_job: MaintenanceJob) -> None:
             parse_datetime(candidate["finished_at"])
             if candidate["finished_at"] else None
         )
+        candidate_options = json.loads(candidate["options"] or "{}")
+        cumulative_builds = {
+            str(key): int(value)
+            for key, value in source_job.options.get(
+                "candidate_folder_build_attempts", {}
+            ).items()
+        }
+        for key, value in candidate_options.get(
+            "folder_build_attempts", {}
+        ).items():
+            cumulative_builds[str(key)] = (
+                cumulative_builds.get(str(key), 0) + int(value)
+            )
         source_job.options = {
             **source_job.options,
-            "candidate_job_options": json.loads(candidate["options"] or "{}"),
+            "candidate_job_options": candidate_options,
+            "candidate_folder_build_attempts": cumulative_builds,
         }
         source_job.save(
             update_fields=[

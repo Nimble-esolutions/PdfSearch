@@ -15,7 +15,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         try:
-            intent = ActivationIntent.objects.get(
+            intent = ActivationIntent.objects.using("control").get(
                 public_id=options["intent_id"]
             )
             intent = reconcile_activation_result(intent)

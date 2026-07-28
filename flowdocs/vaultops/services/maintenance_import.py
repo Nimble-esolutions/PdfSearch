@@ -109,6 +109,10 @@ def _validate_published_runtime(
         generation_id=generation_id,
         manifest_digest=manifest_digest,
     )
+    try:
+        return validate_candidate(runtime)
+    except CandidateMaintenanceError as exc:
+        raise MaintenanceImportError(exc.reason_code) from exc
 
 
 def _resolve_candidate(job):
@@ -412,6 +416,9 @@ def _manifest(job, candidate_manifest, parent, records, total_bytes):
             "validation_basis_digest": candidate_manifest.get("derived", {}).get(
                 "manifest_basis_sha256", ""
             ),
+            "affected_folder_ids": candidate_manifest.get(
+                "affected_folder_ids", []
+            ),
         },
         "vault_authority": {
             "state": "unpublished",
@@ -437,12 +444,19 @@ def import_maintenance_candidate(
     if keyed_workspace:
         if keyed_workspace.generation.lineage_job_public_id != job.public_id:
             raise MaintenanceImportError("idempotency_conflict")
+        _validate_published_runtime(
+            Path(keyed_workspace.runtime_path),
+            manifest=keyed_workspace.generation.manifest,
+            manifest_digest=keyed_workspace.generation.manifest_digest,
+            generation_id=keyed_workspace.generation.generation_id,
+            runtime_root=Path(settings.RUNTIME_GENERATIONS_ROOT),
+        )
         return keyed_workspace
     candidate = _resolve_candidate(job)
     candidate_manifest, recovery = _validate_job_and_manifest(job, candidate)
     candidate_manifest_sha256 = _sha256(candidate / WORKSPACE_MANIFEST)
     try:
-        validation = validate_candidate(candidate)
+        pre_rehearsal_validation = validate_candidate(candidate)
     except CandidateMaintenanceError as exc:
         raise MaintenanceImportError(exc.reason_code) from exc
     parent = _active_parent()
@@ -473,8 +487,9 @@ def import_maintenance_candidate(
                 )
             if workspace.import_idempotency_key != idempotency_key:
                 raise MaintenanceImportError("idempotency_conflict")
-            validate_runtime_workspace(
-                workspace.runtime_path,
+            _validate_published_runtime(
+                Path(workspace.runtime_path),
+                manifest=existing.manifest,
                 runtime_root=runtime_root,
                 generation_id=existing.generation_id,
                 manifest_digest=existing.manifest_digest,
@@ -521,6 +536,10 @@ def import_maintenance_candidate(
             )
             shutil.rmtree(incomplete / ".rehearsal-workspace", ignore_errors=True)
             verify_recovery_superadmin(incomplete / "db.sqlite3")
+            try:
+                validation = validate_candidate(incomplete)
+            except CandidateMaintenanceError as exc:
+                raise MaintenanceImportError(exc.reason_code) from exc
             post_records, post_bytes = _safe_files(incomplete)
             post_manifest, post_digest, post_generation_id = _manifest(
                 job, candidate_manifest, parent, post_records, post_bytes
@@ -531,7 +550,7 @@ def import_maintenance_candidate(
             runtime_name = f"{generation_id}-{manifest_digest[:12]}"
             final_runtime = runtime_root / runtime_name
             if final_runtime.exists():
-                _validate_published_runtime(
+                validation = _validate_published_runtime(
                     final_runtime,
                     manifest=manifest,
                     manifest_digest=manifest_digest,
@@ -564,7 +583,7 @@ def import_maintenance_candidate(
                     os.fsync(root_descriptor)
                 finally:
                     os.close(root_descriptor)
-                _validate_published_runtime(
+                validation = _validate_published_runtime(
                     final_runtime,
                     manifest=manifest,
                     manifest_digest=manifest_digest,
@@ -602,6 +621,7 @@ def import_maintenance_candidate(
                     manifest_digest=manifest_digest,
                     validator_version="vaultops-maintenance-import/v1",
                     evidence={
+                        "pre_rehearsal_candidate": pre_rehearsal_validation,
                         "candidate": validation,
                         "recovery_set_id": recovery["set_id"],
                         "origin": ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
@@ -619,6 +639,7 @@ def import_maintenance_candidate(
                     runtime_path=str(final_runtime),
                     capacity_plan=capacity,
                     validation_evidence={
+                        "pre_rehearsal_candidate": pre_rehearsal_validation,
                         "candidate": validation,
                         "origin": ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
                     },

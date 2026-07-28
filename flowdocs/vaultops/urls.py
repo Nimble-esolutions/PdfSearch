@@ -111,4 +111,14 @@ urlpatterns = [
         views.schedule_activation_view,
         name="schedule_activation",
     ),
+    path(
+        "activations/rollback/confirm/",
+        views.rollback_confirmation_issue,
+        name="rollback_confirmation_issue",
+    ),
+    path(
+        "activations/<uuid:workspace_id>/rollback/",
+        views.schedule_rollback_view,
+        name="schedule_rollback",
+    ),
 ]

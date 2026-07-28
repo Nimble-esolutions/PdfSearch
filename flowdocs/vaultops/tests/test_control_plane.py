@@ -4,8 +4,10 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 from django.apps import apps
-from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.conf import settings
+from django.db import IntegrityError, connections, transaction
+from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from core.models import (
@@ -39,7 +41,11 @@ from vaultops.services.lifecycle import (
     transition_generation_vault_state,
     transition_workspace,
 )
-from vaultops.services.read_model import build_authority_state
+from vaultops.services.read_model import (
+    _observation_is_fresh,
+    build_authority_state,
+    build_dashboard_authority_summary,
+)
 
 
 class ControlPlaneTestCase(TestCase):
@@ -321,6 +327,63 @@ class DurableJobOwnershipTests(ControlPlaneTestCase):
 
 
 class AuthorityReadModelTests(ControlPlaneTestCase):
+    @override_settings(VAULT_VALIDATION_MAX_AGE_SECONDS=300)
+    def test_observation_freshness_includes_exact_threshold(self):
+        now = timezone.now()
+
+        self.assertTrue(
+            _observation_is_fresh(
+                now - timedelta(seconds=300),
+                observed_at=now,
+            )
+        )
+        self.assertFalse(
+            _observation_is_fresh(
+                now - timedelta(seconds=300, microseconds=1),
+                observed_at=now,
+            )
+        )
+
+    @override_settings(VAULT_DEFAULT_PROFILE="missing-profile")
+    def test_dashboard_authority_summary_is_unknown_without_profile(self):
+        summary = build_dashboard_authority_summary()
+
+        self.assertEqual(summary["status"], "unknown")
+        self.assertEqual(summary["reason_code"], "profile_unavailable")
+        self.assertEqual(summary["remote"]["state"], "unknown")
+        self.assertEqual(summary["runtime"]["state"], "unknown")
+        self.assertNotIn("fingerprint", summary)
+
+    @override_settings(VAULT_DEFAULT_PROFILE="test-profile")
+    def test_dashboard_authority_summary_uses_observed_authority(self):
+        now = timezone.now()
+        VaultDatasetProjection.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_state="verified",
+            authoritative_generation_id="vault-generation",
+            inventory_observed_at=now,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id=settings.ENV_IDENTITY.deployment_id,
+            status="ready",
+            active_generation_id="runtime-generation",
+            observed_at=now,
+        )
+
+        summary = build_dashboard_authority_summary()
+
+        self.assertEqual(summary["status"], "healthy")
+        self.assertEqual(
+            summary["remote"]["authoritative_generation_id"],
+            "vault-generation",
+        )
+        self.assertEqual(
+            summary["runtime"]["active_generation_id"],
+            "runtime-generation",
+        )
+        self.assertTrue(summary["state_version"])
+
     def test_remote_authority_and_runtime_activity_remain_independent(self):
         remote = self.make_generation(
             generation_id="remote-authoritative",
@@ -379,6 +442,106 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
         self.assertEqual(state["remote"]["state"], "unknown")
         self.assertEqual(state["runtime"]["state"], "unknown")
         self.assertIn("inventory_unavailable", state["blocking_reasons"])
+
+    @override_settings(VAULT_VALIDATION_MAX_AGE_SECONDS=300)
+    def test_stale_observations_degrade_authority_with_stable_reasons(self):
+        stale = timezone.now() - timedelta(seconds=301)
+        VaultDatasetProjection.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_state="verified",
+            authoritative_generation_id="vault-generation",
+            inventory_observed_at=stale,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id="staging-01",
+            status="ready",
+            observed_at=stale,
+        )
+
+        state = build_authority_state(
+            profile_key=self.profile.key,
+            dataset_id=self.profile.dataset_id,
+            deployment_id="staging-01",
+        )
+
+        self.assertEqual(state["status"], "degraded")
+        self.assertEqual(
+            state["reason_code"],
+            "inventory_observation_stale",
+        )
+        self.assertIn(
+            "runtime_observation_stale",
+            state["blocking_reasons"],
+        )
+        self.assertNotIn("plan_restore", state["allowed_actions"])
+
+    def test_unhealthy_job_blocks_while_active_job_remains_visible(self):
+        now = timezone.now()
+        VaultDatasetProjection.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_state="verified",
+            authoritative_generation_id="vault-generation",
+            inventory_observed_at=now,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id="staging-01",
+            status="ready",
+            observed_at=now,
+        )
+        unhealthy = VaultJob.objects.create(
+            operation="restore",
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            status=VaultJob.Status.TERMINAL_FAILED,
+            idempotency_key="unhealthy-job",
+        )
+        active = VaultJob.objects.create(
+            operation="sync_publish",
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            status=VaultJob.Status.RUNNING,
+            idempotency_key="active-job",
+        )
+
+        state = build_authority_state(
+            profile_key=self.profile.key,
+            dataset_id=self.profile.dataset_id,
+            deployment_id="staging-01",
+        )
+
+        self.assertEqual(
+            state["critical_job"]["public_id"],
+            str(unhealthy.public_id),
+        )
+        self.assertEqual(
+            state["active_job"]["public_id"],
+            str(active.public_id),
+        )
+        self.assertEqual(state["reason_code"], "critical_job_unhealthy")
+
+    @override_settings(VAULT_DEFAULT_PROFILE="test-profile")
+    def test_dashboard_authority_summary_has_fixed_control_query_budget(self):
+        now = timezone.now()
+        VaultDatasetProjection.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_state="verified",
+            authoritative_generation_id="vault-generation",
+            inventory_observed_at=now,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id=settings.ENV_IDENTITY.deployment_id,
+            status="ready",
+            observed_at=now,
+        )
+
+        with CaptureQueriesContext(connections["control"]) as queries:
+            summary = build_dashboard_authority_summary()
+
+        self.assertEqual(summary["status"], "healthy")
+        self.assertLessEqual(len(queries), 5)
 
 
 class LegacyBackfillTests(ControlPlaneTestCase):

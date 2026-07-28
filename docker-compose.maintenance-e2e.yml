@@ -1,0 +1,145 @@
+# Disposable, localhost-only maintenance lifecycle. Never mounts production data.
+x-lifecycle-environment: &lifecycle-environment
+  DATA_ROOT: /app/data
+  DATA_CONTROL_ROOT: /app/data-control
+  CONTROL_DB_PATH: /app/data-control/control.sqlite3
+  SQLITE_DB_PATH: /app/data/db.sqlite3
+  MEDIA_ROOT: /app/data/media
+  PDF_CACHE_DIR: /app/data/pdf_cache
+  FAISS_INDEX_DIR: /app/data/faiss_indexes
+  CHROMA_DIR: /app/data/chroma_db
+  STATIC_ROOT: /app/data/staticfiles
+  BACKUP_DIR: /app/data/backups
+  VAULT_RESTORE_ROOT: /app/data/restore-quarantine
+  RUNTIME_GENERATIONS_ROOT: /app/data/runtime-generations
+  MAINTENANCE_WORKSPACE_ROOT: /app/data-control/maintenance-workspaces
+  SECRET_KEY: maintenance-e2e-secret-key-not-for-production
+  ALLOW_INSECURE_DEFAULTS: "1"
+  DEBUG: "True"
+  APP_ENV: staging
+  DEPLOYMENT_ID: maintenance-e2e
+  AUTHORITATIVE_DATASET_ID: maintenance-e2e
+  PRODUCTION_SOURCE_ID: maintenance-e2e-writer
+  APP_RELEASE_VERSION: maintenance-e2e
+  APP_IMAGE_DIGEST: sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+  DATA_BOOTSTRAP_MODE: empty
+  DATA_MODE: local
+  BACKUP_ROLE: disabled
+  VAULT_SYNC_ENABLED: "0"
+  VAULT_MUTATION_TRACKING_ENABLED: "1"
+  VAULT_RESTORE_ENABLED: "0"
+  VAULT_ADMIN_MUTATIONS_ENABLED: "1"
+  LOCAL_INDEX_MAINTENANCE_ENABLED: "1"
+  FORCE_REINDEX_ENABLED: "1"
+  EXTERNAL_EMBEDDINGS_ENABLED: "1"
+  MAINTENANCE_CANDIDATE_PREPARATION_ENABLED: "1"
+  MAINTENANCE_CANDIDATE_WRITER_MODE: "${LIFECYCLE_WRITER_MODE:-1}"
+  STAGING_RUNTIME_ACTIVATION_ENABLED: "${LIFECYCLE_ACTIVATION_ENABLED:-0}"
+  STAGING_ACTIVATION_APPLY_MODE: auto
+  ACTIVATION_INTENT_SIGNING_KEY: maintenance-e2e-signing-key-with-at-least-32-characters
+  ACTIVATION_RECOVERY_SUPERADMIN_USERNAME: ci-admin
+  ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD: ci-only-password-not-for-production
+  ACTIVATION_SMOKE_QUERIES_FILE: /app/scripts/ci/maintenance-smoke-queries.json
+  EXTERNAL_SIDE_EFFECTS_MODE: sandbox
+  ARTIFACT_VAULT_ENABLED: "0"
+  OPENAI_API_KEY: ""
+  GOOGLE_API_KEY: ""
+  PDFSEARCH_TEST_EMBEDDINGS: "1"
+  REDIS_URL: redis://redis:6379/7
+  ALLOWED_HOSTS: localhost,127.0.0.1
+  CORS_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-18020}
+  CSRF_TRUSTED_ORIGINS: http://localhost:${WEB_PORT:-18020}
+  CSRF_COOKIE_SECURE: "False"
+  SESSION_COOKIE_SECURE: "False"
+  SECURE_SSL_REDIRECT: "False"
+  GUNICORN_WORKERS: "1"
+
+services:
+  redis:
+    image: redis:7.4.2-alpine
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks: [lifecycle]
+
+  web:
+    image: ${PDFSEARCH_IMAGE:-pdfsearch-maintenance-e2e:local}
+    build: .
+    # The activation supervisor exits cleanly after moving a signed pointer.
+    # Model the production orchestrator by restarting that expected handoff.
+    restart: unless-stopped
+    volumes:
+      - lifecycle_data:/app/data
+      - lifecycle_control:/app/data-control
+      - ./scripts/ci/empty-init:/app/init:ro
+    environment: *lifecycle-environment
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/livez"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    networks: [lifecycle]
+
+  browser-proxy:
+    image: ${PDFSEARCH_IMAGE:-pdfsearch-maintenance-e2e:local}
+    entrypoint: ["python", "/bridge/reverse_proxy.py"]
+    volumes:
+      - ./scripts/ci/reverse_proxy.py:/bridge/reverse_proxy.py:ro
+    ports:
+      - "127.0.0.1:${WEB_PORT:-18020}:8080"
+    depends_on:
+      web:
+        condition: service_healthy
+    networks: [lifecycle, browser]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/livez"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  maintenance:
+    image: ${PDFSEARCH_IMAGE:-pdfsearch-maintenance-e2e:local}
+    entrypoint: ["/app/worker-entrypoint.sh"]
+    volumes:
+      - lifecycle_data:/app/data
+      - lifecycle_control:/app/data-control
+      - ./scripts/ci/empty-init:/app/init:ro
+    environment: *lifecycle-environment
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [lifecycle]
+    healthcheck:
+      disable: true
+
+  fixture:
+    image: ${PDFSEARCH_IMAGE:-pdfsearch-maintenance-e2e:local}
+    entrypoint:
+      - python
+      - /app/scripts/ci/maintenance_lifecycle_fixture.py
+    volumes:
+      - lifecycle_data:/app/data
+      - lifecycle_control:/app/data-control
+      - ./scripts/ci/empty-init:/app/init:ro
+      - ./scripts/ci/maintenance_lifecycle_fixture.py:/app/scripts/ci/maintenance_lifecycle_fixture.py:ro
+    environment: *lifecycle-environment
+    networks: [lifecycle]
+    healthcheck:
+      disable: true
+
+volumes:
+  lifecycle_data:
+  lifecycle_control:
+
+networks:
+  lifecycle:
+    driver: bridge
+    internal: true
+  browser:
+    driver: bridge

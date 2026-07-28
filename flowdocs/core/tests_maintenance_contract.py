@@ -9,7 +9,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.maintenance import queue_job, run_job
-from core.management.commands.run_maintenance_jobs import _execute_local_job
+from core.management.commands.run_maintenance_jobs import (
+    _execute_local_job,
+    _requires_source_mutation_scope,
+)
 from core.maintenance_plans import (
     FORCE_CONFIRMATION,
     MaintenancePlanError,
@@ -472,6 +475,10 @@ class MaintenanceWorkerGroupingTests(TestCase):
         self.assertEqual(
             finished.options["completed_folder_ids"], [self.folder.pk]
         )
+        self.assertEqual(
+            finished.options["folder_build_attempts"],
+            {str(self.folder.pk): 1},
+        )
 
         finished.status = "queued"
         finished.failed_items = 0
@@ -480,6 +487,11 @@ class MaintenanceWorkerGroupingTests(TestCase):
         run_job(finished)
         self.assertEqual(precompute.call_count, 2)
         repair.assert_called_once()
+        finished.refresh_from_db()
+        self.assertEqual(
+            finished.options["folder_build_attempts"],
+            {str(self.folder.pk): 1},
+        )
 
     @patch(
         "core.maintenance.precompute_pdf_embeddings",
@@ -510,6 +522,14 @@ class MaintenanceWorkerGroupingTests(TestCase):
         execute.return_value = job
         self.assertIs(_execute_local_job(job), job)
         execute.assert_called_once_with(job)
+        self.assertFalse(_requires_source_mutation_scope(job))
+
+    @override_settings(MAINTENANCE_CANDIDATE_EXECUTION=True)
+    def test_candidate_child_execution_tracks_workspace_mutations(self):
+        job = MaintenanceJob(
+            options={"candidate_required": True}
+        )
+        self.assertTrue(_requires_source_mutation_scope(job))
 
 
 class MaintenanceDeploymentPreflightTests(TestCase):

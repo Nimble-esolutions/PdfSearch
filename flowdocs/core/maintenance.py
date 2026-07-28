@@ -375,6 +375,20 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
             job.items.exclude(folder_id=None).values_list("folder_id", flat=True)
         )
         for folder_id in sorted(all_folder_ids - completed_folder_ids):
+            folder_build_attempts = {
+                str(key): int(value)
+                for key, value in job.options.get(
+                    "folder_build_attempts", {}
+                ).items()
+            }
+            folder_build_attempts[str(folder_id)] = (
+                folder_build_attempts.get(str(folder_id), 0) + 1
+            )
+            job.options = {
+                **job.options,
+                "folder_build_attempts": folder_build_attempts,
+            }
+            job.save(update_fields=["options", "updated_at"])
             try:
                 _repair_folder(Folder.objects.get(pk=folder_id))
             except Exception as exc:

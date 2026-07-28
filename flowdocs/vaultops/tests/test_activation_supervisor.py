@@ -6,16 +6,23 @@ import sqlite3
 import tempfile
 import time
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
+from core.candidate_maintenance import (
+    CandidateMaintenanceError,
+    _verified_mutable_source_runtime_identity,
+)
+from core.recovery_auth import RecoveryAuthenticationError
 from runtime_supervisor import RuntimeSupervisor
 from vaultops.models import (
     ActivationIntent,
@@ -37,9 +44,11 @@ from vaultops.runtime_control import (
 )
 from vaultops.services.activation import (
     ActivationCoordinatorError,
+    prepare_previous_runtime_rollback,
     reconcile_activation_result,
     schedule_activation,
 )
+from vaultops.services.read_model import _rollback_capability
 
 
 SIGNING_KEY = "test-signing-key-with-at-least-32-characters"
@@ -364,6 +373,73 @@ class ActivationCoordinatorTests(TestCase):
             intent_document["target_generation_id"], TARGET_GENERATION
         )
 
+    def _observe_current_source_pointer(self):
+        pointer = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id=DEPLOYMENT_ID,
+            active_generation_id=CURRENT_GENERATION,
+            pointer_digest=pointer.pointer_digest,
+            status="ready",
+            observed_at=timezone.now(),
+        )
+        return pointer
+
+    def test_mutable_writer_source_identity_uses_verified_signed_pointer(self):
+        pointer = self._observe_current_source_pointer()
+        database = self.current_runtime / "db.sqlite3"
+        before = hashlib.sha256(database.read_bytes()).hexdigest()
+
+        with override_settings(
+            ACTIVE_RUNTIME=None,
+            MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+        ):
+            identity = _verified_mutable_source_runtime_identity()
+
+        self.assertEqual(identity, (CURRENT_GENERATION, CURRENT_DIGEST))
+        self.assertEqual(
+            hashlib.sha256(database.read_bytes()).hexdigest(), before
+        )
+        self.assertEqual(pointer.generation_id, identity[0])
+
+    def test_mutable_writer_source_rejects_tampered_pointer(self):
+        self._observe_current_source_pointer()
+        document = json.loads(
+            self.paths["active"].read_text(encoding="utf-8")
+        )
+        document["generation_id"] = "tampered-generation"
+        self.paths["active"].write_text(
+            json.dumps(document), encoding="utf-8"
+        )
+
+        with override_settings(
+            ACTIVE_RUNTIME=None,
+            MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+        ):
+            with self.assertRaisesMessage(
+                CandidateMaintenanceError,
+                "maintenance_source_pointer_unverified",
+            ):
+                _verified_mutable_source_runtime_identity()
+
+    def test_mutable_writer_source_rejects_stale_observation(self):
+        self._observe_current_source_pointer()
+        RuntimePointerObservation.objects.update(pointer_digest="0" * 64)
+
+        with override_settings(
+            ACTIVE_RUNTIME=None,
+            MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+        ):
+            with self.assertRaisesMessage(
+                CandidateMaintenanceError,
+                "maintenance_source_observation_stale",
+            ):
+                _verified_mutable_source_runtime_identity()
+
     def test_exact_activation_request_reuses_the_same_intent(self):
         first = schedule_activation(
             self.workspace,
@@ -424,6 +500,351 @@ class ActivationCoordinatorTests(TestCase):
             ):
                 schedule_activation(self.workspace, confirmed=True)
         self.assertFalse(self.paths["intents"].exists())
+
+    def _configure_signed_local_candidate_as_active(self):
+        lineage_job_id = uuid.uuid4()
+        self.current_generation.runtime_state = (
+            ArtifactGeneration.RuntimeState.PREVIOUS
+        )
+        self.current_generation.save(update_fields=["runtime_state"])
+        self.target_generation.origin = (
+            ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        )
+        self.target_generation.runtime_state = (
+            ArtifactGeneration.RuntimeState.ACTIVE
+        )
+        self.target_generation.deployment_id = DEPLOYMENT_ID
+        self.target_generation.lineage_job_public_id = lineage_job_id
+        self.target_generation.parent_generation_id = CURRENT_GENERATION
+        self.target_generation.parent_manifest_digest = CURRENT_DIGEST
+        self.target_generation.save(
+            update_fields=[
+                "origin",
+                "runtime_state",
+                "deployment_id",
+                "lineage_job_public_id",
+                "parent_generation_id",
+                "parent_manifest_digest",
+            ]
+        )
+        active_document = make_pointer(
+            self.target_runtime,
+            TARGET_GENERATION,
+            TARGET_DIGEST,
+            "local-maintenance-activation",
+        )
+        previous_document = make_pointer(
+            self.current_runtime,
+            CURRENT_GENERATION,
+            CURRENT_DIGEST,
+            "bootstrap-intent",
+        )
+        atomic_write_json(self.paths["active"], active_document)
+        atomic_write_json(self.paths["previous"], previous_document)
+        RuntimePointerObservation.objects.create(
+            deployment_id=DEPLOYMENT_ID,
+            active_generation_id=TARGET_GENERATION,
+            previous_generation_id=CURRENT_GENERATION,
+            pointer_digest=active_document["document_digest"],
+            status="ready",
+            observed_at=timezone.now(),
+        )
+        return active_document
+
+    def test_prepares_exact_previous_signed_runtime_for_rollback(self):
+        active_document = self._configure_signed_local_candidate_as_active()
+
+        workspace = prepare_previous_runtime_rollback()
+
+        self.assertEqual(workspace.generation, self.current_generation)
+        self.assertEqual(
+            Path(workspace.runtime_path), self.current_runtime.resolve()
+        )
+        self.assertEqual(
+            workspace.state, RestoreWorkspace.State.ACTIVATION_READY
+        )
+        self.assertEqual(
+            workspace.validation_evidence["active_generation_id"],
+            TARGET_GENERATION,
+        )
+        self.assertEqual(
+            workspace.validation_evidence["active_pointer_digest"],
+            active_document["document_digest"],
+        )
+        self.assertFalse(
+            workspace.validation_evidence["vault_authority_changed"]
+        )
+
+    def test_prepared_rollback_uses_existing_signed_activation_protocol(self):
+        self._configure_signed_local_candidate_as_active()
+        workspace = prepare_previous_runtime_rollback()
+
+        intent = schedule_activation(
+            workspace, confirmed=True, rollback=True
+        )
+        intent_document = read_signed_document(
+            self.paths["intents"] / f"{intent.public_id}.json",
+            signing_key=SIGNING_KEY,
+            expected_kind="activation_intent",
+            deployment_id=DEPLOYMENT_ID,
+        )
+
+        self.assertEqual(
+            intent_document["target_generation_id"], CURRENT_GENERATION
+        )
+        self.assertEqual(
+            intent_document["previous_generation_id"], TARGET_GENERATION
+        )
+        self.assertEqual(intent_document["activation_mode"], "rollback")
+        self.assertEqual(
+            intent_document["rollback_previous_generation_id"],
+            CURRENT_GENERATION,
+        )
+        self.assertEqual(
+            intent_document["rollback_previous_manifest_digest"],
+            CURRENT_DIGEST,
+        )
+        self.assertEqual(
+            intent.checkpoint["rollback_previous_pointer_digest"],
+            intent_document["rollback_previous_pointer_digest"],
+        )
+
+    def test_scheduling_reauthorizes_previous_pointer_after_capacity_work(self):
+        self._configure_signed_local_candidate_as_active()
+        workspace = prepare_previous_runtime_rollback()
+
+        def change_previous_authority(**kwargs):
+            atomic_write_json(
+                self.paths["previous"],
+                make_pointer(
+                    self.target_runtime,
+                    TARGET_GENERATION,
+                    TARGET_DIGEST,
+                    "concurrent-authority-change",
+                ),
+            )
+            return {
+                "byte_capacity_ok": True,
+                "inode_capacity_ok": True,
+            }
+
+        with patch(
+            "core.artifact_cleanup.capacity_report",
+            side_effect=change_previous_authority,
+        ):
+            with self.assertRaisesMessage(
+                ActivationCoordinatorError,
+                "rollback_authority_changed",
+            ):
+                schedule_activation(
+                    workspace, confirmed=True, rollback=True
+                )
+
+        self.assertFalse(self.paths["intents"].exists())
+
+    def test_rollback_rejects_stale_runtime_observation(self):
+        self._configure_signed_local_candidate_as_active()
+        RuntimePointerObservation.objects.update(pointer_digest="0" * 64)
+
+        with self.assertRaisesMessage(
+            ActivationCoordinatorError,
+            "rollback_pointer_observation_stale",
+        ):
+            prepare_previous_runtime_rollback()
+
+    def test_scheduling_rejects_pointer_change_after_rollback_preparation(self):
+        self._configure_signed_local_candidate_as_active()
+        workspace = prepare_previous_runtime_rollback()
+        changed_active = make_pointer(
+            self.target_runtime,
+            TARGET_GENERATION,
+            TARGET_DIGEST,
+            "changed-active-pointer",
+        )
+        atomic_write_json(self.paths["active"], changed_active)
+
+        with self.assertRaisesMessage(
+            ActivationCoordinatorError,
+            "rollback_authority_changed",
+        ):
+            schedule_activation(
+                workspace, confirmed=True, rollback=True
+            )
+        self.assertFalse(self.paths["intents"].exists())
+
+    def test_consecutive_local_candidates_can_rollback_exactly_one_step(self):
+        self._configure_signed_local_candidate_as_active()
+        self.current_generation.origin = (
+            ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        )
+        self.current_generation.vault_state = (
+            ArtifactGeneration.VaultState.UNKNOWN
+        )
+        self.current_generation.lineage_job_public_id = uuid.uuid4()
+        self.current_generation.parent_generation_id = "older-generation"
+        self.current_generation.parent_manifest_digest = "c" * 64
+        self.current_generation.save(
+            update_fields=[
+                "origin",
+                "vault_state",
+                "lineage_job_public_id",
+                "parent_generation_id",
+                "parent_manifest_digest",
+            ]
+        )
+        workspace = prepare_previous_runtime_rollback()
+
+        intent = schedule_activation(
+            workspace, confirmed=True, rollback=True
+        )
+
+        self.assertEqual(
+            intent.target_generation_id, CURRENT_GENERATION
+        )
+        self.assertEqual(
+            intent.previous_generation_id, TARGET_GENERATION
+        )
+
+    def test_rollback_rejects_non_maintenance_active_runtime(self):
+        self._configure_signed_local_candidate_as_active()
+        self.target_generation.origin = (
+            ArtifactGeneration.Origin.VAULT_GENERATION
+        )
+        self.target_generation.lineage_job_public_id = None
+        self.target_generation.parent_generation_id = ""
+        self.target_generation.parent_manifest_digest = ""
+        self.target_generation.save(
+            update_fields=[
+                "origin",
+                "lineage_job_public_id",
+                "parent_generation_id",
+                "parent_manifest_digest",
+            ]
+        )
+
+        with self.assertRaisesMessage(
+            ActivationCoordinatorError,
+            "rollback_active_generation_ineligible",
+        ):
+            prepare_previous_runtime_rollback()
+
+    def test_rollback_capability_projects_verified_exact_parent(self):
+        self._configure_signed_local_candidate_as_active()
+
+        capability = _rollback_capability()
+
+        self.assertTrue(capability["enabled"])
+        self.assertEqual(capability["reason_code"], "")
+        self.assertEqual(
+            capability["target_generation_id"], CURRENT_GENERATION
+        )
+
+    def test_rollback_capability_reports_bounded_pointer_reasons(self):
+        capability = _rollback_capability()
+        self.assertFalse(capability["enabled"])
+        self.assertEqual(
+            capability["reason_code"], "rollback_pointer_missing"
+        )
+
+        atomic_write_json(self.paths["previous"], {"not": "signed"})
+        capability = _rollback_capability()
+        self.assertEqual(
+            capability["reason_code"], "rollback_pointer_unverified"
+        )
+
+    def test_rollback_capability_reports_unprojected_generation(self):
+        self._configure_signed_local_candidate_as_active()
+        absent_digest = "9" * 64
+        absent_runtime = create_runtime(
+            self.runtime_root, "unprojected-generation", absent_digest
+        )
+        atomic_write_json(
+            self.paths["previous"],
+            make_pointer(
+                absent_runtime,
+                "unprojected-generation",
+                absent_digest,
+                "unprojected-previous",
+            ),
+        )
+
+        self.assertEqual(
+            _rollback_capability()["reason_code"],
+            "rollback_generation_unprojected",
+        )
+
+    def test_rollback_capability_reports_ineligible_lineage_and_staleness(self):
+        self._configure_signed_local_candidate_as_active()
+        self.target_generation.origin = (
+            ArtifactGeneration.Origin.VAULT_GENERATION
+        )
+        self.target_generation.lineage_job_public_id = None
+        self.target_generation.parent_generation_id = ""
+        self.target_generation.parent_manifest_digest = ""
+        self.target_generation.save(
+            update_fields=[
+                "origin",
+                "lineage_job_public_id",
+                "parent_generation_id",
+                "parent_manifest_digest",
+            ]
+        )
+        self.assertEqual(
+            _rollback_capability()["reason_code"],
+            "rollback_active_generation_ineligible",
+        )
+
+        self.target_generation.origin = (
+            ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        )
+        self.target_generation.lineage_job_public_id = uuid.uuid4()
+        self.target_generation.parent_generation_id = CURRENT_GENERATION
+        self.target_generation.parent_manifest_digest = "0" * 64
+        self.target_generation.save(
+            update_fields=[
+                "origin",
+                "lineage_job_public_id",
+                "parent_generation_id",
+                "parent_manifest_digest",
+            ]
+        )
+        self.assertEqual(
+            _rollback_capability()["reason_code"],
+            "rollback_lineage_invalid",
+        )
+
+        self.target_generation.parent_manifest_digest = CURRENT_DIGEST
+        self.target_generation.save(
+            update_fields=["parent_manifest_digest"]
+        )
+        RuntimePointerObservation.objects.update(
+            observed_at=timezone.now()
+            - timedelta(
+                seconds=settings.VAULT_VALIDATION_MAX_AGE_SECONDS + 1
+            )
+        )
+        self.assertEqual(
+            _rollback_capability()["reason_code"],
+            "rollback_pointer_observation_stale",
+        )
+
+    def test_rollback_capability_reports_recovery_auth_and_active_intent(self):
+        self._configure_signed_local_candidate_as_active()
+        with patch(
+            "vaultops.services.read_model."
+            "verify_recovery_superadmin_database",
+            side_effect=RecoveryAuthenticationError,
+        ):
+            self.assertEqual(
+                _rollback_capability()["reason_code"],
+                "activation_recovery_superadmin_unproven",
+            )
+        self.assertEqual(
+            _rollback_capability(
+                pending_activation=SimpleNamespace()
+            )["reason_code"],
+            "runtime_activation_in_progress",
+        )
 
     def test_signed_commit_result_updates_independent_projections(self):
         intent = schedule_activation(self.workspace, confirmed=True)
@@ -573,6 +994,52 @@ class SupervisorProtocolTests(SimpleTestCase):
         )
         return document
 
+    def _replace_with_rollback_intent(self):
+        self.paths["intents"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).unlink()
+        active_document = make_pointer(
+            self.target_runtime,
+            TARGET_GENERATION,
+            TARGET_DIGEST,
+            "active-local-candidate",
+        )
+        atomic_write_json(self.paths["active"], active_document)
+        atomic_write_json(
+            self.paths["previous"], self.current_pointer_document
+        )
+        intent_id = str(uuid.uuid4())
+        document = sign_document(
+            {
+                "schema_version": 1,
+                "kind": "activation_intent",
+                "intent_id": intent_id,
+                "deployment_id": DEPLOYMENT_ID,
+                "target_generation_id": CURRENT_GENERATION,
+                "target_manifest_digest": CURRENT_DIGEST,
+                "target_runtime_path": str(self.current_runtime),
+                "previous_generation_id": TARGET_GENERATION,
+                "previous_pointer_digest": active_document[
+                    "document_digest"
+                ],
+                "activation_mode": "rollback",
+                "rollback_previous_generation_id": CURRENT_GENERATION,
+                "rollback_previous_manifest_digest": CURRENT_DIGEST,
+                "rollback_previous_pointer_digest": (
+                    self.current_pointer_document["document_digest"]
+                ),
+                "smoke_queries_digest": "c" * 64,
+                "expires_at_unix": int(time.time()) + 300,
+                "state_version": 1,
+            },
+            SIGNING_KEY,
+        )
+        atomic_write_json(
+            self.paths["intents"] / f"{intent_id}.json", document
+        )
+        self.intent = document
+        return active_document
+
     def _urlopen(self, request, timeout=5):
         active = read_runtime_pointer(
             self.paths["active"],
@@ -660,7 +1127,271 @@ class SupervisorProtocolTests(SimpleTestCase):
             expected_kind="activation_ack",
             deployment_id=DEPLOYMENT_ID,
         )
+        self.assertEqual(checkpoint["state"], "reconciled")
+
+    def test_transient_projection_failure_is_retried_idempotently(self):
+        maintenance = self._quiesce()
+        reconciliation_calls = {"count": 0}
+
+        def run_command(command, **_kwargs):
+            if "reconcile_activation_result" in command:
+                reconciliation_calls["count"] += 1
+                return SimpleNamespace(
+                    returncode=1
+                    if reconciliation_calls["count"] == 1
+                    else 0
+                )
+            return SimpleNamespace(returncode=0)
+
+        web = self._supervisor(
+            "web",
+            run_command=run_command,
+            maintenance=maintenance,
+        )
+        web.web_tick()
+        checkpoint = web._read_ack(self.intent, "web")
         self.assertEqual(checkpoint["state"], "committed")
+
+        web.web_tick()
+
+        self.assertEqual(reconciliation_calls["count"], 2)
+        self.assertEqual(web._read_ack(self.intent, "web")["state"], "reconciled")
+        self.assertEqual(self._result()["status"], "committed")
+
+    def test_stale_maintenance_ack_cannot_release_barrier(self):
+        stale = sign_document(
+            {
+                "schema_version": 1,
+                "kind": "activation_ack",
+                "deployment_id": DEPLOYMENT_ID,
+                "intent_id": self.intent["intent_id"],
+                "intent_digest": "0" * 64,
+                "role": "maintenance",
+                "state": "quiesced",
+                "process_id": 77,
+                "observed_at_unix": int(time.time()),
+            },
+            SIGNING_KEY,
+        )
+        atomic_write_json(
+            self.paths["acks"]
+            / f"{self.intent['intent_id']}.maintenance.json",
+            stale,
+        )
+        self._supervisor("web").web_tick()
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, CURRENT_GENERATION)
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_restart_resumes_same_intent_before_pointer_switch(self):
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+        first_web._acquire_lock(self.intent)
+
+        restarted_web = self._supervisor("web", maintenance=maintenance)
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_restart_acquires_after_signed_checkpoint_before_lock(self):
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_restart_recovers_legacy_lock_before_signed_checkpoint(self):
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._acquire_lock(self.intent)
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_forward_restart_after_previous_pointer_write_is_idempotent(self):
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+        first_web._acquire_lock(self.intent)
+        atomic_write_json(
+            self.paths["previous"], self.current_pointer_document
+        )
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+        active_after = self.paths["active"].read_bytes()
+        result_after = self.paths["results"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).read_bytes()
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertEqual(self.paths["active"].read_bytes(), active_after)
+        self.assertEqual(
+            self.paths["results"].joinpath(
+                f"{self.intent['intent_id']}.json"
+            ).read_bytes(),
+            result_after,
+        )
+
+    def test_rollback_rechecks_exact_authority_under_acquired_lock(self):
+        active_document = self._replace_with_rollback_intent()
+        maintenance = self._quiesce()
+        web = self._supervisor("web", maintenance=maintenance)
+        acquire = web._acquire_or_resume_pre_cutover_lock
+
+        def acquire_then_change_previous(intent):
+            resumed = acquire(intent)
+            atomic_write_json(
+                self.paths["previous"],
+                active_document,
+            )
+            return resumed
+
+        web._acquire_or_resume_pre_cutover_lock = (
+            acquire_then_change_previous
+        )
+        web.web_tick()
+
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, TARGET_GENERATION)
+        self.assertEqual(
+            self._result()["safe_error_code"],
+            "rollback_previous_pointer_changed",
+        )
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_rollback_restart_after_previous_write_completes_once(self):
+        active_document = self._replace_with_rollback_intent()
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+        first_web._acquire_lock(self.intent)
+        atomic_write_json(self.paths["previous"], active_document)
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+        active_after = self.paths["active"].read_bytes()
+        previous_after = self.paths["previous"].read_bytes()
+        result_after = self.paths["results"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).read_bytes()
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        previous = read_runtime_pointer(
+            self.paths["previous"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, CURRENT_GENERATION)
+        self.assertEqual(previous.generation_id, TARGET_GENERATION)
+        self.assertEqual(self.paths["active"].read_bytes(), active_after)
+        self.assertEqual(
+            self.paths["previous"].read_bytes(), previous_after
+        )
+        self.assertEqual(
+            self.paths["results"].joinpath(
+                f"{self.intent['intent_id']}.json"
+            ).read_bytes(),
+            result_after,
+        )
+
+    def test_rollback_restart_after_active_write_recovers_once(self):
+        active_document = self._replace_with_rollback_intent()
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+        first_web._acquire_lock(self.intent)
+        atomic_write_json(self.paths["previous"], active_document)
+        atomic_write_json(
+            self.paths["active"],
+            make_pointer(
+                self.current_runtime,
+                CURRENT_GENERATION,
+                CURRENT_DIGEST,
+                self.intent["document_digest"],
+            ),
+        )
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+        active_after = self.paths["active"].read_bytes()
+        result_after = self.paths["results"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).read_bytes()
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "rolled_back")
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, TARGET_GENERATION)
+        self.assertEqual(self.paths["active"].read_bytes(), active_after)
+        self.assertEqual(
+            self.paths["results"].joinpath(
+                f"{self.intent['intent_id']}.json"
+            ).read_bytes(),
+            result_after,
+        )
+
+    def test_committed_intent_replay_is_idempotent(self):
+        maintenance = self._quiesce()
+        web = self._supervisor("web", maintenance=maintenance)
+        web.web_tick()
+        pointer_before = self.paths["active"].read_bytes()
+        result_before = self.paths["results"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).read_bytes()
+
+        self._supervisor("web", maintenance=maintenance).web_tick()
+
+        self.assertEqual(self.paths["active"].read_bytes(), pointer_before)
+        self.assertEqual(
+            self.paths["results"].joinpath(
+                f"{self.intent['intent_id']}.json"
+            ).read_bytes(),
+            result_before,
+        )
 
     def test_failed_prestart_verification_rolls_back_and_verifies(self):
         maintenance = self._quiesce()
@@ -801,6 +1532,84 @@ class SupervisorProtocolTests(SimpleTestCase):
         self.assertEqual(
             self._result()["safe_error_code"],
             "production_activation_disabled",
+        )
+
+    def test_rollback_supervisor_rejects_changed_previous_pointer(self):
+        self.paths["intents"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).unlink()
+        active_document = make_pointer(
+            self.target_runtime,
+            TARGET_GENERATION,
+            TARGET_DIGEST,
+            "active-local-candidate",
+        )
+        atomic_write_json(self.paths["active"], active_document)
+        atomic_write_json(
+            self.paths["previous"], self.current_pointer_document
+        )
+        rollback_id = str(uuid.uuid4())
+        rollback_intent = sign_document(
+            {
+                "schema_version": 1,
+                "kind": "activation_intent",
+                "intent_id": rollback_id,
+                "deployment_id": DEPLOYMENT_ID,
+                "target_generation_id": CURRENT_GENERATION,
+                "target_manifest_digest": CURRENT_DIGEST,
+                "target_runtime_path": str(self.current_runtime),
+                "previous_generation_id": TARGET_GENERATION,
+                "previous_pointer_digest": active_document[
+                    "document_digest"
+                ],
+                "activation_mode": "rollback",
+                "rollback_previous_generation_id": CURRENT_GENERATION,
+                "rollback_previous_manifest_digest": CURRENT_DIGEST,
+                "rollback_previous_pointer_digest": (
+                    self.current_pointer_document["document_digest"]
+                ),
+                "smoke_queries_digest": "c" * 64,
+                "expires_at_unix": int(time.time()) + 300,
+                "state_version": 1,
+            },
+            SIGNING_KEY,
+        )
+        atomic_write_json(
+            self.paths["intents"] / f"{rollback_id}.json",
+            rollback_intent,
+        )
+        atomic_write_json(
+            self.paths["previous"],
+            make_pointer(
+                self.target_runtime,
+                TARGET_GENERATION,
+                TARGET_DIGEST,
+                "changed-previous-authority",
+            ),
+        )
+        web = self._supervisor("web")
+        web.stop_child = lambda timeout=30: self.fail(
+            "invalid rollback stopped the application"
+        )
+
+        web.web_tick()
+
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        result = read_signed_document(
+            self.paths["results"] / f"{rollback_id}.json",
+            signing_key=SIGNING_KEY,
+            expected_kind="activation_result",
+            deployment_id=DEPLOYMENT_ID,
+        )
+        self.assertEqual(active.generation_id, TARGET_GENERATION)
+        self.assertEqual(
+            result["safe_error_code"],
+            "rollback_previous_pointer_changed",
         )
 
 

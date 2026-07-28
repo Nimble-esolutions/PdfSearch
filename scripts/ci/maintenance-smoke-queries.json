@@ -1,0 +1,14 @@
+{
+  "queries": [
+    {
+      "locale": "en",
+      "query": "cooperative audit evidence",
+      "allow_empty": false
+    },
+    {
+      "locale": "mr",
+      "query": "सहकारी लेखापरीक्षण पुरावा",
+      "allow_empty": false
+    }
+  ]
+}

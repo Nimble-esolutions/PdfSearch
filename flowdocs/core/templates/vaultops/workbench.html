@@ -591,6 +591,21 @@
         {% endfor %}
       </div>
     </section>
+
+    <section class="vault-panel" aria-labelledby="signed-rollback-heading">
+      <header><p>{% trans "Signed runtime control" %}</p><h3 id="signed-rollback-heading">{% trans "Roll back the latest maintenance activation" %}</h3></header>
+      <p class="vault-note">{% trans "This deliberately restores the exact signed previous runtime only when the active runtime is its verified local-maintenance child. Vault authority is not changed." %}</p>
+      <form method="post" action="{% url 'vaultops:rollback_confirmation_issue' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:signed-rollback">
+        <button class="vault-button vault-button--danger" type="submit"{% if not state.rollback_capability.enabled %} disabled aria-describedby="signed-rollback-reason"{% endif %}>{% trans "Review signed rollback" %}</button>
+      </form>
+      {% if not state.rollback_capability.enabled %}
+      <p id="signed-rollback-reason" class="vault-note"><code>{{ state.rollback_capability.reason_code }}</code></p>
+      {% else %}
+      <p class="vault-note">{% trans "Verified previous runtime:" %} <code>{{ state.rollback_capability.target_generation_id }}</code></p>
+      {% endif %}
+    </section>
   </div>
   {% endif %}
 

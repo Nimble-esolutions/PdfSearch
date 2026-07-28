@@ -33,7 +33,9 @@ from vaultops.models import (
 )
 from vaultops.services.activation import (
     activation_request_replay,
+    prepare_previous_runtime_rollback,
     schedule_activation,
+    validate_previous_runtime_rollback,
 )
 from vaultops.services.audit import append_event
 from vaultops.services.confirmations import (
@@ -893,7 +895,7 @@ def _confirmation_target(action, target):
         ):
             raise WorkbenchRequestError("generation_not_retired")
         return generation_state_digest(generation)
-    if action == "activate_workspace":
+    if action in {"activate_workspace", "rollback_runtime"}:
         workspace = get_object_or_404(
             RestoreWorkspace.objects.select_related("generation"),
             public_id=target,
@@ -904,6 +906,12 @@ def _confirmation_target(action, target):
             raise WorkbenchRequestError(
                 "production_activation_disabled", status_code=409
             )
+        if (
+            action == "rollback_runtime"
+            and workspace.validation_evidence.get("purpose")
+            != "one_step_runtime_rollback"
+        ):
+            raise WorkbenchRequestError("rollback_workspace_invalid")
         return workspace_state_digest(workspace)
     raise WorkbenchRequestError("confirmation_action_invalid")
 
@@ -924,6 +932,10 @@ def _confirmation_submit_url(action, target):
         ),
         "activate_workspace": (
             "vaultops:schedule_activation",
+            {"workspace_id": target},
+        ),
+        "rollback_runtime": (
+            "vaultops:schedule_rollback",
             {"workspace_id": target},
         ),
     }
@@ -1286,69 +1298,161 @@ def gc_plan_execute(request, plan_id):
 
 @superadmin_required
 @require_POST
-def schedule_activation_view(request, workspace_id):
+def rollback_confirmation_issue(request):
     try:
-        idempotency_key = _request_idempotency_key(request)
-        workspace = get_object_or_404(
-            RestoreWorkspace.objects.select_related("generation"),
-            public_id=workspace_id,
-        )
+        _request_idempotency_key(request)
+        workspace = prepare_previous_runtime_rollback()
+        target = str(workspace.public_id)
         digest = workspace_state_digest(workspace)
-        replay = activation_request_replay(
-            deployment_id=settings.ENV_IDENTITY.deployment_id,
-            idempotency_key=idempotency_key,
-            workspace=workspace,
-            request_state_digest=digest,
-        )
-        if replay:
-            return _mutation_success(
-                request,
-                section="restore",
-                reason_code="activation_scheduled",
-                message=f"Activation intent {replay.public_id} scheduled.",
-                data={"activation_intent_id": str(replay.public_id)},
-            )
-        validate_confirmation(
-            challenge_id=_request_value(request, "challenge_id", ""),
+        challenge, phrase = issue_confirmation(
             actor_id=request.user.pk,
-            action="activate_workspace",
+            action="rollback_runtime",
+            target=target,
+            state_digest=digest,
+        )
+        append_event(
+            action="runtime_rollback_prepared",
+            result="succeeded",
+            correlation_id=uuid.uuid4(),
+            actor_id=request.user.pk,
+            actor_name=request.user.get_username(),
+            evidence={
+                "workspace_id": target,
+                "target_generation_id": workspace.generation.generation_id,
+                "vault_authority_changed": False,
+            },
+        )
+        return render(
+            request,
+            "vaultops/confirmation.html",
+            {
+                "challenge": challenge,
+                "phrase": phrase,
+                "action": "rollback_runtime",
+                "target": target,
+                "state_digest": digest,
+                "idempotency_key": str(uuid.uuid4()),
+                "submit_url": reverse(
+                    "vaultops:schedule_rollback",
+                    kwargs={"workspace_id": workspace.public_id},
+                ),
+                "breadcrumb_items": [
+                    {"label": "Dashboard", "url": reverse("dashboard")},
+                    {
+                        "label": "Operations",
+                        "url": reverse("operations_panel"),
+                    },
+                    {"label": "Signed rollback", "url": None},
+                ],
+            },
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="restore")
+
+
+def _schedule_workspace_activation(
+    request, workspace_id, *, confirmation_action, reason_code
+):
+    idempotency_key = _request_idempotency_key(request)
+    workspace = get_object_or_404(
+        RestoreWorkspace.objects.select_related("generation"),
+        public_id=workspace_id,
+    )
+    if (
+        confirmation_action == "rollback_runtime"
+        and workspace.validation_evidence.get("purpose")
+        != "one_step_runtime_rollback"
+    ):
+        raise WorkbenchRequestError("rollback_workspace_invalid")
+    if confirmation_action == "rollback_runtime":
+        validate_previous_runtime_rollback(workspace)
+    digest = workspace_state_digest(workspace)
+    replay = activation_request_replay(
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        idempotency_key=idempotency_key,
+        workspace=workspace,
+        request_state_digest=digest,
+    )
+    if replay:
+        return replay
+    validate_confirmation(
+        challenge_id=_request_value(request, "challenge_id", ""),
+        actor_id=request.user.pk,
+        action=confirmation_action,
+        target=str(workspace.public_id),
+        state_digest=digest,
+        phrase=_request_value(request, "confirmation_phrase", ""),
+    )
+    recovery_set = create_recovery_set("pre-activation")
+    with transaction.atomic(using="control"):
+        digest = workspace_state_digest(workspace)
+        _consume(
+            request,
+            action=confirmation_action,
             target=str(workspace.public_id),
             state_digest=digest,
-            phrase=_request_value(request, "confirmation_phrase", ""),
         )
-        recovery_set = create_recovery_set("pre-activation")
-        with transaction.atomic(using="control"):
-            digest = workspace_state_digest(workspace)
-            _consume(
-                request,
-                action="activate_workspace",
-                target=str(workspace.public_id),
-                state_digest=digest,
-            )
-            intent = schedule_activation(
-                workspace,
-                actor_id=request.user.pk,
-                actor_name=request.user.get_username(),
-                confirmed=True,
-                idempotency_key=idempotency_key,
-                request_state_digest=digest,
-            )
-            append_event(
-                action="activation_recovery_set_verified",
-                result="verified",
-                correlation_id=uuid.uuid4(),
-                actor_id=request.user.pk,
-                actor_name=request.user.get_username(),
-                evidence={
-                    "workspace_id": str(workspace.public_id),
-                    "recovery_set_id": recovery_set["set_id"],
-                },
-            )
+        intent = schedule_activation(
+            workspace,
+            actor_id=request.user.pk,
+            actor_name=request.user.get_username(),
+            confirmed=True,
+            idempotency_key=idempotency_key,
+            request_state_digest=digest,
+            rollback=confirmation_action == "rollback_runtime",
+            recovery_set_id=recovery_set["set_id"],
+        )
+        append_event(
+            action=f"{reason_code}_recovery_set_verified",
+            result="verified",
+            correlation_id=uuid.uuid4(),
+            actor_id=request.user.pk,
+            actor_name=request.user.get_username(),
+            evidence={
+                "workspace_id": str(workspace.public_id),
+                "recovery_set_id": recovery_set["set_id"],
+                "vault_authority_changed": False,
+            },
+        )
+    return intent
+
+
+@superadmin_required
+@require_POST
+def schedule_activation_view(request, workspace_id):
+    try:
+        intent = _schedule_workspace_activation(
+            request,
+            workspace_id,
+            confirmation_action="activate_workspace",
+            reason_code="activation",
+        )
         return _mutation_success(
             request,
             section="restore",
             reason_code="activation_scheduled",
             message=f"Activation intent {intent.public_id} scheduled.",
+            data={"activation_intent_id": str(intent.public_id)},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="restore")
+
+
+@superadmin_required
+@require_POST
+def schedule_rollback_view(request, workspace_id):
+    try:
+        intent = _schedule_workspace_activation(
+            request,
+            workspace_id,
+            confirmation_action="rollback_runtime",
+            reason_code="runtime_rollback",
+        )
+        return _mutation_success(
+            request,
+            section="restore",
+            reason_code="runtime_rollback_scheduled",
+            message=f"Signed rollback intent {intent.public_id} scheduled.",
             data={"activation_intent_id": str(intent.public_id)},
         )
     except Exception as exc:

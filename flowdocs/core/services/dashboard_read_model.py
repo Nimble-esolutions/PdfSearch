@@ -106,18 +106,15 @@ def _category_queryset(user, filters):
     return folders.order_by(*ordering)
 
 
-def _attention_items(*, needs_index, unknown_uploaders, empty_folders, jobs):
+def _attention_items(
+    *, needs_index, unknown_uploaders, empty_folders, jobs, failed_job_count
+):
     items = []
-    failed_jobs = [job for job in jobs if job.status == "failed"]
-    active_jobs = [
-        job for job in jobs
-        if job.status in {"queued", "running", "cancel_requested"}
-    ]
-    if failed_jobs:
+    if failed_job_count:
         items.append({
             "severity": "danger",
             "reason_code": "maintenance_job_failed",
-            "count": len(failed_jobs),
+            "count": failed_job_count,
             "title": gettext("Maintenance work needs review"),
             "detail": gettext("A local maintenance job failed."),
             "action_label": gettext("Review jobs"),
@@ -145,11 +142,11 @@ def _attention_items(*, needs_index, unknown_uploaders, empty_folders, jobs):
             "action_label": gettext("Review categories"),
             "action_url": f"{reverse('dashboard')}?provenance=unknown",
         })
-    if active_jobs:
+    if jobs:
         items.append({
             "severity": "info",
             "reason_code": "maintenance_in_progress",
-            "count": len(active_jobs),
+            "count": len(jobs),
             "title": gettext("Maintenance is in progress"),
             "detail": gettext("The active runtime remains unchanged while work runs."),
             "action_label": gettext("View active work"),
@@ -196,17 +193,35 @@ def build_dashboard_state(*, user, data):
     empty_folders = max(folder_count - folders_with_documents, 0)
 
     is_superadmin = getattr(user, "role", None) == "superadmin"
-    jobs = list(
-        MaintenanceJob.objects.select_related("requested_by")
-        .filter(kind__in=LOCAL_MAINTENANCE_JOB_KINDS)
-        .order_by("-created_at")[:ACTIVE_JOB_LIMIT]
-    ) if is_superadmin else []
+    if is_superadmin:
+        jobs = list(
+            MaintenanceJob.objects.select_related("requested_by")
+            .filter(
+                kind__in=LOCAL_MAINTENANCE_JOB_KINDS,
+                status__in={"queued", "running", "cancel_requested"},
+            )
+            .order_by("-updated_at", "-pk")[:ACTIVE_JOB_LIMIT]
+        )
+        failed_job_count = MaintenanceJob.objects.filter(
+            kind__in=LOCAL_MAINTENANCE_JOB_KINDS,
+            status="failed",
+        ).count()
+        from vaultops.services.read_model import (
+            build_dashboard_authority_summary,
+        )
+
+        vault_posture = build_dashboard_authority_summary()
+    else:
+        jobs = []
+        failed_job_count = 0
+        vault_posture = None
     needs_index = max(total_pdfs - indexed_pdfs, 0)
     attention = _attention_items(
         needs_index=needs_index,
         unknown_uploaders=unknown_uploaders,
         empty_folders=empty_folders,
         jobs=jobs,
+        failed_job_count=failed_job_count,
     )
     if attention:
         posture = {
@@ -235,6 +250,7 @@ def build_dashboard_state(*, user, data):
         "unknown_uploaders": unknown_uploaders,
         "recent_pdfs": list(pdfs.order_by("-uploaded_at", "-pk")[:RECENT_INTAKE_LIMIT]),
         "maintenance_jobs": jobs,
+        "vault_posture": vault_posture,
         "attention_items": attention,
         "category_page": page,
         "category_result_count": paginator.count,

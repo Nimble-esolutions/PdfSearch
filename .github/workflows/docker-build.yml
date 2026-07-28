@@ -98,8 +98,18 @@ jobs:
       - name: Compile Python source
         run: python3 -m compileall -q flowdocs
 
+      - name: Install documentation validation tools
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+        run: |
+          npm ci --legacy-peer-deps
+          npx playwright install --with-deps chromium
+          echo "PUPPETEER_EXECUTABLE_PATH=$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')" >> "$GITHUB_ENV"
+
       - name: Validate active operator documentation
-        run: python3 scripts/ci/docs_contract.py
+        run: |
+          python3 -m unittest scripts.ci.test_docs_contract
+          python3 scripts/ci/docs_contract.py
 
       - name: Validate Dockerfile
         run: docker build --check -f Dockerfile .
@@ -147,7 +157,7 @@ jobs:
 
       - name: Install browser gate dependencies
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npx playwright install --with-deps chromium
 
       - name: Resolve immutable Redis smoke image

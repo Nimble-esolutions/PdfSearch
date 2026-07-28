@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from django.conf import settings
+from django.db.models import Q
+from django.utils import timezone as django_timezone
 
 MAX_APPLY_BYTES = 20 * 1024**3
 
@@ -23,7 +25,13 @@ class CleanupError(RuntimeError):
 def _tree_bytes(path: Path) -> int:
     if path.is_file():
         return path.stat().st_size
-    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
+    total = 0
+    for item in path.rglob("*"):
+        if item.is_symlink():
+            raise CleanupError("unsafe_cleanup_inventory_path", str(item))
+        if item.is_file():
+            total += item.stat().st_size
+    return total
 
 
 def _manifest(path: Path, names: tuple[str, ...]) -> dict:
@@ -31,57 +39,166 @@ def _manifest(path: Path, names: tuple[str, ...]) -> dict:
         candidate = path / name
         if candidate.is_file():
             try:
-                return json.loads(candidate.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                return {}
+                manifest = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, ValueError) as exc:
+                raise CleanupError("cleanup_inventory_unavailable") from exc
+            if not isinstance(manifest, dict):
+                raise CleanupError("cleanup_inventory_unavailable")
+            return manifest
     return {}
 
 
 def _records(root: Path, category: str, manifests=()) -> list[dict]:
-    if not root.is_dir():
-        return []
-    records = []
-    for path in root.iterdir():
-        if path.name.startswith(".") or path.is_symlink():
-            continue
-        manifest = _manifest(path, tuple(manifests))
-        raw_created = manifest.get("created_at")
-        try:
-            created = datetime.fromisoformat(raw_created) if raw_created else None
-        except ValueError:
-            created = None
-        created = created or datetime.fromtimestamp(
-            path.stat().st_mtime, tz=timezone.utc
-        )
-        records.append(
-            {
-                "category": category,
-                "path": str(path.resolve()),
-                "name": path.name,
-                "bytes": _tree_bytes(path),
-                "created_at": created.isoformat(),
-                "state": manifest.get("state", "unknown"),
-                "manifest": manifest,
-            }
-        )
-    return records
-
-
-def _runtime_protections() -> set[str]:
-    protected = set()
     try:
-        from vaultops.models import RuntimePointerObservation
+        if not root.is_dir():
+            return []
+        records = []
+        for path in root.iterdir():
+            if path.name.startswith(".") or path.is_symlink():
+                continue
+            manifest = _manifest(path, tuple(manifests))
+            raw_created = manifest.get("created_at")
+            try:
+                created = (
+                    datetime.fromisoformat(raw_created)
+                    if raw_created
+                    else None
+                )
+            except ValueError:
+                created = None
+            created = created or datetime.fromtimestamp(
+                path.stat().st_mtime, tz=timezone.utc
+            )
+            records.append(
+                {
+                    "category": category,
+                    "path": str(path.resolve()),
+                    "name": path.name,
+                    "bytes": _tree_bytes(path),
+                    "created_at": created.isoformat(),
+                    "state": manifest.get("state", "unknown"),
+                    "manifest": manifest,
+                }
+            )
+        return records
+    except OSError as exc:
+        raise CleanupError("cleanup_inventory_unavailable") from exc
+
+
+def _runtime_protections() -> dict:
+    generation_reasons = {}
+    runtime_path_reasons = {}
+    job_public_ids = set()
+
+    def protect_generation(generation_id, reason):
+        if generation_id:
+            generation_reasons.setdefault(generation_id, set()).add(reason)
+
+    def protect_runtime_path(runtime_path, reason):
+        if runtime_path:
+            resolved = str(Path(runtime_path).resolve())
+            runtime_path_reasons.setdefault(resolved, set()).add(reason)
+
+    try:
+        from core.models import MaintenanceJob
+        from vaultops.models import (
+            ActivationIntent,
+            ArtifactGeneration,
+            RestoreWorkspace,
+            RetentionHold,
+            RuntimePointerObservation,
+        )
 
         pointer = RuntimePointerObservation.objects.filter(
             deployment_id=settings.ENV_IDENTITY.deployment_id
         ).order_by("-observed_at").first()
         for key in ("active_generation_id", "previous_generation_id"):
             value = getattr(pointer, key, "") if pointer else ""
-            if value:
-                protected.add(value)
-    except Exception:
-        pass
-    return protected
+            protect_generation(value, "active_or_previous_runtime")
+
+        protected_states = {
+            ArtifactGeneration.RuntimeState.PENDING,
+            ArtifactGeneration.RuntimeState.APPLYING,
+            ArtifactGeneration.RuntimeState.ACTIVE,
+            ArtifactGeneration.RuntimeState.PREVIOUS,
+            ArtifactGeneration.RuntimeState.ROLLBACK_PENDING,
+        }
+        for generation_id, runtime_state in ArtifactGeneration.objects.filter(
+            runtime_state__in=protected_states
+        ).values_list("generation_id", "runtime_state"):
+            reason = (
+                "active_or_previous_runtime"
+                if runtime_state
+                in {
+                    ArtifactGeneration.RuntimeState.ACTIVE,
+                    ArtifactGeneration.RuntimeState.PREVIOUS,
+                }
+                else "activation_reference"
+            )
+            protect_generation(generation_id, reason)
+        for generation_id in RetentionHold.objects.filter(
+            released_at__isnull=True
+        ).values_list("generation__generation_id", flat=True):
+            protect_generation(generation_id, "incident_hold")
+        live_workspace_states = {
+            RestoreWorkspace.State.PLANNED,
+            RestoreWorkspace.State.DOWNLOADING,
+            RestoreWorkspace.State.DOWNLOAD_PAUSED,
+            RestoreWorkspace.State.DOWNLOADED,
+            RestoreWorkspace.State.VALIDATING,
+            RestoreWorkspace.State.SANITIZING,
+            RestoreWorkspace.State.MIGRATION_REHEARSAL,
+        }
+        current_time = django_timezone.now()
+        live_workspaces = RestoreWorkspace.objects.filter(
+            Q(state__in=live_workspace_states)
+            | Q(
+                state=RestoreWorkspace.State.ACTIVATION_READY,
+                expires_at__gt=current_time,
+            )
+            | Q(
+                state=RestoreWorkspace.State.ACTIVATION_READY,
+                expires_at__isnull=True,
+            )
+        )
+        for generation_id, runtime_path in live_workspaces.values_list(
+            "generation__generation_id", "runtime_path"
+        ):
+            protect_generation(generation_id, "workspace_reference")
+            protect_runtime_path(runtime_path, "workspace_reference")
+
+        live_intent_states = {
+            ActivationIntent.State.PENDING,
+            ActivationIntent.State.APPLYING,
+        }
+        for target, previous in ActivationIntent.objects.filter(
+            state__in=live_intent_states,
+            expires_at__gt=current_time,
+        ).values_list("target_generation_id", "previous_generation_id"):
+            for value in (target, previous):
+                protect_generation(value, "activation_reference")
+
+        live_jobs = MaintenanceJob.objects.filter(
+            status__in={"queued", "running", "paused", "cancel_requested"}
+        )
+        checkpointed_jobs = MaintenanceJob.objects.filter(
+            status="failed", completed_items__gt=0
+        )
+        job_ids = set(
+            live_jobs.values_list("public_id", flat=True)
+        ) | set(checkpointed_jobs.values_list("public_id", flat=True))
+        job_public_ids.update(str(job_id) for job_id in job_ids)
+        for generation_id in ArtifactGeneration.objects.filter(
+            lineage_job_public_id__in=job_ids
+        ).values_list("generation_id", flat=True):
+            protect_generation(generation_id, "current_or_checkpointed_job")
+    except Exception as exc:
+        raise CleanupError("cleanup_protection_state_unavailable") from exc
+    return {
+        "generation_reasons": generation_reasons,
+        "runtime_path_reasons": runtime_path_reasons,
+        "job_public_ids": job_public_ids,
+    }
 
 
 def inventory_local_artifacts() -> list[dict]:
@@ -107,7 +224,11 @@ def inventory_local_artifacts() -> list[dict]:
     records += _records(
         Path(settings.RUNTIME_GENERATIONS_ROOT),
         "runtime_generation",
-        ("runtime-manifest.json", "manifest.json"),
+        (
+            "local-generation-manifest.json",
+            "runtime-manifest.json",
+            "manifest.json",
+        ),
     )
     protected_runtime = _runtime_protections()
     for record in records:
@@ -117,20 +238,32 @@ def inventory_local_artifacts() -> list[dict]:
             reasons.append("incident_hold")
         if record["category"] == "runtime_generation":
             generation = manifest.get("generation_id", record["name"])
-            if generation in protected_runtime:
-                reasons.append("active_or_previous_runtime")
+            reasons.extend(
+                sorted(
+                    protected_runtime["generation_reasons"].get(
+                        generation, set()
+                    )
+                    | protected_runtime["runtime_path_reasons"].get(
+                        record["path"], set()
+                    )
+                )
+            )
+            maintenance_job = manifest.get("maintenance", {}).get(
+                "job_public_id", ""
+            )
+            if maintenance_job in protected_runtime["job_public_ids"]:
+                reasons.append("current_or_checkpointed_job")
             if manifest.get("runtime_state") in {"active", "previous"}:
                 reasons.append("active_or_previous_runtime")
-        if (
-            record["category"] == "maintenance_workspace"
-            and manifest.get("state") == "activation_ready"
-        ):
-            reasons.append("maintenance_candidate")
+        if record["category"] == "maintenance_workspace":
+            maintenance_job = manifest.get("source", {}).get("job_id", "")
+            if maintenance_job in protected_runtime["job_public_ids"]:
+                reasons.append("current_or_checkpointed_job")
         if manifest.get("activation_reference"):
             reasons.append("activation_reference")
         if manifest.get("resumable_checkpoint"):
             reasons.append("resumable_checkpoint")
-        record["protection_reasons"] = reasons
+        record["protection_reasons"] = list(dict.fromkeys(reasons))
     return records
 
 
@@ -164,16 +297,47 @@ def cleanup_plan(now: datetime | None = None) -> dict:
             and age > timedelta(hours=24)
         ):
             reason = "verified_source_snapshot_grace_elapsed"
+        elif (
+            category == "runtime_generation"
+            and record["manifest"].get("origin") == "local_maintenance"
+            and record["manifest"].get("vault_authority", {}).get("state")
+            == "unpublished"
+            and age > timedelta(days=7)
+        ):
+            reason = "unactivated_local_runtime_expired"
         elif category == "runtime_generation":
             retained.append(record)
             continue
         if reason:
-            candidates.append({**record, "reason_code": reason})
+            relationship_basis = hashlib.sha256(
+                json.dumps(
+                    {
+                        "category": record["category"],
+                        "manifest": record["manifest"],
+                        "name": record["name"],
+                        "protection_reasons": record["protection_reasons"],
+                    },
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            candidates.append(
+                {
+                    **record,
+                    "reason_code": reason,
+                    "relationship_basis": relationship_basis,
+                }
+            )
         else:
             retained.append(record)
     basis = {
         "candidates": [
-            (item["category"], item["path"], item["bytes"], item["reason_code"])
+            (
+                item["category"],
+                item["path"],
+                item["bytes"],
+                item["reason_code"],
+                item["relationship_basis"],
+            )
             for item in candidates
         ],
         "protected": [
@@ -219,6 +383,28 @@ def apply_cleanup(plan_id: str) -> dict:
     }
     removed = []
     for item in plan["candidates"]:
+        fresh_plan = cleanup_plan()
+        if not fresh_plan["apply_allowed"]:
+            raise CleanupError("cleanup_exceeds_20_gib_approval_boundary")
+        fresh_item = next(
+            (
+                candidate
+                for candidate in fresh_plan["candidates"]
+                if candidate["path"] == item["path"]
+            ),
+            None,
+        )
+        comparison_fields = (
+            "category",
+            "path",
+            "bytes",
+            "reason_code",
+            "relationship_basis",
+        )
+        if fresh_item is None or any(
+            fresh_item[field] != item[field] for field in comparison_fields
+        ):
+            raise CleanupError("stale_cleanup_plan")
         path = Path(item["path"])
         if path.is_symlink() or path.parent.resolve() not in allowed_roots:
             raise CleanupError("unsafe_cleanup_path", str(path))

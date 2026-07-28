@@ -69,6 +69,14 @@ confirmation bound to the observed state. Restore downloads into quarantine
 and prepares an immutable runtime workspace; it never activates automatically.
 Production activation and garbage collection remain hard-disabled.
 
+The signed rollback control is always visible in the Restore section. It is
+enabled only when the current signed runtime is a verified local-maintenance
+child of the exact signed previous runtime. A disabled control shows a typed
+reason, such as a missing or unverified pointer, stale runtime observation,
+invalid lineage, unavailable recovery login, or activation already in
+progress. Rollback schedules the same signed supervisor protocol as activation
+and does not change remote Vault authority.
+
 All critical Workbench actions are ordinary server-rendered forms and remain
 available without JavaScript. Refresh the page to update evidence when
 JavaScript is disabled. The browser receives only redacted profile and lease

@@ -1732,3 +1732,23 @@ msgstr ""
 msgid ""
 "Sorry, the requested information was not found in the available documents."
 msgstr ""
+
+#: core/templates/vaultops/workbench.html
+msgid "Signed runtime control"
+msgstr ""
+
+#: core/templates/vaultops/workbench.html
+msgid "Roll back the latest maintenance activation"
+msgstr ""
+
+#: core/templates/vaultops/workbench.html
+msgid "This deliberately restores the exact signed previous runtime only when the active runtime is its verified local-maintenance child. Vault authority is not changed."
+msgstr ""
+
+#: core/templates/vaultops/workbench.html
+msgid "Review signed rollback"
+msgstr ""
+
+#: core/templates/vaultops/workbench.html
+msgid "Verified previous runtime:"
+msgstr ""

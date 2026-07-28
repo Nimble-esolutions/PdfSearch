@@ -3,12 +3,13 @@ import json
 import sqlite3
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, override_settings
+from django.conf import settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from core.artifact_cleanup import (
     CleanupError,
@@ -21,6 +22,7 @@ from core.candidate_maintenance import (
     create_workspace,
     validate_candidate,
 )
+from core.maintenance_plans import workbench_maintenance_state
 
 
 class _Values:
@@ -101,14 +103,41 @@ class CandidateWorkspaceTests(SimpleTestCase):
             options={"recovery_set_id": "rs-test"},
             items=_Values([1], [7]),
         )
-        with patch(
-            "core.candidate_maintenance.capacity_report",
-            return_value={
-                "byte_capacity_ok": True,
-                "inode_capacity_ok": True,
-            },
+        barrier = SimpleNamespace(current_epoch=7)
+        with (
+            patch(
+                "core.candidate_maintenance.capacity_report",
+                return_value={
+                    "byte_capacity_ok": True,
+                    "inode_capacity_ok": True,
+                },
+            ),
+            patch(
+                "vaultops.services.mutations.request_barrier",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.assert_barrier_owner",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.release_barrier",
+                return_value=True,
+            ),
         ):
             workspace = create_workspace(job)
+        manifest = json.loads(
+            (workspace / WORKSPACE_MANIFEST).read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["source"]["mutation_epoch"], 7)
+        self.assertEqual(
+            manifest["source"]["database_sha256"],
+            hashlib.sha256((workspace / "db.sqlite3").read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            set(manifest["source"]["source_trees"]),
+            {"media", "faiss", "chroma"},
+        )
         candidate = sqlite3.connect(workspace / "db.sqlite3")
         candidate.execute(
             "UPDATE core_pdffile SET lifecycle='processing' WHERE id=1"
@@ -123,6 +152,152 @@ class CandidateWorkspaceTests(SimpleTestCase):
             hashlib.sha256((workspace / "db.sqlite3").read_bytes()).hexdigest(),
             before,
         )
+        self.assertEqual(manifest["source"]["runtime_generation_id"], "source-runtime")
+        self.assertRegex(manifest["source"]["parent_tree"]["sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(manifest["source"]["snapshot"]["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_workspace_rejects_pointer_change_during_snapshot(self):
+        job = SimpleNamespace(
+            public_id=uuid.uuid4(),
+            kind="reindex_selected",
+            options={"recovery_set_id": "rs-test"},
+            items=_Values([1], [7]),
+        )
+        first = SimpleNamespace(
+            generation_id="source-runtime",
+            manifest_digest="source-manifest",
+            pointer_digest="1" * 64,
+            runtime_path=str(self.data),
+        )
+        second = SimpleNamespace(**{**first.__dict__, "pointer_digest": "2" * 64})
+        barrier = SimpleNamespace(current_epoch=0)
+        with (
+            patch("core.candidate_maintenance.capacity_report", return_value={
+                "byte_capacity_ok": True, "inode_capacity_ok": True,
+            }),
+            patch(
+                "core.candidate_maintenance._maintenance_source_parent",
+                side_effect=[first, second],
+            ),
+            patch(
+                "vaultops.services.mutations.request_barrier",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.assert_barrier_owner",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.release_barrier",
+                return_value=True,
+            ),
+            self.assertRaises(CandidateMaintenanceError) as raised,
+        ):
+            create_workspace(job)
+        self.assertEqual(
+            raised.exception.reason_code, "maintenance_source_authority_changed"
+        )
+        self.assertFalse(any(self.control.glob("maintenance-workspaces/mw-*")))
+
+    def test_workspace_rejects_parent_byte_change_during_snapshot(self):
+        job = SimpleNamespace(
+            public_id=uuid.uuid4(),
+            kind="reindex_selected",
+            options={"recovery_set_id": "rs-test"},
+            items=_Values([1], [7]),
+        )
+        parent = SimpleNamespace(
+            generation_id="source-runtime",
+            manifest_digest="source-manifest",
+            pointer_digest="1" * 64,
+            runtime_path=str(self.data),
+        )
+
+        def resolve_parent():
+            if resolve_parent.calls:
+                (self.data / "media" / "pdfs" / "one.pdf").write_bytes(b"changed")
+            resolve_parent.calls += 1
+            return parent
+
+        resolve_parent.calls = 0
+        barrier = SimpleNamespace(current_epoch=0)
+        with (
+            patch("core.candidate_maintenance.capacity_report", return_value={
+                "byte_capacity_ok": True, "inode_capacity_ok": True,
+            }),
+            patch(
+                "core.candidate_maintenance._maintenance_source_parent",
+                side_effect=resolve_parent,
+            ),
+            patch(
+                "vaultops.services.mutations.request_barrier",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.assert_barrier_owner",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.release_barrier",
+                return_value=True,
+            ),
+            self.assertRaises(CandidateMaintenanceError) as raised,
+        ):
+            create_workspace(job)
+        self.assertEqual(
+            raised.exception.reason_code, "maintenance_source_authority_changed"
+        )
+        self.assertFalse(any(self.control.glob("maintenance-workspaces/mw-*")))
+
+    def test_workspace_rejects_mutation_epoch_drift_and_removes_temporary(self):
+        job = SimpleNamespace(
+            public_id=uuid.uuid4(),
+            kind="reindex_selected",
+            options={"recovery_set_id": "rs-test"},
+            items=_Values([1], [7]),
+        )
+        parent = SimpleNamespace(
+            generation_id="source-runtime",
+            manifest_digest="source-manifest",
+            pointer_digest="1" * 64,
+            runtime_path=str(self.data),
+        )
+        with (
+            patch(
+                "core.candidate_maintenance.capacity_report",
+                return_value={
+                    "byte_capacity_ok": True,
+                    "inode_capacity_ok": True,
+                },
+            ),
+            patch(
+                "core.candidate_maintenance._maintenance_source_parent",
+                return_value=parent,
+            ),
+            patch(
+                "vaultops.services.mutations.request_barrier",
+                return_value=SimpleNamespace(current_epoch=4),
+            ),
+            patch(
+                "vaultops.services.mutations.assert_barrier_owner",
+                side_effect=[
+                    SimpleNamespace(current_epoch=4),
+                    SimpleNamespace(current_epoch=5),
+                ],
+            ),
+            patch(
+                "vaultops.services.mutations.release_barrier",
+                return_value=True,
+            ),
+            self.assertRaises(CandidateMaintenanceError) as raised,
+        ):
+            create_workspace(job)
+
+        self.assertEqual(
+            raised.exception.reason_code, "maintenance_source_snapshot_changed"
+        )
+        self.assertFalse(any(self.control.rglob("*.tmp")))
+        self.assertFalse(any(self.control.glob("maintenance-workspaces/mw-*")))
 
     def test_candidate_validation_checks_media_embeddings_and_faiss(self):
         import faiss
@@ -178,8 +353,92 @@ class CandidateWorkspaceTests(SimpleTestCase):
             raised.exception.reason_code, "candidate_faiss_count_mismatch"
         )
 
+    def test_candidate_validation_checks_unaffected_searchable_folders(self):
+        import faiss
+        import numpy as np
 
-class ArtifactCleanupPlannerTests(SimpleTestCase):
+        workspace = self.control / "whole-runtime-workspace"
+        workspace.mkdir()
+        (workspace / "media" / "pdfs").mkdir(parents=True)
+        for name in ("one.pdf", "two.pdf"):
+            (workspace / "media" / "pdfs" / name).write_bytes(b"%PDF-1.4")
+        (workspace / "faiss_indexes").mkdir()
+        workspace_db = workspace / "db.sqlite3"
+        workspace_db.write_bytes(self.database.read_bytes())
+        connection = sqlite3.connect(workspace_db)
+        connection.execute(
+            "INSERT INTO core_pdffile VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                2,
+                8,
+                "pdfs/two.pdf",
+                json.dumps(["unaffected searchable text"]),
+                json.dumps([[0.0, 1.0]]),
+                "ready",
+            ),
+        )
+        connection.commit()
+        connection.close()
+        index = faiss.IndexFlatIP(2)
+        index.add(np.asarray([[1.0, 0.0]], dtype="float32"))
+        faiss.write_index(
+            index, str(workspace / "faiss_indexes" / "folder_7.index")
+        )
+        (workspace / WORKSPACE_MANIFEST).write_text(
+            json.dumps({"affected_folder_ids": [7]})
+        )
+
+        with self.assertRaises(CandidateMaintenanceError) as raised:
+            validate_candidate(workspace)
+
+        self.assertEqual(raised.exception.reason_code, "candidate_faiss_missing")
+        self.assertEqual(str(raised.exception), "8")
+
+    def test_candidate_validation_reports_full_runtime_folder_scope(self):
+        import faiss
+        import numpy as np
+
+        workspace = self.control / "whole-runtime-valid"
+        workspace.mkdir()
+        (workspace / "media" / "pdfs").mkdir(parents=True)
+        for name in ("one.pdf", "two.pdf"):
+            (workspace / "media" / "pdfs" / name).write_bytes(b"%PDF-1.4")
+        (workspace / "faiss_indexes").mkdir()
+        workspace_db = workspace / "db.sqlite3"
+        workspace_db.write_bytes(self.database.read_bytes())
+        connection = sqlite3.connect(workspace_db)
+        connection.execute(
+            "INSERT INTO core_pdffile VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                2,
+                8,
+                "pdfs/two.pdf",
+                json.dumps(["unaffected searchable text"]),
+                json.dumps([[0.0, 1.0]]),
+                "ready",
+            ),
+        )
+        connection.commit()
+        connection.close()
+        for folder_id, vector in ((7, [1.0, 0.0]), (8, [0.0, 1.0])):
+            index = faiss.IndexFlatIP(2)
+            index.add(np.asarray([vector], dtype="float32"))
+            faiss.write_index(
+                index,
+                str(workspace / "faiss_indexes" / f"folder_{folder_id}.index"),
+            )
+        (workspace / WORKSPACE_MANIFEST).write_text(
+            json.dumps({"affected_folder_ids": [7]})
+        )
+
+        result = validate_candidate(workspace)
+
+        self.assertEqual(result["affected_folder_ids"], [7])
+        self.assertEqual(result["validated_folder_ids"], [7, 8])
+
+
+class ArtifactCleanupPlannerTests(TestCase):
+    databases = {"default", "control"}
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -213,7 +472,7 @@ class ArtifactCleanupPlannerTests(SimpleTestCase):
             json.dumps(
                 {
                     "state": "activation_ready",
-                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
         )
@@ -271,7 +530,7 @@ class ArtifactCleanupPlannerTests(SimpleTestCase):
         self.settings.disable()
         self.temporary.cleanup()
 
-    def test_plan_protects_candidate_and_requires_current_confirmation(self):
+    def test_plan_protects_references_and_requires_current_confirmation(self):
         plan = cleanup_plan()
         self.assertEqual(len(plan["candidates"]), 1)
         self.assertEqual(
@@ -282,7 +541,10 @@ class ArtifactCleanupPlannerTests(SimpleTestCase):
             item["name"]: item["protection_reasons"]
             for item in plan["protected"]
         }
-        self.assertEqual(protections["candidate"], ["maintenance_candidate"])
+        self.assertNotIn("candidate", protections)
+        self.assertIn(
+            "candidate", {item["name"] for item in plan["retained"]}
+        )
         self.assertEqual(protections["incident-held"], ["incident_hold"])
         self.assertEqual(
             protections["activation-reference"], ["activation_reference"]
@@ -300,6 +562,31 @@ class ArtifactCleanupPlannerTests(SimpleTestCase):
         self.assertEqual(len(result["removed"]), 1)
         self.assertFalse(Path(result["removed"][0]["path"]).exists())
 
+    def test_expired_activation_ready_workspace_is_a_candidate(self):
+        workspace = Path(settings.MAINTENANCE_WORKSPACE_ROOT) / "expired-ready"
+        workspace.mkdir()
+        (workspace / "db.sqlite3").write_bytes(b"candidate")
+        (workspace / WORKSPACE_MANIFEST).write_text(
+            json.dumps(
+                {
+                    "state": "activation_ready",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "expires_at": "2020-01-08T00:00:00+00:00",
+                    "source": {"job_id": str(uuid.uuid4())},
+                }
+            )
+        )
+
+        plan = cleanup_plan()
+
+        candidate = next(
+            item for item in plan["candidates"]
+            if item["name"] == "expired-ready"
+        )
+        self.assertEqual(
+            candidate["reason_code"], "unactivated_workspace_expired"
+        )
+
     @patch("core.artifact_cleanup.MAX_APPLY_BYTES", 1)
     def test_apply_is_blocked_above_approval_boundary(self):
         plan = cleanup_plan()
@@ -308,3 +595,241 @@ class ArtifactCleanupPlannerTests(SimpleTestCase):
             CleanupError, "cleanup_exceeds_20_gib_approval_boundary"
         ):
             apply_cleanup(plan["plan_id"])
+
+    def test_unreferenced_local_runtime_expires_after_seven_days(self):
+        runtime = Path(settings.RUNTIME_GENERATIONS_ROOT) / "local-runtime"
+        runtime.mkdir()
+        (runtime / "db.sqlite3").write_bytes(b"candidate")
+        (runtime / "local-generation-manifest.json").write_text(
+            json.dumps(
+                {
+                    "origin": "local_maintenance",
+                    "generation_id": "local-generation",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "vault_authority": {
+                        "state": "unpublished",
+                        "stale": True,
+                    },
+                }
+            )
+        )
+
+        plan = cleanup_plan()
+
+        candidate = next(
+            item for item in plan["candidates"]
+            if item["name"] == "local-runtime"
+        )
+        self.assertEqual(
+            candidate["reason_code"], "unactivated_local_runtime_expired"
+        )
+        self.assertEqual(
+            candidate["manifest"]["generation_id"], "local-generation"
+        )
+
+    def test_local_runtime_for_current_job_is_protected(self):
+        from core.models import MaintenanceJob
+
+        job = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="running",
+        )
+        runtime = Path(settings.RUNTIME_GENERATIONS_ROOT) / "current-job-runtime"
+        runtime.mkdir()
+        (runtime / "db.sqlite3").write_bytes(b"candidate")
+        (runtime / "local-generation-manifest.json").write_text(
+            json.dumps(
+                {
+                    "origin": "local_maintenance",
+                    "generation_id": "current-job-generation",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "maintenance": {"job_public_id": str(job.public_id)},
+                    "vault_authority": {"state": "unpublished"},
+                }
+            )
+        )
+
+        plan = cleanup_plan()
+
+        protected = next(
+            item for item in plan["protected"]
+            if item["name"] == "current-job-runtime"
+        )
+        self.assertIn(
+            "current_or_checkpointed_job",
+            protected["protection_reasons"],
+        )
+
+    def test_activation_ready_runtime_reference_is_protected(self):
+        from vaultops.models import (
+            ArtifactGeneration,
+            RestoreWorkspace,
+            VaultConnectionProfile,
+        )
+
+        runtime = Path(settings.RUNTIME_GENERATIONS_ROOT) / "prepared-runtime"
+        runtime.mkdir()
+        (runtime / "db.sqlite3").write_bytes(b"candidate")
+        (runtime / "local-generation-manifest.json").write_text(
+            json.dumps(
+                {
+                    "origin": "local_maintenance",
+                    "generation_id": "prepared-generation",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "vault_authority": {"state": "unpublished"},
+                }
+            )
+        )
+        profile = VaultConnectionProfile.objects.create(
+            key="cleanup-profile",
+            display_name="Cleanup",
+            dataset_id="cleanup-dataset",
+            fingerprint="c" * 64,
+        )
+        generation = ArtifactGeneration.objects.create(
+            profile=profile,
+            origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+            dataset_id=profile.dataset_id,
+            generation_id="prepared-generation",
+            manifest_digest="d" * 64,
+            vault_state=ArtifactGeneration.VaultState.UNKNOWN,
+            runtime_state=ArtifactGeneration.RuntimeState.INACTIVE,
+            lineage_job_public_id=uuid.uuid4(),
+            parent_generation_id="parent-generation",
+            parent_manifest_digest="e" * 64,
+        )
+        RestoreWorkspace.objects.create(
+            generation=generation,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=generation.manifest_digest,
+            runtime_path=str(runtime),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+        )
+
+        plan = cleanup_plan()
+
+        protected = next(
+            item for item in plan["protected"]
+            if item["name"] == "prepared-runtime"
+        )
+        self.assertIn(
+            "workspace_reference",
+            protected["protection_reasons"],
+        )
+
+    def test_apply_rechecks_pointer_protection_before_deletion(self):
+        from vaultops.models import RuntimePointerObservation
+
+        runtime = Path(settings.RUNTIME_GENERATIONS_ROOT) / "pointer-race"
+        runtime.mkdir()
+        (runtime / "db.sqlite3").write_bytes(b"candidate")
+        (runtime / "local-generation-manifest.json").write_text(
+            json.dumps(
+                {
+                    "origin": "local_maintenance",
+                    "generation_id": "pointer-race-generation",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "vault_authority": {"state": "unpublished"},
+                }
+            )
+        )
+        plan = cleanup_plan()
+        real_cleanup_plan = cleanup_plan
+        calls = 0
+
+        def plan_with_pointer_change(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                RuntimePointerObservation.objects.create(
+                    deployment_id=settings.ENV_IDENTITY.deployment_id,
+                    active_generation_id="pointer-race-generation",
+                    status="ready",
+                    observed_at=datetime.now(timezone.utc),
+                )
+            return real_cleanup_plan(*args, **kwargs)
+
+        with patch(
+            "core.artifact_cleanup.cleanup_plan",
+            side_effect=plan_with_pointer_change,
+        ):
+            with self.assertRaisesRegex(CleanupError, "stale_cleanup_plan"):
+                apply_cleanup(plan["plan_id"])
+
+        self.assertTrue(runtime.exists())
+
+    @patch(
+        "core.artifact_cleanup._runtime_protections",
+        side_effect=CleanupError("cleanup_protection_state_unavailable"),
+    )
+    def test_plan_fails_closed_when_protection_state_is_unavailable(self, _mock):
+        with self.assertRaisesRegex(
+            CleanupError, "cleanup_protection_state_unavailable"
+        ):
+            cleanup_plan()
+
+    def test_unreadable_manifest_blocks_plan_and_apply_without_deletion(self):
+        workspace = (
+            Path(settings.MAINTENANCE_WORKSPACE_ROOT)
+            / "unreadable-workspace"
+        )
+        workspace.mkdir()
+        manifest = workspace / WORKSPACE_MANIFEST
+        manifest.write_text(
+            json.dumps(
+                {
+                    "state": "activation_ready",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                }
+            ),
+            encoding="utf-8",
+        )
+        manifest.chmod(0)
+        try:
+            with self.assertRaisesRegex(
+                CleanupError, "^cleanup_inventory_unavailable$"
+            ) as raised:
+                cleanup_plan()
+            self.assertNotIn(str(manifest), str(raised.exception))
+
+            with self.assertRaisesRegex(
+                CleanupError, "^cleanup_inventory_unavailable$"
+            ):
+                apply_cleanup("untrusted-plan")
+            self.assertTrue(workspace.exists())
+        finally:
+            manifest.chmod(0o600)
+
+    def test_malformed_manifest_blocks_workbench_without_leaking_or_candidates(
+        self,
+    ):
+        workspace = (
+            Path(settings.MAINTENANCE_WORKSPACE_ROOT)
+            / "malformed-private-workspace"
+        )
+        workspace.mkdir()
+        manifest = workspace / WORKSPACE_MANIFEST
+        private_detail = "private-document-name.pdf"
+        manifest.write_text(
+            '{"state":"activation_ready","private":"'
+            + private_detail,
+            encoding="utf-8",
+        )
+
+        state = workbench_maintenance_state()
+
+        cleanup = state["health"]["cleanup"]
+        self.assertEqual(cleanup["state"], "blocked")
+        self.assertEqual(
+            cleanup["reason_code"], "cleanup_inventory_unavailable"
+        )
+        self.assertEqual(cleanup["prunable_bytes"], 0)
+        self.assertEqual(cleanup["protected_bytes"], 0)
+        self.assertEqual(cleanup["plan_id"], "")
+        self.assertNotIn(private_detail, json.dumps(state, default=str))
+
+        with self.assertRaisesRegex(
+            CleanupError, "^cleanup_inventory_unavailable$"
+        ):
+            apply_cleanup("untrusted-plan")
+        self.assertTrue(workspace.exists())

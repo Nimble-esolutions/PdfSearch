@@ -7,7 +7,9 @@ from unittest.mock import patch
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connections
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -15,7 +17,11 @@ from core.lease import acquire_lease, release_lease
 from core.models import ArtifactGeneration as LegacyGeneration
 from core.models import CustomUser, Folder, MaintenanceAuditEvent, MaintenanceJob
 from core.models import PDFFile
-from core.maintenance_plans import create_plan
+from core.maintenance_plans import (
+    _prepared_workspace_ids,
+    _serialize_local_job_payload,
+    create_plan,
+)
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -30,9 +36,11 @@ from vaultops.models import (
     VaultJob,
 )
 from vaultops.services.read_model import (
+    build_workbench_state,
     enrich_workbench_readiness,
     workspace_state_digest,
 )
+from vaultops.services.activation import ActivationCoordinatorError
 
 
 @override_settings(
@@ -105,6 +113,150 @@ class VaultWorkbenchTests(TestCase):
         self.assertContains(response, "<noscript>", html=False)
         self.assertNotContains(response, "cdn.jsdelivr.net")
 
+    def test_restore_section_keeps_signed_rollback_visible_with_reason(self):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "restore"}
+        )
+
+        self.assertContains(
+            response, "Roll back the latest maintenance activation"
+        )
+        self.assertContains(response, "Review signed rollback")
+        self.assertContains(response, "staging_activation_disabled")
+        self.assertContains(
+            response, reverse("vaultops:rollback_confirmation_issue")
+        )
+
+    @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
+    @patch(
+        "vaultops.services.read_model._rollback_capability",
+        return_value={
+            "enabled": True,
+            "reason_code": "",
+            "target_generation_id": "verified-previous",
+        },
+    )
+    def test_signed_rollback_control_is_enabled_for_verified_parent(
+        self, capability
+    ):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "restore"}
+        )
+
+        self.assertContains(
+            response,
+            '<button class="vault-button vault-button--danger" '
+            'type="submit">Review signed rollback</button>',
+            html=True,
+        )
+        self.assertNotContains(response, "staging_activation_disabled")
+        self.assertContains(response, "verified-previous")
+        capability.assert_called_once()
+
+    @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
+    @patch(
+        "vaultops.services.read_model._rollback_capability",
+        return_value={
+            "enabled": False,
+            "reason_code": "rollback_lineage_invalid",
+            "target_generation_id": "",
+        },
+    )
+    def test_signed_rollback_control_displays_typed_eligibility_reason(
+        self, capability
+    ):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "restore"}
+        )
+
+        self.assertContains(response, "rollback_lineage_invalid")
+        self.assertContains(
+            response,
+            'disabled aria-describedby="signed-rollback-reason"',
+            html=False,
+        )
+        capability.assert_called_once()
+
+    @patch(
+        "vaultops.services.read_model._rollback_capability",
+        return_value={
+            "enabled": True,
+            "reason_code": "",
+            "target_generation_id": "verified-previous",
+        },
+    )
+    def test_committed_activation_is_not_projected_as_pending(
+        self, capability
+    ):
+        identity = settings.ENV_IDENTITY
+        ActivationIntent.objects.using("control").create(
+            deployment_id=identity.deployment_id,
+            target_generation_id="committed-target",
+            previous_generation_id="committed-parent",
+            manifest_digest="c" * 64,
+            intent_digest="d" * 64,
+            state=ActivationIntent.State.COMMITTED,
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+
+        state = build_workbench_state(profile_key=self.profile.key)
+
+        self.assertIsNone(state["pending_activation"])
+        capability.assert_called_once_with(pending_activation=None)
+
+    @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
+    def test_non_superadmin_cannot_issue_or_schedule_signed_rollback(self):
+        self.client.force_login(self.admin)
+        issue = self.client.post(
+            reverse("vaultops:rollback_confirmation_issue"),
+            {"idempotency_key": str(uuid.uuid4())},
+        )
+        schedule = self.client.post(
+            reverse(
+                "vaultops:schedule_rollback",
+                kwargs={"workspace_id": uuid.uuid4()},
+            ),
+            {"idempotency_key": str(uuid.uuid4())},
+        )
+
+        self.assertEqual(issue.status_code, 403)
+        self.assertEqual(schedule.status_code, 403)
+
+    @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
+    @patch("vaultops.views.create_recovery_set")
+    @patch("vaultops.views.validate_previous_runtime_rollback")
+    def test_stale_rollback_is_rejected_before_recovery_or_confirmation_use(
+        self, revalidate, create_recovery
+    ):
+        revalidate.side_effect = ActivationCoordinatorError(
+            "rollback_authority_changed"
+        )
+        workspace = RestoreWorkspace.objects.create(
+            generation=self.candidate,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=self.candidate.manifest_digest,
+            runtime_path="/isolated/runtime",
+            validation_evidence={"purpose": "one_step_runtime_rollback"},
+            rehearsal_evidence={"success": True},
+            prepared_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            reverse(
+                "vaultops:schedule_rollback",
+                kwargs={"workspace_id": workspace.public_id},
+            ),
+            {"idempotency_key": str(uuid.uuid4())},
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["reason_code"], "rollback_authority_changed"
+        )
+        create_recovery.assert_not_called()
+        self.assertFalse(ConfirmationChallenge.objects.exists())
+
     def test_maintenance_health_and_candidate_publication_are_evidenced(self):
         ArtifactValidation.objects.create(
             generation=self.candidate,
@@ -141,6 +293,75 @@ class VaultWorkbenchTests(TestCase):
             reverse("operations_panel"), {"section": "sync"}
         )
         self.assertContains(sync_response, "Queue publish-only sync")
+
+    def test_prepared_workspace_lookup_is_one_control_query_for_many_jobs(self):
+        jobs = []
+        expected = {}
+        for index in range(3):
+            job = MaintenanceJob.objects.create(
+                kind="reindex_selected",
+                status="completed",
+                options={"candidate_state": "activation_ready"},
+            )
+            generation = ArtifactGeneration.objects.create(
+                profile=self.profile,
+                origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+                dataset_id=self.profile.dataset_id,
+                generation_id=f"local-candidate-{index}",
+                manifest_digest=f"{index}" * 64,
+                vault_state=ArtifactGeneration.VaultState.UNKNOWN,
+                runtime_state=ArtifactGeneration.RuntimeState.INACTIVE,
+                local_presence=ArtifactGeneration.LocalPresence.PREPARED,
+                lineage_job_public_id=job.public_id,
+                parent_generation_id="parent-generation",
+                parent_manifest_digest="p" * 64,
+            )
+            workspace = RestoreWorkspace.objects.create(
+                generation=generation,
+                state=RestoreWorkspace.State.ACTIVATION_READY,
+                manifest_digest=generation.manifest_digest,
+                prepared_at=timezone.now(),
+            )
+            jobs.append(job)
+            expected[str(job.public_id)] = str(workspace.public_id)
+
+        with CaptureQueriesContext(connections["control"]) as queries:
+            prepared = _prepared_workspace_ids(jobs)
+        self.assertEqual(len(queries), 1)
+        self.assertEqual(prepared, expected)
+
+        with CaptureQueriesContext(connections["control"]) as queries:
+            payloads = [
+                _serialize_local_job_payload(
+                    job,
+                    prepared_workspace_by_job=prepared,
+                )
+                for job in jobs
+            ]
+        self.assertEqual(len(queries), 0)
+        self.assertEqual(
+            {payload["prepared_workspace_id"] for payload in payloads},
+            set(expected.values()),
+        )
+
+    def test_prepared_workspace_lookup_skips_query_without_eligible_jobs(self):
+        jobs = [
+            MaintenanceJob.objects.create(
+                kind="validate",
+                status="running",
+            ),
+            MaintenanceJob.objects.create(
+                kind="reindex_selected",
+                status="completed",
+                options={"candidate_state": "building"},
+            ),
+        ]
+
+        with CaptureQueriesContext(connections["control"]) as queries:
+            prepared = _prepared_workspace_ids(jobs)
+
+        self.assertEqual(prepared, {})
+        self.assertEqual(len(queries), 0)
 
     def test_ready_candidate_keeps_prepare_control_visible_with_typed_reason(self):
         MaintenanceJob.objects.create(

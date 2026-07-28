@@ -138,6 +138,14 @@ def _execute_local_job(job):
     return run_job(job)
 
 
+def _requires_source_mutation_scope(job):
+    """Candidate preparation owns the source barrier before copying."""
+    return not (
+        job.options.get("candidate_required")
+        and not getattr(settings, "MAINTENANCE_CANDIDATE_EXECUTION", False)
+    )
+
+
 class Command(BaseCommand):
     help = "Run queued PdfSearch maintenance jobs with optional backup scheduling"
 
@@ -217,7 +225,10 @@ class Command(BaseCommand):
                 continue
 
             self.stdout.write(f"Running maintenance job {job.public_id} ({job.kind})")
-            if getattr(settings, "VAULT_MUTATION_TRACKING_ENABLED", False):
+            if (
+                getattr(settings, "VAULT_MUTATION_TRACKING_ENABLED", False)
+                and _requires_source_mutation_scope(job)
+            ):
                 from vaultops.services.mutations import (
                     SnapshotBarrierActive,
                     mutation_scope,

@@ -297,6 +297,14 @@ class RuntimeSupervisor:
             runtime_root=self.runtime_root,
         )
 
+    def _previous_pointer(self):
+        return read_runtime_pointer(
+            self.paths["previous"],
+            deployment_id=self.deployment_id,
+            signing_key=self.signing_key,
+            runtime_root=self.runtime_root,
+        )
+
     def _current_pointer_document(self):
         return read_signed_document(
             self.paths["active"],
@@ -360,6 +368,81 @@ class RuntimeSupervisor:
                 "recovery": True,
             },
         )
+
+    def _acquire_or_resume_pre_cutover_lock(self, intent):
+        """Resume only this intent's signed pre-cutover checkpoint."""
+        if not self.paths["lock"].exists():
+            self._acquire_lock(intent)
+            return False
+        web_ack = self._read_ack(intent, "web")
+        if not web_ack or web_ack.get("state") != "applying":
+            raise SupervisorError("runtime_activation_in_progress")
+        self._claim_recovery_lock(intent)
+        return True
+
+    def _has_same_intent_applying_lock(self, intent):
+        web_ack = self._read_ack(intent, "web")
+        if not web_ack or web_ack.get("state") != "applying":
+            return False
+        path = self.paths["lock"]
+        if path.is_symlink() or not path.is_file():
+            return False
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return value.get("intent_id") == intent["intent_id"]
+
+    @staticmethod
+    def _pointer_matches(pointer, *, generation_id, manifest_digest, pointer_digest):
+        return (
+            pointer.generation_id == generation_id
+            and pointer.manifest_digest == manifest_digest
+            and pointer.pointer_digest == pointer_digest
+        )
+
+    def _rollback_previous_matches(self, intent, previous):
+        return self._pointer_matches(
+            previous,
+            generation_id=intent.get(
+                "rollback_previous_generation_id", ""
+            ),
+            manifest_digest=intent.get(
+                "rollback_previous_manifest_digest", ""
+            ),
+            pointer_digest=intent.get(
+                "rollback_previous_pointer_digest", ""
+            ),
+        ) and (
+            previous.generation_id == intent.get("target_generation_id")
+            and previous.manifest_digest
+            == intent.get("target_manifest_digest")
+        )
+
+    def _assert_cutover_authority(self, intent, *, resumed):
+        """Recheck signed authority under the acquired same-intent lock."""
+        active = self._current_pointer()
+        if not (
+            active.generation_id
+            == intent.get("previous_generation_id", "")
+            and active.pointer_digest
+            == intent.get("previous_pointer_digest", "")
+        ):
+            raise SupervisorError("activation_previous_pointer_changed")
+        if intent.get("activation_mode") != "rollback":
+            return active
+        previous = self._previous_pointer()
+        if self._rollback_previous_matches(intent, previous):
+            return active
+        if resumed and (
+            previous.generation_id == active.generation_id
+            and previous.manifest_digest == active.manifest_digest
+            and previous.pointer_digest == active.pointer_digest
+        ):
+            # Bounded crash state: this same signed intent wrote previous.json
+            # but did not yet switch active.json.
+            return active
+        raise SupervisorError("rollback_previous_pointer_changed")
 
     def _run_manage(self, arguments, *, timeout):
         result = self.run_command(
@@ -545,7 +628,8 @@ class RuntimeSupervisor:
                 safe_error_code="activation_incomplete_recovered",
             )
             self._write_ack(intent, "rolled_back")
-            self._reconcile_result_best_effort(intent)
+            if self._reconcile_result_best_effort(intent):
+                self._write_ack(intent, "reconciled")
             return True
         except Exception:
             return False
@@ -581,6 +665,28 @@ class RuntimeSupervisor:
                 intent, "activation_previous_pointer_changed"
             )
             return
+        if intent.get("activation_mode") == "rollback":
+            try:
+                previous = self._previous_pointer()
+            except RuntimeControlError:
+                self._write_failed_without_cutover(
+                    intent, "rollback_previous_pointer_changed"
+                )
+                return
+            resumable_intermediate = (
+                self._has_same_intent_applying_lock(intent)
+                and previous.generation_id == current.generation_id
+                and previous.manifest_digest == current.manifest_digest
+                and previous.pointer_digest == current.pointer_digest
+            )
+            if not (
+                self._rollback_previous_matches(intent, previous)
+                or resumable_intermediate
+            ):
+                self._write_failed_without_cutover(
+                    intent, "rollback_previous_pointer_changed"
+                )
+                return
         if not self._maintenance_acknowledged(intent):
             return
         validate_runtime_workspace(
@@ -589,11 +695,28 @@ class RuntimeSupervisor:
             generation_id=intent["target_generation_id"],
             manifest_digest=intent["target_manifest_digest"],
         )
-        self._acquire_lock(intent)
-        previous_document = self._current_pointer_document()
+        # Persist a signed same-intent checkpoint before the lock. A process
+        # crash on either side can then acquire or resume deterministically.
+        web_ack = self._read_ack(intent, "web")
+        if web_ack and web_ack.get("state") != "applying":
+            return
+        if web_ack is None:
+            self._write_ack(intent, "applying")
+        try:
+            resumed = self._acquire_or_resume_pre_cutover_lock(intent)
+        except SupervisorError:
+            return
+        try:
+            current = self._assert_cutover_authority(
+                intent, resumed=resumed
+            )
+            previous_document = self._current_pointer_document()
+        except SupervisorError as exc:
+            self._write_failed_without_cutover(intent, exc.reason_code)
+            self._release_lock(intent)
+            return
         readiness = {}
         try:
-            self._write_ack(intent, "applying")
             self.stop_child()
             set_runtime_workspace_writable(
                 current.runtime_path,
@@ -653,7 +776,8 @@ class RuntimeSupervisor:
                 },
             )
             self._write_ack(intent, "committed")
-            self._reconcile_result_best_effort(intent)
+            if self._reconcile_result_best_effort(intent):
+                self._write_ack(intent, "reconciled")
         except Exception as exc:
             reason_code = getattr(
                 exc, "reason_code", "activation_verification_failed"
@@ -700,7 +824,8 @@ class RuntimeSupervisor:
                     safe_error_code=reason_code,
                 )
                 self._write_ack(intent, "rolled_back")
-                self._reconcile_result_best_effort(intent)
+                if self._reconcile_result_best_effort(intent):
+                    self._write_ack(intent, "reconciled")
             except Exception:
                 try:
                     restored = self._current_pointer()
@@ -726,6 +851,12 @@ class RuntimeSupervisor:
             except SupervisorError:
                 continue
             if self._result_exists(intent):
+                web_ack = self._read_ack(intent, "web")
+                if (
+                    not web_ack
+                    or web_ack.get("state") != "reconciled"
+                ) and self._reconcile_result_best_effort(intent):
+                    self._write_ack(intent, "reconciled")
                 continue
             self.apply_intent(intent)
             return

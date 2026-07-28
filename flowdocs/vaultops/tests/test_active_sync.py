@@ -9,10 +9,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core import utils as core_utils
+from core import candidate_maintenance
 from core.artifact_vault import ArtifactVault, VaultConfig
 from core.global_writer import GlobalWriterConflict, release_global_writer
 from core.registration import RegistrationError, get_authoritative_pointer
@@ -244,6 +246,103 @@ class MutationBarrierTests(ActiveSyncTestCase):
             response.json()["reason_code"],
             "snapshot_barrier_active",
         )
+
+    def test_candidate_snapshot_barrier_blocks_concurrent_source_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data = root / "data"
+            control = root / "control"
+            data.mkdir()
+            control.mkdir()
+            for name in ("media", "faiss", "chroma"):
+                (data / name).mkdir()
+            database = data / "db.sqlite3"
+            connection = sqlite3.connect(database)
+            connection.execute("CREATE TABLE evidence (id INTEGER PRIMARY KEY)")
+            connection.commit()
+            connection.close()
+
+            class Items:
+                def exclude(self, **_kwargs):
+                    return self
+
+                def values_list(self, field, flat=False):
+                    return [1] if field == "pdf_id" else [7]
+
+            job = SimpleNamespace(
+                public_id=uuid.uuid4(),
+                kind="reindex_selected",
+                options={"recovery_set_id": "rs-test"},
+                items=Items(),
+            )
+            parent = SimpleNamespace(
+                generation_id="parent",
+                manifest_digest="a" * 64,
+                pointer_digest="b" * 64,
+                runtime_path=str(data),
+            )
+            original_copy = candidate_maintenance._copy_tree
+            mutation_blocked = []
+
+            def copy_while_mutation_attempts(source, target):
+                if not mutation_blocked:
+                    with self.assertRaises(SnapshotBarrierActive):
+                        with mutation_scope(
+                            category="media",
+                            operation="upload",
+                        ):
+                            pass
+                    mutation_blocked.append(True)
+                return original_copy(source, target)
+
+            with (
+                override_settings(
+                    DATABASES={
+                        **settings.DATABASES,
+                        "default": {
+                            "ENGINE": "django.db.backends.sqlite3",
+                            "NAME": str(database),
+                        },
+                    },
+                    DATA_ROOT=data,
+                    DATA_CONTROL_ROOT=control,
+                    MEDIA_ROOT=data / "media",
+                    FAISS_INDEX_DIR=data / "faiss",
+                    CHROMA_DIR=data / "chroma",
+                    MAINTENANCE_WORKSPACE_ROOT=control / "workspaces",
+                ),
+                patch(
+                    "core.candidate_maintenance.capacity_report",
+                    return_value={
+                        "byte_capacity_ok": True,
+                        "inode_capacity_ok": True,
+                    },
+                ),
+                patch(
+                    "core.candidate_maintenance._maintenance_source_parent",
+                    return_value=parent,
+                ),
+                patch(
+                    "core.candidate_maintenance._copy_tree",
+                    side_effect=copy_while_mutation_attempts,
+                ),
+            ):
+                workspace = candidate_maintenance.create_workspace(job)
+
+            manifest = json.loads(
+                (workspace / candidate_maintenance.WORKSPACE_MANIFEST).read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(mutation_blocked, [True])
+            self.assertEqual(manifest["source"]["mutation_epoch"], 0)
+            state = SourceMutationState.objects.get(
+                deployment_id="deployment-1"
+            )
+            self.assertEqual(
+                state.barrier_state,
+                SourceMutationState.BarrierState.OPEN,
+            )
 
 
 @override_settings(

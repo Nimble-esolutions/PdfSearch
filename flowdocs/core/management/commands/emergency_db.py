@@ -76,3 +76,5 @@ class Command(BaseCommand):
         except RecoverySetError as exc:
             raise CommandError(f"{exc.reason_code}: {exc}") from exc
         self.stdout.write(json.dumps(result, indent=2, sort_keys=True, default=str))
+        if operation == "validate" and not result["recovery_ready"]:
+            raise CommandError("workspace_not_recovery_ready")
