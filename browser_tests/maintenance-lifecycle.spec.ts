@@ -126,6 +126,7 @@ test.describe('disposable maintenance lifecycle', () => {
         return '';
       }
     }, { timeout: 120_000 }).toMatch(/^lm-/);
+    await login(page, '/dashboard/operations/?section=restore');
 
     for (const [query, language] of [
       ['cooperative audit evidence', 'en'],
@@ -148,6 +149,7 @@ test.describe('disposable maintenance lifecycle', () => {
         return '';
       }
     }, { timeout: 120_000 }).toBe('maintenance-e2e-parent');
+    await login(page, '/dashboard/operations/?section=restore');
     for (const [query, language] of [
       ['cooperative audit evidence', 'en'],
       ['सहकारी लेखापरीक्षण पुरावा', 'mr'],
