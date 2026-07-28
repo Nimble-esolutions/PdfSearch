@@ -30,9 +30,9 @@
       <div><dt>{% trans "Drift" %}</dt><dd class="status status--{% if state.authority.runtime.active_generation_id and state.authority.runtime.active_generation_id == state.authority.remote.authoritative_generation_id %}good{% else %}unknown{% endif %}">
         {% if state.authority.runtime.active_generation_id and state.authority.runtime.active_generation_id == state.authority.remote.authoritative_generation_id %}{% trans "Aligned" %}{% else %}{% trans "Unknown or different" %}{% endif %}
       </dd></div>
-      <div><dt>{% trans "Active Sync" %}</dt><dd data-summary="sync" class="status status--{{ state.sync.state }}">{{ state.sync.state }}</dd></div>
-      <div><dt>{% trans "Writer lease" %}</dt><dd data-summary="lease" class="status status--{{ state.lease.state }}">{{ state.lease.state }}</dd></div>
-      <div><dt>{% trans "Critical job" %}</dt><dd>{% if state.authority.critical_job %}{{ state.authority.critical_job.status }}{% else %}{% trans "None" %}{% endif %}</dd></div>
+      <div><dt>{% trans "Active Sync" %}</dt><dd data-summary="sync" class="status status--{{ state.sync.state }}">{{ state.sync.state_label }}</dd></div>
+      <div><dt>{% trans "Writer lease" %}</dt><dd data-summary="lease" class="status status--{{ state.lease.state }}">{{ state.lease.state_label }}</dd></div>
+      <div><dt>{% trans "Critical job" %}</dt><dd>{% if state.authority.critical_job %}{{ state.authority.critical_job.status_label }}{% else %}{% trans "None" %}{% endif %}</dd></div>
     </dl>
   </section>
 
@@ -50,20 +50,12 @@
   {% if state.authority.blocking_reasons or state.readiness.issues %}
   <section class="vault-alert vault-alert--warning" role="status" aria-labelledby="vault-alert-heading">
     <h3 id="vault-alert-heading">{% trans "Evidence requires attention" %}</h3>
-    <ul>
-      {% for reason in state.authority.blocking_reasons %}
-      <li><code>{{ reason }}</code></li>
-      {% endfor %}
-    </ul>
-    <p>{{ state.recommended_action }}</p>
     {% if state.readiness.issues %}
     <div class="vault-remediation-list" aria-label="{% trans 'Recommended remediation' %}">
       {% for issue in state.readiness.issues %}
       <article class="vault-remediation">
         <div>
-          <strong>{{ issue.title }}</strong>
-          <p>{{ issue.detail }}</p>
-          <code>{{ issue.reason_code }}</code>
+          {% include "components/operator_evidence.html" with presentation=issue.presentation technical_code=issue.reason_code show_action=False only %}
         </div>
         <a class="vault-button vault-button--secondary" href="?section={{ issue.section }}">{{ issue.label }}</a>
       </article>
@@ -86,13 +78,13 @@
       <header><p>{% trans "Trust chain" %}</p><h3 id="authority-heading">{% trans "Authority comparison" %}</h3></header>
       <div class="authority-flow" role="list">
         <article role="listitem">
-          <span>1</span><div><h4>{% trans "Remote authority" %}</h4><p>{{ state.authority.remote.state }}</p><code>{{ state.authority.remote.authoritative_generation_id|default:"unknown" }}</code></div>
+          <span>1</span><div><h4>{% trans "Remote authority" %}</h4><p>{{ state.authority.remote.state_label }}</p>{% if state.authority.remote.authoritative_generation_id %}<code lang="en" dir="ltr">{{ state.authority.remote.authoritative_generation_id }}</code>{% endif %}</div>
         </article>
         <article role="listitem">
           <span>2</span><div><h4>{% trans "Prepared locally" %}</h4><p>{% blocktrans count count=state.workspaces|length %}{{ count }} workspace{% plural %}{{ count }} workspaces{% endblocktrans %}</p></div>
         </article>
         <article role="listitem">
-          <span>3</span><div><h4>{% trans "Runtime authority" %}</h4><p>{{ state.authority.runtime.state }}</p><code>{{ state.authority.runtime.active_generation_id|default:"unknown" }}</code></div>
+          <span>3</span><div><h4>{% trans "Runtime authority" %}</h4><p>{{ state.authority.runtime.state_label }}</p>{% if state.authority.runtime.active_generation_id %}<code lang="en" dir="ltr">{{ state.authority.runtime.active_generation_id }}</code>{% endif %}</div>
         </article>
       </div>
       <p class="vault-note">{% trans "Database projections never move the remote pointer or runtime pointer implicitly." %}</p>
@@ -103,8 +95,8 @@
       <dl class="vault-facts">
         <div><dt>{% trans "Dataset" %}</dt><dd>{{ state.profile.dataset_id|default:state.environment.dataset_id }}</dd></div>
         <div><dt>{% trans "Profile" %}</dt><dd>{{ state.profile.display_name|default:"Unavailable" }}</dd></div>
-        <div><dt>{% trans "Remote inventory" %}</dt><dd>{{ state.authority.remote.state }}</dd></div>
-        <div><dt>{% trans "Runtime readiness" %}</dt><dd>{{ state.authority.runtime.state }}</dd></div>
+        <div><dt>{% trans "Remote inventory" %}</dt><dd>{{ state.authority.remote.state_label }}</dd></div>
+        <div><dt>{% trans "Runtime readiness" %}</dt><dd>{{ state.authority.runtime.state_label }}</dd></div>
         <div><dt>{% trans "Admin mutations" %}</dt><dd>{{ state.feature_flags.admin_mutations_enabled|yesno:_("Enabled,Disabled") }}</dd></div>
         <div><dt>{% trans "Production activation" %}</dt><dd class="status status--disabled">{% trans "Disabled" %}</dd></div>
         <div><dt>{% trans "Garbage collection" %}</dt><dd>{{ state.feature_flags.gc_enabled|yesno:_("Enabled,Disabled") }}</dd></div>
@@ -126,15 +118,15 @@
       <details class="maintenance-health">
         <summary>{% trans "Review recovery, capacity, and workspace evidence" %}</summary>
         <dl class="vault-facts">
-        <div><dt>{% trans "Local recovery sets" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.state }} · {{ state.maintenance.health.local_recovery_sets.verified_count }}</dd></div>
+        <div><dt>{% trans "Local recovery sets" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.state_label }} · {{ state.maintenance.health.local_recovery_sets.verified_count }}</dd></div>
         <div><dt>{% trans "Recovery bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.bytes|filesizeformat }}</dd></div>
         <div><dt>{% trans "Held bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.held_bytes|filesizeformat }}</dd></div>
         <div><dt>{% trans "Prunable bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.prunable_bytes|filesizeformat }}</dd></div>
-        <div><dt>{% trans "Maintenance workspaces" %}</dt><dd>{{ state.maintenance.health.maintenance_workspaces.state }} · {{ state.maintenance.health.maintenance_workspaces.active_count }} ({{ state.maintenance.health.maintenance_workspaces.activation_ready_count }} {% trans "activation-ready" %})</dd></div>
-        <div><dt>{% trans "Verified Vault generations" %}</dt><dd>{{ state.maintenance.health.verified_vault_generations.state }} · {{ state.maintenance.health.verified_vault_generations.verified_count }}</dd></div>
-        <div><dt>{% trans "Free-space reserve" %}</dt><dd>{{ state.maintenance.health.free_space_reserve.state }} · {{ state.maintenance.health.free_space_reserve.free_bytes|filesizeformat }} {% trans "free" %}</dd></div>
-        <div><dt>{% trans "Last restore drill" %}</dt><dd>{{ state.maintenance.health.last_restore_drill.state }}{% if state.maintenance.health.last_restore_drill.observed_at %} · {{ state.maintenance.health.last_restore_drill.observed_at|date:"Y-m-d H:i:s T" }}{% endif %}{% if state.maintenance.health.last_restore_drill.workspace_id %} · <code>{{ state.maintenance.health.last_restore_drill.workspace_id }}</code>{% endif %}</dd></div>
-        <div><dt>{% trans "Cleanup status" %}</dt><dd>{{ state.maintenance.health.cleanup.state }} · {{ state.maintenance.health.cleanup.prunable_bytes|filesizeformat }} {% trans "prunable" %}</dd></div>
+        <div><dt>{% trans "Maintenance workspaces" %}</dt><dd>{{ state.maintenance.health.maintenance_workspaces.state_label }} · {{ state.maintenance.health.maintenance_workspaces.active_count }} ({{ state.maintenance.health.maintenance_workspaces.activation_ready_count }} {% trans "ready for activation review" %})</dd></div>
+        <div><dt>{% trans "Verified Vault generations" %}</dt><dd>{{ state.maintenance.health.verified_vault_generations.state_label }} · {{ state.maintenance.health.verified_vault_generations.verified_count }}</dd></div>
+        <div><dt>{% trans "Free-space reserve" %}</dt><dd>{{ state.maintenance.health.free_space_reserve.state_label }} · {{ state.maintenance.health.free_space_reserve.free_bytes|filesizeformat }} {% trans "free" %}</dd></div>
+        <div><dt>{% trans "Last restore drill" %}</dt><dd>{{ state.maintenance.health.last_restore_drill.state_label }}{% if state.maintenance.health.last_restore_drill.observed_at %} · {{ state.maintenance.health.last_restore_drill.observed_at|date:"Y-m-d H:i:s T" }}{% endif %}{% if state.maintenance.health.last_restore_drill.workspace_id %} · <code lang="en" dir="ltr">{{ state.maintenance.health.last_restore_drill.workspace_id }}</code>{% endif %}</dd></div>
+        <div><dt>{% trans "Cleanup status" %}</dt><dd>{{ state.maintenance.health.cleanup.state_label }} · {{ state.maintenance.health.cleanup.prunable_bytes|filesizeformat }} {% trans "prunable" %}</dd></div>
         </dl>
       </details>
       <div class="maintenance-operations" aria-labelledby="maintenance-operation-heading">
@@ -145,7 +137,7 @@
           <p>{% trans "Disabled controls reflect runtime authority, capacity, or external-service policy. Resolve the typed reason before retrying." %}</p>
           <ul>
             {% for item in state.readiness.disabled_capabilities %}
-            <li><code>{{ item.operation }}</code> · <code>{{ item.reason_code }}</code></li>
+            <li>{{ item.operation_label }}{% include "components/operator_evidence.html" with presentation=item.presentation technical_code=item.reason_code show_action=False only %}</li>
             {% endfor %}
           </ul>
           <a class="vault-button vault-button--secondary" href="?section=configuration">{% trans "Review runtime and profile evidence" %}</a>
@@ -157,7 +149,7 @@
             <h4>{% trans "Validate Files" %}</h4>
             <p>{% trans "Read-only checks for databases, media references, and stored search artifacts." %}</p>
             <span>{% trans "External embeddings" %}: {% trans "Never" %}</span>
-            {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+            {% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}
           </article>
           {% endwith %}
           {% with capability=state.maintenance.capabilities.repair_indexes %}
@@ -165,7 +157,7 @@
             <h4>{% trans "Repair Stored Indexes" %}</h4>
             <p>{% trans "Rebuild folder indexes from existing chunks and embeddings." %}</p>
             <span>{% trans "External embeddings" %}: {% trans "Never" %}</span>
-            {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+            {% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}
           </article>
           {% endwith %}
           {% with capability=state.maintenance.capabilities.reindex_needed %}
@@ -173,7 +165,7 @@
             <h4>{% trans "Reindex Needed" %}</h4>
             <p>{% trans "Reprocess only documents whose searchable artifacts are missing or invalid." %}</p>
             <span>{% trans "External embeddings" %}: {% trans "Required for affected documents" %}</span>
-            {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+            {% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}
           </article>
           {% endwith %}
           {% with capability=state.maintenance.capabilities.reindex_selected %}
@@ -181,7 +173,7 @@
             <h4>{% trans "Reindex Selected" %}</h4>
             <p>{% trans "Deliberately regenerate text, chunks, embeddings, and indexes for the selected scope." %}</p>
             <span>{% trans "External embeddings" %}: {% trans "Required" %}</span>
-            {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+            {% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}
           </article>
           {% endwith %}
         </div>
@@ -216,19 +208,19 @@
         <div class="vault-action-block maintenance-preview-actions">
           {% with capability=state.maintenance.capabilities.validate %}
           <button class="vault-button vault-button--secondary" type="submit" name="operation" value="validate"{% if not capability.enabled %} disabled{% endif %}>{% trans "Preview Validate Files" %}</button>
-          {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          {% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}
           {% endwith %}
           {% with capability=state.maintenance.capabilities.repair_indexes %}
           <button class="vault-button vault-button--secondary" type="submit" name="operation" value="repair_indexes"{% if not capability.enabled %} disabled{% endif %}>{% trans "Preview Repair Stored Indexes" %}</button>
-          {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          {% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}
           {% endwith %}
           {% with capability=state.maintenance.capabilities.reindex_needed %}
           <button class="vault-button vault-button--secondary" type="submit" name="operation" value="reindex_needed"{% if not capability.enabled %} disabled{% endif %}>{% trans "Preview Reindex Needed" %}</button>
-          {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          {% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}
           {% endwith %}
           {% with capability=state.maintenance.capabilities.reindex_selected %}
           <button class="vault-button vault-button--danger" type="submit" name="operation" value="reindex_selected"{% if not capability.enabled %} disabled{% endif %}>{% trans "Preview Reindex Selected" %}</button>
-          {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          {% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}
           {% endwith %}
         </div>
       </form>
@@ -239,7 +231,7 @@
       {% if state.maintenance.selected_plan %}
         <article class="maintenance-selected-plan" aria-labelledby="selected-plan-heading">
           <p class="vault-kicker">{% trans "Selected preview" %}</p>
-          <h4 id="selected-plan-heading">{{ state.maintenance.selected_plan.operation }}</h4>
+          <h4 id="selected-plan-heading">{{ state.maintenance.selected_plan.operation_label }}</h4>
           <code>{{ state.maintenance.selected_plan.public_id }}</code>
           <p class="vault-note">
             {% trans "Source runtime and manifest identities are embedded in the selection plan and revalidated at queue time." %}
@@ -263,8 +255,8 @@
       <div class="vault-records" role="list">
         {% for plan in state.maintenance.plans %}
         <article class="vault-record vault-record--compact" role="listitem">
-          <h4>{{ plan.operation }}</h4>
-          <p>{{ plan.state }} · {{ plan.preview.pdf_count }} {% trans "documents" %} · {{ plan.preview.folder_count }} {% trans "folders" %}</p>
+          <h4>{{ plan.operation_label }}</h4>
+          <p>{{ plan.state_label }} · {{ plan.preview.pdf_count }} {% trans "documents" %} · {{ plan.preview.folder_count }} {% trans "folders" %}</p>
           <p>{% trans "Estimated work" %}: {{ plan.preview.estimated_work_units }} · {% trans "Expires" %}: {{ plan.expires_at|date:"Y-m-d H:i:s T" }}</p>
           <p>{% trans "External embeddings" %}: {{ plan.external_embeddings_required|yesno:_("Required,Not required") }}</p>
           {% if plan.state == "previewed" %}
@@ -291,13 +283,13 @@
         {% if state.maintenance.selected_job %}
           <article class="vault-record vault-record--compact maintenance-selected-job" aria-labelledby="selected-job-heading">
             <p class="vault-kicker">{% trans "Focused job" %}</p>
-            <h4 id="selected-job-heading">{{ state.maintenance.selected_job.kind }} · <code>{{ state.maintenance.selected_job.public_id }}</code></h4>
-            <p>{{ state.maintenance.selected_job.status }} · {{ state.maintenance.selected_job.completed_items }}/{{ state.maintenance.selected_job.total_items }} {% trans "completed" %} · {{ state.maintenance.selected_job.failed_items }} {% trans "failed" %}</p>
+            <h4 id="selected-job-heading">{{ state.maintenance.selected_job.kind_label }} · <code lang="en" dir="ltr">{{ state.maintenance.selected_job.public_id }}</code></h4>
+            <p>{{ state.maintenance.selected_job.status_label }} · {{ state.maintenance.selected_job.completed_items }}/{{ state.maintenance.selected_job.total_items }} {% trans "completed" %} · {{ state.maintenance.selected_job.failed_items }} {% trans "failed" %}</p>
             {% widthratio state.maintenance.selected_job.completed_items state.maintenance.selected_job.total_items 100 as selected_job_progress %}
             <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ state.maintenance.selected_job.total_items }}" aria-valuenow="{{ state.maintenance.selected_job.completed_items }}">
               <span style="width: {{ selected_job_progress|default:0 }}%"></span>
             </div>
-            {% if state.maintenance.selected_job.error_summary %}<code>{{ state.maintenance.selected_job.error_summary }}</code>{% endif %}
+            {% if state.maintenance.selected_job.error_summary %}{% include "components/operator_evidence.html" with presentation=state.maintenance.selected_job.error_presentation technical_code=state.maintenance.selected_job.error_summary evidence_id=state.maintenance.selected_job.public_id show_action=False only %}{% endif %}
             {% if state.maintenance.selected_job.options.candidate_workspace_id %}
               <p>{% trans "Candidate workspace" %}: <code>{{ state.maintenance.selected_job.options.candidate_workspace_id }}</code> · {{ state.maintenance.selected_job.options.candidate_state }}</p>
             {% endif %}
@@ -327,13 +319,13 @@
           role="listitem"
           id="maintenance-job-{{ job.public_id }}"
         >
-          <h4>{{ job.kind }} · <code>{{ job.public_id }}</code></h4>
-          <p>{{ job.status }} · {{ job.completed_items }}/{{ job.total_items }} {% trans "completed" %} · {{ job.failed_items }} {% trans "failed" %}</p>
+          <h4>{{ job.kind_label }} · <code lang="en" dir="ltr">{{ job.public_id }}</code></h4>
+          <p>{{ job.status_label }} · {{ job.completed_items }}/{{ job.total_items }} {% trans "completed" %} · {{ job.failed_items }} {% trans "failed" %}</p>
           {% widthratio job.completed_items job.total_items 100 as maintenance_progress %}
           <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ job.total_items }}" aria-valuenow="{{ job.completed_items }}">
             <span style="width: {{ maintenance_progress|default:0 }}%"></span>
           </div>
-          {% if job.error_summary %}<code>{{ job.error_summary }}</code>{% endif %}
+          {% if job.error_summary %}{% include "components/operator_evidence.html" with presentation=job.error_presentation technical_code=job.error_summary evidence_id=job.public_id show_action=False only %}{% endif %}
           {% if job.options.candidate_workspace_id %}
           <p>{% trans "Candidate workspace" %}: <code>{{ job.options.candidate_workspace_id }}</code> · {{ job.options.candidate_state }}</p>
           {% if job.options.candidate_state == "activation_ready" %}
@@ -396,7 +388,7 @@
   <section class="vault-panel" aria-labelledby="sync-heading">
     <header><p>{% trans "Source to candidate" %}</p><h3 id="sync-heading">{% trans "Active Sync" %}</h3></header>
     <dl class="vault-facts vault-facts--wide">
-      <div><dt>{% trans "State" %}</dt><dd>{{ state.sync.state }}</dd></div>
+      <div><dt>{% trans "State" %}</dt><dd>{{ state.sync.state_label }}</dd></div>
       <div><dt>{% trans "Policy" %}</dt><dd>{{ state.sync.mode }}</dd></div>
       <div><dt>{% trans "Promotion policy" %}</dt><dd>{{ state.sync.promotion_mode }}</dd></div>
       <div><dt>{% trans "Source epoch" %}</dt><dd>{{ state.sync.source_epoch }}</dd></div>
@@ -427,14 +419,14 @@
           <p>{{ generation.created_at|date:"Y-m-d H:i" }}</p>
         </div>
         <dl>
-          <div><dt>{% trans "Vault" %}</dt><dd>{{ generation.vault_state }}</dd></div>
-          <div><dt>{% trans "Runtime" %}</dt><dd>{{ generation.runtime_state }}</dd></div>
-          <div><dt>{% trans "Local" %}</dt><dd>{{ generation.local_presence }}</dd></div>
+          <div><dt>{% trans "Vault" %}</dt><dd>{{ generation.vault_state_label }}</dd></div>
+          <div><dt>{% trans "Runtime" %}</dt><dd>{{ generation.runtime_state_label }}</dd></div>
+          <div><dt>{% trans "Local" %}</dt><dd>{{ generation.local_presence_label }}</dd></div>
           <div><dt>{% trans "Objects" %}</dt><dd>{{ generation.file_count }}</dd></div>
           <div><dt>{% trans "Bytes" %}</dt><dd>{{ generation.byte_count|filesizeformat }}</dd></div>
         </dl>
         {% if generation.protection_reasons %}
-        <p class="vault-note">{% trans "Protected by" %}: {% for reason in generation.protection_reasons %}<code>{{ reason }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+        <div class="vault-note"><strong>{% trans "Deletion protection is active" %}</strong>{% for reason in generation.protection_presentations %}{% include "components/operator_evidence.html" with presentation=reason technical_code=reason.technical_code show_action=False only %}{% endfor %}</div>
         {% endif %}
         {% if generation.vault_state == "candidate" and state.feature_flags.admin_mutations_enabled %}
         <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
@@ -462,9 +454,9 @@
         {% for generation in state.generations %}
         <article class="vault-record vault-record--compact" role="listitem">
           <h4>{{ generation.generation_id }}</h4>
-          <p>{{ generation.vault_state }} · {{ generation.file_count }} {% trans "objects" %}</p>
+          <p>{{ generation.vault_state_label }} · {{ generation.file_count }} {% trans "objects" %}</p>
           {% if generation.protection_reasons %}
-          <p>{% trans "Protected by" %}: {% for reason in generation.protection_reasons %}<code>{{ reason }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+          <div><strong>{% trans "Deletion protection is active" %}</strong>{% for reason in generation.protection_presentations %}{% include "components/operator_evidence.html" with presentation=reason technical_code=reason.technical_code show_action=False only %}{% endfor %}</div>
           {% endif %}
           {% if generation.retirement_allowed and state.feature_flags.admin_mutations_enabled %}
           <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
@@ -487,8 +479,12 @@
             {% csrf_token %}
             <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:hold:{{ forloop.counter }}">
             <input type="hidden" name="state_version" value="{{ state.state_version }}">
-            <label for="hold-reason-{{ forloop.counter }}">{% trans "Hold reason code" %}</label>
-            <input id="hold-reason-{{ forloop.counter }}" name="reason_code" maxlength="80" required>
+            <label for="hold-reason-{{ forloop.counter }}">{% trans "Reason for hold" %}</label>
+            <select id="hold-reason-{{ forloop.counter }}" name="reason_code" required>
+              <option value="incident_investigation">{% trans "Incident investigation" %}</option>
+              <option value="legal_or_policy_review">{% trans "Legal or policy review" %}</option>
+              <option value="operator_requested_preservation">{% trans "Operator-requested preservation" %}</option>
+            </select>
             <label for="hold-owner-{{ forloop.counter }}">{% trans "Incident or owner reference" %}</label>
             <input id="hold-owner-{{ forloop.counter }}" name="owner_reference" maxlength="160" required>
             <button class="vault-button vault-button--secondary" type="submit"{% if not state.feature_flags.admin_mutations_enabled %} disabled{% endif %}>{% trans "Create retention hold" %}</button>
@@ -504,7 +500,8 @@
         {% for hold in state.retention_holds %}
         <article class="vault-record vault-record--compact" role="listitem">
           <h4>{{ hold.generation_id }}</h4>
-          <p><code>{{ hold.reason_code }}</code> · {{ hold.owner_reference }}</p>
+          <p>{{ hold.presentation.title }} · {{ hold.owner_reference }}</p>
+          {% include "components/operator_evidence.html" with presentation=hold.presentation technical_code=hold.reason_code evidence_id=hold.public_id show_action=False only %}
           <p>{% if hold.active %}{% trans "Active" %}{% else %}{% trans "Released or expired" %}{% endif %}</p>
           {% if hold.active and state.feature_flags.admin_mutations_enabled %}
           <form method="post" action="{% url 'vaultops:retention_hold_release' hold.public_id %}">
@@ -532,7 +529,7 @@
         {% for plan in state.gc_plans %}
         <article class="vault-record vault-record--compact" role="listitem">
           <h4>{{ plan.public_id }}</h4>
-          <p>{{ plan.state }} · {{ plan.candidate_generation_ids|length }} {% trans "candidate generations" %}</p>
+          <p>{{ plan.state_label }} · {{ plan.candidate_generation_ids|length }} {% trans "candidate generations" %}</p>
           <dl>
             <div><dt>{% trans "Exclusive objects" %}</dt><dd>{{ plan.estimates.exclusive_objects|default:"0" }}</dd></div>
             <div><dt>{% trans "Exclusive bytes" %}</dt><dd>{{ plan.estimates.exclusive_bytes|default:"0"|filesizeformat }}</dd></div>
@@ -574,8 +571,8 @@
         {% for workspace in state.workspaces %}
         <article class="vault-record vault-record--compact" role="listitem">
           <h4>{{ workspace.generation_id }}</h4>
-          <p>{{ workspace.state }} · {{ workspace.downloaded_objects }} {% trans "objects" %}</p>
-          {% if workspace.safe_error_code %}<code>{{ workspace.safe_error_code }}</code>{% endif %}
+          <p>{{ workspace.state_label }} · {{ workspace.downloaded_objects }} {% trans "objects" %}</p>
+          {% if workspace.safe_error_code %}{% include "components/operator_evidence.html" with presentation=workspace.error_presentation technical_code=workspace.safe_error_code evidence_id=workspace.public_id show_action=False only %}{% endif %}
           {% if workspace.activation_allowed and state.feature_flags.admin_mutations_enabled %}
           <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
             {% csrf_token %}
@@ -601,7 +598,7 @@
         <button class="vault-button vault-button--danger" type="submit"{% if not state.rollback_capability.enabled %} disabled aria-describedby="signed-rollback-reason"{% endif %}>{% trans "Review signed rollback" %}</button>
       </form>
       {% if not state.rollback_capability.enabled %}
-      <p id="signed-rollback-reason" class="vault-note"><code>{{ state.rollback_capability.reason_code }}</code></p>
+      <div id="signed-rollback-reason" class="vault-note">{% include "components/operator_evidence.html" with presentation=state.rollback_capability.presentation technical_code=state.rollback_capability.reason_code show_action=False only %}</div>
       {% else %}
       <p class="vault-note">{% trans "Verified previous runtime:" %} <code>{{ state.rollback_capability.target_generation_id }}</code></p>
       {% endif %}
@@ -616,10 +613,10 @@
       <div class="vault-records" role="list">
         {% for job in state.jobs %}
         <article class="vault-record vault-record--compact" role="listitem">
-          <h4>{{ job.operation }}</h4>
-          <p><code>{{ job.public_id }}</code></p>
-          <p>{{ job.status }}{% if job.phase %} · {{ job.phase }}{% endif %}</p>
-          {% if job.safe_error_code %}<code>{{ job.safe_error_code }}</code>{% endif %}
+          <h4>{{ job.operation_label }}</h4>
+          <p><code lang="en" dir="ltr">{{ job.public_id }}</code></p>
+          <p>{{ job.status_label }}{% if job.phase %} · {{ job.phase_label }}{% endif %}</p>
+          {% if job.safe_error_code %}{% include "components/operator_evidence.html" with presentation=job.error_presentation technical_code=job.safe_error_code evidence_id=job.public_id show_action=False only %}{% endif %}
           {% if job.cancellable %}
           <form method="post" action="{% url 'vaultops:job_cancel' job.public_id %}">
             {% csrf_token %}
@@ -644,7 +641,7 @@
       <header><p>{% trans "Append-only evidence" %}</p><h3 id="audit-heading">{% trans "Audit trail" %}</h3></header>
       <ol class="vault-timeline">
         {% for event in state.audit %}
-        <li><time datetime="{{ event.created_at|date:'c' }}">{{ event.created_at|date:"Y-m-d H:i:s" }}</time><strong>{{ event.action }}</strong><span>{{ event.result }}</span>{% if event.safe_error_code %}<code>{{ event.safe_error_code }}</code>{% endif %}</li>
+        <li><time datetime="{{ event.created_at|date:'c' }}">{{ event.created_at|date:"Y-m-d H:i:s" }}</time><strong>{{ event.action_label }}</strong><span>{{ event.result_label }}</span>{% if event.safe_error_code %}{% include "components/operator_evidence.html" with presentation=event.error_presentation technical_code=event.safe_error_code evidence_id=event.public_id show_action=False only %}{% elif event.reason_code %}{% include "components/operator_evidence.html" with presentation=event.presentation technical_code=event.reason_code evidence_id=event.public_id show_action=False only %}{% endif %}</li>
         {% empty %}<li>{% trans "No control-plane audit events are recorded." %}</li>{% endfor %}
       </ol>
     </section>
@@ -699,10 +696,10 @@
     <section class="vault-panel" aria-labelledby="lease-heading">
       <header><p>{% trans "Redacted ownership" %}</p><h3 id="lease-heading">{% trans "Writer lease" %}</h3></header>
       <dl class="vault-facts">
-        <div><dt>{% trans "State" %}</dt><dd>{{ state.lease.state }}</dd></div>
+        <div><dt>{% trans "State" %}</dt><dd>{{ state.lease.state_label }}</dd></div>
         <div><dt>{% trans "Holder fingerprint" %}</dt><dd>{{ state.lease.holder_fingerprint|default:"—" }}</dd></div>
         <div><dt>{% trans "Fencing epoch" %}</dt><dd>{{ state.lease.writer_epoch|default:"—" }}</dd></div>
-        <div><dt>{% trans "Reason" %}</dt><dd>{{ state.lease.reason_code|default:"—" }}</dd></div>
+        {% if state.lease.reason_code %}<div><dt>{% trans "Guidance" %}</dt><dd>{% include "components/operator_evidence.html" with presentation=state.lease.presentation technical_code=state.lease.reason_code show_action=False only %}</dd></div>{% endif %}
       </dl>
       <p class="vault-note">{% trans "Owner tokens and raw lease records are never sent to the browser. Recovery requires a separately guarded operator flow." %}</p>
     </section>

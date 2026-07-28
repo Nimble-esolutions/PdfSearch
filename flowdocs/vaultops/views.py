@@ -22,6 +22,7 @@ from core.maintenance_plans import (
     workbench_maintenance_state,
 )
 from core.models import MaintenanceAuditEvent, MaintenanceJob, MaintenancePlan
+from core.operator_presentation import decorate_operator_state, present_reason
 from core.emergency_recovery import create_set as create_recovery_set
 from vaultops.models import (
     ArtifactGeneration,
@@ -223,6 +224,7 @@ def _api_response(
         {
             "status": status,
             "reason_code": reason_code,
+            "presentation": present_reason(reason_code) if reason_code else None,
             "severity": severity,
             "recommended_action": recommended_action,
             "observed_at": timezone.now(),
@@ -288,7 +290,7 @@ def _mutation_error(request, exc, *, section="overview"):
             recommended_action="Refresh state and review the blocking reason.",
             http_status=http_status,
         )
-    messages.error(request, reason_code.replace("_", " "))
+    messages.error(request, present_reason(reason_code)["title"])
     return _form_redirect(section)
 
 
@@ -306,6 +308,7 @@ def workbench(request):
         selected_job_id=request.GET.get("job", ""),
     )
     enrich_workbench_readiness(state)
+    decorate_operator_state(state)
     state["vault_state_version"] = state["state_version"]
     state["maintenance_state_version"] = state["maintenance"]["state_version"]
     state["combined_state_version"] = hashlib.sha256(
@@ -342,6 +345,7 @@ def state_api(request):
         selected_job_id=request.GET.get("job", ""),
     )
     enrich_workbench_readiness(state)
+    decorate_operator_state(state)
     state["vault_state_version"] = state["state_version"]
     state["maintenance_state_version"] = state["maintenance"]["state_version"]
     state["combined_state_version"] = hashlib.sha256(

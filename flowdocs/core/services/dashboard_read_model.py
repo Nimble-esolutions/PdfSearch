@@ -8,6 +8,7 @@ from django.utils.translation import gettext
 
 from core.models import CustomUser, Folder, MaintenanceJob, PDFFile
 from core.maintenance_plans import LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS
+from core.operator_presentation import decorate_dashboard_state
 
 
 CATEGORY_PAGE_SIZE = 24
@@ -238,7 +239,7 @@ def build_dashboard_state(*, user, data):
             "recommended_action": None,
         }
 
-    return {
+    return decorate_dashboard_state({
         "observed_at": timezone.now(),
         "posture": posture,
         "folder_count": folder_count,
@@ -268,4 +269,4 @@ def build_dashboard_state(*, user, data):
             if user.role in {"admin", "superadmin"}
             else None
         ),
-    }
+    })

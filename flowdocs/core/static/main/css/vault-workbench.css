@@ -387,3 +387,36 @@ code { overflow-wrap: anywhere; color: var(--vault-maroon-dark); }
 @media (prefers-reduced-motion: reduce) {
   .vault-workbench *, .vault-confirmation * { scroll-behavior: auto !important; transition: none !important; }
 }
+.operator-guidance {
+  border-inline-start: 3px solid var(--vault-border, #8b8175);
+  margin-block: 0.5rem;
+  padding-inline-start: 0.75rem;
+}
+
+.operator-guidance > p {
+  margin-block: 0.25rem;
+}
+
+.operator-guidance__consequence {
+  color: var(--vault-muted, #625c55);
+}
+
+.operator-evidence {
+  margin-block-start: 0.5rem;
+}
+
+.operator-evidence summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  padding-block: 0.65rem;
+}
+
+.operator-evidence dl {
+  margin: 0;
+}
+
+.operator-evidence code {
+  overflow-wrap: anywhere;
+  unicode-bidi: isolate;
+}

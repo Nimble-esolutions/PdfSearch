@@ -22,8 +22,8 @@
 
   <div class="cockpit-posture cockpit-posture--{{ cockpit.posture.severity }}" role="status">
     <div>
-      <span class="cockpit-posture__code">{{ cockpit.posture.reason_code }}</span>
-      <strong>{{ cockpit.posture.message }}</strong>
+      <strong>{{ cockpit.posture.presentation.title }}</strong>
+      <span>{{ cockpit.posture.presentation.detail }}</span>
     </div>
     {% if cockpit.posture.recommended_action %}
       <a class="btn btn-primary btn-sm" href="{{ cockpit.posture.recommended_action.action_url }}">{{ cockpit.posture.recommended_action.action_label }}</a>
@@ -71,7 +71,6 @@
             <div>
               <h3>{{ item.title }}</h3>
               <p>{{ item.detail }}</p>
-              <code>{{ item.reason_code }}</code>
             </div>
             {% if item.reason_code != cockpit.posture.reason_code %}
               <a href="{{ item.action_url }}" class="btn btn-outline-primary btn-sm cockpit-attention-item__action">{{ item.action_label }}</a>
@@ -84,6 +83,14 @@
           </div>
         {% endfor %}
       </div>
+      {% if cockpit.housekeeping_items %}
+        <div class="admin-panel admin-panel--inset">
+          <h3>{% trans "Housekeeping" %}</h3>
+          {% for item in cockpit.housekeeping_items %}
+            <p>{{ item.title }} — {{ item.detail }} <a class="cockpit-housekeeping__link" href="{{ item.action_url }}">{{ item.action_label }}</a></p>
+          {% endfor %}
+        </div>
+      {% endif %}
     </section>
 
     <div class="admin-panel">
@@ -264,7 +271,7 @@
             <div class="ops-lane-item">
               <span>
                 <strong>{{ job.get_kind_display }}</strong>
-                <small>{{ job.status|title }}</small>
+                <small>{{ job.get_status_display }}</small>
               </span>
               <span>
                 <b>{{ job.completed_items }}/{{ job.total_items }}</b>
@@ -285,17 +292,14 @@
         <div class="admin-page-heading">
           <h2>{% trans "Vault posture" %}</h2>
           <p>
-            <strong>{{ cockpit.vault_posture.status|default:"unknown"|title }}</strong>
-            {% if cockpit.vault_posture.reason_code %}
-              · {% trans "Reason" %}: {{ cockpit.vault_posture.reason_code }}
-            {% endif %}
+            <strong>{{ cockpit.vault_posture.status_label|default:_("Unavailable") }}</strong>
           </p>
         </div>
         <div class="ops-lane-list">
           <div class="ops-lane-item">
             <span>
               <strong>{% trans "Remote authority" %}</strong>
-              <small>{{ cockpit.vault_posture.remote.state|default:"unknown"|title }}</small>
+              <small>{{ cockpit.vault_posture.remote.state_label|default:_("Unavailable") }}</small>
             </span>
             <span>
               {% if cockpit.vault_posture.remote.authoritative_generation_id %}
@@ -307,7 +311,7 @@
           <div class="ops-lane-item">
             <span>
               <strong>{% trans "Runtime" %}</strong>
-              <small>{{ cockpit.vault_posture.runtime.state|default:"unknown"|title }}</small>
+              <small>{{ cockpit.vault_posture.runtime.state_label|default:_("Unavailable") }}</small>
             </span>
             <span>
               {% if cockpit.vault_posture.runtime.active_generation_id %}

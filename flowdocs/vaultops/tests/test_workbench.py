@@ -284,7 +284,7 @@ class VaultWorkbenchTests(TestCase):
         )
         self.assertContains(response, "Verified Vault generations")
         self.assertContains(response, "Free-space reserve")
-        self.assertContains(response, "passed")
+        self.assertContains(response, "Passed")
         self.assertContains(response, str(workspace.public_id))
         self.assertContains(response, "mw-evidence")
         self.assertContains(response, "Vault publication required")

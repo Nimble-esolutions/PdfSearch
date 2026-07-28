@@ -2448,3 +2448,129 @@ msgstr "स्वाक्षरीत रोलबॅक तपासा"
 #: core/templates/vaultops/workbench.html
 msgid "Verified previous runtime:"
 msgstr "सत्यापित मागील रनटाइम:"
+
+msgid "Technical details"
+msgstr "तांत्रिक तपशील"
+
+msgid "Code"
+msgstr "कोड"
+
+msgid "Evidence ID"
+msgstr "पुरावा आयडी"
+
+msgid "Housekeeping"
+msgstr "नियमित देखभाल"
+
+msgid "Unavailable"
+msgstr "उपलब्ध नाही"
+
+msgid "Reason for hold"
+msgstr "होल्डचे कारण"
+
+msgid "Incident investigation"
+msgstr "घटना तपास"
+
+msgid "Legal or policy review"
+msgstr "कायदेशीर किंवा धोरणात्मक आढावा"
+
+msgid "Operator-requested preservation"
+msgstr "ऑपरेटरने विनंती केलेले जतन"
+
+msgid "Deletion protection is active"
+msgstr "हटविण्यापासून संरक्षण सक्रिय आहे"
+
+msgid "Additional technical evidence requires review."
+msgstr "अतिरिक्त तांत्रिक पुराव्याचा आढावा आवश्यक आहे."
+
+msgid "The system recorded evidence that does not yet have approved operator guidance."
+msgstr "प्रणालीने असा पुरावा नोंदवला आहे ज्यासाठी अद्याप मंजूर ऑपरेटर मार्गदर्शन उपलब्ध नाही."
+
+msgid "Do not infer a recovery action from the technical code alone."
+msgstr "केवळ तांत्रिक कोडवरून पुनर्प्राप्ती कृती ठरवू नका."
+
+msgid "Review operations evidence"
+msgstr "संचालन पुराव्याचा आढावा घ्या"
+
+msgid "Embedding service is unavailable"
+msgstr "एम्बेडिंग सेवा उपलब्ध नाही"
+
+msgid "New embeddings cannot be generated in this environment."
+msgstr "या वातावरणात नवीन एम्बेडिंग तयार करता येत नाहीत."
+
+msgid "Reindex operations remain disabled."
+msgstr "पुनःअनुक्रमणिका कृती बंद राहतील."
+
+msgid "Review embedding configuration"
+msgstr "एम्बेडिंग संरचनेचा आढावा घ्या"
+
+msgid "Retry available"
+msgstr "पुन्हा प्रयत्न उपलब्ध"
+
+msgid "Observation is stale"
+msgstr "निरीक्षण कालबाह्य आहे"
+
+msgid "Additional evidence"
+msgstr "अतिरिक्त पुरावा"
+
+msgid "Ready for activation review"
+msgstr "सक्रियकरण आढाव्यासाठी तयार"
+
+msgid "Vault changes are disabled"
+msgstr "तिजोरीतील बदल बंद आहेत"
+
+msgid "This environment does not permit administrative Vault mutations."
+msgstr "या वातावरणात प्रशासकीय तिजोरी बदलांना परवानगी नाही."
+
+msgid "The control remains unavailable."
+msgstr "नियंत्रण उपलब्ध राहणार नाही."
+
+msgid "Review configuration"
+msgstr "संरचनेचा आढावा घ्या"
+
+msgid "Rollback evidence is incomplete"
+msgstr "रोलबॅक पुरावा अपूर्ण आहे"
+
+msgid "The signed active or previous runtime pointer is missing."
+msgstr "स्वाक्षरीत सक्रिय किंवा मागील रनटाइम निर्देशांक उपलब्ध नाही."
+
+msgid "Signed rollback remains unavailable."
+msgstr "स्वाक्षरीत रोलबॅक उपलब्ध राहणार नाही."
+
+msgid "Review runtime evidence"
+msgstr "रनटाइम पुराव्याचा आढावा घ्या"
+
+msgid "A retention hold is active"
+msgstr "जतन होल्ड सक्रिय आहे"
+
+msgid "An operator hold requires this generation to be preserved."
+msgstr "ऑपरेटर होल्डमुळे ही आवृत्ती जतन करणे आवश्यक आहे."
+
+msgid "It remains protected from deletion."
+msgstr "ही आवृत्ती हटविण्यापासून संरक्षित राहील."
+
+msgid "Review retention holds"
+msgstr "जतन होल्डचा आढावा घ्या"
+
+msgid "Approved Vault profile is unavailable"
+msgstr "मंजूर तिजोरी प्रोफाइल उपलब्ध नाही"
+
+msgid "The server-approved remote profile could not be loaded."
+msgstr "सर्व्हरने मंजूर केलेले दूरस्थ प्रोफाइल लोड करता आले नाही."
+
+msgid "Remote inventory and restore work remain unavailable."
+msgstr "दूरस्थ सूची आणि पुनर्स्थापना कार्य उपलब्ध राहणार नाही."
+
+msgid "Review profile configuration"
+msgstr "प्रोफाइल संरचनेचा आढावा घ्या"
+
+msgid "Local development posture"
+msgstr "स्थानिक विकास स्थिती"
+
+msgid "Controlled runtime posture"
+msgstr "नियंत्रित रनटाइम स्थिती"
+
+msgid "Remote publication and production activation stay disabled or explicitly gated in local development. Use this Workbench to inspect evidence and prepare candidates; it never changes remote authority implicitly."
+msgstr "स्थानिक विकासात दूरस्थ प्रकाशन आणि उत्पादन सक्रियकरण बंद किंवा स्पष्टपणे नियंत्रित राहते. पुरावा तपासण्यासाठी आणि उमेदवार तयार करण्यासाठी हे कार्यपटल वापरा; ते दूरस्थ अधिकार आपोआप बदलत नाही."
+
+msgid "Remote publication, restore, and activation remain separately gated by verified evidence and explicit operator confirmation."
+msgstr "दूरस्थ प्रकाशन, पुनर्स्थापना आणि सक्रियकरण यांना सत्यापित पुरावा आणि स्पष्ट ऑपरेटर पुष्टीची स्वतंत्र अट लागू राहते."
