@@ -245,11 +245,10 @@ def inventory_local_artifacts() -> list[dict]:
                 reasons.append("current_or_checkpointed_job")
             if manifest.get("runtime_state") in {"active", "previous"}:
                 reasons.append("active_or_previous_runtime")
-        if (
-            record["category"] == "maintenance_workspace"
-            and manifest.get("state") == "activation_ready"
-        ):
-            reasons.append("maintenance_candidate")
+        if record["category"] == "maintenance_workspace":
+            maintenance_job = manifest.get("source", {}).get("job_id", "")
+            if maintenance_job in protected_runtime["job_public_ids"]:
+                reasons.append("current_or_checkpointed_job")
         if manifest.get("activation_reference"):
             reasons.append("activation_reference")
         if manifest.get("resumable_checkpoint"):
@@ -300,12 +299,35 @@ def cleanup_plan(now: datetime | None = None) -> dict:
             retained.append(record)
             continue
         if reason:
-            candidates.append({**record, "reason_code": reason})
+            relationship_basis = hashlib.sha256(
+                json.dumps(
+                    {
+                        "category": record["category"],
+                        "manifest": record["manifest"],
+                        "name": record["name"],
+                        "protection_reasons": record["protection_reasons"],
+                    },
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            candidates.append(
+                {
+                    **record,
+                    "reason_code": reason,
+                    "relationship_basis": relationship_basis,
+                }
+            )
         else:
             retained.append(record)
     basis = {
         "candidates": [
-            (item["category"], item["path"], item["bytes"], item["reason_code"])
+            (
+                item["category"],
+                item["path"],
+                item["bytes"],
+                item["reason_code"],
+                item["relationship_basis"],
+            )
             for item in candidates
         ],
         "protected": [
@@ -351,6 +373,28 @@ def apply_cleanup(plan_id: str) -> dict:
     }
     removed = []
     for item in plan["candidates"]:
+        fresh_plan = cleanup_plan()
+        if not fresh_plan["apply_allowed"]:
+            raise CleanupError("cleanup_exceeds_20_gib_approval_boundary")
+        fresh_item = next(
+            (
+                candidate
+                for candidate in fresh_plan["candidates"]
+                if candidate["path"] == item["path"]
+            ),
+            None,
+        )
+        comparison_fields = (
+            "category",
+            "path",
+            "bytes",
+            "reason_code",
+            "relationship_basis",
+        )
+        if fresh_item is None or any(
+            fresh_item[field] != item[field] for field in comparison_fields
+        ):
+            raise CleanupError("stale_cleanup_plan")
         path = Path(item["path"])
         if path.is_symlink() or path.parent.resolve() not in allowed_roots:
             raise CleanupError("unsafe_cleanup_path", str(path))

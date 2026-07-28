@@ -298,7 +298,7 @@ class ArtifactCleanupPlannerTests(TestCase):
             json.dumps(
                 {
                     "state": "activation_ready",
-                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
         )
@@ -356,7 +356,7 @@ class ArtifactCleanupPlannerTests(TestCase):
         self.settings.disable()
         self.temporary.cleanup()
 
-    def test_plan_protects_candidate_and_requires_current_confirmation(self):
+    def test_plan_protects_references_and_requires_current_confirmation(self):
         plan = cleanup_plan()
         self.assertEqual(len(plan["candidates"]), 1)
         self.assertEqual(
@@ -367,7 +367,10 @@ class ArtifactCleanupPlannerTests(TestCase):
             item["name"]: item["protection_reasons"]
             for item in plan["protected"]
         }
-        self.assertEqual(protections["candidate"], ["maintenance_candidate"])
+        self.assertNotIn("candidate", protections)
+        self.assertIn(
+            "candidate", {item["name"] for item in plan["retained"]}
+        )
         self.assertEqual(protections["incident-held"], ["incident_hold"])
         self.assertEqual(
             protections["activation-reference"], ["activation_reference"]
@@ -384,6 +387,31 @@ class ArtifactCleanupPlannerTests(TestCase):
         result = apply_cleanup(plan["plan_id"])
         self.assertEqual(len(result["removed"]), 1)
         self.assertFalse(Path(result["removed"][0]["path"]).exists())
+
+    def test_expired_activation_ready_workspace_is_a_candidate(self):
+        workspace = Path(settings.MAINTENANCE_WORKSPACE_ROOT) / "expired-ready"
+        workspace.mkdir()
+        (workspace / "db.sqlite3").write_bytes(b"candidate")
+        (workspace / WORKSPACE_MANIFEST).write_text(
+            json.dumps(
+                {
+                    "state": "activation_ready",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "expires_at": "2020-01-08T00:00:00+00:00",
+                    "source": {"job_id": str(uuid.uuid4())},
+                }
+            )
+        )
+
+        plan = cleanup_plan()
+
+        candidate = next(
+            item for item in plan["candidates"]
+            if item["name"] == "expired-ready"
+        )
+        self.assertEqual(
+            candidate["reason_code"], "unactivated_workspace_expired"
+        )
 
     @patch("core.artifact_cleanup.MAX_APPLY_BYTES", 1)
     def test_apply_is_blocked_above_approval_boundary(self):
@@ -514,6 +542,47 @@ class ArtifactCleanupPlannerTests(TestCase):
             "workspace_reference",
             protected["protection_reasons"],
         )
+
+    def test_apply_rechecks_pointer_protection_before_deletion(self):
+        from vaultops.models import RuntimePointerObservation
+
+        runtime = Path(settings.RUNTIME_GENERATIONS_ROOT) / "pointer-race"
+        runtime.mkdir()
+        (runtime / "db.sqlite3").write_bytes(b"candidate")
+        (runtime / "local-generation-manifest.json").write_text(
+            json.dumps(
+                {
+                    "origin": "local_maintenance",
+                    "generation_id": "pointer-race-generation",
+                    "created_at": "2020-01-01T00:00:00+00:00",
+                    "vault_authority": {"state": "unpublished"},
+                }
+            )
+        )
+        plan = cleanup_plan()
+        real_cleanup_plan = cleanup_plan
+        calls = 0
+
+        def plan_with_pointer_change(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                RuntimePointerObservation.objects.create(
+                    deployment_id=settings.ENV_IDENTITY.deployment_id,
+                    active_generation_id="pointer-race-generation",
+                    status="ready",
+                    observed_at=datetime.now(timezone.utc),
+                )
+            return real_cleanup_plan(*args, **kwargs)
+
+        with patch(
+            "core.artifact_cleanup.cleanup_plan",
+            side_effect=plan_with_pointer_change,
+        ):
+            with self.assertRaisesRegex(CleanupError, "stale_cleanup_plan"):
+                apply_cleanup(plan["plan_id"])
+
+        self.assertTrue(runtime.exists())
 
     @patch(
         "core.artifact_cleanup._runtime_protections",
