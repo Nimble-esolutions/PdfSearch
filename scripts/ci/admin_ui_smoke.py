@@ -86,7 +86,12 @@ def main():
         require(dashboard.status_code == 200, f"dashboard GET failed: {dashboard.status_code}")
         require(
             "Operations Cockpit" in dashboard.text
-            and "Dispatch Board" in dashboard.text
+            and "Needs attention" in dashboard.text
+            and "Category Yard" in dashboard.text
+            and 'name="readiness"' in dashboard.text
+            and 'name="provenance"' in dashboard.text
+            and "Active Work" in dashboard.text
+            and "Vault posture" in dashboard.text
             and "Add Category" in dashboard.text
             and ("No categories yet" in dashboard.text or "admin-category-card" in dashboard.text),
             "dashboard UI missing",
@@ -107,6 +112,16 @@ def main():
             and "Queue publish-only sync" in sync.text
             and 'method="post"' in sync.text,
             "no-JavaScript Active Sync form missing",
+        )
+        maintenance = client.get("/dashboard/operations/?section=maintenance")
+        require(
+            maintenance.status_code == 200
+            and "Documents & Indexes" in maintenance.text
+            and "Choose the outcome you need" in maintenance.text
+            and "Unchanged during processing" in maintenance.text
+            and "Preview Repair Stored Indexes" in maintenance.text
+            and 'name="filter_indexed"' in maintenance.text,
+            "guided Documents & Indexes workbench missing",
         )
         state = client.get("/dashboard/operations/api/v1/state/")
         require(state.status_code == 200, "workbench state API failed")
