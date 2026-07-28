@@ -2087,7 +2087,9 @@ class JobDrawerTests(TestCase):
 
     def test_active_jobs_endpoint_returns_only_active(self):
         running = MaintenanceJob.objects.create(kind="validate", status="running")
-        queued = MaintenanceJob.objects.create(kind="reindex_all", status="queued")
+        queued = MaintenanceJob.objects.create(
+            kind="reindex_selected", status="queued"
+        )
         MaintenanceJob.objects.create(kind="validate", status="completed")
         MaintenanceJob.objects.create(kind="validate", status="failed")
         self.client.force_login(self.superadmin)
@@ -2098,6 +2100,23 @@ class JobDrawerTests(TestCase):
         self.assertEqual(data["count"], 2)
         self.assertIn(str(running.public_id), job_ids)
         self.assertIn(str(queued.public_id), job_ids)
+
+    def test_active_jobs_excludes_legacy_generation_kinds(self):
+        queued = MaintenanceJob.objects.create(
+            kind="reindex_selected",
+            status="queued",
+        )
+        MaintenanceJob.objects.create(
+            kind="sync_generation",
+            status="running",
+        )
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("active_jobs"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        job_ids = [j["job_id"] for j in data["jobs"]]
+        self.assertIn(str(queued.public_id), job_ids)
+        self.assertNotIn("sync_generation", [j["kind"] for j in data["jobs"]])
 
     def test_active_jobs_requires_superadmin(self):
         admin = get_user_model().objects.create_user(
@@ -2132,6 +2151,21 @@ class JobDrawerTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "job-drawer-toggle")
+
+    def test_legacy_job_kind_cannot_be_cancelled_from_cockpit_action(self):
+        self.client.force_login(self.superadmin)
+        job = MaintenanceJob.objects.create(
+            kind="restore_generation", status="running"
+        )
+        response = self.client.post(
+            reverse("maintenance_job_action", args=[job.public_id]),
+            {"action": "cancel"},
+            follow=True,
+        )
+
+        self.assertContains(response, "maintenance_job_action_not_allowed")
+        job.refresh_from_db()
+        self.assertEqual(job.status, "running")
 
 
 class DocumentLifecycleTests(TestCase):

@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.utils.translation import gettext
 
 from core.models import CustomUser, Folder, MaintenanceJob, PDFFile
+from core.maintenance_plans import LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS
 
 
 CATEGORY_PAGE_SIZE = 24
@@ -197,6 +198,7 @@ def build_dashboard_state(*, user, data):
     is_superadmin = getattr(user, "role", None) == "superadmin"
     jobs = list(
         MaintenanceJob.objects.select_related("requested_by")
+        .filter(kind__in=LOCAL_MAINTENANCE_JOB_KINDS)
         .order_by("-created_at")[:ACTIVE_JOB_LIMIT]
     ) if is_superadmin else []
     needs_index = max(total_pdfs - indexed_pdfs, 0)

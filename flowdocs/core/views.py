@@ -68,6 +68,7 @@ from .maintenance import (
     restore_pdf,
 )
 from .maintenance_plans import (
+    LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS,
     MaintenancePlanError,
     create_plan as create_maintenance_plan,
 )
@@ -1088,6 +1089,12 @@ def bulk_filter_preview(request):
 def maintenance_job_action(request, job_id):
     """Cancel active work or requeue a failed job from the cockpit."""
     job = get_object_or_404(MaintenanceJob, public_id=job_id)
+    if job.kind not in LOCAL_MAINTENANCE_JOB_KINDS:
+        messages.error(
+            request,
+            "maintenance_job_action_not_allowed: this maintenance job is not managed here.",
+        )
+        return redirect("dashboard")
     action = request.POST.get("action", "").strip()
     if action == "cancel" and job.status in {"queued", "running"}:
         job.status = "cancel_requested" if job.status == "running" else "cancelled"
@@ -1240,7 +1247,8 @@ def job_status(request, job_id):
 def active_jobs(request):
     """Return all queued/running/cancel_requested jobs as JSON."""
     jobs = MaintenanceJob.objects.filter(
-        status__in=("queued", "running", "cancel_requested")
+        status__in=("queued", "running", "cancel_requested"),
+        kind__in=sorted(LOCAL_MAINTENANCE_JOB_KINDS),
     ).order_by("-created_at")[:20]
     return JsonResponse({
         "jobs": [_job_status_json(job) for job in jobs],

@@ -18,7 +18,13 @@ from .artifact_cleanup import (
     inventory_local_artifacts,
 )
 from .maintenance import queue_job
-from .models import Folder, MaintenanceJob, MaintenancePlan, PDFFile
+from .models import (
+    Folder,
+    MaintenanceAuditEvent,
+    MaintenanceJob,
+    MaintenancePlan,
+    PDFFile,
+)
 
 LOCAL_OPERATIONS = {
     "validate",
@@ -304,7 +310,9 @@ def create_plan(*, operation: str, data, actor, idempotency_key: str) -> Mainten
         raise MaintenancePlanError(reason)
     if not idempotency_key or len(idempotency_key) > 128:
         raise MaintenancePlanError("invalid_idempotency_key")
-    existing = MaintenancePlan.objects.filter(idempotency_key=idempotency_key).first()
+    existing = MaintenancePlan.objects.filter(
+        idempotency_key=idempotency_key, operation=operation
+    ).first()
     if existing:
         if existing.created_by_id != actor.pk:
             raise MaintenancePlanError("idempotency_conflict")
@@ -417,7 +425,58 @@ def _job_state_version(job: dict) -> str:
     ).hexdigest()
 
 
-def workbench_maintenance_state(*, selected_plan_id="") -> dict:
+def _serialize_local_job_payload(
+    job: MaintenanceJob | dict, *, include_audit=False
+) -> dict:
+    payload = {
+        "public_id": str(job.public_id if hasattr(job, "public_id") else job["public_id"]),
+        "kind": str(job.kind if hasattr(job, "kind") else job["kind"]),
+        "status": str(job.status if hasattr(job, "status") else job["status"]),
+        "total_items": int(job.total_items if hasattr(job, "total_items") else job["total_items"]),
+        "completed_items": int(job.completed_items if hasattr(job, "completed_items") else job["completed_items"]),
+        "failed_items": int(job.failed_items if hasattr(job, "failed_items") else job["failed_items"]),
+        "error_summary": str(
+            job.error_summary if hasattr(job, "error_summary") else job["error_summary"]
+        ),
+        "updated_at": (
+            job.updated_at.isoformat() if hasattr(job, "updated_at")
+            else job["updated_at"].isoformat()
+        ),
+        "options": job.options if hasattr(job, "options") else job.get("options", {}),
+    }
+    payload["state_version"] = _job_state_version(
+        {
+            "public_id": payload["public_id"],
+            "status": payload["status"],
+            "completed_items": payload["completed_items"],
+            "failed_items": payload["failed_items"],
+            "updated_at": (job.updated_at if hasattr(job, "updated_at") else job["updated_at"]),
+        }
+    )
+    payload["allowed_actions"] = {
+        "cancel": payload["status"] in {"queued", "running"},
+        "retry": payload["status"] == "failed",
+    }
+    if include_audit and hasattr(job, "id"):
+        payload["audit_events"] = [
+            {
+                "event_type": event.event_type,
+                "created_at": event.created_at.isoformat(),
+                "payload": event.payload,
+                "actor": event.actor.username if event.actor else None,
+            }
+            for event in MaintenanceAuditEvent.objects.filter(
+                job=job
+            ).order_by("created_at")
+        ]
+    else:
+        payload["audit_events"] = []
+    return payload
+
+
+def workbench_maintenance_state(
+    *, selected_plan_id="", selected_job_id=""
+) -> dict:
     reasons = capability_reasons()
     recovery_sets = list_sets()
     cleanup = plan_prune()
@@ -439,18 +498,14 @@ def workbench_maintenance_state(*, selected_plan_id="") -> dict:
             "free_inodes": 0,
             "inode_reserve": 0,
         }
-    jobs = list(
-        MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).values(
-            "public_id", "kind", "status", "total_items", "completed_items",
-            "failed_items", "error_summary", "created_at", "updated_at", "options",
-        )[:20]
-    )
-    for job in jobs:
-        job["state_version"] = _job_state_version(job)
-        job["allowed_actions"] = {
-            "cancel": job["status"] in {"queued", "running"},
-            "retry": job["status"] == "failed",
-        }
+    jobs = [
+        _serialize_local_job_payload(job)
+        for job in list(
+            MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).order_by(
+                "-created_at"
+            )[:20]
+        )
+    ]
     plans = list(
         MaintenancePlan.objects.select_related("job").values(
             "public_id", "operation", "state", "preview", "state_version",
@@ -465,6 +520,41 @@ def workbench_maintenance_state(*, selected_plan_id="") -> dict:
         ),
         None,
     )
+    selected_job = None
+    selected_job_id = str(selected_job_id).strip()
+    if selected_job_id:
+        selected_job = next(
+            (
+                job
+                for job in jobs
+                if str(job["public_id"]) == selected_job_id
+            ),
+            None,
+        )
+        if selected_job is None:
+            selected_job_record = MaintenanceJob.objects.filter(
+                public_id=selected_job_id,
+                kind__in=LOCAL_OPERATIONS,
+            ).first()
+            if selected_job_record is not None:
+                selected_job = _serialize_local_job_payload(
+                    selected_job_record,
+                    include_audit=True,
+                )
+        if selected_job and not selected_job["audit_events"]:
+            selected_job["audit_events"] = [
+                {
+                    "event_type": event["event_type"],
+                    "created_at": event["created_at"].isoformat(),
+                    "payload": event["payload"],
+                    "actor": event["actor__username"],
+                }
+                for event in MaintenanceAuditEvent.objects.filter(
+                    job__public_id=selected_job_id
+                )
+                .order_by("created_at")
+                .values("event_type", "created_at", "payload", "actor__username")
+            ]
     version_payload = {
         "plans": [
             (str(plan["public_id"]), plan["state"], plan["state_version"])
@@ -493,6 +583,7 @@ def workbench_maintenance_state(*, selected_plan_id="") -> dict:
         "plans": plans,
         "selected_plan": selected_plan,
         "jobs": jobs,
+        "selected_job": selected_job,
         "confirmation_phrase": FORCE_CONFIRMATION,
         "health": {
             "local_recovery_sets": {
