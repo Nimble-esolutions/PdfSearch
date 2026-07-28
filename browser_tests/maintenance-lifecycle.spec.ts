@@ -57,8 +57,11 @@ async function assertExpectedSearch(page: Page, query: string, language: string)
     const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
     const response = await fetch('/search/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-      body: JSON.stringify({ query, language }),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRFToken': csrf,
+      },
+      body: new URLSearchParams({ query, language }).toString(),
     });
     return { status: response.status, body: await response.json() };
   }, { query, language });
