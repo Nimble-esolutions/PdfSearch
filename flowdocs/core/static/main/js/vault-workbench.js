@@ -6,7 +6,9 @@
 
   const update = (selector, value) => {
     const element = root.querySelector(selector);
-    if (element && value) element.textContent = value;
+    if (!element || value === undefined) return;
+    element.textContent =
+      value === null || String(value).trim() === "" ? "—" : String(value);
   };
 
   const refresh = async () => {

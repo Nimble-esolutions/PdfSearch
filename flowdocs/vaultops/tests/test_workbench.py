@@ -661,11 +661,11 @@ class VaultWorkbenchTests(TestCase):
         generation.refresh_from_db()
         self.assertEqual(generation.status, "validated")
 
-    def test_legacy_vault_page_redirects_to_generations(self):
+    def test_legacy_vault_page_redirects_to_maintenance(self):
         response = self.client.get(reverse("vault_operations"))
         self.assertRedirects(
             response,
-            f"{reverse('operations_panel')}?section=generations",
+            f"{reverse('operations_panel')}?section=maintenance",
             fetch_redirect_response=False,
         )
 
@@ -694,6 +694,19 @@ class VaultWorkbenchTests(TestCase):
                 reverse("operations_panel")
             ),
             nav,
+        )
+
+    def test_profile_scope_is_preserved_in_live_state_url(self):
+        response = self.client.get(
+            reverse("operations_panel"),
+            {"section": "overview", "profile": self.profile.key},
+        )
+        self.assertContains(
+            response,
+            '{}?profile={}'.format(
+                reverse("vaultops:state"),
+                self.profile.key,
+            ),
         )
 
     def test_mutation_rejects_missing_idempotency_key(self):

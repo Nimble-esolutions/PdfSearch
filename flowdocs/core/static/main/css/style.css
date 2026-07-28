@@ -523,7 +523,15 @@ body {
 }
 
 .admin-nav .btn-outline-light {
+  color: var(--admin-primary-strong);
+  background: #fff;
+  border-color: #fff;
+}
+
+.admin-nav .btn-outline-light:hover,
+.admin-nav .btn-outline-light:focus {
   color: #fff;
+  background: #3a091a;
   border-color: #fff;
 }
 

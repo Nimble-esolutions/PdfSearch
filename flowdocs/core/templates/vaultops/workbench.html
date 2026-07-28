@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="vault-workbench" data-state-url="{% url 'vaultops:state' %}">
+<div class="vault-workbench" data-state-url="{% url 'vaultops:state' %}{% if request.GET.profile %}?profile={{ request.GET.profile|urlencode }}{% endif %}">
   <header class="vault-heading">
     <div>
       <p class="vault-kicker">{% trans "Operations / Vault Workbench" %}</p>
@@ -340,7 +340,13 @@
           <p class="vault-note"><strong>{% trans "Vault publication required" %}</strong> — {% trans "publish and verify a new immutable generation before remote authority reflects this candidate." %}</p>
           {% endif %}
           {% endif %}
+          {% if job.kind == "reindex_needed" or job.kind == "reindex_selected" %}
           <p class="vault-note">{% trans "A successful reindex creates local changes that make the prior Vault generation stale. Publish a new verified generation before remote authority reflects them." %}</p>
+          {% elif job.kind == "repair_indexes" %}
+          <p class="vault-note">{% trans "A successful repair rebuilds stored indexes from existing chunks and embeddings without external embedding calls." %}</p>
+          {% else %}
+          <p class="vault-note">{% trans "Validation is read-only and does not make the current Vault generation stale." %}</p>
+          {% endif %}
           <div class="maintenance-job-actions">
             {% if job.allowed_actions.cancel %}
               <form method="post" action="{% url 'vaultops:maintenance_job_cancel' job.public_id %}">
@@ -357,7 +363,8 @@
               </form>
             {% endif %}
             {% if job.options.candidate_state == "activation_ready" %}
-              <a class="vault-button" href="?section=restore&workspace={{ job.options.candidate_workspace_id }}">{% trans "Review activation" %}</a>
+              <span class="vault-button vault-button--disabled" aria-disabled="true">{% trans "Review activation" %}</span>
+              <code>candidate_activation_unavailable</code>
             {% endif %}
           </div>
         </article>
