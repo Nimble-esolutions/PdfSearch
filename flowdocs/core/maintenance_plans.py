@@ -19,6 +19,7 @@ from .artifact_cleanup import (
     inventory_local_artifacts,
 )
 from .maintenance import queue_job
+from .search_artifact_health import classify_search_artifacts
 from .models import (
     Folder,
     MaintenanceAuditEvent,
@@ -235,16 +236,34 @@ def _selection_query(selection: dict):
 def _source_digest(query) -> str:
     summary = query.aggregate(latest_upload=Max("uploaded_at"))
     digest = hashlib.sha256()
-    # Stream stable identity/state tuples instead of materialising an
-    # unbounded list in memory or in a plan JSON field.  Indexed state is part
-    # of the authority digest so a document becoming indexed/unindexed causes
-    # queue-time recalculation to reject a stale plan.
-    for pdf_id, indexed, uploaded_at in query.values_list(
-        "pk", "indexed", "uploaded_at"
-    ).iterator(chunk_size=1000):
+    # Stream secret-free hashes of stored artifact state. Only the aggregate
+    # digest is persisted; document text and embedding values never leave the
+    # database or enter previews, logs, or audit records.
+    fields = (
+        "pk", "folder_id", "file", "file_path", "lifecycle", "indexed",
+        "uploaded_at", "category", "subject", "keywords", "extracted_text",
+        "text_content", "page_chunks", "chunk_embeddings",
+    )
+    for row in query.values_list(*fields).iterator(chunk_size=250):
+        artifact = dict(zip(fields, row))
+        for key in (
+            "keywords", "extracted_text", "text_content",
+            "page_chunks", "chunk_embeddings",
+        ):
+            artifact[key] = hashlib.sha256(
+                json.dumps(
+                    artifact[key],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                ).encode("utf-8")
+            ).hexdigest()
         digest.update(
-            f"{pdf_id}:{int(bool(indexed))}:{uploaded_at or ''}\n".encode("utf-8")
+            json.dumps(
+                artifact, sort_keys=True, separators=(",", ":"), default=str
+            ).encode("utf-8")
         )
+        digest.update(b"\n")
     payload = {
         "selection_digest": digest.hexdigest(),
         "match_count": query.count(),
@@ -270,8 +289,46 @@ def calculate_preview(operation: str, selection: dict) -> dict:
     if operation not in LOCAL_OPERATIONS:
         raise MaintenancePlanError("unknown_operation")
     query = _selection_query(selection)
+    artifact_reason_counts: dict[str, int] = {}
+    blocked_count = 0
+    repair_only_count = 0
     if operation == "reindex_needed":
-        query = query.filter(indexed=False)
+        needed_ids: list[int] = []
+        candidates = query.filter(
+            lifecycle__in=("uploaded", "processing", "ready")
+        ).only(
+            "pk", "file", "lifecycle", "indexed",
+            "page_chunks", "chunk_embeddings",
+        )
+        for scanned, pdf in enumerate(
+            candidates.iterator(chunk_size=250), start=1
+        ):
+            if scanned > MAX_PREVIEW_PDFS:
+                raise MaintenancePlanError("selection_too_large")
+            try:
+                media_exists = bool(
+                    pdf.file
+                    and pdf.file.name
+                    and pdf.file.storage.exists(pdf.file.name)
+                )
+            except (OSError, ValueError):
+                media_exists = False
+            health = classify_search_artifacts(
+                lifecycle=pdf.lifecycle,
+                indexed=pdf.indexed,
+                media_exists=media_exists,
+                page_chunks=pdf.page_chunks,
+                chunk_embeddings=pdf.chunk_embeddings,
+            )
+            for reason_code in health.reason_codes:
+                artifact_reason_counts[reason_code] = (
+                    artifact_reason_counts.get(reason_code, 0) + 1
+                )
+            blocked_count += int(health.blocking)
+            repair_only_count += int(health.repair_required)
+            if health.reindex_required:
+                needed_ids.append(pdf.pk)
+        query = query.filter(pk__in=needed_ids)
     pdf_count = query.count()
     # Repair workers consume folders and rebuild one index per folder; they do
     # not need a document-id payload. Other operations queue individual PDFs,
@@ -302,7 +359,20 @@ def calculate_preview(operation: str, selection: dict) -> dict:
             for row in folder_rows if row["folder_id"]
         ],
         "estimated_work_units": len(pdf_ids) + len(folder_ids),
+        "blocked_count": blocked_count,
+        "repair_only_count": repair_only_count,
+        "artifact_reason_counts": artifact_reason_counts,
     }
+
+
+def _preview_source_query(selection: dict, preview: dict):
+    query = _selection_query(selection)
+    pdf_ids = preview.get("pdf_ids", [])
+    if pdf_ids:
+        return query.filter(pk__in=pdf_ids)
+    if preview.get("folder_ids"):
+        return query.filter(folder_id__in=preview["folder_ids"])
+    return query.none()
 
 
 def create_plan(*, operation: str, data, actor, idempotency_key: str) -> MaintenancePlan:
@@ -322,7 +392,7 @@ def create_plan(*, operation: str, data, actor, idempotency_key: str) -> Mainten
     preview = calculate_preview(operation, selection)
     if not preview["folder_ids"] and not preview["pdf_ids"]:
         raise MaintenancePlanError("empty_scope")
-    source = _source_digest(_selection_query(selection))
+    source = _source_digest(_preview_source_query(selection, preview))
     state_payload = {
         "operation": operation,
         "selection": selection,
@@ -372,7 +442,9 @@ def queue_plan(*, plan: MaintenancePlan, actor, confirmation: str = "") -> Maint
     if reason:
         raise MaintenancePlanError(reason)
     fresh_preview = calculate_preview(plan.operation, plan.selection)
-    fresh_source = _source_digest(_selection_query(plan.selection))
+    fresh_source = _source_digest(
+        _preview_source_query(plan.selection, fresh_preview)
+    )
     if fresh_preview != plan.preview or fresh_source != plan.source_digest:
         plan.state = "rejected"
         plan.save(update_fields=["state", "updated_at"])

@@ -1067,52 +1067,40 @@ def bulk_maintenance(request):
 
 @superadmin_required
 def bulk_filter_preview(request):
-    """Return a JSON count of PDFs matching the current filter for the selected folders."""
-    folder_ids = [int(value) for value in request.GET.getlist("folder_ids") if value.isdigit()]
-    if not folder_ids:
-        return JsonResponse({"count": 0, "folders": 0})
-    pdfs = PDFFile.objects.filter(folder_id__in=folder_ids)
-    filter_q, _ = _parse_bulk_filters(request)
-    if filter_q:
-        pdfs = pdfs.filter(filter_q)
-    indexed_count = pdfs.filter(indexed=True).count()
-    return JsonResponse({
-        "count": pdfs.count(),
-        "folders": len(folder_ids),
-        "indexed": indexed_count,
-        "needs_index": pdfs.count() - indexed_count,
-    })
+    """Reject the retired ad-hoc preview path without calculating authority."""
+    return JsonResponse(
+        {
+            "status": "retired",
+            "error": "operation_replaced",
+            "reason_code": "operation_replaced",
+            "detail": "Create a durable preview in Documents & Indexes.",
+            "recommended_action": "create_maintenance_plan",
+            "workbench_url": (
+                f"{reverse('operations_panel')}?section=maintenance"
+            ),
+        },
+        status=410,
+    )
 
 
 @superadmin_required
 @require_POST
 def maintenance_job_action(request, job_id):
-    """Cancel active work or requeue a failed job from the cockpit."""
-    job = get_object_or_404(MaintenanceJob, public_id=job_id)
-    if job.kind not in LOCAL_MAINTENANCE_JOB_KINDS:
-        messages.error(
-            request,
-            "maintenance_job_action_not_allowed: this maintenance job is not managed here.",
-        )
-        return redirect("dashboard")
-    action = request.POST.get("action", "").strip()
-    if action == "cancel" and job.status in {"queued", "running"}:
-        job.status = "cancel_requested" if job.status == "running" else "cancelled"
-        if job.status == "cancelled":
-            job.finished_at = timezone.now()
-        job.save(update_fields=["status", "finished_at", "updated_at"])
-        messages.success(request, f"Maintenance job {job.public_id} cancellation recorded.")
-    elif action == "retry" and job.status == "failed":
-        job.status = "queued"
-        job.error_summary = ""
-        job.finished_at = None
-        job.failed_items = 0
-        job.items.filter(status="failed").update(status="queued", error_code="", error_message="", finished_at=None)
-        job.save(update_fields=["status", "error_summary", "finished_at", "failed_items", "updated_at"])
-        messages.success(request, f"Maintenance job {job.public_id} requeued.")
-    else:
-        messages.info(request, "That job cannot accept this action in its current state.")
-    return redirect("dashboard")
+    """Reject direct mutation; guarded Workbench routes own cancel and retry."""
+    return JsonResponse(
+        {
+            "status": "retired",
+            "error": "operation_replaced",
+            "reason_code": "operation_replaced",
+            "detail": "Use the guarded Documents & Indexes job controls.",
+            "recommended_action": "review_workbench_job",
+            "job_id": str(job_id),
+            "workbench_url": (
+                f"{reverse('operations_panel')}?section=maintenance&job={job_id}"
+            ),
+        },
+        status=410,
+    )
 
 @superadmin_required
 def job_audit_trail(request, job_id):

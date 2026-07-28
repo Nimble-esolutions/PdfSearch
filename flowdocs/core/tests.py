@@ -1263,7 +1263,7 @@ class DashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_superadmin_can_cancel_and_retry_maintenance_job(self):
+    def test_legacy_job_action_cannot_cancel_or_retry_maintenance_job(self):
         superadmin = get_user_model().objects.create_user(
             username="maintenance-superadmin",
             password="test-password",
@@ -1277,9 +1277,10 @@ class DashboardTests(TestCase):
             {"action": "cancel"},
         )
 
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["error"], "operation_replaced")
         queued.refresh_from_db()
-        self.assertEqual(queued.status, "cancelled")
+        self.assertEqual(queued.status, "queued")
 
         failed = MaintenanceJob.objects.create(
             kind="validate", status="failed", failed_items=1, error_summary="old error"
@@ -1289,11 +1290,12 @@ class DashboardTests(TestCase):
             {"action": "retry"},
         )
 
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["error"], "operation_replaced")
         failed.refresh_from_db()
-        self.assertEqual(failed.status, "queued")
-        self.assertEqual(failed.failed_items, 0)
-        self.assertEqual(failed.error_summary, "")
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(failed.failed_items, 1)
+        self.assertEqual(failed.error_summary, "old error")
 
     def test_superadmin_can_repair_index_from_stored_artifacts(self):
         superadmin = get_user_model().objects.create_user(
@@ -1346,17 +1348,20 @@ class DashboardTests(TestCase):
         folder = Folder.objects.create(name="Documents", created_by=superadmin)
         needed_pdf = PDFFile.objects.create(
             title="Needs index",
-            file="pdfs/needs-index.pdf",
+            file=SimpleUploadedFile("needs-index.pdf", b"%PDF-1.4"),
             folder=folder,
             uploaded_by=superadmin,
             indexed=False,
         )
         indexed_pdf = PDFFile.objects.create(
             title="Already indexed",
-            file="pdfs/already-indexed.pdf",
+            file=SimpleUploadedFile("already-indexed.pdf", b"%PDF-1.4"),
             folder=folder,
             uploaded_by=superadmin,
             indexed=True,
+            lifecycle="ready",
+            page_chunks=["Already searchable"],
+            chunk_embeddings=[[1.0, 0.0]],
         )
         self.client.force_login(superadmin)
 
@@ -1387,7 +1392,7 @@ class DashboardTests(TestCase):
         precompute.assert_called_once_with(needed_pdf, rebuild_index=False)
         self.assertNotEqual(precompute.call_args.args[0].pk, indexed_pdf.pk)
 
-    def test_reprocess_needed_preserves_ocr_artifacts_when_pdf_has_no_text(self):
+    def test_repair_stored_index_preserves_ocr_artifacts_without_embedding(self):
         superadmin = get_user_model().objects.create_user(
             username="ocr-superadmin",
             password="test-password",
@@ -1396,7 +1401,7 @@ class DashboardTests(TestCase):
         folder = Folder.objects.create(name="Scanned documents", created_by=superadmin)
         pdf = PDFFile.objects.create(
             title="Photo OCR scan",
-            file="pdfs/photo-ocr-scan.pdf",
+            file=SimpleUploadedFile("photo-ocr-scan.pdf", b"%PDF-1.4"),
             folder=folder,
             uploaded_by=superadmin,
             indexed=False,
@@ -1412,18 +1417,17 @@ class DashboardTests(TestCase):
         ):
             response = self.client.post(
                 reverse("folder_operations", args=[folder.pk]),
-                {"operation": "reprocess_needed"},
+                {"operation": "repair_stored_index"},
             )
-            plan = MaintenancePlan.objects.get(operation="reindex_needed")
+            plan = MaintenancePlan.objects.get(operation="repair_indexes")
             with patch(
                 "core.maintenance_plans.create_set",
                 return_value={"set_id": "rs-test"},
             ):
                 job = queue_plan(plan=plan, actor=superadmin)
         with patch(
-            "core.maintenance.precompute_pdf_embeddings",
-            side_effect=SearchDataIntegrityError("PDF has no extractable text"),
-        ), patch(
+            "core.maintenance.precompute_pdf_embeddings"
+        ) as precompute, patch(
             "core.maintenance.build_or_load_faiss_index_for_folder",
             return_value=(object(), [], []),
         ) as rebuild:
@@ -1434,6 +1438,7 @@ class DashboardTests(TestCase):
             f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
             fetch_redirect_response=False,
         )
+        precompute.assert_not_called()
         rebuild.assert_called_once_with(folder, force_rebuild=True)
         pdf.refresh_from_db()
         self.assertTrue(pdf.indexed)
@@ -2016,16 +2021,16 @@ class BulkFilterTests(TestCase):
         self.assertEqual(filters, {})
         self.assertEqual(PDFFile.objects.filter(q).count(), 2)
 
-    def test_bulk_filter_preview_endpoint(self):
+    def test_legacy_bulk_filter_preview_is_rejected(self):
         self.client.force_login(self.superadmin)
         response = self.client.get(
             reverse("bulk_filter_preview"),
             {"folder_ids": str(self.folder.pk), "filter_indexed": "true"},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 410)
         data = response.json()
-        self.assertEqual(data["count"], 1)
-        self.assertEqual(data["indexed"], 1)
+        self.assertEqual(data["error"], "operation_replaced")
+        self.assertIn("section=maintenance", data["workbench_url"])
 
     def test_bulk_filter_preview_requires_superadmin(self):
         admin = get_user_model().objects.create_user(
@@ -2152,7 +2157,7 @@ class JobDrawerTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "job-drawer-toggle")
 
-    def test_legacy_job_kind_cannot_be_cancelled_from_cockpit_action(self):
+    def test_legacy_job_action_never_mutates_historical_generation_job(self):
         self.client.force_login(self.superadmin)
         job = MaintenanceJob.objects.create(
             kind="restore_generation", status="running"
@@ -2160,10 +2165,10 @@ class JobDrawerTests(TestCase):
         response = self.client.post(
             reverse("maintenance_job_action", args=[job.public_id]),
             {"action": "cancel"},
-            follow=True,
         )
 
-        self.assertContains(response, "maintenance_job_action_not_allowed")
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["error"], "operation_replaced")
         job.refresh_from_db()
         self.assertEqual(job.status, "running")
 

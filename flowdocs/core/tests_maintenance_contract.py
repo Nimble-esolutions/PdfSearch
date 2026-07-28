@@ -15,6 +15,7 @@ from core.maintenance_plans import (
     MaintenancePlanError,
     MAX_SELECTION_IDS,
     capability_reasons,
+    calculate_preview,
     create_plan,
     normalize_selection,
     queue_plan,
@@ -189,6 +190,67 @@ class MaintenancePlanningTests(TestCase):
             keywords=["cooperative"],
             indexed=False,
         )
+        with self.assertRaisesRegex(MaintenancePlanError, "stale_plan"):
+            queue_plan(plan=plan, actor=self.superadmin)
+
+    def test_reindex_needed_includes_indexed_pdf_with_invalid_artifacts(self):
+        self.pdf.indexed = True
+        self.pdf.lifecycle = "ready"
+        self.pdf.page_chunks = ["first", "second"]
+        self.pdf.chunk_embeddings = [[0.1, 0.2]]
+        self.pdf.save(
+            update_fields=[
+                "indexed", "lifecycle", "page_chunks", "chunk_embeddings"
+            ]
+        )
+
+        preview = calculate_preview(
+            "reindex_needed",
+            normalize_selection({"folder_ids": [str(self.folder.pk)]}),
+        )
+
+        self.assertEqual(preview["pdf_ids"], [self.pdf.pk])
+        self.assertEqual(
+            preview["artifact_reason_counts"]["chunk_embedding_count_mismatch"],
+            1,
+        )
+
+    def test_reindex_needed_keeps_valid_stored_artifacts_repair_only(self):
+        self.pdf.indexed = False
+        self.pdf.lifecycle = "ready"
+        self.pdf.page_chunks = ["first"]
+        self.pdf.chunk_embeddings = [[0.1, 0.2]]
+        self.pdf.save(
+            update_fields=[
+                "indexed", "lifecycle", "page_chunks", "chunk_embeddings"
+            ]
+        )
+
+        preview = calculate_preview(
+            "reindex_needed",
+            normalize_selection({"folder_ids": [str(self.folder.pk)]}),
+        )
+
+        self.assertEqual(preview["pdf_ids"], [])
+        self.assertEqual(preview["repair_only_count"], 1)
+        self.assertEqual(
+            preview["artifact_reason_counts"]["stored_index_repair_required"],
+            1,
+        )
+
+    def test_plan_stales_when_chunk_content_changes_at_same_count(self):
+        self.pdf.indexed = True
+        self.pdf.lifecycle = "ready"
+        self.pdf.page_chunks = ["original"]
+        self.pdf.chunk_embeddings = [[0.1, 0.2]]
+        self.pdf.save(
+            update_fields=[
+                "indexed", "lifecycle", "page_chunks", "chunk_embeddings"
+            ]
+        )
+        plan = self._plan("validate")
+        PDFFile.objects.filter(pk=self.pdf.pk).update(page_chunks=["changed"])
+
         with self.assertRaisesRegex(MaintenancePlanError, "stale_plan"):
             queue_plan(plan=plan, actor=self.superadmin)
         plan.refresh_from_db()

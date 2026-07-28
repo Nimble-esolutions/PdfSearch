@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -180,7 +181,7 @@ class VaultWorkbenchTests(TestCase):
         folder = Folder.objects.create(name="Law", created_by=self.superadmin)
         PDFFile.objects.create(
             title="Governance",
-            file="pdfs/governance.pdf",
+            file=SimpleUploadedFile("governance.pdf", b"%PDF-1.4"),
             folder=folder,
             uploaded_by=self.superadmin,
             indexed=False,
