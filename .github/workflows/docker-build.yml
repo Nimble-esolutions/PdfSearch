@@ -102,7 +102,7 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npx playwright install --with-deps chromium
 
       - name: Validate active operator documentation
@@ -156,7 +156,7 @@ jobs:
 
       - name: Install browser gate dependencies
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npx playwright install --with-deps chromium
 
       - name: Resolve immutable Redis smoke image
