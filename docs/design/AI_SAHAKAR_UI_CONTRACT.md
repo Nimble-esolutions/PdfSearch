@@ -128,6 +128,23 @@ All Dashboard and Workbench presentation resolves through
 retain the exact token only inside Technical details; replacing underscores
 with spaces is never an acceptable explanation.
 
+Marathi operator copy is authored copy, not an English fallback. Translate a
+term literally when Marathi has an established, unambiguous equivalent. When a
+specialized product or infrastructure term would become misleading if
+translated—such as Vault, runtime, profile, rollback, embedding, manifest,
+checkpoint, or garbage collection—use a consistent Marathi-script
+transliteration and explain its effect in ordinary Marathi. Do not leave these
+words in Latin script merely because they originated in English. The only
+intentional English/LTR exceptions are immutable machine evidence: exact
+codes, API field names, hashes, UUIDs, filenames, paths, versions, and
+correlation identifiers.
+
+Every registry title, detail, consequence, action, and state label must have a
+non-empty, non-fuzzy Marathi catalog entry before merge. Review older
+Dashboard and Workbench translations in the same affected area; gettext fuzzy
+matches are suggestions, not approved translations. Reviewers must check
+semantic accuracy rather than accepting a catalog that only compiles.
+
 Motion is utility only. Shared motion tokens are micro-interactions around
 120–160ms and surface/state transitions around 180–240ms, using opacity and
 transform rather than layout dimensions. `prefers-reduced-motion`, Save-Data,

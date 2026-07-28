@@ -22,7 +22,12 @@ documentation.
 5. Implement the smallest contextual enhancement using existing tokens and
    Django patterns. Do not introduce a frontend framework or animation library.
 6. Review equivalent authored English and Marathi meaning, consequence, and
-   next-action copy. Scan visible text and accessibility output for machine
+   next-action copy. Inventory existing translations for the affected
+   Dashboard/Workbench area and correct stale fuzzy or misleading entries.
+   Prefer precise Marathi literal translations; use the contract glossary's
+   Marathi-script transliteration only when a specialized term has no safe
+   Marathi equivalent. Ordinary interface copy must not fall back to
+   Latin-script English. Scan visible text and accessibility output for machine
    tokens, then expand Technical details and verify the exact bounded code is
    copyable, LTR, and redacted.
 7. Verify the affected English, Marathi, mobile, desktop, keyboard, reduced
@@ -43,6 +48,12 @@ documentation.
 - Do not claim visual or browser validation without executing it.
 - Raw `reason_code`, `safe_error_code`, error summaries, protection/blocking
   reasons, and state-machine values never become primary copy.
+- Every registry title, detail, consequence, action, and label has a reviewed,
+  non-fuzzy Marathi entry. A compiling catalog or automatic fuzzy match is not
+  translation approval.
+- Exact codes, API fields, hashes, UUIDs, filenames, and paths remain
+  English/LTR technical evidence; user-facing technical concepts use Marathi
+  literals or the approved Marathi-script transliteration glossary.
 
 ## Minimum review commands
 
@@ -50,6 +61,7 @@ documentation.
 git diff --check
 python manage.py check
 msgfmt --check flowdocs/locale/mr/LC_MESSAGES/django.po -o /tmp/django-mr.mo
+msgattrib --only-fuzzy flowdocs/locale/mr/LC_MESSAGES/django.po
 python3 scripts/ci/validate_operator_language.py
 node --check flowdocs/core/static/main/js/search.js
 ```
