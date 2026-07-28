@@ -33,10 +33,10 @@ cd "$ROOT"
 if [ "${SKIP_MAINTENANCE_E2E_BUILD:-0}" != "1" ]; then
   docker build -t "$PDFSEARCH_IMAGE" .
 fi
-"${COMPOSE[@]}" up -d --wait redis web
+"${COMPOSE[@]}" up -d --wait redis web browser-proxy
 "${COMPOSE[@]}" stop web
 "${COMPOSE[@]}" run --rm fixture seed-and-freeze
-"${COMPOSE[@]}" up -d --wait web maintenance
+"${COMPOSE[@]}" up -d --wait web maintenance browser-proxy
 
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=queue \
@@ -62,6 +62,7 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
 "${COMPOSE[@]}" stop web maintenance
 LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
   "${COMPOSE[@]}" up -d --wait --force-recreate web maintenance
+"${COMPOSE[@]}" up -d --wait browser-proxy
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=activate \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \

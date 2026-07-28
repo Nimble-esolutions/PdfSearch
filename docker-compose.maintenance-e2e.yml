@@ -74,8 +74,6 @@ services:
       - lifecycle_data:/app/data
       - lifecycle_control:/app/data-control
       - ./scripts/ci/empty-init:/app/init:ro
-    ports:
-      - "127.0.0.1:${WEB_PORT:-18020}:8000"
     environment: *lifecycle-environment
     depends_on:
       redis:
@@ -86,6 +84,23 @@ services:
       timeout: 5s
       retries: 60
     networks: [lifecycle]
+
+  browser-proxy:
+    image: ${PDFSEARCH_IMAGE:-pdfsearch-maintenance-e2e:local}
+    entrypoint: ["python", "/bridge/reverse_proxy.py"]
+    volumes:
+      - ./scripts/ci/reverse_proxy.py:/bridge/reverse_proxy.py:ro
+    ports:
+      - "127.0.0.1:${WEB_PORT:-18020}:8080"
+    depends_on:
+      web:
+        condition: service_healthy
+    networks: [lifecycle, browser]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/livez"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
 
   maintenance:
     image: ${PDFSEARCH_IMAGE:-pdfsearch-maintenance-e2e:local}
@@ -125,3 +140,5 @@ networks:
   lifecycle:
     driver: bridge
     internal: true
+  browser:
+    driver: bridge
