@@ -289,9 +289,9 @@
             <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ state.maintenance.selected_job.total_items }}" aria-valuenow="{{ state.maintenance.selected_job.completed_items }}">
               <span style="width: {{ selected_job_progress|default:0 }}%"></span>
             </div>
-            {% if state.maintenance.selected_job.error_summary %}{% include "components/operator_evidence.html" with presentation=state.maintenance.selected_job.error_presentation technical_code=state.maintenance.selected_job.error_summary evidence_id=state.maintenance.selected_job.public_id show_action=False only %}{% endif %}
+            {% if state.maintenance.selected_job.safe_error_code %}{% include "components/operator_evidence.html" with presentation=state.maintenance.selected_job.error_presentation technical_code=state.maintenance.selected_job.safe_error_code evidence_id=state.maintenance.selected_job.public_id show_action=False only %}{% endif %}
             {% if state.maintenance.selected_job.options.candidate_workspace_id %}
-              <p>{% trans "Candidate workspace" %}: <code>{{ state.maintenance.selected_job.options.candidate_workspace_id }}</code> · {{ state.maintenance.selected_job.options.candidate_state }}</p>
+              <p>{% trans "Candidate workspace" %}: <code>{{ state.maintenance.selected_job.options.candidate_workspace_id }}</code> · {{ state.maintenance.selected_job.options.candidate_state_label }}</p>
             {% endif %}
             {% if state.maintenance.selected_job.options.recovery_set_id %}
               <p>{% trans "Recovery set" %}: <code>{{ state.maintenance.selected_job.options.recovery_set_id }}</code></p>
@@ -301,8 +301,8 @@
               {% if state.maintenance.selected_job.audit_events %}
                 <ul class="vault-timeline">
                   {% for event in state.maintenance.selected_job.audit_events %}
-                    <li><time>{{ event.created_at }}</time><strong>{{ event.event_type }}</strong>{% if event.actor %} <span>({{ event.actor }})</span>{% endif %}
-                      <span>{{ event.payload }}</span>
+                    <li><time>{{ event.created_at }}</time><strong>{{ event.event_type_label }}</strong>{% if event.actor %} <span>({{ event.actor }})</span>{% endif %}
+                      {% if event.safe_error_code %}{% include "components/operator_evidence.html" with presentation=event.error_presentation technical_code=event.safe_error_code evidence_id=event.evidence_id show_action=False only %}{% endif %}
                     </li>
                   {% endfor %}
                 </ul>
@@ -325,9 +325,9 @@
           <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ job.total_items }}" aria-valuenow="{{ job.completed_items }}">
             <span style="width: {{ maintenance_progress|default:0 }}%"></span>
           </div>
-          {% if job.error_summary %}{% include "components/operator_evidence.html" with presentation=job.error_presentation technical_code=job.error_summary evidence_id=job.public_id show_action=False only %}{% endif %}
+          {% if job.safe_error_code %}{% include "components/operator_evidence.html" with presentation=job.error_presentation technical_code=job.safe_error_code evidence_id=job.public_id show_action=False only %}{% endif %}
           {% if job.options.candidate_workspace_id %}
-          <p>{% trans "Candidate workspace" %}: <code>{{ job.options.candidate_workspace_id }}</code> · {{ job.options.candidate_state }}</p>
+          <p>{% trans "Candidate workspace" %}: <code>{{ job.options.candidate_workspace_id }}</code> · {{ job.options.candidate_state_label }}</p>
           {% if job.options.candidate_state == "activation_ready" %}
           <p class="vault-note"><strong>{% trans "Vault publication required" %}</strong> — {% trans "publish and verify a new immutable generation before remote authority reflects this candidate." %}</p>
           {% endif %}

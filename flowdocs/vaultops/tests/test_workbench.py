@@ -363,6 +363,40 @@ class VaultWorkbenchTests(TestCase):
         self.assertEqual(prepared, {})
         self.assertEqual(len(queries), 0)
 
+    def test_local_job_projection_redacts_raw_exception_and_audit_message(self):
+        marker = "/private/runtime/token=must-not-reach-browser"
+        job = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="failed",
+            failed_items=1,
+            error_summary=marker,
+        )
+        MaintenanceAuditEvent.objects.create(
+            job=job,
+            event_type="item_failed",
+            payload={
+                "item_id": 7,
+                "error_code": "index_repair_failed",
+                "error_message": marker,
+            },
+        )
+
+        payload = _serialize_local_job_payload(job, include_audit=True)
+
+        self.assertNotIn("error_summary", payload)
+        self.assertEqual(payload["safe_error_code"], "maintenance_job_failed")
+        self.assertNotIn(marker, json.dumps(payload))
+        self.assertEqual(
+            payload["audit_events"][0],
+            {
+                "event_type": "item_failed",
+                "created_at": payload["audit_events"][0]["created_at"],
+                "safe_error_code": "index_repair_failed",
+                "evidence_id": "7",
+                "actor": None,
+            },
+        )
+
     def test_ready_candidate_keeps_prepare_control_visible_with_typed_reason(self):
         MaintenanceJob.objects.create(
             kind="repair_indexes",

@@ -1,8 +1,13 @@
+import ast
+from pathlib import Path
+
 from django.test import SimpleTestCase
 from django.utils import translation
 
 from core.operator_presentation import (
     REASONS,
+    UNKNOWN_REASON,
+    UI_REASON_CODES,
     decorate_operator_state,
     label_for,
     present_reason,
@@ -10,6 +15,47 @@ from core.operator_presentation import (
 
 
 class OperatorPresentationTests(SimpleTestCase):
+    @staticmethod
+    def _literal_producer_reasons():
+        flowdocs_root = Path(__file__).resolve().parents[1]
+        producer_paths = (
+            flowdocs_root / "core" / "services" / "dashboard_read_model.py",
+            flowdocs_root / "core" / "maintenance_plans.py",
+            flowdocs_root / "vaultops" / "services" / "read_model.py",
+            flowdocs_root / "vaultops" / "views.py",
+        )
+        reasons = set()
+        for path in producer_paths:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                function_name = (
+                    node.func.id
+                    if isinstance(node.func, ast.Name)
+                    else node.func.attr
+                    if isinstance(node.func, ast.Attribute)
+                    else ""
+                )
+                if function_name in {
+                    "WorkbenchRequestError",
+                    "MaintenancePlanError",
+                } and node.args:
+                    value = node.args[0]
+                    if isinstance(value, ast.Constant) and isinstance(
+                        value.value, str
+                    ):
+                        reasons.add(value.value)
+                for keyword in node.keywords:
+                    if keyword.arg != "reason_code":
+                        continue
+                    value = keyword.value
+                    if isinstance(value, ast.Constant) and isinstance(
+                        value.value, str
+                    ) and value.value:
+                        reasons.add(value.value)
+        return reasons
+
     def test_known_reason_has_complete_operator_copy(self):
         presentation = present_reason("external_embeddings_disabled")
         self.assertEqual(presentation["title"], "Embedding service is unavailable")
@@ -38,6 +84,7 @@ class OperatorPresentationTests(SimpleTestCase):
             "status": "retryable_failed",
             "reason_code": "worker_heartbeat_expired",
             "safe_error_code": "restore_failed",
+            "options": {"candidate_state": "building"},
         }
         decorate_operator_state(state)
         self.assertEqual(state["status"], "retryable_failed")
@@ -51,27 +98,76 @@ class OperatorPresentationTests(SimpleTestCase):
         self.assertEqual(
             state["error_presentation"]["technical_code"], "restore_failed"
         )
+        self.assertEqual(
+            state["options"]["candidate_state_label"],
+            "Candidate preparation in progress",
+        )
 
-    def test_registry_covers_dashboard_and_workbench_boundary_reasons(self):
-        required = {
-            "operations_ready",
-            "maintenance_job_failed",
-            "index_debt_present",
-            "provenance_review_required",
-            "maintenance_in_progress",
-            "empty_categories_present",
-            "external_embeddings_disabled",
-            "capacity_degraded",
-            "generation_authoritative",
-            "generation_runtime_referenced",
-            "workspace_referenced",
-            "generation_job_in_progress",
-            "retention_hold_active",
-            "rollback_pointer_missing",
-            "rollback_pointer_unverified",
-            "rollback_lineage_invalid",
+    def test_registry_covers_every_inventoried_ui_reason(self):
+        self.assertEqual(UI_REASON_CODES - REASONS.keys(), set())
+
+    def test_literal_ui_producer_reasons_are_in_inventory(self):
+        self.assertEqual(
+            self._literal_producer_reasons() - UI_REASON_CODES,
+            set(),
+        )
+
+    def test_every_inventoried_ui_reason_has_complete_authored_copy(self):
+        required_fields = {
+            "title",
+            "detail",
+            "consequence",
+            "action_label",
+            "action_url",
+            "severity",
+            "technical_code",
+            "known",
         }
-        self.assertEqual(required - REASONS.keys(), set())
+        for code in sorted(UI_REASON_CODES):
+            with self.subTest(code=code):
+                presentation = present_reason(code)
+                self.assertEqual(set(presentation), required_fields)
+                self.assertTrue(presentation["known"])
+                self.assertEqual(presentation["technical_code"], code)
+                for field in (
+                    "title",
+                    "detail",
+                    "consequence",
+                    "action_label",
+                    "action_url",
+                    "severity",
+                ):
+                    self.assertTrue(presentation[field])
+
+    def test_success_outcomes_do_not_use_unknown_warning_copy(self):
+        success_reasons = {
+            "maintenance_plan_created",
+            "maintenance_job_queued",
+            "maintenance_candidate_prepared",
+            "restore_queued",
+            "job_retry_queued",
+            "profile_configured",
+            "profile_probe_completed",
+            "profile_inventory_verified",
+            "sync_queued",
+            "confirmation_issued",
+            "promotion_queued",
+            "generation_retired",
+            "generation_unretired",
+            "retention_hold_created",
+            "retention_hold_released",
+            "gc_plan_created",
+            "activation_scheduled",
+            "runtime_rollback_scheduled",
+        }
+        for code in sorted(success_reasons):
+            with self.subTest(code=code):
+                presentation = present_reason(code)
+                self.assertTrue(presentation["known"])
+                self.assertNotEqual(
+                    presentation["title"], UNKNOWN_REASON["title"]
+                )
+                self.assertIn(presentation["severity"], {"success", "info"})
 
     def test_marathi_catalog_resolves_authored_copy(self):
         with translation.override("mr"):
