@@ -69,12 +69,16 @@ reports its initial state. It does not make the workspace activation-ready.
 - referenced-media completeness without printing document paths; and
 - whether indexes still require rebuilding.
 
-The JSON result deliberately separates `database_verified` from
-`recovery_ready`. `verification_state: verified` proves only the copied
-database bytes and SQLite checks. Typed entries in `blockers` explain why the
-workspace is not ready, including `required_migrations_unapplied`,
-`migration_evidence_incompatible`, `recovery_superadmin_unproven`,
-`referenced_media_missing`, and `index_rebuild_required`.
+The JSON result deliberately separates
+`database_verification_state: verified` from `recovery_ready`. The top-level
+`verification_state` is `blocked` whenever any readiness blocker exists, so
+automation cannot mistake database-only integrity for a usable recovery.
+Migration checks reject both required migrations that are absent and applied
+migrations unknown to the running image. Typed entries in `blockers` explain
+why the workspace is not ready, including `required_migrations_unapplied`,
+`unknown_applied_migrations`, `migration_evidence_incompatible`,
+`recovery_superadmin_unproven`, `referenced_media_missing`, and
+`index_rebuild_required`.
 
 `emergency_db validate` prints this secret-free report and exits nonzero while
 any blocker remains. The prepared workspace is preserved for investigation and

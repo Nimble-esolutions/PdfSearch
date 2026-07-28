@@ -203,7 +203,10 @@ class EmergencyRecoveryTests(SimpleTestCase):
             self.fail(f"unexpected test target exists: {target}")
         try:
             result = prepare_set(recovery_set["set_id"], target)
-            self.assertEqual(result["verification_state"], "verified")
+            self.assertEqual(result["verification_state"], "blocked")
+            self.assertEqual(
+                result["database_verification_state"], "verified"
+            )
             self.assertTrue(result["database_verified"])
             self.assertFalse(result["recovery_ready"])
             self.assertEqual(
@@ -225,7 +228,10 @@ class EmergencyRecoveryTests(SimpleTestCase):
         try:
             result = prepare_set(recovery_set["set_id"], target)
 
-            self.assertEqual(result["verification_state"], "verified")
+            self.assertEqual(result["verification_state"], "blocked")
+            self.assertEqual(
+                result["database_verification_state"], "verified"
+            )
             self.assertTrue(result["database_verified"])
             self.assertFalse(result["recovery_ready"])
             self.assertEqual(
@@ -346,6 +352,70 @@ class EmergencyRecoveryTests(SimpleTestCase):
 
                 shutil.rmtree(target)
 
+    def test_validate_rejects_unknown_application_and_control_migrations(self):
+        recovery_set = create_set("manual")
+        target = self.root.parent / f"prepared-{recovery_set['set_id']}"
+        try:
+            prepare_set(recovery_set["set_id"], target)
+            database_cases = (
+                ("application", "core", "9999_future"),
+                ("control", "vaultops", "9999_future"),
+            )
+            manifest_path = target / MANIFEST
+            manifest = json.loads(manifest_path.read_text())
+            for database_key, app, migration in database_cases:
+                database = target / manifest["databases"][database_key]["file"]
+                connection = sqlite3.connect(database)
+                connection.execute(
+                    "INSERT INTO django_migrations (app, name) VALUES (?, ?)",
+                    (app, migration),
+                )
+                connection.commit()
+                connection.close()
+                manifest["databases"][database_key]["sha256"] = _sha256(database)
+            manifest_path.write_text(json.dumps(manifest))
+
+            result = validate_workspace(target)
+
+            blockers = [
+                item
+                for item in result["blockers"]
+                if item["code"] == "unknown_applied_migrations"
+            ]
+            self.assertEqual(
+                blockers,
+                [
+                    {
+                        "code": "unknown_applied_migrations",
+                        "scope": "default",
+                        "count": 1,
+                    },
+                    {
+                        "code": "unknown_applied_migrations",
+                        "scope": "control",
+                        "count": 1,
+                    },
+                ],
+            )
+            self.assertEqual(
+                result["migrations"]["default"][
+                    "unknown_applied_migration_count"
+                ],
+                1,
+            )
+            self.assertEqual(
+                result["migrations"]["control"][
+                    "unknown_applied_migration_count"
+                ],
+                1,
+            )
+            self.assertNotIn("9999_future", json.dumps(result))
+        finally:
+            if target.exists():
+                import shutil
+
+                shutil.rmtree(target)
+
     def test_validate_reports_authentication_and_media_as_typed_blockers(self):
         connection = sqlite3.connect(self.application_db)
         connection.execute(
@@ -395,6 +465,10 @@ class EmergencyRecoveryTests(SimpleTestCase):
                 )
 
             report = json.loads(output.getvalue())
+            self.assertEqual(report["verification_state"], "blocked")
+            self.assertEqual(
+                report["database_verification_state"], "verified"
+            )
             self.assertFalse(report["recovery_ready"])
             self.assertTrue((target / "application.sqlite3").is_file())
             self.assertTrue((target / "control.sqlite3").is_file())

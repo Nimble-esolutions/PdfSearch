@@ -414,6 +414,7 @@ def _migration_compatibility(
     recorded_leaves: object,
     expected_leaves: list[str],
     required_nodes: list[str],
+    known_nodes: set[str],
 ) -> tuple[dict, list[dict]]:
     recorded = (
         sorted(set(recorded_leaves))
@@ -439,6 +440,15 @@ def _migration_compatibility(
                 "count": len(missing),
             }
         )
+    unknown = sorted(applied - known_nodes)
+    if unknown:
+        blockers.append(
+            {
+                "code": "unknown_applied_migrations",
+                "scope": alias,
+                "count": len(unknown),
+            }
+        )
     return (
         {
             "state": "compatible" if not blockers else "blocked",
@@ -446,6 +456,7 @@ def _migration_compatibility(
             "expected_leaf_count": len(expected),
             "required_migration_count": len(required_nodes),
             "unapplied_migration_count": len(missing),
+            "unknown_applied_migration_count": len(unknown),
         },
         blockers,
     )
@@ -537,6 +548,11 @@ def validate_workspace(workspace: Path) -> dict:
     blockers = []
     expected_migrations = migration_leaves()
     required_migration_nodes = required_migrations()
+    known_migration_nodes = {
+        node
+        for nodes in required_migration_nodes.values()
+        for node in nodes
+    }
     migration_report = {}
     for alias, database_key in (("default", "application"), ("control", "control")):
         database_path = database_paths.get(database_key)
@@ -552,6 +568,7 @@ def validate_workspace(workspace: Path) -> dict:
             recorded_leaves=manifest.get("migration_leaves", {}).get(alias),
             expected_leaves=expected_migrations.get(alias, []),
             required_nodes=required_migration_nodes.get(alias, []),
+            known_nodes=known_migration_nodes,
         )
         migration_report[alias] = report
         blockers.extend(migration_blockers)
@@ -608,7 +625,8 @@ def validate_workspace(workspace: Path) -> dict:
     )
     return {
         "workspace": str(root),
-        "verification_state": "verified",
+        "verification_state": "verified" if not blockers else "blocked",
+        "database_verification_state": "verified",
         "database_verified": True,
         "recovery_ready": not blockers,
         "blockers": blockers,
