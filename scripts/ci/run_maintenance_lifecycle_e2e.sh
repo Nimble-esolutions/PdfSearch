@@ -73,7 +73,7 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=activate \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
     --project=desktop --reporter=list
-"${COMPOSE[@]}" run --rm fixture assert-parent-tree
+"${COMPOSE[@]}" run --rm fixture assert-final-parent-custody
 "${COMPOSE[@]}" run --rm fixture assert-final-control-evidence
 
 web_container="$("${COMPOSE[@]}" ps -q web)"

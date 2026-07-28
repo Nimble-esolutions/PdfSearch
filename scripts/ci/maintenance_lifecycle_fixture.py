@@ -84,6 +84,60 @@ def _tree_records(root: Path) -> list[dict]:
     return records
 
 
+def _database_custody(path: Path) -> dict:
+    """Capture schema and non-operational row identity without row contents."""
+    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        tables = connection.execute(
+            "SELECT name, sql FROM sqlite_master "
+            "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
+            "ORDER BY name"
+        ).fetchall()
+        evidence = {"schema": {}, "rows": {}}
+        for table, schema_sql in tables:
+            evidence["schema"][table] = hashlib.sha256(
+                (schema_sql or "").encode("utf-8")
+            ).hexdigest()
+            if table == "django_session":
+                continue
+            columns = [
+                row[1]
+                for row in connection.execute(
+                    f'PRAGMA table_info("{table}")'
+                )
+            ]
+            if table == "core_customuser":
+                columns = [
+                    column for column in columns if column != "last_login"
+                ]
+            quoted = ", ".join(f'"{column}"' for column in columns)
+            rows = connection.execute(
+                f'SELECT {quoted} FROM "{table}"'
+            ).fetchall()
+            encoded_rows = []
+            for row in rows:
+                encoded_rows.append(
+                    json.dumps(
+                        [
+                            (
+                                {"sha256": hashlib.sha256(value).hexdigest()}
+                                if isinstance(value, bytes)
+                                else value
+                            )
+                            for value in row
+                        ],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                )
+            evidence["rows"][table] = hashlib.sha256(
+                "\n".join(sorted(encoded_rows)).encode("utf-8")
+            ).hexdigest()
+        return evidence
+    finally:
+        connection.close()
+
+
 def seed_and_freeze() -> None:
     user, _ = CustomUser.objects.update_or_create(
         username=USERNAME,
@@ -218,6 +272,9 @@ def seed_and_freeze() -> None:
             {
                 "runtime_path": str(runtime),
                 "records": _tree_records(runtime),
+                "database_custody": _database_custody(
+                    runtime / "db.sqlite3"
+                ),
                 "vault_projection": list(
                     ArtifactGeneration.objects.using("control")
                     .values(
@@ -328,6 +385,49 @@ def assert_parent_tree() -> None:
     print("parent_runtime_tree_unchanged")
 
 
+def assert_final_parent_custody() -> None:
+    """Allow active-runtime thaw and auth rows, but no content custody drift."""
+    expected = json.loads(PARENT_EVIDENCE.read_text(encoding="utf-8"))
+    runtime = Path(expected["runtime_path"])
+    expected_records = {
+        item["path"]: item for item in expected["records"]
+    }
+    actual_records = {
+        item["path"]: item for item in _tree_records(runtime)
+    }
+    if expected_records.keys() != actual_records.keys():
+        raise SystemExit("parent_runtime_path_set_changed")
+    for path, before in expected_records.items():
+        after = actual_records[path]
+        if before["type"] != after["type"]:
+            raise SystemExit(f"parent_runtime_type_changed:{path}")
+        expected_mode = 0o750 if after["type"] == "directory" else 0o640
+        if after["mode"] != expected_mode:
+            raise SystemExit(f"parent_runtime_active_mode_invalid:{path}")
+        if path != "db.sqlite3" and (
+            before.get("size") != after.get("size")
+            or before.get("sha256") != after.get("sha256")
+        ):
+            raise SystemExit(f"parent_runtime_content_changed:{path}")
+    current_database = _database_custody(runtime / "db.sqlite3")
+    expected_database = expected["database_custody"]
+    if current_database["schema"] != expected_database["schema"]:
+        raise SystemExit("parent_runtime_database_schema_changed")
+    changed_tables = sorted(
+        table
+        for table in expected_database["rows"].keys()
+        | current_database["rows"].keys()
+        if expected_database["rows"].get(table)
+        != current_database["rows"].get(table)
+    )
+    if changed_tables:
+        raise SystemExit(
+            "parent_runtime_database_content_changed:"
+            + ",".join(changed_tables[:20])
+        )
+    print("final_parent_content_custody_verified")
+
+
 def assert_maintenance_evidence() -> None:
     from core.models import MaintenanceJob
 
@@ -432,6 +532,8 @@ if __name__ == "__main__":
         activation_evidence()
     elif operation == "assert-parent-tree":
         assert_parent_tree()
+    elif operation == "assert-final-parent-custody":
+        assert_final_parent_custody()
     elif operation == "assert-maintenance-evidence":
         assert_maintenance_evidence()
     elif operation == "assert-final-control-evidence":
@@ -440,5 +542,6 @@ if __name__ == "__main__":
         raise SystemExit(
             "expected seed-and-freeze, remove-retry-file, "
             "repair-retry-file, activation-evidence, assert-parent-tree, "
-            "assert-maintenance-evidence, or assert-final-control-evidence"
+            "assert-final-parent-custody, assert-maintenance-evidence, "
+            "or assert-final-control-evidence"
         )
