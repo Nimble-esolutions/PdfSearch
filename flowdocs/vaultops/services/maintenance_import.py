@@ -51,6 +51,7 @@ RUNTIME_SOURCE_ENTRIES = (
     "faiss_indexes",
     "chroma_db",
 )
+LOCAL_GENERATION_MANIFEST = "local-generation-manifest.json"
 KNOWN_CANDIDATE_ONLY_ENTRIES = {WORKSPACE_MANIFEST, "backups"}
 
 
@@ -87,6 +88,27 @@ def _read_candidate_manifest(path):
     if not isinstance(manifest, dict):
         raise MaintenanceImportError("maintenance_candidate_manifest_invalid")
     return manifest
+
+
+def _validate_published_runtime(
+    runtime,
+    *,
+    manifest,
+    manifest_digest,
+    generation_id,
+    runtime_root,
+):
+    stored_manifest = _read_candidate_manifest(
+        runtime / LOCAL_GENERATION_MANIFEST
+    )
+    if stored_manifest != manifest:
+        raise MaintenanceImportError("maintenance_runtime_manifest_mismatch")
+    validate_runtime_workspace(
+        runtime,
+        runtime_root=runtime_root,
+        generation_id=generation_id,
+        manifest_digest=manifest_digest,
+    )
 
 
 def _resolve_candidate(job):
@@ -400,6 +422,7 @@ def import_maintenance_candidate(
         return keyed_workspace
     candidate = _resolve_candidate(job)
     candidate_manifest, recovery = _validate_job_and_manifest(job, candidate)
+    candidate_manifest_sha256 = _sha256(candidate / WORKSPACE_MANIFEST)
     try:
         validation = validate_candidate(candidate)
     except CandidateMaintenanceError as exc:
@@ -430,6 +453,8 @@ def import_maintenance_candidate(
                 raise MaintenanceImportError(
                     "maintenance_candidate_projection_incomplete"
                 )
+            if workspace.import_idempotency_key != idempotency_key:
+                raise MaintenanceImportError("idempotency_conflict")
             validate_runtime_workspace(
                 workspace.runtime_path,
                 runtime_root=runtime_root,
@@ -438,7 +463,17 @@ def import_maintenance_candidate(
             )
             return workspace
 
+        if _sha256(candidate / WORKSPACE_MANIFEST) != candidate_manifest_sha256:
+            raise MaintenanceImportError("maintenance_candidate_changed")
         records, total_bytes = _safe_files(candidate)
+        try:
+            recovery = verify_set(
+                str(candidate_manifest["source"]["recovery_set_id"])
+            )
+        except RecoverySetError as exc:
+            raise MaintenanceImportError(exc.reason_code) from exc
+        if recovery.get("verification_state") != "verified":
+            raise MaintenanceImportError("maintenance_recovery_set_unverified")
         capacity = capacity_report(
             source_bytes=total_bytes,
             operation="activation",
@@ -456,6 +491,11 @@ def import_maintenance_candidate(
         incomplete.mkdir(mode=0o700)
         try:
             _copy_records(candidate, incomplete, records)
+            if (
+                _sha256(candidate / WORKSPACE_MANIFEST)
+                != candidate_manifest_sha256
+            ):
+                raise MaintenanceImportError("maintenance_candidate_changed")
             rehearsal = rehearse_migrations(
                 incomplete / "db.sqlite3",
                 workspace_path=incomplete / ".rehearsal-workspace",
@@ -473,34 +513,47 @@ def import_maintenance_candidate(
             runtime_name = f"{generation_id}-{manifest_digest[:12]}"
             final_runtime = runtime_root / runtime_name
             if final_runtime.exists():
-                raise MaintenanceImportError(
-                    "maintenance_runtime_target_exists"
+                _validate_published_runtime(
+                    final_runtime,
+                    manifest=manifest,
+                    manifest_digest=manifest_digest,
+                    generation_id=generation_id,
+                    runtime_root=runtime_root,
                 )
-            atomic_write_json(
-                incomplete / "runtime-evidence.json",
-                {
-                    "generation_id": generation_id,
-                    "manifest_digest": manifest_digest,
-                    "origin": ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
-                    "parent_generation_id": parent.generation_id,
-                    "parent_manifest_digest": parent.manifest_digest,
-                    "maintenance_job_public_id": str(job.public_id),
-                },
-            )
-            _fsync_tree(incomplete)
-            _make_read_only(incomplete)
-            os.replace(incomplete, final_runtime)
-            root_descriptor = os.open(runtime_root, os.O_RDONLY)
-            try:
-                os.fsync(root_descriptor)
-            finally:
-                os.close(root_descriptor)
-            validate_runtime_workspace(
-                final_runtime,
-                runtime_root=runtime_root,
-                generation_id=generation_id,
-                manifest_digest=manifest_digest,
-            )
+                shutil.rmtree(incomplete)
+                published_here = False
+            else:
+                atomic_write_json(
+                    incomplete / LOCAL_GENERATION_MANIFEST,
+                    manifest,
+                )
+                atomic_write_json(
+                    incomplete / "runtime-evidence.json",
+                    {
+                        "generation_id": generation_id,
+                        "manifest_digest": manifest_digest,
+                        "origin": ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+                        "parent_generation_id": parent.generation_id,
+                        "parent_manifest_digest": parent.manifest_digest,
+                        "maintenance_job_public_id": str(job.public_id),
+                    },
+                )
+                _fsync_tree(incomplete)
+                _make_read_only(incomplete)
+                os.replace(incomplete, final_runtime)
+                root_descriptor = os.open(runtime_root, os.O_RDONLY)
+                try:
+                    os.fsync(root_descriptor)
+                finally:
+                    os.close(root_descriptor)
+                _validate_published_runtime(
+                    final_runtime,
+                    manifest=manifest,
+                    manifest_digest=manifest_digest,
+                    generation_id=generation_id,
+                    runtime_root=runtime_root,
+                )
+                published_here = True
         except Exception:
             shutil.rmtree(incomplete, ignore_errors=True)
             raise
@@ -577,6 +630,7 @@ def import_maintenance_candidate(
                     },
                 )
         except Exception:
-            _remove_runtime(final_runtime)
+            if published_here:
+                _remove_runtime(final_runtime)
             raise
         return workspace

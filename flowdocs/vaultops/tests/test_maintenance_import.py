@@ -206,15 +206,17 @@ class MaintenanceCandidateImportTests(TestCase):
             1,
         )
 
-    def test_same_job_with_new_key_reuses_projected_runtime(self):
-        first = import_maintenance_candidate(
+    def test_same_job_with_new_key_is_rejected(self):
+        import_maintenance_candidate(
             self.job, idempotency_key="maintenance-import-request-1"
         )
-        second = import_maintenance_candidate(
-            self.job, idempotency_key="maintenance-import-request-2"
-        )
 
-        self.assertEqual(first.pk, second.pk)
+        with self.assertRaises(MaintenanceImportError) as raised:
+            import_maintenance_candidate(
+                self.job, idempotency_key="maintenance-import-request-2"
+            )
+
+        self.assertEqual(raised.exception.reason_code, "idempotency_conflict")
 
     def test_idempotency_key_cannot_be_reused_for_another_job(self):
         import_maintenance_candidate(
@@ -261,3 +263,32 @@ class MaintenanceCandidateImportTests(TestCase):
             raised.exception.reason_code,
             "maintenance_candidate_entries_unexpected",
         )
+
+    def test_process_death_orphan_is_verified_and_reconciled(self):
+        with patch(
+            "vaultops.services.maintenance_import.ArtifactGeneration.objects.create",
+            side_effect=SystemExit("simulated process death"),
+        ):
+            with self.assertRaises(SystemExit):
+                import_maintenance_candidate(
+                    self.job,
+                    idempotency_key="maintenance-import-request-1",
+                )
+
+        runtimes = [
+            path
+            for path in self.runtime_root.iterdir()
+            if path.is_dir() and not path.name.startswith(".")
+        ]
+        self.assertEqual(len(runtimes), 1)
+        self.assertTrue(
+            (runtimes[0] / "local-generation-manifest.json").is_file()
+        )
+
+        workspace = import_maintenance_candidate(
+            self.job,
+            idempotency_key="maintenance-import-request-1",
+        )
+
+        self.assertEqual(Path(workspace.runtime_path), runtimes[0])
+        self.assertEqual(ArtifactGeneration.objects.count(), 1)
