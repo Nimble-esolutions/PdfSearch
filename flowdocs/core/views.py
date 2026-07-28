@@ -1659,42 +1659,8 @@ def search_query(request):
 
 @superadmin_required
 def operations_panel(request):
-    """Environment and Data Lifecycle operations dashboard."""
-    env_identity = getattr(settings, "ENV_IDENTITY", None)
-    ctx = {"title": "Operations \u2014 Data Lifecycle"}
-    if env_identity:
-        ctx.update({
-            "app_env": env_identity.app_env.value,
-            "dataset_id": env_identity.dataset_id,
-            "authoritative_dataset_id": env_identity.authoritative_dataset_id,
-            "restore_source_dataset_id": env_identity.restore_source_dataset_id,
-            "production_source_id": env_identity.production_source_id,
-            "deployment_id": env_identity.deployment_id,
-            "instance_id": env_identity.instance_id[:20] if env_identity.instance_id else "",
-            "backup_role": env_identity.backup_role.value,
-            "backup_sync_mode": env_identity.backup_sync_mode.value,
-            "scheduler_enabled": env_identity.maintenance_scheduler_enabled,
-            "data_mode": env_identity.data_mode.value,
-            "side_effects": env_identity.external_side_effects.value,
-            "build_digest": (env_identity.build_image_digest or env_identity.app_image_digest)[:24] if env_identity.app_image_digest else "",
-            "app_release": env_identity.app_release_version or env_identity.build_release_version,
-            "digest_mismatch": bool(env_identity.build_image_digest and env_identity.app_image_digest and env_identity.build_image_digest != env_identity.app_image_digest),
-        })
-    try:
-        local_gen = ArtifactGeneration.objects.filter(status="active").order_by("-promoted_at").first()
-        if local_gen:
-            ctx["local_generation"] = local_gen.generation_id
-            age = timezone.now() - local_gen.created_at
-            ctx["local_generation_days"] = age.days
-            ctx["local_generation_hours"] = age.seconds // 3600
-    except Exception:
-        pass
-    try:
-        from .activation_journal import activation_status
-        ctx["activation_status"] = activation_status()
-    except Exception:
-        pass
-    return render(request, "dashboard_operations.html", {**ctx, "breadcrumb_items": [{"label": gettext("Dashboard"), "url": reverse("dashboard")}, {"label": gettext("Operations"), "url": None}]})
+    """Compatibility alias retained for legacy callers."""
+    return redirect(f"{reverse('operations_panel')}?section=overview")
 def health_data(request):
     """Public: return coarse data readiness status only."""
     return JsonResponse({"status": _data_readiness_check()})
