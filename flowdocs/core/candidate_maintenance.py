@@ -174,13 +174,14 @@ def _embedding_validation(database: Path, folder_ids: list[int]) -> dict:
     try:
         placeholders = ",".join("?" for _ in folder_ids) or "NULL"
         rows = connection.execute(
-            "SELECT id, page_chunks, chunk_embeddings FROM core_pdffile "
+            "SELECT id, folder_id, page_chunks, chunk_embeddings FROM core_pdffile "
             f"WHERE folder_id IN ({placeholders}) AND lifecycle != 'archived'",
             folder_ids,
         )
         dimensions = set()
         vectors = 0
-        for pdf_id, chunks_raw, embeddings_raw in rows:
+        folders = {}
+        for pdf_id, folder_id, chunks_raw, embeddings_raw in rows:
             chunks = json.loads(chunks_raw or "[]")
             embeddings = json.loads(embeddings_raw or "[]")
             if chunks and len(chunks) != len(embeddings):
@@ -194,6 +195,11 @@ def _embedding_validation(database: Path, folder_ids: list[int]) -> dict:
                     )
                 dimensions.add(len(embedding))
                 vectors += 1
+            folder = folders.setdefault(
+                str(folder_id), {"vectors": 0, "dimensions": set()}
+            )
+            folder["vectors"] += len(embeddings)
+            folder["dimensions"].update(len(embedding) for embedding in embeddings)
         if len(dimensions) > 1:
             raise CandidateMaintenanceError(
                 "candidate_embedding_dimension_mismatch"
@@ -201,6 +207,13 @@ def _embedding_validation(database: Path, folder_ids: list[int]) -> dict:
         return {
             "vectors": vectors,
             "dimensions": sorted(dimensions),
+            "folders": {
+                folder_id: {
+                    "vectors": record["vectors"],
+                    "dimensions": sorted(record["dimensions"]),
+                }
+                for folder_id, record in sorted(folders.items())
+            },
         }
     finally:
         connection.close()
@@ -261,6 +274,21 @@ def validate_candidate(workspace: Path) -> dict:
         for record in faiss_records.values()
     ):
         raise CandidateMaintenanceError("candidate_faiss_dimension_mismatch")
+    for folder_id, record in faiss_records.items():
+        expected = embedding["folders"].get(
+            folder_id, {"vectors": 0, "dimensions": []}
+        )
+        if record["vectors"] != expected["vectors"]:
+            raise CandidateMaintenanceError(
+                "candidate_faiss_count_mismatch", folder_id
+            )
+        if (
+            expected["dimensions"]
+            and record["dimension"] != expected["dimensions"][0]
+        ):
+            raise CandidateMaintenanceError(
+                "candidate_faiss_dimension_mismatch", folder_id
+            )
     return {
         "sqlite": {"integrity": "ok", "foreign_key_violations": 0},
         "media": {"referenced": len(media_rows), "missing": 0},

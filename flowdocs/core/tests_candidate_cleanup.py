@@ -16,6 +16,7 @@ from core.artifact_cleanup import (
     cleanup_plan,
 )
 from core.candidate_maintenance import (
+    CandidateMaintenanceError,
     WORKSPACE_MANIFEST,
     create_workspace,
     validate_candidate,
@@ -152,6 +153,30 @@ class CandidateWorkspaceTests(SimpleTestCase):
         self.assertEqual(result["media"]["missing"], 0)
         self.assertEqual(result["embeddings"]["dimensions"], [2])
         self.assertEqual(result["faiss"]["7"]["vectors"], 1)
+
+    def test_candidate_validation_rejects_faiss_vector_count_mismatch(self):
+        import faiss
+
+        workspace = self.control / "count-mismatch-workspace"
+        workspace.mkdir()
+        (workspace / "media" / "pdfs").mkdir(parents=True)
+        (workspace / "media" / "pdfs" / "one.pdf").write_bytes(b"%PDF-1.4")
+        (workspace / "faiss_indexes").mkdir()
+        (workspace / "db.sqlite3").write_bytes(self.database.read_bytes())
+        faiss.write_index(
+            faiss.IndexFlatIP(2),
+            str(workspace / "faiss_indexes" / "folder_7.index"),
+        )
+        (workspace / WORKSPACE_MANIFEST).write_text(
+            json.dumps({"affected_folder_ids": [7]})
+        )
+
+        with self.assertRaises(CandidateMaintenanceError) as raised:
+            validate_candidate(workspace)
+
+        self.assertEqual(
+            raised.exception.reason_code, "candidate_faiss_count_mismatch"
+        )
 
 
 class ArtifactCleanupPlannerTests(SimpleTestCase):
