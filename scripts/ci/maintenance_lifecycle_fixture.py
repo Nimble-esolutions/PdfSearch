@@ -312,7 +312,19 @@ def assert_parent_tree() -> None:
     expected = json.loads(PARENT_EVIDENCE.read_text(encoding="utf-8"))
     actual = _tree_records(Path(expected["runtime_path"]))
     if actual != expected["records"]:
-        raise SystemExit("parent_runtime_tree_changed")
+        expected_by_path = {
+            item["path"]: item for item in expected["records"]
+        }
+        actual_by_path = {item["path"]: item for item in actual}
+        changed_paths = sorted(
+            path
+            for path in expected_by_path.keys() | actual_by_path.keys()
+            if expected_by_path.get(path) != actual_by_path.get(path)
+        )
+        raise SystemExit(
+            "parent_runtime_tree_changed:"
+            + ",".join(changed_paths[:20])
+        )
     print("parent_runtime_tree_unchanged")
 
 
