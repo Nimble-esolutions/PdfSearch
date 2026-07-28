@@ -36,6 +36,7 @@ from vaultops.models import (
     VaultJob,
 )
 from vaultops.services.read_model import (
+    build_workbench_state,
     enrich_workbench_readiness,
     workspace_state_digest,
 )
@@ -175,6 +176,33 @@ class VaultWorkbenchTests(TestCase):
             html=False,
         )
         capability.assert_called_once()
+
+    @patch(
+        "vaultops.services.read_model._rollback_capability",
+        return_value={
+            "enabled": True,
+            "reason_code": "",
+            "target_generation_id": "verified-previous",
+        },
+    )
+    def test_committed_activation_is_not_projected_as_pending(
+        self, capability
+    ):
+        identity = settings.ENV_IDENTITY
+        ActivationIntent.objects.using("control").create(
+            deployment_id=identity.deployment_id,
+            target_generation_id="committed-target",
+            previous_generation_id="committed-parent",
+            manifest_digest="c" * 64,
+            intent_digest="d" * 64,
+            state=ActivationIntent.State.COMMITTED,
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+
+        state = build_workbench_state(profile_key=self.profile.key)
+
+        self.assertIsNone(state["pending_activation"])
+        capability.assert_called_once_with(pending_activation=None)
 
     @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
     def test_non_superadmin_cannot_issue_or_schedule_signed_rollback(self):

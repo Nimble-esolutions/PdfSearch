@@ -774,7 +774,7 @@ def _rollback_capability(*, pending_activation=None):
     if not reason_code:
         projected = {
             generation.generation_id: generation
-            for generation in ArtifactGeneration.objects.filter(
+            for generation in ArtifactGeneration.objects.using("control").filter(
                 deployment_id=identity.deployment_id,
                 generation_id__in=[
                     active_pointer.generation_id,
@@ -807,7 +807,7 @@ def _rollback_capability(*, pending_activation=None):
     ):
         reason_code = "rollback_lineage_invalid"
     if not reason_code:
-        observation = RuntimePointerObservation.objects.filter(
+        observation = RuntimePointerObservation.objects.using("control").filter(
             deployment_id=identity.deployment_id
         ).order_by("-observed_at").first()
         if (
@@ -893,7 +893,7 @@ def build_workbench_state(*, profile_key=None):
     mutation = SourceMutationState.objects.filter(
         deployment_id=identity.deployment_id
     ).first()
-    pending_activation = ActivationIntent.objects.filter(
+    pending_activation = ActivationIntent.objects.using("control").filter(
         deployment_id=identity.deployment_id,
         state__in=[
             ActivationIntent.State.PENDING,
