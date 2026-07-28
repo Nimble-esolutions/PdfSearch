@@ -30,14 +30,45 @@ async function previewAndQueue(
   typedConfirmation?: string,
 ) {
   await page.locator('fieldset.maintenance-scope input[type="checkbox"]').first().check();
+  await page.locator('select[name="filter_indexed"]').selectOption('true');
+  await page.locator('input[name="filter_category"]').fill('audit');
+  await page.locator('input[name="filter_subject"]').fill('cooperation');
+  await page.locator('input[name="filter_keywords"]').fill('audit,लेखापरीक्षण');
+  const today = new Date().toISOString().slice(0, 10);
+  await page.locator('input[name="filter_uploaded_after"]').fill(today);
+  await page.locator('input[name="filter_uploaded_before"]').fill(today);
   await page.getByRole('button', { name: previewButton }).click();
   await expect(page.getByText('Selected preview', { exact: true })).toBeVisible();
   const selected = page.locator('.maintenance-selected-plan');
-  await expect(selected.getByText(/Documents/)).toBeVisible();
+  await expect(
+    selected.locator('div').filter({ hasText: /^Documents2$/ }).first(),
+  ).toBeVisible();
+  await expect(
+    selected.locator('div').filter({ hasText: /^Affected folders1$/ }).first(),
+  ).toBeVisible();
   if (typedConfirmation) {
     await page.locator('input[name="typed_confirmation"]').first().fill(typedConfirmation);
   }
   await page.getByRole('button', { name: 'Confirm and queue local maintenance' }).first().click();
+}
+
+async function assertExpectedSearch(page: Page, query: string, language: string) {
+  const result = await page.evaluate(async ({ query, language }) => {
+    const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const response = await fetch('/search/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({ query, language }),
+    });
+    return { status: response.status, body: await response.json() };
+  }, { query, language });
+  expect(result.status).toBe(200);
+  expect(
+    result.body.references.some(
+      (reference: { title?: string }) =>
+        reference.title === 'Bilingual audit evidence',
+    ),
+  ).toBe(true);
 }
 
 test.describe('disposable maintenance lifecycle', () => {
@@ -97,17 +128,7 @@ test.describe('disposable maintenance lifecycle', () => {
       ['cooperative audit evidence', 'en'],
       ['सहकारी लेखापरीक्षण पुरावा', 'mr'],
     ]) {
-      const result = await page.evaluate(async ({ query, language }) => {
-        const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-        const response = await fetch('/search/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-          body: JSON.stringify({ query, language }),
-        });
-        return { status: response.status, body: await response.json() };
-      }, { query, language });
-      expect(result.status).toBe(200);
-      expect(result.body.references.length).toBeGreaterThan(0);
+      await assertExpectedSearch(page, query, language);
     }
 
     await page.goto('/dashboard/operations/?section=restore');
@@ -124,5 +145,11 @@ test.describe('disposable maintenance lifecycle', () => {
         return '';
       }
     }, { timeout: 120_000 }).toBe('maintenance-e2e-parent');
+    for (const [query, language] of [
+      ['cooperative audit evidence', 'en'],
+      ['सहकारी लेखापरीक्षण पुरावा', 'mr'],
+    ]) {
+      await assertExpectedSearch(page, query, language);
+    }
   });
 });

@@ -9,6 +9,7 @@ import os
 import shutil
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, "/app/flowdocs")
@@ -25,7 +26,9 @@ from django.utils import timezone
 from core.models import CustomUser, Folder, PDFFile
 from core.utils import precompute_pdf_embeddings
 from vaultops.models import (
+    ActivationIntent,
     ArtifactGeneration,
+    ConfirmationChallenge,
     RuntimePointerObservation,
     VaultConnectionProfile,
 )
@@ -41,6 +44,7 @@ GENERATION_ID = "maintenance-e2e-parent"
 MANIFEST_DIGEST = hashlib.sha256(GENERATION_ID.encode()).hexdigest()
 USERNAME = "ci-admin"
 PASSWORD = "ci-only-password-not-for-production"
+PARENT_EVIDENCE = Path(settings.DATA_CONTROL_ROOT) / "e2e-parent-tree.json"
 
 
 def _pdf(path: Path, text: str) -> None:
@@ -61,6 +65,23 @@ def _copy_database(source: Path, target: Path) -> None:
     finally:
         target_connection.close()
         source_connection.close()
+
+
+def _tree_records(root: Path) -> list[dict]:
+    records = []
+    for path in sorted(root.rglob("*"), key=lambda value: value.as_posix()):
+        relative = path.relative_to(root).as_posix()
+        stat_result = path.lstat()
+        record = {
+            "path": relative,
+            "mode": stat_result.st_mode & 0o777,
+            "type": "directory" if path.is_dir() else "file",
+            "size": stat_result.st_size,
+        }
+        if path.is_file():
+            record["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        records.append(record)
+    return records
 
 
 def seed_and_freeze() -> None:
@@ -192,6 +213,26 @@ def seed_and_freeze() -> None:
             "observed_at": timezone.now(),
         },
     )
+    PARENT_EVIDENCE.write_text(
+        json.dumps(
+            {
+                "runtime_path": str(runtime),
+                "records": _tree_records(runtime),
+                "vault_projection": list(
+                    ArtifactGeneration.objects.using("control")
+                    .values(
+                        "generation_id",
+                        "manifest_digest",
+                        "vault_state",
+                    )
+                    .order_by("generation_id")
+                ),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    os.chown(PARENT_EVIDENCE, 1000, 1000)
     print("fixture_ready")
 
 
@@ -254,6 +295,106 @@ def activation_evidence() -> None:
     print(json.dumps(evidence, sort_keys=True))
 
 
+def assert_parent_tree() -> None:
+    expected = json.loads(PARENT_EVIDENCE.read_text(encoding="utf-8"))
+    actual = _tree_records(Path(expected["runtime_path"]))
+    if actual != expected["records"]:
+        raise SystemExit("parent_runtime_tree_changed")
+    print("parent_runtime_tree_unchanged")
+
+
+def assert_maintenance_evidence() -> None:
+    from core.models import MaintenanceJob
+
+    job = MaintenanceJob.objects.filter(kind="reindex_selected").latest(
+        "created_at"
+    )
+    items = list(job.items.order_by("pdf_id"))
+    if job.status != "completed" or len(items) != 2:
+        raise SystemExit("maintenance_job_scope_invalid")
+    if any(
+        item.attempts != 1
+        or item.started_at is None
+        or item.finished_at is None
+        for item in items
+    ):
+        raise SystemExit("maintenance_checkpoint_recomputed")
+    attempts = job.options.get("folder_build_attempts", {})
+    if list(attempts.values()) != [2]:
+        raise SystemExit("maintenance_folder_build_count_invalid")
+    print("maintenance_checkpoint_evidence_verified")
+
+
+def assert_final_control_evidence() -> None:
+    from vaultops.runtime_control import read_runtime_pointer
+
+    expected = json.loads(PARENT_EVIDENCE.read_text(encoding="utf-8"))
+    paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    active = read_runtime_pointer(
+        paths["active"],
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+    )
+    previous = read_runtime_pointer(
+        paths["previous"],
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+    )
+    if active.generation_id != GENERATION_ID or not previous.generation_id.startswith(
+        "lm-"
+    ):
+        raise SystemExit("signed_pointer_pair_invalid")
+    intents = list(
+        ActivationIntent.objects.using("control").order_by("created_at")
+    )
+    if len(intents) != 2 or any(
+        intent.state != ActivationIntent.State.COMMITTED for intent in intents
+    ):
+        raise SystemExit("activation_intents_not_terminal")
+    if any(not intent.idempotency_key for intent in intents):
+        raise SystemExit("activation_idempotency_missing")
+    for intent in intents:
+        recovery_set_id = intent.checkpoint.get("recovery_set_id", "")
+        manifest_path = (
+            Path(settings.RECOVERY_SET_ROOT)
+            / recovery_set_id
+            / "recovery-set.json"
+        )
+        if not recovery_set_id or not manifest_path.is_file():
+            raise SystemExit("activation_recovery_evidence_missing")
+        recovery_manifest = json.loads(
+            manifest_path.read_text(encoding="utf-8")
+        )
+        created_at = datetime.fromisoformat(
+            recovery_manifest["created_at"]
+        )
+        if created_at > intent.created_at:
+            raise SystemExit("activation_recovery_not_pre_intent")
+    if ConfirmationChallenge.objects.using("control").filter(
+        used_at__isnull=False
+    ).count() < 2:
+        raise SystemExit("confirmation_evidence_missing")
+    original = {
+        item["generation_id"]: item
+        for item in expected["vault_projection"]
+    }
+    current = {
+        item["generation_id"]: item
+        for item in ArtifactGeneration.objects.using("control")
+        .filter(generation_id__in=original)
+        .values("generation_id", "manifest_digest", "vault_state")
+    }
+    if current != original:
+        raise SystemExit("vault_projection_changed")
+    if ArtifactGeneration.objects.using("control").filter(
+        origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+    ).exclude(vault_state=ArtifactGeneration.VaultState.UNKNOWN).exists():
+        raise SystemExit("local_candidate_moved_vault_authority")
+    print("final_signed_control_evidence_verified")
+
+
 if __name__ == "__main__":
     operation = sys.argv[1] if len(sys.argv) > 1 else ""
     if operation == "seed-and-freeze":
@@ -264,8 +405,15 @@ if __name__ == "__main__":
         repair_retry_file()
     elif operation == "activation-evidence":
         activation_evidence()
+    elif operation == "assert-parent-tree":
+        assert_parent_tree()
+    elif operation == "assert-maintenance-evidence":
+        assert_maintenance_evidence()
+    elif operation == "assert-final-control-evidence":
+        assert_final_control_evidence()
     else:
         raise SystemExit(
             "expected seed-and-freeze, remove-retry-file, "
-            "repair-retry-file, or activation-evidence"
+            "repair-retry-file, activation-evidence, assert-parent-tree, "
+            "assert-maintenance-evidence, or assert-final-control-evidence"
         )

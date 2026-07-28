@@ -124,3 +124,4 @@ volumes:
 networks:
   lifecycle:
     driver: bridge
+    internal: true

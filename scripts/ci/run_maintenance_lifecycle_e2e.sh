@@ -14,6 +14,18 @@ cleanup() {
     "${COMPOSE[@]}" logs --no-color --tail=120 web maintenance >&2 || true
   fi
   LIFECYCLE_ACTIVATION_ENABLED=0 "${COMPOSE[@]}" down --volumes --remove-orphans
+  leftovers="$(
+    {
+      docker ps -aq --filter "label=com.docker.compose.project=$PROJECT"
+      docker network ls -q --filter "label=com.docker.compose.project=$PROJECT"
+      docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT"
+    } | sed '/^$/d'
+  )"
+  if [ -n "$leftovers" ]; then
+    echo "Disposable lifecycle teardown left project artifacts" >&2
+    exit 1
+  fi
+  return "$status"
 }
 trap cleanup EXIT
 
@@ -30,18 +42,22 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=queue \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
     --project=desktop --reporter=list
+"${COMPOSE[@]}" run --rm fixture assert-parent-tree
 
 "${COMPOSE[@]}" run --rm fixture remove-retry-file
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=fail \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
     --project=desktop --reporter=list
+"${COMPOSE[@]}" run --rm fixture assert-parent-tree
 
 "${COMPOSE[@]}" run --rm fixture repair-retry-file
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=retry \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
     --project=desktop --reporter=list
+"${COMPOSE[@]}" run --rm fixture assert-maintenance-evidence
+"${COMPOSE[@]}" run --rm fixture assert-parent-tree
 
 "${COMPOSE[@]}" stop web maintenance
 LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
@@ -50,6 +66,8 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=activate \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
     --project=desktop --reporter=list
+"${COMPOSE[@]}" run --rm fixture assert-parent-tree
+"${COMPOSE[@]}" run --rm fixture assert-final-control-evidence
 
 web_container="$("${COMPOSE[@]}" ps -q web)"
 web_restarts="$(docker inspect --format '{{.RestartCount}}' "$web_container")"
