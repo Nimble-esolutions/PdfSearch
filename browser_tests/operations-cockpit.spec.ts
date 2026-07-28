@@ -13,6 +13,17 @@ async function login(page: Page) {
   ]);
 }
 
+async function switchLanguage(page: Page, language: 'en' | 'mr') {
+  const form = page.locator(`form:has(input[name="language"][value="${language}"])`);
+  const button = form.locator('button[type="submit"]');
+  if (!(await button.isVisible())) {
+    await page.locator('.navbar-toggler').click();
+    await expect(button).toBeVisible();
+  }
+  await button.click();
+  await expect(page.locator('html')).toHaveAttribute('lang', language);
+}
+
 test.describe('Operations Cockpit', () => {
   test('prioritizes work and separates local maintenance from Vault authority', async ({ page }) => {
     await login(page);
@@ -51,6 +62,16 @@ test.describe('Operations Cockpit', () => {
     const results = await new AxeBuilder({ page }).analyze();
     expect(
       results.violations.filter(
+        violation => violation.impact === 'critical' || violation.impact === 'serious',
+      ),
+    ).toEqual([]);
+    await switchLanguage(page, 'mr');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
+    await expectNoVisibleMachineTokens(page);
+
+    const marathiResults = await new AxeBuilder({ page }).analyze();
+    expect(
+      marathiResults.violations.filter(
         violation => violation.impact === 'critical' || violation.impact === 'serious',
       ),
     ).toEqual([]);

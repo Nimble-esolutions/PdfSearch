@@ -7,6 +7,16 @@ import {
 
 const username = 'ci-admin';
 const password = 'ci-only-password-not-for-production';
+const workbenchSections = [
+  'overview',
+  'sync',
+  'generations',
+  'restore',
+  'maintenance',
+  'jobs',
+  'retention',
+  'configuration',
+] as const;
 
 async function login(page: Page, next = '/dashboard/operations/') {
   await page.goto(`/login/?next=${encodeURIComponent(next)}`);
@@ -32,6 +42,7 @@ async function switchLanguage(page: Page, language: 'en' | 'mr') {
 
 test.describe('Vault Operations Workbench', () => {
   test('passes authority, a11y, locale, no-JS, and zoom gates', async ({ browser, page }) => {
+    test.setTimeout(90_000);
     const externalRequests: string[] = [];
     page.on('request', request => {
       const url = new URL(request.url());
@@ -57,10 +68,32 @@ test.describe('Vault Operations Workbench', () => {
       ),
     ).toEqual([]);
 
+    for (const section of workbenchSections) {
+      await page.goto(`/dashboard/operations/?section=${section}`);
+      await expect(
+        page.locator('.vault-section-nav a[aria-current="page"]'),
+        `current navigation item for en/${section}`,
+      ).toHaveAttribute('href', `?section=${section}`);
+      await expectNoVisibleMachineTokens(page);
+    }
+
     await switchLanguage(page, 'mr');
     await expect(page.getByRole('heading', { name: 'तिजोरी संचालन कार्यपटल' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'अधिकृत स्थिती तुलना' })).toBeVisible();
-    await expectNoVisibleMachineTokens(page);
+    for (const section of workbenchSections) {
+      await page.goto(`/dashboard/operations/?section=${section}`);
+      await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
+      await expect(
+        page.locator('.vault-section-nav a[aria-current="page"]'),
+        `current navigation item for mr/${section}`,
+      ).toHaveAttribute('href', `?section=${section}`);
+      await expectNoVisibleMachineTokens(page);
+    }
+    const marathiResults = await new AxeBuilder({ page }).analyze();
+    expect(
+      marathiResults.violations.filter(
+        violation => violation.impact === 'critical' || violation.impact === 'serious',
+      ),
+    ).toEqual([]);
     await switchLanguage(page, 'en');
 
     await page.goto('/dashboard/operations/?section=retention');
