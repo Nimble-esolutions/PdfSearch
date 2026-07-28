@@ -364,6 +364,42 @@ class ActivationCoordinatorTests(TestCase):
             intent_document["target_generation_id"], TARGET_GENERATION
         )
 
+    def test_exact_activation_request_reuses_the_same_intent(self):
+        first = schedule_activation(
+            self.workspace,
+            confirmed=True,
+            idempotency_key="activation-request-1",
+            request_state_digest="d" * 64,
+        )
+        second = schedule_activation(
+            self.workspace,
+            confirmed=True,
+            idempotency_key="activation-request-1",
+            request_state_digest="d" * 64,
+        )
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(ActivationIntent.objects.count(), 1)
+
+    def test_activation_request_key_rejects_changed_state(self):
+        schedule_activation(
+            self.workspace,
+            confirmed=True,
+            idempotency_key="activation-request-1",
+            request_state_digest="d" * 64,
+        )
+
+        with self.assertRaisesMessage(
+            ActivationCoordinatorError,
+            "idempotency_conflict",
+        ):
+            schedule_activation(
+                self.workspace,
+                confirmed=True,
+                idempotency_key="activation-request-1",
+                request_state_digest="e" * 64,
+            )
+
     def test_production_is_hard_blocked_before_filesystem_mutation(self):
         with override_settings(
             ENV_IDENTITY=staging_identity(

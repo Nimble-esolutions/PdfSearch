@@ -11,7 +11,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from vaultops.models import (
@@ -171,6 +171,32 @@ def _verify_workspace(workspace):
     return runtime
 
 
+def activation_request_replay(
+    *,
+    deployment_id,
+    idempotency_key,
+    workspace,
+    request_state_digest,
+):
+    if not idempotency_key:
+        return None
+    existing = ActivationIntent.objects.filter(
+        deployment_id=deployment_id,
+        idempotency_key=idempotency_key,
+    ).first()
+    if not existing:
+        return None
+    if (
+        existing.workspace_id != workspace.pk
+        or existing.request_state_digest != request_state_digest
+        or existing.target_generation_id
+        != workspace.generation.generation_id
+        or existing.manifest_digest != workspace.manifest_digest
+    ):
+        raise ActivationCoordinatorError("idempotency_conflict")
+    return existing
+
+
 def schedule_activation(
     workspace,
     *,
@@ -178,6 +204,8 @@ def schedule_activation(
     actor_name="",
     confirmed=False,
     expires_seconds=300,
+    idempotency_key="",
+    request_state_digest="",
 ):
     """Create one signed intent; the web supervisor performs the cutover."""
     _guard_activation_enabled()
@@ -185,6 +213,16 @@ def schedule_activation(
         raise ActivationCoordinatorError("typed_confirmation_required")
     if expires_seconds < 30 or expires_seconds > 900:
         raise ActivationCoordinatorError("activation_intent_expiry_invalid")
+    if idempotency_key and len(request_state_digest) != 64:
+        raise ActivationCoordinatorError("activation_request_state_invalid")
+    replay = activation_request_replay(
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        idempotency_key=idempotency_key,
+        workspace=workspace,
+        request_state_digest=request_state_digest,
+    )
+    if replay:
+        return replay
     runtime = _verify_workspace(workspace)
     from core.artifact_cleanup import capacity_report
 
@@ -272,46 +310,59 @@ def schedule_activation(
     signed_intent = sign_document(
         payload, settings.ACTIVATION_INTENT_SIGNING_KEY
     )
-    with transaction.atomic(using="control"):
-        if ActivationIntent.objects.select_for_update().filter(
-            deployment_id=settings.ENV_IDENTITY.deployment_id,
-            state__in=[
-                ActivationIntent.State.PENDING,
-                ActivationIntent.State.APPLYING,
-            ],
-        ).exists():
-            raise ActivationCoordinatorError(
-                "runtime_activation_in_progress"
+    try:
+        with transaction.atomic(using="control"):
+            if ActivationIntent.objects.select_for_update().filter(
+                deployment_id=settings.ENV_IDENTITY.deployment_id,
+                state__in=[
+                    ActivationIntent.State.PENDING,
+                    ActivationIntent.State.APPLYING,
+                ],
+            ).exists():
+                raise ActivationCoordinatorError(
+                    "runtime_activation_in_progress"
+                )
+            intent = ActivationIntent.objects.create(
+                public_id=intent_public_id,
+                workspace=workspace,
+                deployment_id=settings.ENV_IDENTITY.deployment_id,
+                target_generation_id=workspace.generation.generation_id,
+                previous_generation_id=current_pointer.generation_id,
+                manifest_digest=workspace.manifest_digest,
+                intent_digest=signed_intent["document_digest"],
+                idempotency_key=idempotency_key,
+                request_state_digest=request_state_digest,
+                checkpoint={
+                    "previous_pointer_digest": current_pointer.pointer_digest,
+                    "target_runtime_path": str(runtime),
+                    "smoke_queries_digest": smoke_queries_digest,
+                    "protocol_state": "scheduled",
+                    "capacity_plan": activation_capacity,
+                },
+                actor_id=actor_id,
+                actor_name=actor_name,
+                expires_at=expires_at,
             )
-        intent = ActivationIntent.objects.create(
-            public_id=intent_public_id,
-            workspace=workspace,
+            generation = workspace.generation
+            generation.deployment_id = settings.ENV_IDENTITY.deployment_id
+            generation.save(update_fields=["deployment_id", "updated_at"])
+            transition_generation_runtime_state(
+                generation,
+                ArtifactGeneration.RuntimeState.PENDING,
+                correlation_id=intent.public_id,
+                actor_id=actor_id,
+                actor_name=actor_name,
+            )
+    except IntegrityError:
+        replay = activation_request_replay(
             deployment_id=settings.ENV_IDENTITY.deployment_id,
-            target_generation_id=workspace.generation.generation_id,
-            previous_generation_id=current_pointer.generation_id,
-            manifest_digest=workspace.manifest_digest,
-            intent_digest=signed_intent["document_digest"],
-            checkpoint={
-                "previous_pointer_digest": current_pointer.pointer_digest,
-                "target_runtime_path": str(runtime),
-                "smoke_queries_digest": smoke_queries_digest,
-                "protocol_state": "scheduled",
-                "capacity_plan": activation_capacity,
-            },
-            actor_id=actor_id,
-            actor_name=actor_name,
-            expires_at=expires_at,
+            idempotency_key=idempotency_key,
+            workspace=workspace,
+            request_state_digest=request_state_digest,
         )
-        generation = workspace.generation
-        generation.deployment_id = settings.ENV_IDENTITY.deployment_id
-        generation.save(update_fields=["deployment_id", "updated_at"])
-        transition_generation_runtime_state(
-            generation,
-            ArtifactGeneration.RuntimeState.PENDING,
-            correlation_id=intent.public_id,
-            actor_id=actor_id,
-            actor_name=actor_name,
-        )
+        if replay:
+            return replay
+        raise ActivationCoordinatorError("idempotency_conflict")
     intent_path = paths["intents"] / f"{intent.public_id}.json"
     try:
         atomic_write_json(intent_path, signed_intent)

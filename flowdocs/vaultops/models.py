@@ -511,6 +511,10 @@ class ActivationIntent(TimeStampedModel):
     previous_generation_id = models.CharField(max_length=160)
     manifest_digest = models.CharField(max_length=64)
     intent_digest = models.CharField(max_length=64, unique=True)
+    idempotency_key = models.CharField(max_length=160, blank=True, default="")
+    request_state_digest = models.CharField(
+        max_length=64, blank=True, default=""
+    )
     state = models.CharField(
         max_length=16, choices=State.choices, default=State.PENDING
     )
@@ -524,6 +528,13 @@ class ActivationIntent(TimeStampedModel):
     expires_at = models.DateTimeField()
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["deployment_id", "idempotency_key"],
+                condition=~Q(idempotency_key=""),
+                name="vaultops_unique_activation_request",
+            ),
+        ]
         ordering = ["-created_at"]
 
 
