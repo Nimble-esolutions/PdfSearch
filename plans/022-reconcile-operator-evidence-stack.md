@@ -14,6 +14,8 @@
 - **Depends on**: 018, 019, 020, 021
 - **Category**: docs
 - **Planned at**: commit `f7d0536`, 2026-07-28
+- **Implementation**: DONE — roadmap, documentation, rules, skill, checks, and
+  stacked-PR merge evidence were reconciled.
 
 ## Why this matters
 

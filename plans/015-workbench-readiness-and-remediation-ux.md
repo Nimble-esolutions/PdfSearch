@@ -12,6 +12,8 @@
 - **Depends on**: 013, 014
 - **Category**: bug
 - **Planned at**: commit `6c9a262`, 2026-07-28
+- **Implementation**: DONE — succeeded by Plans 017–022, which completed
+  operator-language presentation, redaction, Marathi parity, and enforcement.
 
 ## Why this matters
 

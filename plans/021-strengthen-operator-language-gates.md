@@ -14,6 +14,8 @@
 - **Depends on**: 018, 019, 020
 - **Category**: tests
 - **Planned at**: commit `f7d0536`, 2026-07-28
+- **Implementation**: DONE — source fixtures and rendered English/Marathi
+  visible-text and accessibility-name scans enforce the boundary.
 
 ## Why this matters
 

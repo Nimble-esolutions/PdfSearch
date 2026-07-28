@@ -31,12 +31,12 @@ run its drift check, and stop when a stated assumption is false.
 | 014 | Correct maintenance capability gates and filter validation | P1 | M | 013 | DONE |
 | 015 | Make Workbench readiness failures actionable | P1 | M | 013, 014 | DONE |
 | 016 | Bound maintenance read models and verify full workflow | P2 | M | 014, 015 | DONE |
-| 017 | Human-centred operator evidence | P1 | M | 015, 016 | RECONCILE |
-| 018 | Complete the UI reason presentation registry | P1 | M | — | TODO |
-| 019 | Redact operator technical evidence | P1 | M | 018 | TODO |
-| 020 | Enforce Marathi operator-copy parity | P1 | M | 018 | TODO |
-| 021 | Strengthen rendered/accessibility anti-slop gates | P1 | M | 018, 019, 020 | TODO |
-| 022 | Reconcile roadmap and stacked-PR readiness | P2 | S | 018, 019, 020, 021 | TODO |
+| 017 | Human-centred operator evidence | P1 | M | 015, 016 | DONE |
+| 018 | Complete the UI reason presentation registry | P1 | M | — | DONE |
+| 019 | Redact operator technical evidence | P1 | M | 018 | DONE |
+| 020 | Enforce Marathi operator-copy parity | P1 | M | 018 | DONE |
+| 021 | Strengthen rendered/accessibility anti-slop gates | P1 | M | 018, 019, 020 | DONE |
+| 022 | Reconcile roadmap and stacked-PR readiness | P2 | S | 018, 019, 020, 021 | DONE |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -174,10 +174,8 @@ filtered preview, repair and reindex queueing, progress and retry, candidate
 preparation, signed activation, English and Marathi search, rollback, and
 post-rollback content custody.
 
-Plan 017 remains `RECONCILE`. The 2026-07-28 completion audit found that known
-UI reasons still fall through to the generic fallback, raw local-maintenance
-exception summaries can enter expanded technical details, most registry copy
-falls back to English in Marathi, and the anti-slop gate does not yet prove the
-full rendered/accessibility/role matrix. Plans 018-022 are the ordered closure
-work. PRs #100-#103 must not be represented as merge-ready until those plans,
-reviews, and hosted checks are reconciled.
+Plan 017 is `DONE`. Plans 018–022 closed the 2026-07-28 completion-audit gaps:
+all inventoried UI reasons resolve to authored guidance, browser projections
+redact raw exception and audit messages, Marathi has reviewed copy for every
+active registry string, and the anti-slop gate proves visible and accessible
+machine-token containment across the Dashboard and every Workbench section.

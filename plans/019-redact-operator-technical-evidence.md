@@ -15,6 +15,8 @@
 - **Depends on**: 018
 - **Category**: security
 - **Planned at**: commit `f7d0536`, 2026-07-28
+- **Implementation**: DONE — browser projections expose bounded safe codes and
+  identifiers while raw exception and audit messages remain server-side.
 
 ## Why this matters
 

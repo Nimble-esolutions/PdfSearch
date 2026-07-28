@@ -15,6 +15,8 @@
 - **Depends on**: none
 - **Category**: bug
 - **Planned at**: commit `f7d0536`, 2026-07-28
+- **Implementation**: DONE — every inventoried UI producer resolves to authored
+  guidance, with a neutral unknown-code fallback.
 
 ## Why this matters
 

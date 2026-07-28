@@ -14,6 +14,8 @@
 - **Depends on**: 018
 - **Category**: bug
 - **Planned at**: commit `f7d0536`, 2026-07-28
+- **Implementation**: DONE — all active registry strings have reviewed Marathi
+  copy, with no fuzzy, empty, or identical-English primary entries.
 
 ## Why this matters
 
