@@ -311,14 +311,14 @@ def create_plan(*, operation: str, data, actor, idempotency_key: str) -> Mainten
         raise MaintenancePlanError(reason)
     if not idempotency_key or len(idempotency_key) > 128:
         raise MaintenancePlanError("invalid_idempotency_key")
+    selection = normalize_selection(data)
     existing = MaintenancePlan.objects.filter(
         idempotency_key=idempotency_key, operation=operation
     ).first()
     if existing:
-        if existing.created_by_id != actor.pk:
+        if existing.created_by_id != actor.pk or existing.selection != selection:
             raise MaintenancePlanError("idempotency_conflict")
         return existing
-    selection = normalize_selection(data)
     preview = calculate_preview(operation, selection)
     if not preview["folder_ids"] and not preview["pdf_ids"]:
         raise MaintenancePlanError("empty_scope")
@@ -353,7 +353,7 @@ def create_plan(*, operation: str, data, actor, idempotency_key: str) -> Mainten
         ).first()
         if collision is None:
             raise
-        if collision.created_by_id != actor.pk:
+        if collision.created_by_id != actor.pk or collision.selection != selection:
             raise MaintenancePlanError("idempotency_conflict")
         return collision
 

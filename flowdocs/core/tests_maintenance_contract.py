@@ -93,6 +93,26 @@ class MaintenancePlanningTests(TestCase):
         self.assertEqual(validate_plan.operation, "validate")
         self.assertEqual(repair_plan.operation, "repair_indexes")
 
+    def test_idempotency_key_rejects_changed_selection(self):
+        key = f"test:{uuid.uuid4()}"
+        original = self._plan("validate", key=key)
+
+        with self.assertRaisesRegex(MaintenancePlanError, "idempotency_conflict"):
+            create_plan(
+                operation="validate",
+                data={
+                    "folder_ids": [str(self.folder.pk)],
+                    "filter_subject": "different-subject",
+                    "filter_keywords": "cooperative",
+                },
+                actor=self.superadmin,
+                idempotency_key=key,
+            )
+
+        original.refresh_from_db()
+        self.assertEqual(original.selection["filter_subject"], "housing")
+        self.assertEqual(MaintenancePlan.objects.count(), 1)
+
     def test_capability_matrix_applies_independent_prerequisites(self):
         cases = (
             # local, force, embeddings, expected-needed, expected-selected
