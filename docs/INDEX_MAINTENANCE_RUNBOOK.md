@@ -89,6 +89,23 @@ signed confirmation and rollback workflow. Keep the active and previous runtime
 unchanged until SQLite, media references, embedding dimensions/counts, FAISS
 coherence, and derived hashes validate.
 
+When `MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=1` in an activation-enabled
+staging environment, **Prepare for activation** revalidates the completed job,
+its verified recovery set, current signed parent pointer, SQLite/media/
+embedding/FAISS evidence, and migration rehearsal. It then copies only the
+allowlisted runtime artifacts into a digest-addressed temporary directory,
+fsyncs and atomically publishes an immutable runtime, and records an explicit
+`local_maintenance` generation with parent lineage. Exact retries reuse the
+same prepared workspace. A changed job, expired candidate, stale parent,
+unsafe file, insufficient evidence, or reused idempotency key fails closed.
+
+Preparation does not activate the runtime. **Review typed activation** enters
+the existing signed activation and rollback flow, which creates a fresh
+pre-activation recovery set and preserves the current and previous runtimes.
+The local generation always retains Vault state `unknown`; it cannot be
+promoted into remote Vault authority. Publication creates a separate verified
+Vault generation.
+
 Successful reindexing makes the prior Vault generation stale. Publish and
 verify a new immutable Vault candidate before remote authority reflects the
 new searchable artifacts. Publication and promotion are separate explicit

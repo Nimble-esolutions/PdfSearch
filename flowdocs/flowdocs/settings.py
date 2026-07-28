@@ -582,6 +582,14 @@ ENV_IDENTITY = _env_identity
 
 if ENV_IDENTITY.is_production and STAGING_RUNTIME_ACTIVATION_ENABLED:
     raise ImproperlyConfigured('production_activation_disabled')
+if (
+    MAINTENANCE_CANDIDATE_PREPARATION_ENABLED
+    and not STAGING_RUNTIME_ACTIVATION_ENABLED
+):
+    raise ImproperlyConfigured(
+        'MAINTENANCE_CANDIDATE_PREPARATION_ENABLED requires '
+        'STAGING_RUNTIME_ACTIVATION_ENABLED'
+    )
 if STAGING_RUNTIME_ACTIVATION_ENABLED:
     if ENV_IDENTITY.app_env.value != 'staging':
         raise ImproperlyConfigured(
