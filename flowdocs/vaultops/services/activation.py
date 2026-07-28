@@ -94,7 +94,7 @@ def _read_smoke_queries():
     return hashlib.sha256(raw).hexdigest()
 
 
-def _verify_recovery_superadmin(database_path):
+def verify_recovery_superadmin(database_path):
     username = settings.ACTIVATION_RECOVERY_SUPERADMIN_USERNAME
     password = settings.ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD
     try:
@@ -167,7 +167,7 @@ def _verify_workspace(workspace):
         generation_id=workspace.generation.generation_id,
         manifest_digest=workspace.manifest_digest,
     )
-    _verify_recovery_superadmin(database)
+    verify_recovery_superadmin(database)
     return runtime
 
 
@@ -233,6 +233,23 @@ def schedule_activation(
         raise ActivationCoordinatorError(
             "activation_previous_runtime_unverified"
         )
+    target_generation = workspace.generation
+    if target_generation.origin == ArtifactGeneration.Origin.LOCAL_MAINTENANCE:
+        if (
+            target_generation.vault_state
+            != ArtifactGeneration.VaultState.UNKNOWN
+            or target_generation.parent_generation_id
+            != current_pointer.generation_id
+            or target_generation.parent_manifest_digest
+            != current_pointer.manifest_digest
+            or workspace.pointer_digest != current_pointer.pointer_digest
+            or workspace.manifest_digest != target_generation.manifest_digest
+            or workspace.validation_evidence.get("origin")
+            != ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        ):
+            raise ActivationCoordinatorError(
+                "maintenance_candidate_lineage_invalid"
+            )
 
     intent_public_id = uuid.uuid4()
     expires_at = timezone.now() + timedelta(seconds=expires_seconds)
