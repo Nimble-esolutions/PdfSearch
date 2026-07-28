@@ -531,6 +531,9 @@ STAGING_RUNTIME_ACTIVATION_ENABLED = _env_bool(
 MAINTENANCE_CANDIDATE_PREPARATION_ENABLED = _env_bool(
     'MAINTENANCE_CANDIDATE_PREPARATION_ENABLED', False
 )
+MAINTENANCE_CANDIDATE_WRITER_MODE = _env_bool(
+    'MAINTENANCE_CANDIDATE_WRITER_MODE', False
+)
 STAGING_ACTIVATION_APPLY_MODE = os.getenv(
     'STAGING_ACTIVATION_APPLY_MODE', 'auto'
 ).strip().lower()
@@ -584,12 +587,29 @@ if ENV_IDENTITY.is_production and STAGING_RUNTIME_ACTIVATION_ENABLED:
     raise ImproperlyConfigured('production_activation_disabled')
 if (
     MAINTENANCE_CANDIDATE_PREPARATION_ENABLED
-    and not STAGING_RUNTIME_ACTIVATION_ENABLED
+    and not (
+        STAGING_RUNTIME_ACTIVATION_ENABLED
+        or MAINTENANCE_CANDIDATE_WRITER_MODE
+    )
 ):
     raise ImproperlyConfigured(
         'MAINTENANCE_CANDIDATE_PREPARATION_ENABLED requires '
-        'STAGING_RUNTIME_ACTIVATION_ENABLED'
+        'STAGING_RUNTIME_ACTIVATION_ENABLED or '
+        'MAINTENANCE_CANDIDATE_WRITER_MODE'
     )
+if MAINTENANCE_CANDIDATE_WRITER_MODE:
+    if ENV_IDENTITY.is_production or ENV_IDENTITY.app_env.value != 'staging':
+        raise ImproperlyConfigured(
+            'MAINTENANCE_CANDIDATE_WRITER_MODE requires non-production staging'
+        )
+    if STAGING_RUNTIME_ACTIVATION_ENABLED:
+        raise ImproperlyConfigured(
+            'MAINTENANCE_CANDIDATE_WRITER_MODE cannot serve an active runtime'
+        )
+    if len(ACTIVATION_INTENT_SIGNING_KEY) < 32:
+        raise ImproperlyConfigured(
+            'ACTIVATION_INTENT_SIGNING_KEY must contain at least 32 characters'
+        )
 if STAGING_RUNTIME_ACTIVATION_ENABLED:
     if ENV_IDENTITY.app_env.value != 'staging':
         raise ImproperlyConfigured(

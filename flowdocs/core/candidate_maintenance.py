@@ -112,7 +112,7 @@ def _verified_mutable_source_runtime_identity():
             signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
             runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
         )
-    except RuntimeControlError as exc:
+    except (RuntimeControlError, OSError) as exc:
         raise CandidateMaintenanceError(
             "maintenance_source_pointer_unverified"
         ) from exc
