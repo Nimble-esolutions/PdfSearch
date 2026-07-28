@@ -103,14 +103,41 @@ class CandidateWorkspaceTests(SimpleTestCase):
             options={"recovery_set_id": "rs-test"},
             items=_Values([1], [7]),
         )
-        with patch(
-            "core.candidate_maintenance.capacity_report",
-            return_value={
-                "byte_capacity_ok": True,
-                "inode_capacity_ok": True,
-            },
+        barrier = SimpleNamespace(current_epoch=7)
+        with (
+            patch(
+                "core.candidate_maintenance.capacity_report",
+                return_value={
+                    "byte_capacity_ok": True,
+                    "inode_capacity_ok": True,
+                },
+            ),
+            patch(
+                "vaultops.services.mutations.request_barrier",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.assert_barrier_owner",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.release_barrier",
+                return_value=True,
+            ),
         ):
             workspace = create_workspace(job)
+        manifest = json.loads(
+            (workspace / WORKSPACE_MANIFEST).read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["source"]["mutation_epoch"], 7)
+        self.assertEqual(
+            manifest["source"]["database_sha256"],
+            hashlib.sha256((workspace / "db.sqlite3").read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            set(manifest["source"]["source_trees"]),
+            {"media", "faiss", "chroma"},
+        )
         candidate = sqlite3.connect(workspace / "db.sqlite3")
         candidate.execute(
             "UPDATE core_pdffile SET lifecycle='processing' WHERE id=1"
@@ -124,9 +151,6 @@ class CandidateWorkspaceTests(SimpleTestCase):
         self.assertNotEqual(
             hashlib.sha256((workspace / "db.sqlite3").read_bytes()).hexdigest(),
             before,
-        )
-        manifest = json.loads(
-            (workspace / WORKSPACE_MANIFEST).read_text(encoding="utf-8")
         )
         self.assertEqual(manifest["source"]["runtime_generation_id"], "source-runtime")
         self.assertRegex(manifest["source"]["parent_tree"]["sha256"], r"^[0-9a-f]{64}$")
@@ -146,6 +170,7 @@ class CandidateWorkspaceTests(SimpleTestCase):
             runtime_path=str(self.data),
         )
         second = SimpleNamespace(**{**first.__dict__, "pointer_digest": "2" * 64})
+        barrier = SimpleNamespace(current_epoch=0)
         with (
             patch("core.candidate_maintenance.capacity_report", return_value={
                 "byte_capacity_ok": True, "inode_capacity_ok": True,
@@ -153,6 +178,18 @@ class CandidateWorkspaceTests(SimpleTestCase):
             patch(
                 "core.candidate_maintenance._maintenance_source_parent",
                 side_effect=[first, second],
+            ),
+            patch(
+                "vaultops.services.mutations.request_barrier",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.assert_barrier_owner",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.release_barrier",
+                return_value=True,
             ),
             self.assertRaises(CandidateMaintenanceError) as raised,
         ):
@@ -183,6 +220,7 @@ class CandidateWorkspaceTests(SimpleTestCase):
             return parent
 
         resolve_parent.calls = 0
+        barrier = SimpleNamespace(current_epoch=0)
         with (
             patch("core.candidate_maintenance.capacity_report", return_value={
                 "byte_capacity_ok": True, "inode_capacity_ok": True,
@@ -191,12 +229,74 @@ class CandidateWorkspaceTests(SimpleTestCase):
                 "core.candidate_maintenance._maintenance_source_parent",
                 side_effect=resolve_parent,
             ),
+            patch(
+                "vaultops.services.mutations.request_barrier",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.assert_barrier_owner",
+                return_value=barrier,
+            ),
+            patch(
+                "vaultops.services.mutations.release_barrier",
+                return_value=True,
+            ),
             self.assertRaises(CandidateMaintenanceError) as raised,
         ):
             create_workspace(job)
         self.assertEqual(
             raised.exception.reason_code, "maintenance_source_authority_changed"
         )
+        self.assertFalse(any(self.control.glob("maintenance-workspaces/mw-*")))
+
+    def test_workspace_rejects_mutation_epoch_drift_and_removes_temporary(self):
+        job = SimpleNamespace(
+            public_id=uuid.uuid4(),
+            kind="reindex_selected",
+            options={"recovery_set_id": "rs-test"},
+            items=_Values([1], [7]),
+        )
+        parent = SimpleNamespace(
+            generation_id="source-runtime",
+            manifest_digest="source-manifest",
+            pointer_digest="1" * 64,
+            runtime_path=str(self.data),
+        )
+        with (
+            patch(
+                "core.candidate_maintenance.capacity_report",
+                return_value={
+                    "byte_capacity_ok": True,
+                    "inode_capacity_ok": True,
+                },
+            ),
+            patch(
+                "core.candidate_maintenance._maintenance_source_parent",
+                return_value=parent,
+            ),
+            patch(
+                "vaultops.services.mutations.request_barrier",
+                return_value=SimpleNamespace(current_epoch=4),
+            ),
+            patch(
+                "vaultops.services.mutations.assert_barrier_owner",
+                side_effect=[
+                    SimpleNamespace(current_epoch=4),
+                    SimpleNamespace(current_epoch=5),
+                ],
+            ),
+            patch(
+                "vaultops.services.mutations.release_barrier",
+                return_value=True,
+            ),
+            self.assertRaises(CandidateMaintenanceError) as raised,
+        ):
+            create_workspace(job)
+
+        self.assertEqual(
+            raised.exception.reason_code, "maintenance_source_snapshot_changed"
+        )
+        self.assertFalse(any(self.control.rglob("*.tmp")))
         self.assertFalse(any(self.control.glob("maintenance-workspaces/mw-*")))
 
     def test_candidate_validation_checks_media_embeddings_and_faiss(self):

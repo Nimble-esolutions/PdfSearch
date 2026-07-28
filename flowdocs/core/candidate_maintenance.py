@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import fcntl
 import json
 import math
 import os
@@ -13,7 +12,6 @@ import sqlite3
 import subprocess
 import sys
 import uuid
-from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -100,29 +98,27 @@ def _tree_identity(root: Path) -> dict:
     }
 
 
-@contextmanager
-def _source_snapshot_lock():
-    root = Path(settings.DATA_CONTROL_ROOT)
-    root.mkdir(parents=True, exist_ok=True)
-    lock_path = root / ".maintenance-source-snapshot.lock"
-    descriptor = os.open(
-        lock_path,
-        os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
-        0o600,
-    )
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
+def _mutable_source_identities() -> dict:
+    return {
+        "media": _tree_identity(Path(settings.MEDIA_ROOT).resolve()),
+        "faiss": _tree_identity(Path(settings.FAISS_INDEX_DIR).resolve()),
+        "chroma": _tree_identity(Path(settings.CHROMA_DIR).resolve()),
+    }
 
 
-def _source_identity(job: MaintenanceJob, parent) -> dict:
-    database = Path(settings.DATABASES["default"]["NAME"]).resolve()
+def _source_identity(
+    job: MaintenanceJob,
+    parent,
+    *,
+    snapshot_database: Path,
+    mutation_epoch: int,
+    source_trees: dict,
+) -> dict:
     return {
         "job_id": str(job.public_id),
-        "database_sha256": _sha256(database),
+        "database_sha256": _sha256(snapshot_database),
+        "mutation_epoch": mutation_epoch,
+        "source_trees": source_trees,
         "runtime_generation_id": parent.generation_id,
         "runtime_manifest_digest": parent.manifest_digest,
         "runtime_pointer_digest": parent.pointer_digest,
@@ -239,36 +235,73 @@ def create_workspace(job: MaintenanceJob) -> Path:
     workspace = root / f"mw-{job.public_id}-{uuid.uuid4().hex[:8]}"
     temporary = root / f".{workspace.name}.tmp"
     temporary.mkdir(mode=0o700)
+    barrier_acquired = False
     try:
-        with _source_snapshot_lock():
-            parent = _maintenance_source_parent()
-            parent_tree_before = _tree_identity(Path(parent.runtime_path))
-            _copy_sqlite(
-                Path(settings.DATABASES["default"]["NAME"]).resolve(),
-                temporary / "db.sqlite3",
+        from vaultops.services.mutations import (
+            assert_barrier_owner,
+            release_barrier,
+            request_barrier,
+        )
+
+        deployment_id = settings.ENV_IDENTITY.deployment_id
+        barrier = request_barrier(
+            owner_job_id=job.public_id,
+            source_deployment=deployment_id,
+        )
+        barrier_acquired = True
+        barrier = assert_barrier_owner(
+            owner_job_id=job.public_id,
+            source_deployment=deployment_id,
+        )
+        mutation_epoch = barrier.current_epoch
+        parent = _maintenance_source_parent()
+        parent_tree_before = _tree_identity(Path(parent.runtime_path))
+        live_database = Path(settings.DATABASES["default"]["NAME"]).resolve()
+        live_database_before = _sha256(live_database)
+        source_trees_before = _mutable_source_identities()
+        _copy_sqlite(live_database, temporary / "db.sqlite3")
+        _copy_tree(Path(settings.MEDIA_ROOT).resolve(), temporary / "media")
+        _copy_tree(
+            Path(settings.FAISS_INDEX_DIR).resolve(),
+            temporary / "faiss_indexes",
+        )
+        _copy_tree(
+            Path(settings.CHROMA_DIR).resolve(), temporary / "chroma_db"
+        )
+        (temporary / "pdf_cache").mkdir()
+        (temporary / "backups").mkdir()
+        parent_after = _maintenance_source_parent()
+        parent_tree_after = _tree_identity(Path(parent_after.runtime_path))
+        source_trees_after = _mutable_source_identities()
+        live_database_after = _sha256(live_database)
+        barrier_after = assert_barrier_owner(
+            owner_job_id=job.public_id,
+            source_deployment=deployment_id,
+        )
+        source = _source_identity(
+            job,
+            parent,
+            snapshot_database=temporary / "db.sqlite3",
+            mutation_epoch=mutation_epoch,
+            source_trees=source_trees_before,
+        )
+        if (
+            parent_after.pointer_digest != parent.pointer_digest
+            or parent_tree_after != parent_tree_before
+            or source["parent_tree"] != parent_tree_before
+        ):
+            raise CandidateMaintenanceError(
+                "maintenance_source_authority_changed"
             )
-            _copy_tree(Path(settings.MEDIA_ROOT).resolve(), temporary / "media")
-            _copy_tree(
-                Path(settings.FAISS_INDEX_DIR).resolve(),
-                temporary / "faiss_indexes",
+        if (
+            barrier_after.current_epoch != mutation_epoch
+            or live_database_after != live_database_before
+            or source_trees_after != source_trees_before
+        ):
+            raise CandidateMaintenanceError(
+                "maintenance_source_snapshot_changed"
             )
-            _copy_tree(
-                Path(settings.CHROMA_DIR).resolve(), temporary / "chroma_db"
-            )
-            (temporary / "pdf_cache").mkdir()
-            (temporary / "backups").mkdir()
-            source = _source_identity(job, parent)
-            parent_after = _maintenance_source_parent()
-            parent_tree_after = _tree_identity(Path(parent_after.runtime_path))
-            if (
-                parent_after.pointer_digest != parent.pointer_digest
-                or parent_tree_after != parent_tree_before
-                or source["parent_tree"] != parent_tree_before
-            ):
-                raise CandidateMaintenanceError(
-                    "maintenance_source_authority_changed"
-                )
-            source["snapshot"] = _tree_identity(temporary)
+        source["snapshot"] = _tree_identity(temporary)
         (temporary / WORKSPACE_MANIFEST).write_text(
             json.dumps(
                 {
@@ -306,6 +339,13 @@ def create_workspace(job: MaintenanceJob) -> Path:
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
+    finally:
+        if barrier_acquired:
+            release_barrier(
+                owner_job_id=job.public_id,
+                source_deployment=settings.ENV_IDENTITY.deployment_id,
+                tolerate_lost=True,
+            )
 
 
 def _candidate_environment(workspace: Path) -> dict:

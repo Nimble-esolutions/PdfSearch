@@ -415,7 +415,9 @@ PDF_CACHE_DIR = (
 
 # Vault Active Sync remains disabled unless every required switch is explicit.
 VAULT_SYNC_ENABLED = _env_bool('VAULT_SYNC_ENABLED', False)
-VAULT_MUTATION_TRACKING_ENABLED = VAULT_SYNC_ENABLED
+VAULT_MUTATION_TRACKING_ENABLED = _env_bool(
+    'VAULT_MUTATION_TRACKING_ENABLED', VAULT_SYNC_ENABLED
+)
 _vault_sync_mode = os.getenv(
     'VAULT_SYNC_MODE',
     os.getenv('BACKUP_SYNC_MODE', 'manual'),
@@ -609,6 +611,11 @@ if MAINTENANCE_CANDIDATE_WRITER_MODE:
     if len(ACTIVATION_INTENT_SIGNING_KEY) < 32:
         raise ImproperlyConfigured(
             'ACTIVATION_INTENT_SIGNING_KEY must contain at least 32 characters'
+        )
+    if not VAULT_MUTATION_TRACKING_ENABLED:
+        raise ImproperlyConfigured(
+            'MAINTENANCE_CANDIDATE_WRITER_MODE requires '
+            'VAULT_MUTATION_TRACKING_ENABLED'
         )
 if STAGING_RUNTIME_ACTIVATION_ENABLED:
     if ENV_IDENTITY.app_env.value != 'staging':
