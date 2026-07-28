@@ -30,7 +30,7 @@ run its drift check, and stop when a stated assumption is false.
 | 013 | Restore task-first Operations Cockpit hierarchy | P1 | M | — | DONE |
 | 014 | Correct maintenance capability gates and filter validation | P1 | M | 013 | DONE |
 | 015 | Make Workbench readiness failures actionable | P1 | M | 013, 014 | DONE |
-| 016 | Bound maintenance read models and verify full workflow | P2 | M | 014, 015 | DONE* |
+| 016 | Bound maintenance read models and verify full workflow | P2 | M | 014, 015 | RECONCILE |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -158,8 +158,7 @@ These findings were observed against the local authenticated deployment at
 `http://127.0.0.1:8000` and verified against source at commit `6c9a262`. The
 visual audit did not modify application source or enable production mutations.
 
-`DONE*` means implementation and focused Django verification are complete; the
-Playwright browser gate was attempted but blocked by the host Chromium
-Mach-port sandbox (`KERN_SUCCESS` permission failure), not by an application
-assertion. Re-run the browser and Compose gates in CI or an approved browser
-runtime before marking the release fully verified.
+Plan 016 remains `RECONCILE` until an end-to-end browser gate proves filtered
+preview, repair and reindex queueing, progress and retry, candidate preparation,
+signed activation, English and Marathi search, and rollback. Focused Django and
+surface-level Playwright checks do not satisfy that full lifecycle contract.
