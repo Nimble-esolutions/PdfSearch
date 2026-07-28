@@ -111,6 +111,34 @@ class VaultWorkbenchTests(TestCase):
         self.assertContains(response, "<noscript>", html=False)
         self.assertNotContains(response, "cdn.jsdelivr.net")
 
+    def test_restore_section_keeps_signed_rollback_visible_with_reason(self):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "restore"}
+        )
+
+        self.assertContains(
+            response, "Roll back the latest maintenance activation"
+        )
+        self.assertContains(response, "Review signed rollback")
+        self.assertContains(response, "staging_activation_disabled")
+        self.assertContains(
+            response, reverse("vaultops:rollback_confirmation_issue")
+        )
+
+    @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
+    def test_signed_rollback_control_is_enabled_only_in_staging(self):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "restore"}
+        )
+
+        self.assertContains(
+            response,
+            '<button class="vault-button vault-button--danger" '
+            'type="submit">Review signed rollback</button>',
+            html=True,
+        )
+        self.assertNotContains(response, "staging_activation_disabled")
+
     def test_maintenance_health_and_candidate_publication_are_evidenced(self):
         ArtifactValidation.objects.create(
             generation=self.candidate,

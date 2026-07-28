@@ -2428,3 +2428,19 @@ msgstr "GC अंमलबजावणी बंद आहे"
 #: core/templates/vaultops/workbench.html
 msgid "No GC dry-runs are recorded."
 msgstr "कोणतीही GC पूर्वचाचणी नोंदवलेली नाही."
+
+#: core/templates/vaultops/workbench.html
+msgid "Signed runtime control"
+msgstr "स्वाक्षरीत रनटाइम नियंत्रण"
+
+#: core/templates/vaultops/workbench.html
+msgid "Roll back the latest maintenance activation"
+msgstr "नवीनतम देखभाल सक्रियकरण मागे घ्या"
+
+#: core/templates/vaultops/workbench.html
+msgid "This deliberately restores the exact signed previous runtime only when the active runtime is its verified local-maintenance child. Vault authority is not changed."
+msgstr "सक्रिय रनटाइम हा मागील स्वाक्षरीत रनटाइमचा सत्यापित स्थानिक-देखभाल वारस असेल तरच ही कृती तो मागील रनटाइम जाणीवपूर्वक पुनर्स्थापित करते. तिजोरी अधिकार बदलत नाही."
+
+#: core/templates/vaultops/workbench.html
+msgid "Review signed rollback"
+msgstr "स्वाक्षरीत रोलबॅक तपासा"
