@@ -119,6 +119,9 @@ def _resolve_candidate(job):
         or not candidate_id.startswith(f"mw-{job.public_id}-")
     ):
         raise MaintenanceImportError("maintenance_candidate_identity_invalid")
+    configured_root = Path(settings.MAINTENANCE_WORKSPACE_ROOT)
+    if configured_root.is_symlink() or not configured_root.is_dir():
+        raise MaintenanceImportError("maintenance_workspace_root_unsafe")
     root = workspace_root()
     candidate = root / candidate_id
     if candidate.is_symlink() or not candidate.is_dir():
@@ -332,7 +335,22 @@ def _remove_runtime(root):
 @contextmanager
 def _import_lock(runtime_root):
     lock_path = Path(runtime_root) / ".maintenance-import.lock"
-    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            lock_path,
+            os.O_RDWR
+            | os.O_CREAT
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        lock_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_nlink != 1:
+            os.close(descriptor)
+            descriptor = -1
+            raise MaintenanceImportError("maintenance_import_lock_unsafe")
+    except OSError as exc:
+        raise MaintenanceImportError("maintenance_import_lock_unsafe") from exc
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         yield

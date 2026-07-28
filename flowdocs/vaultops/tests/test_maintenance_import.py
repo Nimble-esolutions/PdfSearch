@@ -292,3 +292,37 @@ class MaintenanceCandidateImportTests(TestCase):
 
         self.assertEqual(Path(workspace.runtime_path), runtimes[0])
         self.assertEqual(ArtifactGeneration.objects.count(), 1)
+
+    def test_symlinked_workspace_root_is_rejected(self):
+        linked_root = self.root / "linked-maintenance"
+        linked_root.symlink_to(self.maintenance_root, target_is_directory=True)
+
+        with override_settings(MAINTENANCE_WORKSPACE_ROOT=linked_root):
+            with self.assertRaises(MaintenanceImportError) as raised:
+                import_maintenance_candidate(
+                    self.job,
+                    idempotency_key="maintenance-import-request-1",
+                )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "maintenance_workspace_root_unsafe",
+        )
+
+    def test_symlinked_import_lock_is_rejected(self):
+        lock_target = self.root / "lock-target"
+        lock_target.write_text("unsafe")
+        (self.runtime_root / ".maintenance-import.lock").symlink_to(
+            lock_target
+        )
+
+        with self.assertRaises(MaintenanceImportError) as raised:
+            import_maintenance_candidate(
+                self.job,
+                idempotency_key="maintenance-import-request-1",
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "maintenance_import_lock_unsafe",
+        )
