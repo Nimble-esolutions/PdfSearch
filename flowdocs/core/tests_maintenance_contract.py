@@ -9,7 +9,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.maintenance import queue_job, run_job
-from core.management.commands.run_maintenance_jobs import _execute_local_job
+from core.management.commands.run_maintenance_jobs import (
+    _execute_local_job,
+    _requires_source_mutation_scope,
+)
 from core.maintenance_plans import (
     FORCE_CONFIRMATION,
     MaintenancePlanError,
@@ -519,6 +522,14 @@ class MaintenanceWorkerGroupingTests(TestCase):
         execute.return_value = job
         self.assertIs(_execute_local_job(job), job)
         execute.assert_called_once_with(job)
+        self.assertFalse(_requires_source_mutation_scope(job))
+
+    @override_settings(MAINTENANCE_CANDIDATE_EXECUTION=True)
+    def test_candidate_child_execution_tracks_workspace_mutations(self):
+        job = MaintenanceJob(
+            options={"candidate_required": True}
+        )
+        self.assertTrue(_requires_source_mutation_scope(job))
 
 
 class MaintenanceDeploymentPreflightTests(TestCase):
