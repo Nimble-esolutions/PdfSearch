@@ -563,7 +563,8 @@ class RuntimeSupervisor:
                 safe_error_code="activation_incomplete_recovered",
             )
             self._write_ack(intent, "rolled_back")
-            self._reconcile_result_best_effort(intent)
+            if self._reconcile_result_best_effort(intent):
+                self._write_ack(intent, "reconciled")
             return True
         except Exception:
             return False
@@ -695,7 +696,8 @@ class RuntimeSupervisor:
                 },
             )
             self._write_ack(intent, "committed")
-            self._reconcile_result_best_effort(intent)
+            if self._reconcile_result_best_effort(intent):
+                self._write_ack(intent, "reconciled")
         except Exception as exc:
             reason_code = getattr(
                 exc, "reason_code", "activation_verification_failed"
@@ -742,7 +744,8 @@ class RuntimeSupervisor:
                     safe_error_code=reason_code,
                 )
                 self._write_ack(intent, "rolled_back")
-                self._reconcile_result_best_effort(intent)
+                if self._reconcile_result_best_effort(intent):
+                    self._write_ack(intent, "reconciled")
             except Exception:
                 try:
                     restored = self._current_pointer()
@@ -768,6 +771,12 @@ class RuntimeSupervisor:
             except SupervisorError:
                 continue
             if self._result_exists(intent):
+                web_ack = self._read_ack(intent, "web")
+                if (
+                    not web_ack
+                    or web_ack.get("state") != "reconciled"
+                ) and self._reconcile_result_best_effort(intent):
+                    self._write_ack(intent, "reconciled")
                 continue
             self.apply_intent(intent)
             return

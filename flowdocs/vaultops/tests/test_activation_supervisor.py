@@ -1081,7 +1081,36 @@ class SupervisorProtocolTests(SimpleTestCase):
             expected_kind="activation_ack",
             deployment_id=DEPLOYMENT_ID,
         )
+        self.assertEqual(checkpoint["state"], "reconciled")
+
+    def test_transient_projection_failure_is_retried_idempotently(self):
+        maintenance = self._quiesce()
+        reconciliation_calls = {"count": 0}
+
+        def run_command(command, **_kwargs):
+            if "reconcile_activation_result" in command:
+                reconciliation_calls["count"] += 1
+                return SimpleNamespace(
+                    returncode=1
+                    if reconciliation_calls["count"] == 1
+                    else 0
+                )
+            return SimpleNamespace(returncode=0)
+
+        web = self._supervisor(
+            "web",
+            run_command=run_command,
+            maintenance=maintenance,
+        )
+        web.web_tick()
+        checkpoint = web._read_ack(self.intent, "web")
         self.assertEqual(checkpoint["state"], "committed")
+
+        web.web_tick()
+
+        self.assertEqual(reconciliation_calls["count"], 2)
+        self.assertEqual(web._read_ack(self.intent, "web")["state"], "reconciled")
+        self.assertEqual(self._result()["status"], "committed")
 
     def test_stale_maintenance_ack_cannot_release_barrier(self):
         stale = sign_document(
