@@ -369,6 +369,16 @@ class RuntimeSupervisor:
             },
         )
 
+    def _acquire_or_resume_pre_cutover_lock(self, intent):
+        """Resume only this intent's signed pre-cutover checkpoint."""
+        if not self.paths["lock"].exists():
+            self._acquire_lock(intent)
+            return
+        web_ack = self._read_ack(intent, "web")
+        if not web_ack or web_ack.get("state") != "applying":
+            raise SupervisorError("runtime_activation_in_progress")
+        self._claim_recovery_lock(intent)
+
     def _run_manage(self, arguments, *, timeout):
         result = self.run_command(
             [sys.executable, "manage.py", *arguments],
@@ -621,7 +631,7 @@ class RuntimeSupervisor:
             generation_id=intent["target_generation_id"],
             manifest_digest=intent["target_manifest_digest"],
         )
-        self._acquire_lock(intent)
+        self._acquire_or_resume_pre_cutover_lock(intent)
         previous_document = self._current_pointer_document()
         readiness = {}
         try:

@@ -1083,6 +1083,67 @@ class SupervisorProtocolTests(SimpleTestCase):
         )
         self.assertEqual(checkpoint["state"], "committed")
 
+    def test_stale_maintenance_ack_cannot_release_barrier(self):
+        stale = sign_document(
+            {
+                "schema_version": 1,
+                "kind": "activation_ack",
+                "deployment_id": DEPLOYMENT_ID,
+                "intent_id": self.intent["intent_id"],
+                "intent_digest": "0" * 64,
+                "role": "maintenance",
+                "state": "quiesced",
+                "process_id": 77,
+                "observed_at_unix": int(time.time()),
+            },
+            SIGNING_KEY,
+        )
+        atomic_write_json(
+            self.paths["acks"]
+            / f"{self.intent['intent_id']}.maintenance.json",
+            stale,
+        )
+        self._supervisor("web").web_tick()
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, CURRENT_GENERATION)
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_restart_resumes_same_intent_before_pointer_switch(self):
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+        first_web._acquire_lock(self.intent)
+
+        restarted_web = self._supervisor("web", maintenance=maintenance)
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_committed_intent_replay_is_idempotent(self):
+        maintenance = self._quiesce()
+        web = self._supervisor("web", maintenance=maintenance)
+        web.web_tick()
+        pointer_before = self.paths["active"].read_bytes()
+        result_before = self.paths["results"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).read_bytes()
+
+        self._supervisor("web", maintenance=maintenance).web_tick()
+
+        self.assertEqual(self.paths["active"].read_bytes(), pointer_before)
+        self.assertEqual(
+            self.paths["results"].joinpath(
+                f"{self.intent['intent_id']}.json"
+            ).read_bytes(),
+            result_before,
+        )
+
     def test_failed_prestart_verification_rolls_back_and_verifies(self):
         maintenance = self._quiesce()
         calls = {"count": 0}
