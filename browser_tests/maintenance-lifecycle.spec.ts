@@ -44,7 +44,7 @@ async function previewAndQueue(
     selected.locator('div').filter({ hasText: /^Documents2$/ }).first(),
   ).toBeVisible();
   await expect(
-    selected.locator('div').filter({ hasText: /^Affected folders1$/ }).first(),
+    selected.locator('div').filter({ hasText: /^Folders1$/ }).first(),
   ).toBeVisible();
   if (typedConfirmation) {
     await page.locator('input[name="typed_confirmation"]').first().fill(typedConfirmation);
