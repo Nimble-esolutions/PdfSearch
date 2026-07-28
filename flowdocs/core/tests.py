@@ -323,7 +323,7 @@ class RegistrationSecurityTests(TestCase):
         response = self.client.get(reverse("vault_operations"))
         self.assertRedirects(
             response,
-            f"{reverse('operations_panel')}?section=generations",
+            f"{reverse('operations_panel')}?section=maintenance",
             fetch_redirect_response=False,
         )
 
@@ -1943,11 +1943,11 @@ class GenerationLifecycleTests(TestCase):
             f"{reverse('operations_panel')}?section=generations",
         )
 
-        # The retired mixed-control page now routes to the guarded workbench.
+        # The retired mixed-control page now routes to Documents & Indexes.
         vault_response = self.client.get(reverse("vault_operations"))
         self.assertRedirects(
             vault_response,
-            f"{reverse('operations_panel')}?section=generations",
+            f"{reverse('operations_panel')}?section=maintenance",
             fetch_redirect_response=False,
         )
 class BulkFilterTests(TestCase):

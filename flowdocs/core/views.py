@@ -1713,8 +1713,8 @@ def operations_lease(request):
 
 @superadmin_required
 def s3_operations_view(request):
-    """Redirect the retired mixed-control page to the truthful workbench."""
-    return redirect(f"{reverse('operations_panel')}?section=generations")
+    """Redirect the retired mixed-control page to the local maintenance hub."""
+    return redirect(f"{reverse('operations_panel')}?section=maintenance")
 
 
 ALLOWED_SETTING_KEYS = {
