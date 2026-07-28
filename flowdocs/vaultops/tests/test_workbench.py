@@ -614,6 +614,33 @@ class VaultWorkbenchTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_operations_navigation_marks_active_section(self):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "maintenance"}
+        )
+        nav = response.content.decode("utf-8")
+        self.assertIn(
+            'href="{}" aria-current="page"'.format(reverse("operations_panel")),
+            nav,
+        )
+        self.assertNotIn(
+            'href="{}?section=generations" aria-current="page"'.format(
+                reverse("operations_panel")
+            ),
+            nav,
+        )
+
+        response = self.client.get(
+            f"{reverse('operations_panel')}?section=generations"
+        )
+        nav = response.content.decode("utf-8")
+        self.assertIn(
+            'href="{}?section=generations" aria-current="page"'.format(
+                reverse("operations_panel")
+            ),
+            nav,
+        )
+
     def test_mutation_rejects_missing_idempotency_key(self):
         response = self.client.post(
             reverse("vaultops:restore_start"),

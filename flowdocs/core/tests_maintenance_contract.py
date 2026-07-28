@@ -85,6 +85,14 @@ class MaintenancePlanningTests(TestCase):
             first.expires_at, first.created_at + timedelta(minutes=15, seconds=1)
         )
 
+    def test_idempotency_key_is_operation_scoped(self):
+        key = f"test:{uuid.uuid4()}"
+        validate_plan = self._plan("validate", key=key)
+        repair_plan = self._plan("repair_indexes", key=key)
+        self.assertNotEqual(validate_plan.pk, repair_plan.pk)
+        self.assertEqual(validate_plan.operation, "validate")
+        self.assertEqual(repair_plan.operation, "repair_indexes")
+
     def test_capability_matrix_applies_independent_prerequisites(self):
         cases = (
             # local, force, embeddings, expected-needed, expected-selected
