@@ -1819,6 +1819,8 @@ class AuditAndValidationTests(TestCase):
 
 
 class GenerationLifecycleTests(TestCase):
+    databases = {"default", "control"}
+
     def setUp(self):
         self.superadmin = get_user_model().objects.create_user(
             username="generation-superadmin",
@@ -1956,6 +1958,8 @@ class GenerationLifecycleTests(TestCase):
             fetch_redirect_response=False,
         )
 class BulkFilterTests(TestCase):
+    databases = {"default", "control"}
+
     def setUp(self):
         self.superadmin = get_user_model().objects.create_user(
             username="filter-superadmin",
