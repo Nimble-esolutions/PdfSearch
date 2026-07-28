@@ -13,6 +13,7 @@ MUTATING_VIEW_NAMES = {
     "dashboard_folder",
     "bulk_maintenance",
     "maintenance_job_action",
+    "maintenance_candidate_prepare",
     "save_settings",
     "register",
     "edit_user",

@@ -181,6 +181,12 @@ def transition_generation_vault_state(
 ):
     with transaction.atomic(using=CONTROL_DB):
         locked = ArtifactGeneration.objects.select_for_update().get(pk=generation.pk)
+        if locked.origin == ArtifactGeneration.Origin.LOCAL_MAINTENANCE:
+            raise LifecycleConflict(
+                "vault_authority_not_applicable",
+                current_state=locked.vault_state,
+                requested_state=requested_state,
+            )
         current = locked.vault_state
         _guard_transition(
             current,

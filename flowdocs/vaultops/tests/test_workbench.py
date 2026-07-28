@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ from core.models import CustomUser, Folder, MaintenanceAuditEvent, MaintenanceJo
 from core.models import PDFFile
 from core.maintenance_plans import create_plan
 from vaultops.models import (
+    ActivationIntent,
     ArtifactGeneration,
     ArtifactValidation,
     ConfirmationChallenge,
@@ -27,7 +29,10 @@ from vaultops.models import (
     VaultAuditEvent,
     VaultJob,
 )
-from vaultops.services.read_model import enrich_workbench_readiness
+from vaultops.services.read_model import (
+    enrich_workbench_readiness,
+    workspace_state_digest,
+)
 
 
 @override_settings(
@@ -136,6 +141,97 @@ class VaultWorkbenchTests(TestCase):
             reverse("operations_panel"), {"section": "sync"}
         )
         self.assertContains(sync_response, "Queue publish-only sync")
+
+    def test_ready_candidate_keeps_prepare_control_visible_with_typed_reason(self):
+        MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="completed",
+            options={
+                "candidate_workspace_id": "mw-disabled",
+                "candidate_state": "activation_ready",
+            },
+        )
+
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "maintenance"}
+        )
+
+        self.assertContains(response, "Prepare for activation")
+        self.assertContains(response, "candidate_preparation_disabled")
+
+    @override_settings(MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True)
+    @patch("vaultops.views.import_maintenance_candidate")
+    def test_superadmin_can_prepare_ready_candidate(self, importer):
+        job = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="completed",
+            options={
+                "candidate_workspace_id": "mw-ready",
+                "candidate_state": "activation_ready",
+            },
+        )
+        generation = SimpleNamespace(
+            generation_id="lm-prepared",
+            origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+        )
+        importer.return_value = SimpleNamespace(
+            public_id=uuid.uuid4(),
+            generation=generation,
+        )
+        page = self.client.get(
+            reverse("operations_panel"), {"section": "maintenance"}
+        )
+        rendered_job = next(
+            item
+            for item in page.context["state"]["maintenance"]["jobs"]
+            if item["public_id"] == str(job.public_id)
+        )
+
+        response = self.client.post(
+            reverse(
+                "vaultops:maintenance_candidate_prepare",
+                kwargs={"job_id": job.public_id},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": rendered_job["state_version"],
+            },
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 202, response.content)
+        self.assertEqual(
+            response.json()["data"]["origin"], "local_maintenance"
+        )
+        self.assertFalse(
+            response.json()["data"]["vault_authority_changed"]
+        )
+        importer.assert_called_once()
+
+    @override_settings(MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True)
+    def test_non_superadmin_cannot_prepare_candidate(self):
+        job = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="completed",
+            options={
+                "candidate_workspace_id": "mw-ready",
+                "candidate_state": "activation_ready",
+            },
+        )
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse(
+                "vaultops:maintenance_candidate_prepare",
+                kwargs={"job_id": job.public_id},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": "invalid",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_non_superadmin_is_forbidden(self):
         self.client.force_login(self.admin)
@@ -451,6 +547,114 @@ class VaultWorkbenchTests(TestCase):
             ).count(),
             1,
         )
+
+    def test_invalid_activation_phrase_does_not_create_recovery_set(self):
+        workspace = RestoreWorkspace.objects.create(
+            generation=self.candidate,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=self.candidate.manifest_digest,
+            prepared_at=timezone.now(),
+        )
+        issue = self.client.post(
+            reverse("vaultops:confirmation_issue"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "action": "activate_workspace",
+                "target": str(workspace.public_id),
+            },
+        )
+
+        with patch("vaultops.views.create_recovery_set") as recovery:
+            response = self.client.post(
+                reverse(
+                    "vaultops:schedule_activation",
+                    kwargs={"workspace_id": workspace.public_id},
+                ),
+                {
+                    "idempotency_key": str(uuid.uuid4()),
+                    "challenge_id": str(issue.context["challenge"].public_id),
+                    "confirmation_phrase": "wrong phrase",
+                },
+            )
+
+        self.assertEqual(response.status_code, 303)
+        recovery.assert_not_called()
+        issue.context["challenge"].refresh_from_db()
+        self.assertIsNone(issue.context["challenge"].used_at)
+
+    def test_activation_recovery_failure_leaves_confirmation_reusable(self):
+        workspace = RestoreWorkspace.objects.create(
+            generation=self.candidate,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=self.candidate.manifest_digest,
+            prepared_at=timezone.now(),
+        )
+        issue = self.client.post(
+            reverse("vaultops:confirmation_issue"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "action": "activate_workspace",
+                "target": str(workspace.public_id),
+            },
+        )
+
+        with patch(
+            "vaultops.views.create_recovery_set",
+            side_effect=RuntimeError("recovery unavailable"),
+        ):
+            response = self.client.post(
+                reverse(
+                    "vaultops:schedule_activation",
+                    kwargs={"workspace_id": workspace.public_id},
+                ),
+                {
+                    "idempotency_key": str(uuid.uuid4()),
+                    "challenge_id": str(issue.context["challenge"].public_id),
+                    "confirmation_phrase": issue.context["phrase"],
+                },
+            )
+
+        self.assertEqual(response.status_code, 303)
+        issue.context["challenge"].refresh_from_db()
+        self.assertIsNone(issue.context["challenge"].used_at)
+
+    def test_exact_activation_post_replay_skips_recovery_work(self):
+        workspace = RestoreWorkspace.objects.create(
+            generation=self.candidate,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=self.candidate.manifest_digest,
+            prepared_at=timezone.now(),
+        )
+        state_digest = workspace_state_digest(workspace)
+        idempotency_key = str(uuid.uuid4())
+        intent = ActivationIntent.objects.create(
+            workspace=workspace,
+            deployment_id=settings.ENV_IDENTITY.deployment_id,
+            target_generation_id=self.candidate.generation_id,
+            previous_generation_id="previous",
+            manifest_digest=workspace.manifest_digest,
+            intent_digest="i" * 64,
+            idempotency_key=idempotency_key,
+            request_state_digest=state_digest,
+            expires_at=timezone.now() + timedelta(minutes=5),
+        )
+
+        with patch("vaultops.views.create_recovery_set") as recovery:
+            response = self.client.post(
+                reverse(
+                    "vaultops:schedule_activation",
+                    kwargs={"workspace_id": workspace.public_id},
+                ),
+                {"idempotency_key": idempotency_key},
+                HTTP_ACCEPT="application/json",
+            )
+
+        self.assertEqual(response.status_code, 202, response.content)
+        self.assertEqual(
+            response.json()["data"]["activation_intent_id"],
+            str(intent.public_id),
+        )
+        recovery.assert_not_called()
 
     def test_typed_retirement_is_reversible_and_never_claims_deletion(self):
         page = self.client.get(

@@ -68,6 +68,11 @@ class VaultDatasetProjection(TimeStampedModel):
 
 
 class ArtifactGeneration(TimeStampedModel):
+    class Origin(models.TextChoices):
+        VAULT_GENERATION = "vault_generation", "Vault generation"
+        LOCAL_MAINTENANCE = "local_maintenance", "Local maintenance"
+        LEGACY_PROJECTION = "legacy_projection", "Legacy projection"
+
     class VaultState(models.TextChoices):
         CANDIDATE = "candidate", "Candidate"
         AUTHORITATIVE = "authoritative", "Authoritative"
@@ -98,6 +103,11 @@ class ArtifactGeneration(TimeStampedModel):
         on_delete=models.PROTECT,
         related_name="generations",
     )
+    origin = models.CharField(
+        max_length=24,
+        choices=Origin.choices,
+        default=Origin.VAULT_GENERATION,
+    )
     dataset_id = models.CharField(max_length=120)
     generation_id = models.CharField(max_length=160)
     manifest_digest = models.CharField(max_length=64, blank=True, default="")
@@ -113,6 +123,13 @@ class ArtifactGeneration(TimeStampedModel):
     )
     deployment_id = models.CharField(max_length=120, blank=True, default="")
     source = models.CharField(max_length=80, blank=True, default="")
+    lineage_job_public_id = models.UUIDField(null=True, blank=True)
+    parent_generation_id = models.CharField(
+        max_length=160, blank=True, default=""
+    )
+    parent_manifest_digest = models.CharField(
+        max_length=64, blank=True, default=""
+    )
     legacy_database_id = models.PositiveBigIntegerField(null=True, blank=True)
     legacy_status = models.CharField(max_length=24, blank=True, default="")
     observed_at = models.DateTimeField(null=True, blank=True)
@@ -127,6 +144,40 @@ class ArtifactGeneration(TimeStampedModel):
                 fields=["deployment_id"],
                 condition=Q(runtime_state="active") & ~Q(deployment_id=""),
                 name="vaultops_one_active_generation_per_deployment",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~Q(origin="local_maintenance")
+                    | (
+                        Q(lineage_job_public_id__isnull=False)
+                        & ~Q(parent_generation_id="")
+                        & ~Q(parent_manifest_digest="")
+                    )
+                ),
+                name="vaultops_local_origin_has_lineage",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(origin="local_maintenance")
+                    | (
+                        Q(lineage_job_public_id__isnull=True)
+                        & Q(parent_generation_id="")
+                        & Q(parent_manifest_digest="")
+                    )
+                ),
+                name="vaultops_nonlocal_origin_has_no_lineage",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~Q(origin="local_maintenance")
+                    | Q(vault_state="unknown")
+                ),
+                name="vaultops_local_origin_not_vault_authority",
+            ),
+            models.UniqueConstraint(
+                fields=["lineage_job_public_id"],
+                condition=Q(origin="local_maintenance"),
+                name="vaultops_unique_local_maintenance_job",
             ),
         ]
         ordering = ["-created_at"]
@@ -199,6 +250,9 @@ class RestoreWorkspace(TimeStampedModel):
         max_length=64, blank=True, default=""
     )
     pointer_digest = models.CharField(max_length=64, blank=True, default="")
+    import_idempotency_key = models.CharField(
+        max_length=160, blank=True, default=""
+    )
     quarantine_path = models.CharField(max_length=1000, blank=True, default="")
     runtime_path = models.CharField(max_length=1000, blank=True, default="")
     capacity_plan = models.JSONField(default=dict, blank=True)
@@ -213,6 +267,13 @@ class RestoreWorkspace(TimeStampedModel):
     expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["import_idempotency_key"],
+                condition=~Q(import_idempotency_key=""),
+                name="vaultops_unique_workspace_import_idempotency",
+            ),
+        ]
         ordering = ["-created_at"]
 
 
@@ -450,6 +511,10 @@ class ActivationIntent(TimeStampedModel):
     previous_generation_id = models.CharField(max_length=160)
     manifest_digest = models.CharField(max_length=64)
     intent_digest = models.CharField(max_length=64, unique=True)
+    idempotency_key = models.CharField(max_length=160, blank=True, default="")
+    request_state_digest = models.CharField(
+        max_length=64, blank=True, default=""
+    )
     state = models.CharField(
         max_length=16, choices=State.choices, default=State.PENDING
     )
@@ -463,6 +528,13 @@ class ActivationIntent(TimeStampedModel):
     expires_at = models.DateTimeField()
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["deployment_id", "idempotency_key"],
+                condition=~Q(idempotency_key=""),
+                name="vaultops_unique_activation_request",
+            ),
+        ]
         ordering = ["-created_at"]
 
 

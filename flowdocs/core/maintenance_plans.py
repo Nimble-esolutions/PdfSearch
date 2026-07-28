@@ -541,6 +541,40 @@ def _serialize_local_job_payload(
         "cancel": payload["status"] in {"queued", "running"},
         "retry": payload["status"] == "failed",
     }
+    candidate_reason = ""
+    prepared_workspace_id = ""
+    if payload["status"] != "completed":
+        candidate_reason = "job_not_completed"
+    elif payload["options"].get("candidate_state") != "activation_ready":
+        candidate_reason = "candidate_not_ready"
+    else:
+        from vaultops.models import ArtifactGeneration, RestoreWorkspace
+
+        prepared = (
+            RestoreWorkspace.objects.filter(
+                generation__origin=(
+                    ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+                ),
+                generation__lineage_job_public_id=payload["public_id"],
+                state=RestoreWorkspace.State.ACTIVATION_READY,
+            )
+            .order_by("-prepared_at")
+            .first()
+        )
+        if prepared:
+            prepared_workspace_id = str(prepared.public_id)
+        elif not settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:
+            candidate_reason = "candidate_preparation_disabled"
+        elif settings.ENV_IDENTITY.is_production:
+            candidate_reason = "runtime_read_only"
+    payload["allowed_actions"]["prepare_activation"] = (
+        not candidate_reason and not prepared_workspace_id
+    )
+    payload["allowed_actions"]["review_activation"] = bool(
+        prepared_workspace_id
+    )
+    payload["allowed_actions"]["candidate_reason"] = candidate_reason
+    payload["prepared_workspace_id"] = prepared_workspace_id
     if include_audit and hasattr(job, "id"):
         payload["audit_events"] = [
             {

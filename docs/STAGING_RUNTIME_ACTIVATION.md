@@ -38,6 +38,7 @@ CONTROL_DB_PATH=/app/data-control/control.sqlite3
 RUNTIME_GENERATIONS_ROOT=/app/data/runtime-generations
 
 STAGING_RUNTIME_ACTIVATION_ENABLED=0
+MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=0
 STAGING_ACTIVATION_APPLY_MODE=auto
 ACTIVATION_INTENT_SIGNING_KEY=<at-least-32-random-characters>
 ACTIVATION_SMOKE_QUERIES_FILE=/app/data-control/config/activation-smoke-queries.json
@@ -93,6 +94,9 @@ a staging activation acceptance probe.
 7. Enable `STAGING_RUNTIME_ACTIVATION_ENABLED=1` for both services and restart
    them together. Startup rejects a missing, malformed, wrongly signed, or
    cross-deployment pointer.
+8. Enable `MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=1` only when this staging
+   environment should import validated local-maintenance candidates. This
+   separate gate does not publish or activate a candidate.
 
 When activation mode is enabled, startup also rejects legacy import, JSON
 migration, and superuser-bootstrap switches because those would mutate a

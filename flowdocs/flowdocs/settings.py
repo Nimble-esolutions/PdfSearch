@@ -528,6 +528,9 @@ VAULT_RESTORE_MIN_FREE_INODES = _env_nonnegative_int(
 STAGING_RUNTIME_ACTIVATION_ENABLED = _env_bool(
     'STAGING_RUNTIME_ACTIVATION_ENABLED', False
 )
+MAINTENANCE_CANDIDATE_PREPARATION_ENABLED = _env_bool(
+    'MAINTENANCE_CANDIDATE_PREPARATION_ENABLED', False
+)
 STAGING_ACTIVATION_APPLY_MODE = os.getenv(
     'STAGING_ACTIVATION_APPLY_MODE', 'auto'
 ).strip().lower()
@@ -579,6 +582,14 @@ ENV_IDENTITY = _env_identity
 
 if ENV_IDENTITY.is_production and STAGING_RUNTIME_ACTIVATION_ENABLED:
     raise ImproperlyConfigured('production_activation_disabled')
+if (
+    MAINTENANCE_CANDIDATE_PREPARATION_ENABLED
+    and not STAGING_RUNTIME_ACTIVATION_ENABLED
+):
+    raise ImproperlyConfigured(
+        'MAINTENANCE_CANDIDATE_PREPARATION_ENABLED requires '
+        'STAGING_RUNTIME_ACTIVATION_ENABLED'
+    )
 if STAGING_RUNTIME_ACTIVATION_ENABLED:
     if ENV_IDENTITY.app_env.value != 'staging':
         raise ImproperlyConfigured(

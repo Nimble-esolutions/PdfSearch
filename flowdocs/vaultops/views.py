@@ -31,14 +31,19 @@ from vaultops.models import (
     VaultConnectionProfile,
     VaultJob,
 )
-from vaultops.services.activation import schedule_activation
+from vaultops.services.activation import (
+    activation_request_replay,
+    schedule_activation,
+)
 from vaultops.services.audit import append_event
 from vaultops.services.confirmations import (
     consume_confirmation,
     issue_confirmation,
+    validate_confirmation,
 )
 from vaultops.services.jobs import request_cancellation, requeue_job
 from vaultops.services.inventory import project_verified_generation, verify_generation
+from vaultops.services.maintenance_import import import_maintenance_candidate
 from vaultops.services.profiles import (
     probe_restore_profile,
     upsert_restore_profile,
@@ -499,6 +504,56 @@ def maintenance_job_cancel(request, job_id):
 @require_POST
 def maintenance_job_retry(request, job_id):
     return _local_job_action(request, job_id, action="retry")
+
+
+@superadmin_required
+@require_POST
+def maintenance_candidate_prepare(request, job_id):
+    try:
+        if not settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:
+            raise WorkbenchRequestError(
+                "candidate_preparation_disabled", status_code=409
+            )
+        idempotency_key = _request_idempotency_key(
+            request, require_admin_gate=False
+        )
+        job = get_object_or_404(
+            MaintenanceJob,
+            public_id=job_id,
+            kind__in={
+                "repair_indexes",
+                "reindex_needed",
+                "reindex_selected",
+            },
+        )
+        if _request_value(request, "state_version", "") != (
+            _local_job_state_version(job)
+        ):
+            raise MaintenancePlanError("stale_state_version")
+        workspace = import_maintenance_candidate(
+            job,
+            idempotency_key=idempotency_key,
+            actor_id=request.user.pk,
+            actor_name=request.user.get_username(),
+        )
+        return _mutation_success(
+            request,
+            section="maintenance",
+            reason_code="maintenance_candidate_prepared",
+            message=(
+                "Local maintenance candidate prepared. Review typed "
+                "activation separately; Vault publication is still required."
+            ),
+            data={
+                "job_id": str(job.public_id),
+                "workspace_id": str(workspace.public_id),
+                "generation_id": workspace.generation.generation_id,
+                "origin": workspace.generation.origin,
+                "vault_authority_changed": False,
+            },
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="maintenance")
 
 
 @superadmin_required
@@ -1233,10 +1288,33 @@ def gc_plan_execute(request, plan_id):
 @require_POST
 def schedule_activation_view(request, workspace_id):
     try:
-        _request_idempotency_key(request)
+        idempotency_key = _request_idempotency_key(request)
         workspace = get_object_or_404(
             RestoreWorkspace.objects.select_related("generation"),
             public_id=workspace_id,
+        )
+        digest = workspace_state_digest(workspace)
+        replay = activation_request_replay(
+            deployment_id=settings.ENV_IDENTITY.deployment_id,
+            idempotency_key=idempotency_key,
+            workspace=workspace,
+            request_state_digest=digest,
+        )
+        if replay:
+            return _mutation_success(
+                request,
+                section="restore",
+                reason_code="activation_scheduled",
+                message=f"Activation intent {replay.public_id} scheduled.",
+                data={"activation_intent_id": str(replay.public_id)},
+            )
+        validate_confirmation(
+            challenge_id=_request_value(request, "challenge_id", ""),
+            actor_id=request.user.pk,
+            action="activate_workspace",
+            target=str(workspace.public_id),
+            state_digest=digest,
+            phrase=_request_value(request, "confirmation_phrase", ""),
         )
         recovery_set = create_recovery_set("pre-activation")
         with transaction.atomic(using="control"):
@@ -1252,6 +1330,8 @@ def schedule_activation_view(request, workspace_id):
                 actor_id=request.user.pk,
                 actor_name=request.user.get_username(),
                 confirmed=True,
+                idempotency_key=idempotency_key,
+                request_state_digest=digest,
             )
             append_event(
                 action="activation_recovery_set_verified",

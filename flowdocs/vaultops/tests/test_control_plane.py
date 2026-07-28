@@ -124,6 +124,57 @@ class LifecycleGuardTests(ControlPlaneTestCase):
 
         self.assertEqual(raised.exception.reason_code, "invalid_vault_transition")
 
+    def test_local_maintenance_generation_cannot_enter_vault_authority(self):
+        generation = self.make_generation(
+            origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+            lineage_job_public_id=uuid.uuid4(),
+            parent_generation_id="generation-parent",
+            parent_manifest_digest="b" * 64,
+            vault_state=ArtifactGeneration.VaultState.UNKNOWN,
+        )
+
+        with self.assertRaises(LifecycleConflict) as raised:
+            transition_generation_vault_state(
+                generation,
+                ArtifactGeneration.VaultState.CANDIDATE,
+                correlation_id=uuid.uuid4(),
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code, "vault_authority_not_applicable"
+        )
+
+    def test_local_maintenance_generation_requires_complete_lineage(self):
+        with self.assertRaises(IntegrityError), transaction.atomic(
+            using="control"
+        ):
+            self.make_generation(
+                origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+                vault_state=ArtifactGeneration.VaultState.UNKNOWN,
+            )
+
+    def test_local_maintenance_generation_cannot_claim_vault_state(self):
+        with self.assertRaises(IntegrityError), transaction.atomic(
+            using="control"
+        ):
+            self.make_generation(
+                origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+                lineage_job_public_id=uuid.uuid4(),
+                parent_generation_id="generation-parent",
+                parent_manifest_digest="b" * 64,
+                vault_state=ArtifactGeneration.VaultState.CANDIDATE,
+            )
+
+    def test_nonlocal_generation_cannot_carry_maintenance_lineage(self):
+        with self.assertRaises(IntegrityError), transaction.atomic(
+            using="control"
+        ):
+            self.make_generation(
+                lineage_job_public_id=uuid.uuid4(),
+                parent_generation_id="generation-parent",
+                parent_manifest_digest="b" * 64,
+            )
+
     def test_workspace_cannot_skip_from_planned_to_activation_ready(self):
         generation = self.make_generation()
         workspace = RestoreWorkspace.objects.create(

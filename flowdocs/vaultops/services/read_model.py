@@ -175,12 +175,16 @@ def generation_state_digest(generation):
     return _state_digest(
         {
             "profile_id": generation.profile_id,
+            "origin": generation.origin,
             "dataset_id": generation.dataset_id,
             "generation_id": generation.generation_id,
             "manifest_digest": generation.manifest_digest,
             "vault_state": generation.vault_state,
             "runtime_state": generation.runtime_state,
             "local_presence": generation.local_presence,
+            "lineage_job_public_id": generation.lineage_job_public_id,
+            "parent_generation_id": generation.parent_generation_id,
+            "parent_manifest_digest": generation.parent_manifest_digest,
             "updated_at": generation.updated_at,
         }
     )
@@ -191,9 +195,22 @@ def workspace_state_digest(workspace):
         {
             "workspace_id": str(workspace.public_id),
             "generation_id": workspace.generation.generation_id,
+            "generation_origin": workspace.generation.origin,
+            "lineage_job_public_id": (
+                workspace.generation.lineage_job_public_id
+            ),
+            "parent_generation_id": (
+                workspace.generation.parent_generation_id
+            ),
+            "parent_manifest_digest": (
+                workspace.generation.parent_manifest_digest
+            ),
             "manifest_digest": workspace.manifest_digest,
             "state": workspace.state,
             "runtime_path": workspace.runtime_path,
+            "pointer_digest": workspace.pointer_digest,
+            "validation_evidence": workspace.validation_evidence,
+            "rehearsal_evidence": workspace.rehearsal_evidence,
             "prepared_at": workspace.prepared_at,
             "updated_at": workspace.updated_at,
         }

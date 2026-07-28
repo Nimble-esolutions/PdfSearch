@@ -67,7 +67,7 @@ def issue_confirmation(
     return challenge, phrase
 
 
-def consume_confirmation(
+def _validate_confirmation(
     *,
     challenge_id,
     actor_id,
@@ -75,6 +75,7 @@ def consume_confirmation(
     target,
     state_digest,
     phrase,
+    consume,
 ):
     now = timezone.now()
     with transaction.atomic(using="control"):
@@ -104,11 +105,54 @@ def consume_confirmation(
         supplied = _phrase_digest((phrase or "").strip(), challenge.phrase_salt)
         if not hmac.compare_digest(challenge.phrase_digest, supplied):
             raise ConfirmationError("confirmation_phrase_mismatch")
-        challenge.used_at = now
-        challenge.save(update_fields=["used_at"])
-        return hashlib.sha256(
+        confirmation_digest = hashlib.sha256(
             (
                 f"{challenge.public_id}:{challenge.state_digest}:"
                 f"{challenge.phrase_digest}"
             ).encode("utf-8")
         ).hexdigest()
+        if consume:
+            challenge.used_at = now
+            challenge.save(update_fields=["used_at"])
+        return confirmation_digest
+
+
+def validate_confirmation(
+    *,
+    challenge_id,
+    actor_id,
+    action,
+    target,
+    state_digest,
+    phrase,
+):
+    """Validate a challenge without consuming it or authorizing mutation."""
+    return _validate_confirmation(
+        challenge_id=challenge_id,
+        actor_id=actor_id,
+        action=action,
+        target=target,
+        state_digest=state_digest,
+        phrase=phrase,
+        consume=False,
+    )
+
+
+def consume_confirmation(
+    *,
+    challenge_id,
+    actor_id,
+    action,
+    target,
+    state_digest,
+    phrase,
+):
+    return _validate_confirmation(
+        challenge_id=challenge_id,
+        actor_id=actor_id,
+        action=action,
+        target=target,
+        state_digest=state_digest,
+        phrase=phrase,
+        consume=True,
+    )

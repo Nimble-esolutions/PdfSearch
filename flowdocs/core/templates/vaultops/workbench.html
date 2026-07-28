@@ -363,8 +363,26 @@
               </form>
             {% endif %}
             {% if job.options.candidate_state == "activation_ready" %}
-              <span class="vault-button vault-button--disabled" aria-disabled="true">{% trans "Review activation" %}</span>
-              <code>candidate_activation_unavailable</code>
+              {% if job.allowed_actions.prepare_activation %}
+                <form method="post" action="{% url 'vaultops:maintenance_candidate_prepare' job.public_id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="state_version" value="{{ job.state_version }}">
+                  <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+                  <button class="vault-button vault-button--secondary" type="submit">{% trans "Prepare for activation" %}</button>
+                </form>
+              {% elif job.allowed_actions.review_activation %}
+                <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+                  <input type="hidden" name="action" value="activate_workspace">
+                  <input type="hidden" name="target" value="{{ job.prepared_workspace_id }}">
+                  <button class="vault-button" type="submit">{% trans "Review typed activation" %}</button>
+                </form>
+                <p class="vault-note"><strong>{% trans "Prepared runtime candidate" %}</strong> — {% trans "origin: local maintenance; remote Vault authority is unchanged." %}</p>
+              {% else %}
+                <span class="vault-button vault-button--disabled" aria-disabled="true">{% trans "Prepare for activation" %}</span>
+                <code>{{ job.allowed_actions.candidate_reason }}</code>
+              {% endif %}
             {% endif %}
           </div>
         </article>
