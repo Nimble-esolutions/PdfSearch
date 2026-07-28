@@ -1748,3 +1748,7 @@ msgstr ""
 #: core/templates/vaultops/workbench.html
 msgid "Review signed rollback"
 msgstr ""
+
+#: core/templates/vaultops/workbench.html
+msgid "Verified previous runtime:"
+msgstr ""

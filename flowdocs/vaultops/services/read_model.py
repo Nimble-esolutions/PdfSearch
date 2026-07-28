@@ -1,10 +1,15 @@
 import hashlib
 import json
+from pathlib import Path
 
 from django.conf import settings
 from django.db import DatabaseError
 from django.utils import timezone
 
+from core.recovery_auth import (
+    RecoveryAuthenticationError,
+    verify_recovery_superadmin_database,
+)
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -20,6 +25,11 @@ from vaultops.models import (
     VaultJob,
 )
 from vaultops.services.retention import generation_protection_reasons
+from vaultops.runtime_control import (
+    RuntimeControlError,
+    read_runtime_pointer,
+    runtime_control_paths,
+)
 
 
 ACTIVE_JOB_STATES = {
@@ -721,6 +731,118 @@ def _lease_summary(dataset_id):
     }
 
 
+def _rollback_capability(*, pending_activation=None):
+    """Project bounded, secret-free rollback eligibility for the Workbench."""
+    identity = settings.ENV_IDENTITY
+    reason_code = ""
+    if not settings.VAULT_ADMIN_MUTATIONS_ENABLED:
+        reason_code = "vault_admin_mutations_disabled"
+    elif identity.is_production:
+        reason_code = "production_activation_disabled"
+    elif (
+        identity.app_env.value != "staging"
+        or not settings.STAGING_RUNTIME_ACTIVATION_ENABLED
+    ):
+        reason_code = "staging_activation_disabled"
+    elif pending_activation is not None:
+        reason_code = "runtime_activation_in_progress"
+
+    active_pointer = previous_pointer = None
+    paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    if not reason_code and (
+        not paths["active"].is_file() or not paths["previous"].is_file()
+    ):
+        reason_code = "rollback_pointer_missing"
+    if not reason_code:
+        try:
+            active_pointer = read_runtime_pointer(
+                paths["active"],
+                deployment_id=identity.deployment_id,
+                signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+                runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+            )
+            previous_pointer = read_runtime_pointer(
+                paths["previous"],
+                deployment_id=identity.deployment_id,
+                signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+                runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+            )
+        except RuntimeControlError:
+            reason_code = "rollback_pointer_unverified"
+
+    active_generation = previous_generation = None
+    if not reason_code:
+        projected = {
+            generation.generation_id: generation
+            for generation in ArtifactGeneration.objects.filter(
+                deployment_id=identity.deployment_id,
+                generation_id__in=[
+                    active_pointer.generation_id,
+                    previous_pointer.generation_id,
+                ],
+            )
+        }
+        active_generation = projected.get(active_pointer.generation_id)
+        previous_generation = projected.get(previous_pointer.generation_id)
+        if active_generation is None or previous_generation is None:
+            reason_code = "rollback_generation_unprojected"
+    if not reason_code and (
+        active_generation.origin
+        != ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        or active_generation.runtime_state
+        != ArtifactGeneration.RuntimeState.ACTIVE
+    ):
+        reason_code = "rollback_active_generation_ineligible"
+    if not reason_code and (
+        previous_generation.runtime_state
+        != ArtifactGeneration.RuntimeState.PREVIOUS
+        or active_generation.parent_generation_id
+        != previous_generation.generation_id
+        or active_generation.parent_manifest_digest
+        != previous_generation.manifest_digest
+        or active_pointer.manifest_digest
+        != active_generation.manifest_digest
+        or previous_pointer.manifest_digest
+        != previous_generation.manifest_digest
+    ):
+        reason_code = "rollback_lineage_invalid"
+    if not reason_code:
+        observation = RuntimePointerObservation.objects.filter(
+            deployment_id=identity.deployment_id
+        ).order_by("-observed_at").first()
+        if (
+            observation is None
+            or not _observation_is_fresh(
+                observation.observed_at, observed_at=timezone.now()
+            )
+            or observation.active_generation_id
+            != active_pointer.generation_id
+            or observation.previous_generation_id
+            != previous_pointer.generation_id
+            or observation.pointer_digest != active_pointer.pointer_digest
+        ):
+            reason_code = "rollback_pointer_observation_stale"
+    if not reason_code:
+        try:
+            verify_recovery_superadmin_database(
+                Path(previous_pointer.database_path),
+                username=settings.ACTIVATION_RECOVERY_SUPERADMIN_USERNAME,
+                password=settings.ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD,
+            )
+        except RecoveryAuthenticationError:
+            reason_code = "activation_recovery_superadmin_unproven"
+
+    return {
+        "enabled": not reason_code,
+        "reason_code": reason_code,
+        "target_generation_id": (
+            previous_pointer.generation_id
+            if not reason_code and previous_pointer is not None
+            else ""
+        ),
+    }
+
+
 def build_workbench_state(*, profile_key=None):
     identity = settings.ENV_IDENTITY
     profile_key = profile_key or settings.VAULT_DEFAULT_PROFILE
@@ -760,6 +882,7 @@ def build_workbench_state(*, profile_key=None):
             "sync": {"state": "disabled"},
             "lease": _lease_summary(identity.dataset_id),
             "feature_flags": _feature_flags(),
+            "rollback_capability": _rollback_capability(),
         }
     authority = _authority_state(
         profile, profile.dataset_id, identity.deployment_id
@@ -853,6 +976,9 @@ def build_workbench_state(*, profile_key=None):
             else None
         ),
         "feature_flags": _feature_flags(),
+        "rollback_capability": _rollback_capability(
+            pending_activation=pending_activation
+        ),
     }
     payload["state_version"] = _state_digest(
         {
@@ -874,6 +1000,7 @@ def build_workbench_state(*, profile_key=None):
             },
             "sync": payload["sync"],
             "pending_activation": payload["pending_activation"],
+            "rollback_capability": payload["rollback_capability"],
             "generation_states": [
                 item["state_digest"] for item in generations
             ],

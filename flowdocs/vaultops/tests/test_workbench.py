@@ -127,7 +127,17 @@ class VaultWorkbenchTests(TestCase):
         )
 
     @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
-    def test_signed_rollback_control_is_enabled_only_in_staging(self):
+    @patch(
+        "vaultops.services.read_model._rollback_capability",
+        return_value={
+            "enabled": True,
+            "reason_code": "",
+            "target_generation_id": "verified-previous",
+        },
+    )
+    def test_signed_rollback_control_is_enabled_for_verified_parent(
+        self, capability
+    ):
         response = self.client.get(
             reverse("operations_panel"), {"section": "restore"}
         )
@@ -139,6 +149,50 @@ class VaultWorkbenchTests(TestCase):
             html=True,
         )
         self.assertNotContains(response, "staging_activation_disabled")
+        self.assertContains(response, "verified-previous")
+        capability.assert_called_once()
+
+    @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
+    @patch(
+        "vaultops.services.read_model._rollback_capability",
+        return_value={
+            "enabled": False,
+            "reason_code": "rollback_lineage_invalid",
+            "target_generation_id": "",
+        },
+    )
+    def test_signed_rollback_control_displays_typed_eligibility_reason(
+        self, capability
+    ):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "restore"}
+        )
+
+        self.assertContains(response, "rollback_lineage_invalid")
+        self.assertContains(
+            response,
+            'disabled aria-describedby="signed-rollback-reason"',
+            html=False,
+        )
+        capability.assert_called_once()
+
+    @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
+    def test_non_superadmin_cannot_issue_or_schedule_signed_rollback(self):
+        self.client.force_login(self.admin)
+        issue = self.client.post(
+            reverse("vaultops:rollback_confirmation_issue"),
+            {"idempotency_key": str(uuid.uuid4())},
+        )
+        schedule = self.client.post(
+            reverse(
+                "vaultops:schedule_rollback",
+                kwargs={"workspace_id": uuid.uuid4()},
+            ),
+            {"idempotency_key": str(uuid.uuid4())},
+        )
+
+        self.assertEqual(issue.status_code, 403)
+        self.assertEqual(schedule.status_code, 403)
 
     @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
     @patch("vaultops.views.create_recovery_set")

@@ -6,10 +6,12 @@ import sqlite3
 import tempfile
 import time
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.management import call_command
@@ -20,6 +22,7 @@ from core.candidate_maintenance import (
     CandidateMaintenanceError,
     _verified_mutable_source_runtime_identity,
 )
+from core.recovery_auth import RecoveryAuthenticationError
 from runtime_supervisor import RuntimeSupervisor
 from vaultops.models import (
     ActivationIntent,
@@ -45,6 +48,7 @@ from vaultops.services.activation import (
     reconcile_activation_result,
     schedule_activation,
 )
+from vaultops.services.read_model import _rollback_capability
 
 
 SIGNING_KEY = "test-signing-key-with-at-least-32-characters"
@@ -723,6 +727,124 @@ class ActivationCoordinatorTests(TestCase):
             "rollback_active_generation_ineligible",
         ):
             prepare_previous_runtime_rollback()
+
+    def test_rollback_capability_projects_verified_exact_parent(self):
+        self._configure_signed_local_candidate_as_active()
+
+        capability = _rollback_capability()
+
+        self.assertTrue(capability["enabled"])
+        self.assertEqual(capability["reason_code"], "")
+        self.assertEqual(
+            capability["target_generation_id"], CURRENT_GENERATION
+        )
+
+    def test_rollback_capability_reports_bounded_pointer_reasons(self):
+        capability = _rollback_capability()
+        self.assertFalse(capability["enabled"])
+        self.assertEqual(
+            capability["reason_code"], "rollback_pointer_missing"
+        )
+
+        atomic_write_json(self.paths["previous"], {"not": "signed"})
+        capability = _rollback_capability()
+        self.assertEqual(
+            capability["reason_code"], "rollback_pointer_unverified"
+        )
+
+    def test_rollback_capability_reports_unprojected_generation(self):
+        self._configure_signed_local_candidate_as_active()
+        absent_digest = "9" * 64
+        absent_runtime = create_runtime(
+            self.runtime_root, "unprojected-generation", absent_digest
+        )
+        atomic_write_json(
+            self.paths["previous"],
+            make_pointer(
+                absent_runtime,
+                "unprojected-generation",
+                absent_digest,
+                "unprojected-previous",
+            ),
+        )
+
+        self.assertEqual(
+            _rollback_capability()["reason_code"],
+            "rollback_generation_unprojected",
+        )
+
+    def test_rollback_capability_reports_ineligible_lineage_and_staleness(self):
+        self._configure_signed_local_candidate_as_active()
+        self.target_generation.origin = (
+            ArtifactGeneration.Origin.VAULT_GENERATION
+        )
+        self.target_generation.lineage_job_public_id = None
+        self.target_generation.parent_generation_id = ""
+        self.target_generation.parent_manifest_digest = ""
+        self.target_generation.save(
+            update_fields=[
+                "origin",
+                "lineage_job_public_id",
+                "parent_generation_id",
+                "parent_manifest_digest",
+            ]
+        )
+        self.assertEqual(
+            _rollback_capability()["reason_code"],
+            "rollback_active_generation_ineligible",
+        )
+
+        self.target_generation.origin = (
+            ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        )
+        self.target_generation.lineage_job_public_id = uuid.uuid4()
+        self.target_generation.parent_generation_id = CURRENT_GENERATION
+        self.target_generation.parent_manifest_digest = "0" * 64
+        self.target_generation.save(
+            update_fields=[
+                "origin",
+                "lineage_job_public_id",
+                "parent_generation_id",
+                "parent_manifest_digest",
+            ]
+        )
+        self.assertEqual(
+            _rollback_capability()["reason_code"],
+            "rollback_lineage_invalid",
+        )
+
+        self.target_generation.parent_manifest_digest = CURRENT_DIGEST
+        self.target_generation.save(
+            update_fields=["parent_manifest_digest"]
+        )
+        RuntimePointerObservation.objects.update(
+            observed_at=timezone.now()
+            - timedelta(
+                seconds=settings.VAULT_VALIDATION_MAX_AGE_SECONDS + 1
+            )
+        )
+        self.assertEqual(
+            _rollback_capability()["reason_code"],
+            "rollback_pointer_observation_stale",
+        )
+
+    def test_rollback_capability_reports_recovery_auth_and_active_intent(self):
+        self._configure_signed_local_candidate_as_active()
+        with patch(
+            "vaultops.services.read_model."
+            "verify_recovery_superadmin_database",
+            side_effect=RecoveryAuthenticationError,
+        ):
+            self.assertEqual(
+                _rollback_capability()["reason_code"],
+                "activation_recovery_superadmin_unproven",
+            )
+        self.assertEqual(
+            _rollback_capability(
+                pending_activation=SimpleNamespace()
+            )["reason_code"],
+            "runtime_activation_in_progress",
+        )
 
     def test_signed_commit_result_updates_independent_projections(self):
         intent = schedule_activation(self.workspace, confirmed=True)

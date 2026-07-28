@@ -224,6 +224,9 @@ def prepare_previous_runtime_rollback():
     ).order_by("-observed_at").first()
     if (
         observation is None
+        or (
+            timezone.now() - observation.observed_at
+        ).total_seconds() > settings.VAULT_VALIDATION_MAX_AGE_SECONDS
         or observation.active_generation_id != active_generation.generation_id
         or observation.previous_generation_id
         != previous_generation.generation_id
@@ -367,6 +370,9 @@ def validate_previous_runtime_rollback(workspace):
     ).order_by("-observed_at").first()
     if (
         observation is None
+        or (
+            timezone.now() - observation.observed_at
+        ).total_seconds() > settings.VAULT_VALIDATION_MAX_AGE_SECONDS
         or observation.active_generation_id != active_pointer.generation_id
         or observation.previous_generation_id
         != previous_pointer.generation_id

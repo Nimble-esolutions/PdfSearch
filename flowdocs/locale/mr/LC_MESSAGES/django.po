@@ -2444,3 +2444,7 @@ msgstr "सक्रिय रनटाइम हा मागील स्व�
 #: core/templates/vaultops/workbench.html
 msgid "Review signed rollback"
 msgstr "स्वाक्षरीत रोलबॅक तपासा"
+
+#: core/templates/vaultops/workbench.html
+msgid "Verified previous runtime:"
+msgstr "सत्यापित मागील रनटाइम:"

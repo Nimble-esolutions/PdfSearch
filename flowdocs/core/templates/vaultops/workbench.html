@@ -598,12 +598,12 @@
       <form method="post" action="{% url 'vaultops:rollback_confirmation_issue' %}">
         {% csrf_token %}
         <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:signed-rollback">
-        <button class="vault-button vault-button--danger" type="submit"{% if not state.feature_flags.staging_activation_enabled or not state.feature_flags.admin_mutations_enabled %} disabled{% endif %}>{% trans "Review signed rollback" %}</button>
+        <button class="vault-button vault-button--danger" type="submit"{% if not state.rollback_capability.enabled %} disabled aria-describedby="signed-rollback-reason"{% endif %}>{% trans "Review signed rollback" %}</button>
       </form>
-      {% if not state.feature_flags.admin_mutations_enabled %}
-      <code>vault_admin_mutations_disabled</code>
-      {% elif not state.feature_flags.staging_activation_enabled %}
-      <code>staging_activation_disabled</code>
+      {% if not state.rollback_capability.enabled %}
+      <p id="signed-rollback-reason" class="vault-note"><code>{{ state.rollback_capability.reason_code }}</code></p>
+      {% else %}
+      <p class="vault-note">{% trans "Verified previous runtime:" %} <code>{{ state.rollback_capability.target_generation_id }}</code></p>
       {% endif %}
     </section>
   </div>
