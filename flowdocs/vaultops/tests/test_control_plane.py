@@ -58,46 +58,6 @@ class ControlPlaneTestCase(TestCase):
             environment_locked=True,
         )
 
-    @override_settings(VAULT_DEFAULT_PROFILE="missing-profile")
-    def test_dashboard_authority_summary_is_unknown_without_profile(self):
-        summary = build_dashboard_authority_summary()
-
-        self.assertEqual(summary["status"], "unknown")
-        self.assertEqual(summary["reason_code"], "profile_unavailable")
-        self.assertEqual(summary["remote"]["state"], "unknown")
-        self.assertEqual(summary["runtime"]["state"], "unknown")
-        self.assertNotIn("fingerprint", summary)
-
-    @override_settings(VAULT_DEFAULT_PROFILE="test-profile")
-    def test_dashboard_authority_summary_uses_observed_authority(self):
-        now = timezone.now()
-        VaultDatasetProjection.objects.create(
-            profile=self.profile,
-            dataset_id=self.profile.dataset_id,
-            inventory_state="verified",
-            authoritative_generation_id="vault-generation",
-            inventory_observed_at=now,
-        )
-        RuntimePointerObservation.objects.create(
-            deployment_id=settings.ENV_IDENTITY.deployment_id,
-            status="ready",
-            active_generation_id="runtime-generation",
-            observed_at=now,
-        )
-
-        summary = build_dashboard_authority_summary()
-
-        self.assertEqual(summary["status"], "healthy")
-        self.assertEqual(
-            summary["remote"]["authoritative_generation_id"],
-            "vault-generation",
-        )
-        self.assertEqual(
-            summary["runtime"]["active_generation_id"],
-            "runtime-generation",
-        )
-        self.assertTrue(summary["state_version"])
-
     def make_generation(self, generation_id="generation-1", **kwargs):
         values = {
             "profile": self.profile,
@@ -365,6 +325,46 @@ class DurableJobOwnershipTests(ControlPlaneTestCase):
 
 
 class AuthorityReadModelTests(ControlPlaneTestCase):
+    @override_settings(VAULT_DEFAULT_PROFILE="missing-profile")
+    def test_dashboard_authority_summary_is_unknown_without_profile(self):
+        summary = build_dashboard_authority_summary()
+
+        self.assertEqual(summary["status"], "unknown")
+        self.assertEqual(summary["reason_code"], "profile_unavailable")
+        self.assertEqual(summary["remote"]["state"], "unknown")
+        self.assertEqual(summary["runtime"]["state"], "unknown")
+        self.assertNotIn("fingerprint", summary)
+
+    @override_settings(VAULT_DEFAULT_PROFILE="test-profile")
+    def test_dashboard_authority_summary_uses_observed_authority(self):
+        now = timezone.now()
+        VaultDatasetProjection.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_state="verified",
+            authoritative_generation_id="vault-generation",
+            inventory_observed_at=now,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id=settings.ENV_IDENTITY.deployment_id,
+            status="ready",
+            active_generation_id="runtime-generation",
+            observed_at=now,
+        )
+
+        summary = build_dashboard_authority_summary()
+
+        self.assertEqual(summary["status"], "healthy")
+        self.assertEqual(
+            summary["remote"]["authoritative_generation_id"],
+            "vault-generation",
+        )
+        self.assertEqual(
+            summary["runtime"]["active_generation_id"],
+            "runtime-generation",
+        )
+        self.assertTrue(summary["state_version"])
+
     def test_remote_authority_and_runtime_activity_remain_independent(self):
         remote = self.make_generation(
             generation_id="remote-authoritative",
