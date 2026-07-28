@@ -143,7 +143,10 @@ def compile_mermaid(
             and Path(playwright_executable.stdout).is_file()
         ):
             config_path.write_text(
-                json.dumps({"executablePath": playwright_executable.stdout}),
+                json.dumps({
+                    "executablePath": playwright_executable.stdout,
+                    "args": ["--no-sandbox"],
+                }),
                 encoding="utf-8",
             )
             command.extend(["--puppeteerConfigFile", str(config_path)])
@@ -245,7 +248,10 @@ def compile_mermaid_batch(
             and Path(playwright_executable.stdout).is_file()
         ):
             config_path.write_text(
-                json.dumps({"executablePath": playwright_executable.stdout}),
+                json.dumps({
+                    "executablePath": playwright_executable.stdout,
+                    "args": ["--no-sandbox"],
+                }),
                 encoding="utf-8",
             )
             command.extend(["--puppeteerConfigFile", str(config_path)])
