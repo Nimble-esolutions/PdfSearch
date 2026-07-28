@@ -13,7 +13,10 @@ from core.management.commands.run_maintenance_jobs import _execute_local_job
 from core.maintenance_plans import (
     FORCE_CONFIRMATION,
     MaintenancePlanError,
+    MAX_SELECTION_IDS,
+    capability_reasons,
     create_plan,
+    normalize_selection,
     queue_plan,
 )
 from core.models import CustomUser, Folder, MaintenanceJob, MaintenancePlan, PDFFile
@@ -81,6 +84,71 @@ class MaintenancePlanningTests(TestCase):
         self.assertLessEqual(
             first.expires_at, first.created_at + timedelta(minutes=15, seconds=1)
         )
+
+    def test_capability_matrix_applies_independent_prerequisites(self):
+        cases = (
+            # local, force, embeddings, expected-needed, expected-selected
+            (True, True, True, "", ""),
+            (False, True, True, "bulk_reindex_disabled", "bulk_reindex_disabled"),
+            (True, False, True, "", "bulk_reindex_disabled"),
+            (True, True, False, "external_embeddings_disabled", "external_embeddings_disabled"),
+            (True, False, False, "external_embeddings_disabled", "bulk_reindex_disabled"),
+        )
+        for local, force, embeddings, needed, selected in cases:
+            with self.subTest(local=local, force=force, embeddings=embeddings):
+                with override_settings(
+                    LOCAL_INDEX_MAINTENANCE_ENABLED=local,
+                    FORCE_REINDEX_ENABLED=force,
+                    EXTERNAL_EMBEDDINGS_ENABLED=embeddings,
+                    ACTIVE_RUNTIME=None,
+                ):
+                    reasons = capability_reasons()
+                self.assertEqual(reasons["validate"], reasons["repair_indexes"])
+                self.assertEqual(reasons["reindex_needed"], needed)
+                self.assertEqual(reasons["reindex_selected"], selected)
+
+    def test_normalize_selection_rejects_inverted_date_range(self):
+        with self.assertRaisesRegex(MaintenancePlanError, "malformed_filters"):
+            normalize_selection(
+                {
+                    "folder_ids": [str(self.folder.pk)],
+                    "filter_uploaded_after": "2026-02-01",
+                    "filter_uploaded_before": "2026-01-31",
+                }
+            )
+
+    def test_normalize_selection_rejects_malformed_date(self):
+        with self.assertRaisesRegex(MaintenancePlanError, "malformed_filters"):
+            normalize_selection(
+                {
+                    "folder_ids": [str(self.folder.pk)],
+                    "filter_uploaded_after": "31-01-2026",
+                }
+            )
+
+    def test_normalize_selection_rejects_empty_or_non_numeric_scope(self):
+        with self.assertRaisesRegex(MaintenancePlanError, "empty_scope"):
+            normalize_selection({"folder_ids": ["not-a-number"]})
+
+    def test_normalize_selection_accepts_equal_date_boundary(self):
+        selection = normalize_selection(
+            {
+                "folder_ids": [str(self.folder.pk), str(self.folder.pk)],
+                "pdf_ids": ["not-a-number", str(self.pdf.pk), str(self.pdf.pk)],
+                "filter_uploaded_after": "2026-01-31",
+                "filter_uploaded_before": "2026-01-31",
+            }
+        )
+        self.assertEqual(selection["folder_ids"], [self.folder.pk])
+        self.assertEqual(selection["pdf_ids"], [self.pdf.pk])
+
+    def test_normalize_selection_rejects_oversized_id_lists(self):
+        with self.assertRaisesRegex(MaintenancePlanError, "selection_too_large"):
+            normalize_selection(
+                {
+                    "folder_ids": [str(index) for index in range(MAX_SELECTION_IDS + 1)],
+                }
+            )
 
     def test_stale_selection_is_rejected_before_queue(self):
         plan = self._plan()

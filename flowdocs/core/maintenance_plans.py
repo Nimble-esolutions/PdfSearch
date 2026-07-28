@@ -27,6 +27,7 @@ LOCAL_OPERATIONS = {
     "reindex_selected",
 }
 FORCE_CONFIRMATION = "REINDEX SELECTED"
+MAX_SELECTION_IDS = 5000
 
 
 class MaintenancePlanError(RuntimeError):
@@ -88,6 +89,13 @@ def _vault_health() -> tuple[dict, dict]:
 
 
 def capability_reasons() -> dict[str, str]:
+    """Return the server-authoritative gate reason for every local operation.
+
+    Validation and stored-index repair only need local maintenance readiness;
+    document reindexing additionally needs embeddings, while force-reindexing
+    has its own explicit authorization flag.  Keep these prerequisites
+    independent so one disabled flag cannot accidentally mask another.
+    """
     common = ""
     if getattr(settings, "ACTIVE_RUNTIME", None) is not None:
         common = "runtime_read_only"
@@ -105,20 +113,20 @@ def capability_reasons() -> dict[str, str]:
         except Exception:
             pass
 
-    reasons = {
-        "validate": common,
-        "repair_indexes": common,
-        "reindex_needed": common,
-        "reindex_selected": common,
-    }
-    if not common and not getattr(settings, "FORCE_REINDEX_ENABLED", False):
-        reasons["reindex_selected"] = "bulk_reindex_disabled"
-    elif (
-        not common
-        and not getattr(settings, "EXTERNAL_EMBEDDINGS_ENABLED", False)
-    ):
-        reasons["reindex_selected"] = "external_embeddings_disabled"
+    reasons = {operation: common for operation in LOCAL_OPERATIONS}
+    if common:
+        return reasons
+
+    # ``reindex_needed`` calls the embedding provider for missing artifacts.
+    # Force-reindexing has both this prerequisite and a separate operator gate.
+    if not getattr(settings, "EXTERNAL_EMBEDDINGS_ENABLED", False):
         reasons["reindex_needed"] = "external_embeddings_disabled"
+        reasons["reindex_selected"] = "external_embeddings_disabled"
+    if not getattr(settings, "FORCE_REINDEX_ENABLED", False):
+        # Prefer the force gate when both selected-reindex prerequisites are
+        # unavailable: it is the first explicit authorization the operator
+        # must grant, while ``reindex_needed`` remains independently gated.
+        reasons["reindex_selected"] = "bulk_reindex_disabled"
     return reasons
 
 
@@ -132,8 +140,15 @@ def _values(data, name: str) -> list[str]:
 
 
 def normalize_selection(data) -> dict:
-    folder_ids = sorted({int(value) for value in _values(data, "folder_ids") if value.isdigit()})
-    pdf_ids = sorted({int(value) for value in _values(data, "pdf_ids") if value.isdigit()})
+    raw_folder_ids = _values(data, "folder_ids")
+    raw_pdf_ids = _values(data, "pdf_ids")
+    if (
+        len(raw_folder_ids) > MAX_SELECTION_IDS
+        or len(raw_pdf_ids) > MAX_SELECTION_IDS
+    ):
+        raise MaintenancePlanError("selection_too_large")
+    folder_ids = sorted({int(value) for value in raw_folder_ids if value.isdigit()})
+    pdf_ids = sorted({int(value) for value in raw_pdf_ids if value.isdigit()})
     indexed = str(data.get("filter_indexed", "")).strip().lower()
     if indexed not in {"", "true", "false"}:
         raise MaintenancePlanError("malformed_filters", "filter_indexed")
@@ -153,13 +168,20 @@ def normalize_selection(data) -> dict:
             "uploaded_before": str(data.get("filter_uploaded_before", "")).strip(),
         },
     }
+    parsed_dates = {}
     for key in ("uploaded_after", "uploaded_before"):
         value = result["filters"][key]
         if value:
             try:
-                datetime.strptime(value, "%Y-%m-%d")
+                parsed_dates[key] = datetime.strptime(value, "%Y-%m-%d").date()
             except ValueError as exc:
                 raise MaintenancePlanError("malformed_filters", key) from exc
+    if (
+        parsed_dates.get("uploaded_after")
+        and parsed_dates.get("uploaded_before")
+        and parsed_dates["uploaded_after"] > parsed_dates["uploaded_before"]
+    ):
+        raise MaintenancePlanError("malformed_filters", "uploaded_date_range")
     if not folder_ids and not pdf_ids:
         raise MaintenancePlanError("empty_scope")
     return result
