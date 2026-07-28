@@ -13,6 +13,7 @@ from vaultops.models import ConfirmationChallenge
 
 ALLOWED_ACTIONS = {
     "activate_workspace": "ACTIVATE",
+    "rollback_runtime": "ROLLBACK",
     "promote_generation": "PROMOTE",
     "retire_generation": "RETIRE",
     "unretire_generation": "UNRETIRE",

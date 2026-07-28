@@ -164,6 +164,130 @@ def activation_request_replay(
     return existing
 
 
+def prepare_previous_runtime_rollback():
+    """Prepare a one-step rollback through the signed activation protocol."""
+    _guard_activation_enabled()
+    identity = settings.ENV_IDENTITY
+    paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    try:
+        active_pointer = read_runtime_pointer(
+            paths["active"],
+            deployment_id=identity.deployment_id,
+            signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+            runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+        )
+        previous_pointer = read_runtime_pointer(
+            paths["previous"],
+            deployment_id=identity.deployment_id,
+            signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+            runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+        )
+    except RuntimeControlError as exc:
+        raise ActivationCoordinatorError(
+            "rollback_pointer_unverified"
+        ) from exc
+    try:
+        active_generation = ArtifactGeneration.objects.get(
+            deployment_id=identity.deployment_id,
+            generation_id=active_pointer.generation_id,
+        )
+        previous_generation = ArtifactGeneration.objects.get(
+            deployment_id=identity.deployment_id,
+            generation_id=previous_pointer.generation_id,
+        )
+    except ArtifactGeneration.DoesNotExist as exc:
+        raise ActivationCoordinatorError(
+            "rollback_generation_unprojected"
+        ) from exc
+    if (
+        active_generation.origin
+        != ArtifactGeneration.Origin.LOCAL_MAINTENANCE
+        or active_generation.runtime_state
+        != ArtifactGeneration.RuntimeState.ACTIVE
+    ):
+        raise ActivationCoordinatorError(
+            "rollback_active_generation_ineligible"
+        )
+    if (
+        previous_generation.runtime_state
+        != ArtifactGeneration.RuntimeState.PREVIOUS
+        or active_generation.parent_generation_id
+        != previous_generation.generation_id
+        or active_generation.parent_manifest_digest
+        != previous_generation.manifest_digest
+        or active_pointer.manifest_digest != active_generation.manifest_digest
+        or previous_pointer.manifest_digest != previous_generation.manifest_digest
+    ):
+        raise ActivationCoordinatorError("rollback_lineage_invalid")
+    observation = RuntimePointerObservation.objects.filter(
+        deployment_id=identity.deployment_id
+    ).order_by("-observed_at").first()
+    if (
+        observation is None
+        or observation.active_generation_id != active_generation.generation_id
+        or observation.previous_generation_id
+        != previous_generation.generation_id
+        or observation.pointer_digest != active_pointer.pointer_digest
+    ):
+        raise ActivationCoordinatorError(
+            "rollback_pointer_observation_stale"
+        )
+    verify_recovery_superadmin(previous_pointer.database_path)
+    now = timezone.now()
+    workspace = (
+        RestoreWorkspace.objects.filter(
+            generation=previous_generation,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            runtime_path=str(previous_pointer.runtime_path),
+            validation_evidence__purpose="one_step_runtime_rollback",
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    evidence = {
+        "purpose": "one_step_runtime_rollback",
+        "active_generation_id": active_generation.generation_id,
+        "active_pointer_digest": active_pointer.pointer_digest,
+        "previous_pointer_digest": previous_pointer.pointer_digest,
+        "vault_authority_changed": False,
+    }
+    rehearsal = {
+        "success": True,
+        "app_release": identity.app_release_version,
+        "image_digest": identity.app_image_digest,
+        "basis": "previous_signed_runtime",
+    }
+    if workspace is None:
+        workspace = RestoreWorkspace.objects.create(
+            generation=previous_generation,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=previous_generation.manifest_digest,
+            pointer_digest=active_pointer.pointer_digest,
+            runtime_path=str(previous_pointer.runtime_path),
+            validation_evidence=evidence,
+            rehearsal_evidence=rehearsal,
+            prepared_at=now,
+            expires_at=now + timedelta(minutes=10),
+        )
+    else:
+        workspace.pointer_digest = active_pointer.pointer_digest
+        workspace.validation_evidence = evidence
+        workspace.rehearsal_evidence = rehearsal
+        workspace.prepared_at = now
+        workspace.expires_at = now + timedelta(minutes=10)
+        workspace.save(
+            update_fields=[
+                "pointer_digest",
+                "validation_evidence",
+                "rehearsal_evidence",
+                "prepared_at",
+                "expires_at",
+                "updated_at",
+            ]
+        )
+    return workspace
+
+
 def schedule_activation(
     workspace,
     *,

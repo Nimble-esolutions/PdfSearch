@@ -61,6 +61,7 @@ RUNTIME_TRANSITIONS = {
         ArtifactGeneration.RuntimeState.ROLLBACK_PENDING,
     },
     ArtifactGeneration.RuntimeState.PREVIOUS: {
+        ArtifactGeneration.RuntimeState.PENDING,
         ArtifactGeneration.RuntimeState.ACTIVE,
         ArtifactGeneration.RuntimeState.INACTIVE,
     },
