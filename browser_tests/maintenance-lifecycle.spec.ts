@@ -74,6 +74,24 @@ async function assertExpectedSearch(page: Page, query: string, language: string)
   ).toBe(true);
 }
 
+async function waitForActivationSettlement(page: Page) {
+  await expect.poll(async () => {
+    try {
+      const response = await page.request.get(
+        '/dashboard/operations/api/v1/state/',
+      );
+      if (!response.ok()) return 'state-unavailable';
+      const envelope = await response.json();
+      const pending = envelope.data?.pending_activation;
+      return pending
+        ? `${pending.state}:${pending.public_id}`
+        : 'settled';
+    } catch {
+      return 'state-unavailable';
+    }
+  }, { timeout: 120_000 }).toBe('settled');
+}
+
 test.describe('disposable maintenance lifecycle', () => {
   test.setTimeout(180_000);
   test.skip(({ browserName }) => browserName !== 'chromium');
@@ -127,6 +145,8 @@ test.describe('disposable maintenance lifecycle', () => {
       }
     }, { timeout: 120_000 }).toMatch(/^lm-/);
     await login(page, '/dashboard/operations/?section=restore');
+    await waitForActivationSettlement(page);
+    await page.reload();
 
     for (const [query, language] of [
       ['cooperative audit evidence', 'en'],
@@ -150,6 +170,8 @@ test.describe('disposable maintenance lifecycle', () => {
       }
     }, { timeout: 120_000 }).toBe('maintenance-e2e-parent');
     await login(page, '/dashboard/operations/?section=restore');
+    await waitForActivationSettlement(page);
+    await page.reload();
     for (const [query, language] of [
       ['cooperative audit evidence', 'en'],
       ['सहकारी लेखापरीक्षण पुरावा', 'mr'],
