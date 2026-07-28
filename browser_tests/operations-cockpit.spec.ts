@@ -28,16 +28,6 @@ test.describe('Operations Cockpit', () => {
     await expect(page.getByText('sync data to S3')).toHaveCount(0);
     await expect(page.locator('#job-drawer-toggle')).toHaveCount(0);
 
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(
-      results.violations.filter(
-        violation => violation.impact === 'critical' || violation.impact === 'serious',
-      ),
-    ).toEqual([]);
-  });
-
-  test('renders bounded filters without horizontal overflow', async ({ page }) => {
-    await login(page);
     const filters = page.getByRole('search', { name: 'Filter categories' });
     await expect(filters.getByLabel('Find category')).toBeVisible();
     await expect(filters.getByLabel('Search readiness')).toBeVisible();
@@ -50,5 +40,12 @@ test.describe('Operations Cockpit', () => {
       client: document.documentElement.clientWidth,
     }));
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
+
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(
+      results.violations.filter(
+        violation => violation.impact === 'critical' || violation.impact === 'serious',
+      ),
+    ).toEqual([]);
   });
 });

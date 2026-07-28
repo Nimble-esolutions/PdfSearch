@@ -527,6 +527,11 @@ body {
   border-color: #fff;
 }
 
+.admin-category-card .btn-outline-danger {
+  color: #a51d2d;
+  border-color: #a51d2d;
+}
+
 .cockpit-observed time {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
