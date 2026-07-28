@@ -104,6 +104,30 @@ Every interactive component must retain understandable static states:
 | Error/no-result | plain-language cause, retry or next action, no raw exception |
 | Admin action | permission-aware, confirmation for destructive work, success/error feedback |
 
+## Machine evidence and operator language
+
+Stable reason codes, safe-error codes, state-machine values, operation names,
+job kinds, and audit actions are backend evidence. They are not interface copy.
+Every operator-facing error or disabled control must explain, in equivalent
+authored English and Marathi:
+
+- what happened or why the control is unavailable;
+- the operational consequence; and
+- the safest next action.
+
+Dashboard, public, and ordinary-user surfaces never display internal codes.
+Authorized superadmins may reveal bounded, redacted evidence through the shared
+collapsed **Technical details** component. Machine tokens are prohibited in
+headings, badges, buttons, alerts, summaries, and screen-reader descriptions.
+Technical codes use English language and left-to-right direction even on a
+Marathi page. Generation IDs, hashes, timestamps, workspace IDs, and
+correlation IDs may remain visible when they are necessary evidence.
+
+All Dashboard and Workbench presentation resolves through
+`core.operator_presentation`. Unknown tokens use neutral review guidance and
+retain the exact token only inside Technical details; replacing underscores
+with spaces is never an acceptable explanation.
+
 Motion is utility only. Shared motion tokens are micro-interactions around
 120–160ms and surface/state transitions around 180–240ms, using opacity and
 transform rather than layout dimensions. `prefers-reduced-motion`, Save-Data,

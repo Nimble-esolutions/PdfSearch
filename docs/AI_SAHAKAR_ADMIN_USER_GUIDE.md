@@ -77,6 +77,12 @@ invalid lineage, unavailable recovery login, or activation already in
 progress. Rollback schedules the same signed supervisor protocol as activation
 and does not change remote Vault authority.
 
+Warnings and disabled controls now lead with plain-language guidance: what the
+evidence means, what remains unavailable, and what to review next. Stable
+support codes are not ordinary interface labels. Superadmins can expand
+**Technical details** when a support or audit workflow needs the exact,
+redacted code. Do not treat the code alone as remediation advice.
+
 All critical Workbench actions are ordinary server-rendered forms and remain
 available without JavaScript. Refresh the page to update evidence when
 JavaScript is disabled. The browser receives only redacted profile and lease

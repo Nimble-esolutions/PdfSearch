@@ -14,13 +14,20 @@ documentation.
 1. Read [`docs/design/AI_SAHAKAR_UI_CONTRACT.md`](../../docs/design/AI_SAHAKAR_UI_CONTRACT.md).
 2. Inspect the existing template, CSS, JavaScript, locale, and browser tests
    before editing. Preserve user changes and the existing search contract.
-3. State the affected component, responsive breakpoints, states, locale copy,
+3. Inventory every reason code, safe error, state, operation, job kind, audit
+   action, and result that the changed surface can expose. Resolve each through
+   `core.operator_presentation`; do not infer copy from the token.
+4. State the affected component, responsive breakpoints, states, locale copy,
    accessibility behavior, and performance impact in the PR or design note.
-4. Implement the smallest contextual enhancement using existing tokens and
+5. Implement the smallest contextual enhancement using existing tokens and
    Django patterns. Do not introduce a frontend framework or animation library.
-5. Verify the affected English, Marathi, mobile, desktop, keyboard, reduced
+6. Review equivalent authored English and Marathi meaning, consequence, and
+   next-action copy. Scan visible text and accessibility output for machine
+   tokens, then expand Technical details and verify the exact bounded code is
+   copyable, LTR, and redacted.
+7. Verify the affected English, Marathi, mobile, desktop, keyboard, reduced
    motion, source, loading, error, and admin states.
-6. Update the developer/user guide or contract when behavior or rules change.
+8. Update the developer/user guide or contract when behavior or rules change.
 
 ## Non-negotiable guardrails
 
@@ -34,6 +41,8 @@ documentation.
   OpenAI policy, data lifecycle, RustFS, writer, or scheduler behavior for a UI
   task.
 - Do not claim visual or browser validation without executing it.
+- Raw `reason_code`, `safe_error_code`, error summaries, protection/blocking
+  reasons, and state-machine values never become primary copy.
 
 ## Minimum review commands
 
@@ -41,6 +50,7 @@ documentation.
 git diff --check
 python manage.py check
 msgfmt --check flowdocs/locale/mr/LC_MESSAGES/django.po -o /tmp/django-mr.mo
+python3 scripts/ci/validate_operator_language.py
 node --check flowdocs/core/static/main/js/search.js
 ```
 

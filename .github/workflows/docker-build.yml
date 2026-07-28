@@ -110,6 +110,8 @@ jobs:
         run: |
           python3 -m unittest scripts.ci.test_docs_contract
           python3 scripts/ci/docs_contract.py
+          python3 -m unittest scripts.ci.test_operator_language
+          python3 scripts/ci/validate_operator_language.py
 
       - name: Validate Dockerfile
         run: docker build --check -f Dockerfile .

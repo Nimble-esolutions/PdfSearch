@@ -29,6 +29,26 @@ accessibility, or performance without changing the protected direction.
 Use existing Django partials, translation tags, `json_script`, and CSS tokens.
 Do not copy production data or secrets into fixtures.
 
+## Operator presentation API
+
+`flowdocs/core/operator_presentation.py` is the sole presentation boundary for
+Dashboard and Workbench machine evidence. Keep `reason_code`,
+`safe_error_code`, state, operation, and job fields stable. Add the adjacent
+`presentation` or `*_label` fields by calling `decorate_operator_state`; JSON
+responses keep the code and add a sibling presentation object.
+
+Templates render guidance with:
+
+```django
+{% include "components/operator_evidence.html" with
+  presentation=item.presentation technical_code=item.reason_code only %}
+```
+
+The component presents title, explanation, consequence, and action first. It
+places the exact code in collapsed, LTR Technical details. Unknown codes use
+neutral review guidance and must never be formatted by replacing underscores.
+Register new UI reasons with authored English and Marathi copy before use.
+
 ## Safe UI change workflow
 
 1. Inspect the current implementation and the relevant browser tests.
@@ -54,6 +74,8 @@ git diff --check
 python manage.py check
 python manage.py makemigrations --check --dry-run
 msgfmt --check flowdocs/locale/mr/LC_MESSAGES/django.po -o /tmp/django-mr.mo
+python3 -m unittest scripts.ci.test_operator_language
+python3 scripts/ci/validate_operator_language.py
 node --check flowdocs/core/static/main/js/search.js
 ```
 

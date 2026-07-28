@@ -1,5 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import {
+  expectNoVisibleMachineTokens,
+  expectTechnicalEvidence,
+} from './helpers/operator-language';
 
 const username = 'ci-admin';
 const password = 'ci-only-password-not-for-production';
@@ -40,6 +44,11 @@ test.describe('Vault Operations Workbench', () => {
     await expect(page.locator('[data-summary="remote"]')).toBeVisible();
     await expect(page.locator('link[href*="vendor/bootstrap/5.3.0"]')).toHaveCount(1);
     expect(externalRequests).toEqual([]);
+    await expectNoVisibleMachineTokens(page);
+    const firstTechnicalCode = (
+      await page.locator('details.operator-evidence code').first().textContent()
+    )?.trim();
+    if (firstTechnicalCode) await expectTechnicalEvidence(page, firstTechnicalCode);
 
     const results = await new AxeBuilder({ page }).analyze();
     expect(
@@ -51,6 +60,7 @@ test.describe('Vault Operations Workbench', () => {
     await switchLanguage(page, 'mr');
     await expect(page.getByRole('heading', { name: 'तिजोरी संचालन कार्यपटल' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'अधिकृत स्थिती तुलना' })).toBeVisible();
+    await expectNoVisibleMachineTokens(page);
     await switchLanguage(page, 'en');
 
     await page.goto('/dashboard/operations/?section=retention');

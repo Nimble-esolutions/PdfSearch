@@ -110,4 +110,11 @@ production data used:              false
 - Object-store capability probe results via `object_store_capabilities.py`.
 - Global writer status display via `global_writer.py`.
 
-## Verdict: LOCAL UI/UX VALIDATED
+## Historical limitation
+
+This audit predates the operator-language contract. It did not test visible
+machine-token leakage, collapsed technical evidence, unknown-code fallbacks, or
+English/Marathi reason-copy equivalence. Its visual findings remain historical
+evidence and must not be treated as validation of current operator messaging.
+
+## Verdict: HISTORICAL LOCAL UI/UX SNAPSHOT

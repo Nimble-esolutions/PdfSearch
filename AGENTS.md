@@ -86,6 +86,13 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   succession, prefer an integration branch: merge all PRs into it, resolve
   conflicts once, run the full suite, then fast-forward `dev`. This avoids
   the N×N rebase matrix where each merge forces rebasing every remaining PR.
+- **Operator language boundary:** Dashboard and Workbench UI changes must
+  resolve machine reasons, states, job kinds, operations, and audit values
+  through `core.operator_presentation` and render codes only through
+  `components/operator_evidence.html`. Never interpolate raw diagnostic codes
+  or create user copy by replacing underscores. Run
+  `python3 scripts/ci/validate_operator_language.py` for every operator UI
+  change and preserve equivalent authored English/Marathi guidance.
 
 ## Local Validation
 

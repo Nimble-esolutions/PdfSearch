@@ -110,3 +110,9 @@ with a degraded local posture assertion and a healthy test-fixture posture.
 
 Every new typed degraded state must define an operator explanation and a safe
 destination before it is allowed into the Workbench envelope.
+# Successor note
+
+Implementation improved readiness structure but did not complete presentation
+quality: raw machine reasons and state tokens remained visible in multiple
+Workbench sections. Plan 017 supersedes that incomplete operator-language
+portion while preserving this plan's backend readiness and remediation work.
