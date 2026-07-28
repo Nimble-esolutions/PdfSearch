@@ -121,7 +121,6 @@ if [ "$DATA_BOOTSTRAP_MODE" != "empty" ] && [ "$DATA_BOOTSTRAP_MODE" != "bootstr
     cp -a "$INIT_FAISS/." "$FAISS_DIR/"
 fi
 
-TIMESTAMP=$(date +%F_%H%M%S)
 if [ -s "$DB_PATH" ]; then
     echo "[db] Running integrity check..."
     INTEGRITY=$(sqlite3 "$DB_PATH" "PRAGMA integrity_check")
@@ -131,16 +130,6 @@ if [ -s "$DB_PATH" ]; then
     fi
     echo "[db] Integrity check: ok"
 
-    BACKUP_FILE="$BACKUP_DIR/db_backup_$TIMESTAMP.sqlite3"
-    echo "[backup] Creating consistent SQLite snapshot"
-    sqlite3 "$DB_PATH" ".backup '$BACKUP_FILE'"
-
-    BACKUP_OK=$(sqlite3 "$BACKUP_FILE" "PRAGMA integrity_check")
-    if [ "$BACKUP_OK" != "ok" ]; then
-        echo "[backup] WARNING: emergency backup integrity check failed: $BACKUP_OK" >&2
-    else
-        echo "[backup] Emergency backup verified: ok"
-    fi
 fi
 
 if [ -s "$CONTROL_DB_PATH" ]; then
@@ -150,12 +139,17 @@ if [ -s "$CONTROL_DB_PATH" ]; then
         echo "[control] FATAL: control database integrity check failed: $CONTROL_INTEGRITY" >&2
         exit 1
     fi
-    CONTROL_BACKUP_FILE="$BACKUP_DIR/control_backups/control_backup_$TIMESTAMP.sqlite3"
-    sqlite3 "$CONTROL_DB_PATH" ".backup '$CONTROL_BACKUP_FILE'"
-    echo "[control] Stable control database backup verified"
 fi
 
 cd /app/flowdocs
+
+PENDING_MIGRATIONS=$(python manage.py showmigrations --plan | grep -c '\[ \]' || true)
+if [ "$PENDING_MIGRATIONS" -gt 0 ] && [ -s "$DB_PATH" ]; then
+    echo "[recovery] Pending migrations detected; creating required recovery set"
+    python manage.py emergency_db create --reason pre-migration
+else
+    echo "[recovery] No pending migrations; no restart backup required"
+fi
 
 if [ "${RUN_JSON_MIGRATIONS:-0}" = "1" ] && [ -x /usr/local/bin/apply_sqlite_json.py ]; then
     echo "[migrate] Applying explicit JSON migrations"
@@ -178,6 +172,7 @@ else
 fi
 echo "[migrate] Running stable control database migrations"
 python manage.py migrate --database control --noinput
+python manage.py maintenance_preflight
 
 echo "[db] Running post-migration integrity check..."
 POST_INTEGRITY=$(sqlite3 "$DB_PATH" "PRAGMA integrity_check")

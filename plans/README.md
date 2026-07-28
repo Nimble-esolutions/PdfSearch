@@ -1,6 +1,6 @@
 # PdfSearch implementation roadmap
 
-Reviewed against commit `f742b59` on 2026-07-26. These files are handoff
+Reviewed against commit `6c9a262` on 2026-07-28. These files are handoff
 contracts for future developers and AI agents. Read the selected plan fully,
 run its drift check, and stop when a stated assumption is false.
 
@@ -27,6 +27,10 @@ run its drift check, and stop when a stated assumption is false.
 | 007 | Reconcile public source references, sharing, and evidence UX | P1 | S/M | 005, 006 gate | RECONCILE |
 | 011 | Establish immutable evidence packs and reconciliation | P1 | M | 006 gate | TODO |
 | 012 | Add compatibility seams and agent-safe capabilities | P1 | M | 011 | TODO |
+| 013 | Restore task-first Operations Cockpit hierarchy | P1 | M | — | DONE |
+| 014 | Correct maintenance capability gates and filter validation | P1 | M | 013 | DONE |
+| 015 | Make Workbench readiness failures actionable | P1 | M | 013, 014 | DONE |
+| 016 | Bound maintenance read models and verify full workflow | P2 | M | 014, 015 | DONE* |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -41,6 +45,18 @@ run its drift check, and stop when a stated assumption is false.
                                            │
                                            v
                                     012 compatibility seams
+                                           │
+                                           v
+                                013 cockpit hierarchy
+                                           │
+                                           v
+                                014 maintenance gates
+                                           │
+                                           v
+                                015 readiness remediation
+                                           │
+                                           v
+                                016 bounded read model
                                       │              │
                                       v              v
                            008 custody/database    009 retrieval benchmark
@@ -123,3 +139,27 @@ changes.
   civic queries require a measured lexical/semantic hybrid benchmark first.
 - Replacing the server-rendered UI with a SPA: no demonstrated user or
   operational benefit; preserve small, progressively enhanced JavaScript.
+
+## 2026-07-28 local visual audit findings
+
+- Repeated maintenance CTAs and a large pre-task chrome area delay the actual
+  Dashboard/Workbench work surface; captured in Plan 013.
+- `capability_reasons()` uses an `if/elif` precedence chain, so independent
+  embedding and force-reindex prerequisites are not evaluated as a matrix;
+  inverted date ranges are also accepted; captured in Plan 014.
+- The local Workbench exposes `profile_unavailable`, unknown authority, and
+  disabled flags without a direct, typed remediation destination; captured in
+  Plan 015.
+- The maintenance read model scans local artifacts during render and stores
+  unbounded matching PDF IDs in previews; end-to-end workflow coverage does not
+  prove bounded behavior; captured in Plan 016.
+
+These findings were observed against the local authenticated deployment at
+`http://127.0.0.1:8000` and verified against source at commit `6c9a262`. The
+visual audit did not modify application source or enable production mutations.
+
+`DONE*` means implementation and focused Django verification are complete; the
+Playwright browser gate was attempted but blocked by the host Chromium
+Mach-port sandbox (`KERN_SUCCESS` permission failure), not by an application
+assertion. Re-run the browser and Compose gates in CI or an approved browser
+runtime before marking the release fully verified.

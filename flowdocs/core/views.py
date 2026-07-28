@@ -3,6 +3,7 @@ import functools
 import hashlib
 import logging
 import os
+import uuid
 import time
 from functools import wraps
 
@@ -66,8 +67,14 @@ from .maintenance import (
     queue_job,
     restore_pdf,
 )
+from .maintenance_plans import (
+    LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS,
+    MaintenancePlanError,
+    create_plan as create_maintenance_plan,
+)
 from .forms import UploadForm
 from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
+from .services.dashboard_read_model import build_dashboard_state
 from datetime import datetime
 from .utils import (
     detect_language,
@@ -832,36 +839,32 @@ def restore_pdf_view(request, pdf_id):
 def folder_operations(request, folder_id):
     folder = get_object_or_404(Folder, pk=folder_id)
     operation = request.POST.get("operation", "").strip()
-
-    if operation == "repair_stored_index":
-        job = queue_job(
-            kind="repair_indexes",
-            requested_by=request.user,
-            folders=[folder],
-            scope={"folder_id": folder.pk},
-        )
-        messages.success(request, f"Repair job queued: {job.public_id}.")
+    mapped = {
+        "repair_stored_index": "repair_indexes",
+        "reprocess_needed": "reindex_needed",
+        "reprocess_all": "reindex_selected",
+    }.get(operation)
+    if mapped is None:
+        messages.error(request, "Unknown folder maintenance action.")
         return redirect("dashboard_folder", folder_id=folder.pk)
-
-    if operation in {"reprocess_needed", "reprocess_all"}:
-        candidates = PDFFile.objects.filter(folder=folder).order_by("pk")
-        if operation == "reprocess_needed":
-            candidates = candidates.filter(indexed=False)
-        candidates = list(candidates)
-        if not candidates:
-            messages.info(request, "No documents matched that maintenance action.")
-            return redirect("dashboard_folder", folder_id=folder.pk)
-        job = queue_job(
-            kind={"reprocess_needed": "reindex_needed", "reprocess_all": "reindex_all"}[operation],
-            requested_by=request.user,
-            pdfs=candidates,
-            scope={"folder_id": folder.pk},
+    try:
+        plan = create_maintenance_plan(
+            operation=mapped,
+            data={"folder_ids": [folder.pk]},
+            actor=request.user,
+            idempotency_key=f"folder:{folder.pk}:{uuid.uuid4()}",
         )
-        messages.success(request, f"Reindex job queued for {len(candidates)} document(s): {job.public_id}.")
+    except MaintenancePlanError as exc:
+        messages.error(request, exc.reason_code.replace("_", " "))
         return redirect("dashboard_folder", folder_id=folder.pk)
-
-    messages.error(request, "Unknown folder maintenance action.")
-    return redirect("dashboard_folder", folder_id=folder.pk)
+    messages.success(
+        request,
+        f"Maintenance preview created for {plan.preview['pdf_count']} "
+        "document(s); confirm it in Documents & Indexes.",
+    )
+    return redirect(
+        f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}"
+    )
 
 # ---------------- DPDA / Legal Pages ----------------
 LEGAL_NAVIGATION = (
@@ -973,22 +976,8 @@ def dashboard(request, folder_id=None):
         )
 
     # else: folders list
-    category_query = (request.GET.get("category_q") or "").strip()[:100]
-    folders, cockpit = admin_cockpit_context(request.user, category_query=category_query)
-    cockpit["maintenance_jobs"] = list(
-        MaintenanceJob.objects.select_related("requested_by").order_by("-created_at")[:8]
-    ) if is_superadmin_user(request.user) else []
-    cockpit["generations"] = list(ArtifactGeneration.objects.order_by("-created_at")[:12]) if is_superadmin_user(request.user) else []
-    if is_superadmin_user(request.user) and os.getenv("ARTIFACT_VAULT_ENABLED", "0").lower() in {"1", "true", "yes"}:
-        try:
-            cockpit["vault_generations"] = [
-                item.key.rsplit("/", 1)[-1][:-5]
-                for item in ArtifactVault().list_manifests()
-            ]
-        except ArtifactVaultError:
-            cockpit["vault_generations"] = []
-    else:
-        cockpit["vault_generations"] = []
+    cockpit = build_dashboard_state(user=request.user, data=request.GET)
+    folders = cockpit["category_page"].object_list
     return render(
         request,
         "dashboard.html",
@@ -996,7 +985,7 @@ def dashboard(request, folder_id=None):
             "folders": folders,
             "cockpit": cockpit,
             "role": role,
-            "category_query": category_query,
+            "category_query": cockpit["filters"].query,
             "breadcrumb_items": [
                 {"label": gettext("Dashboard"), "url": None},
             ],
@@ -1060,97 +1049,58 @@ def _parse_bulk_filters(request):
 @superadmin_required
 @require_POST
 def bulk_maintenance(request):
-    """Queue one bulk operation from the cockpit without doing work in Gunicorn."""
+    """Reject the retired direct-mutation and generation control path."""
     operation = request.POST.get("operation", "").strip()
-    if operation not in {"reindex_needed", "reindex_all", "repair_indexes", "validate", "sync_generation", "restore_generation"}:
-        messages.error(request, "Unknown maintenance operation.")
-        return redirect("dashboard")
-
-    folder_ids = [int(value) for value in request.POST.getlist("folder_ids") if value.isdigit()]
-    folders = Folder.objects.filter(pk__in=folder_ids)
-
-    filter_q, filter_params = _parse_bulk_filters(request)
-
-    if operation == "sync_generation":
-        job = queue_job(kind=operation, requested_by=request.user, scope={"folder_ids": folder_ids, "filters": filter_params})
-        messages.success(request, f"S3 generation sync queued: {job.public_id}.")
-        return redirect("dashboard")
-    if operation == "restore_generation":
-        generation_id = (
-            request.POST.get("generation_id", "").strip()
-            or request.POST.get("generation_choice", "").strip()
+    if operation in {"sync_generation", "restore_generation"}:
+        messages.error(
+            request,
+            "operation_replaced: use Vault Operations for publication or restore.",
         )
-        if not generation_id:
-            messages.error(request, "Enter an immutable generation id before staging a restore.")
-            return redirect("dashboard")
-        job = queue_job(
-            kind=operation,
-            requested_by=request.user,
-            scope={},
-            options={"generation_id": generation_id},
+        return redirect(f"{reverse('operations_panel')}?section=overview")
+    else:
+        messages.error(
+            request,
+            "operation_replaced: create and confirm a Documents & Indexes preview.",
         )
-        messages.success(request, f"Generation pull queued for staging: {job.public_id}.")
-        return redirect("dashboard")
-    if operation == "repair_indexes":
-        items = list(folders)
-        job = queue_job(kind=operation, requested_by=request.user, folders=items, scope={"folder_ids": folder_ids, "filters": filter_params})
-    else:
-        pdfs = PDFFile.objects.filter(folder_id__in=folder_ids).order_by("pk")
-        if filter_q:
-            pdfs = pdfs.filter(filter_q)
-        if operation == "reindex_needed":
-            pdfs = pdfs.filter(indexed=False)
-        items = list(pdfs)
-        job = queue_job(kind=operation, requested_by=request.user, pdfs=items, scope={"folder_ids": folder_ids, "filters": filter_params})
-    if not items:
-        messages.info(request, "No documents or categories matched that maintenance operation.")
-    else:
-        messages.success(request, f"{operation.replace('_', ' ').title()} job queued for {len(items)} item(s).")
-    return redirect("dashboard")
+        return redirect(f"{reverse('operations_panel')}?section=maintenance")
 
 
 @superadmin_required
 def bulk_filter_preview(request):
-    """Return a JSON count of PDFs matching the current filter for the selected folders."""
-    folder_ids = [int(value) for value in request.GET.getlist("folder_ids") if value.isdigit()]
-    if not folder_ids:
-        return JsonResponse({"count": 0, "folders": 0})
-    pdfs = PDFFile.objects.filter(folder_id__in=folder_ids)
-    filter_q, _ = _parse_bulk_filters(request)
-    if filter_q:
-        pdfs = pdfs.filter(filter_q)
-    indexed_count = pdfs.filter(indexed=True).count()
-    return JsonResponse({
-        "count": pdfs.count(),
-        "folders": len(folder_ids),
-        "indexed": indexed_count,
-        "needs_index": pdfs.count() - indexed_count,
-    })
+    """Reject the retired ad-hoc preview path without calculating authority."""
+    return JsonResponse(
+        {
+            "status": "retired",
+            "error": "operation_replaced",
+            "reason_code": "operation_replaced",
+            "detail": "Create a durable preview in Documents & Indexes.",
+            "recommended_action": "create_maintenance_plan",
+            "workbench_url": (
+                f"{reverse('operations_panel')}?section=maintenance"
+            ),
+        },
+        status=410,
+    )
 
 
 @superadmin_required
 @require_POST
 def maintenance_job_action(request, job_id):
-    """Cancel active work or requeue a failed job from the cockpit."""
-    job = get_object_or_404(MaintenanceJob, public_id=job_id)
-    action = request.POST.get("action", "").strip()
-    if action == "cancel" and job.status in {"queued", "running"}:
-        job.status = "cancel_requested" if job.status == "running" else "cancelled"
-        if job.status == "cancelled":
-            job.finished_at = timezone.now()
-        job.save(update_fields=["status", "finished_at", "updated_at"])
-        messages.success(request, f"Maintenance job {job.public_id} cancellation recorded.")
-    elif action == "retry" and job.status == "failed":
-        job.status = "queued"
-        job.error_summary = ""
-        job.finished_at = None
-        job.failed_items = 0
-        job.items.filter(status="failed").update(status="queued", error_code="", error_message="", finished_at=None)
-        job.save(update_fields=["status", "error_summary", "finished_at", "failed_items", "updated_at"])
-        messages.success(request, f"Maintenance job {job.public_id} requeued.")
-    else:
-        messages.info(request, "That job cannot accept this action in its current state.")
-    return redirect("dashboard")
+    """Reject direct mutation; guarded Workbench routes own cancel and retry."""
+    return JsonResponse(
+        {
+            "status": "retired",
+            "error": "operation_replaced",
+            "reason_code": "operation_replaced",
+            "detail": "Use the guarded Documents & Indexes job controls.",
+            "recommended_action": "review_workbench_job",
+            "job_id": str(job_id),
+            "workbench_url": (
+                f"{reverse('operations_panel')}?section=maintenance&job={job_id}"
+            ),
+        },
+        status=410,
+    )
 
 @superadmin_required
 def job_audit_trail(request, job_id):
@@ -1285,7 +1235,8 @@ def job_status(request, job_id):
 def active_jobs(request):
     """Return all queued/running/cancel_requested jobs as JSON."""
     jobs = MaintenanceJob.objects.filter(
-        status__in=("queued", "running", "cancel_requested")
+        status__in=("queued", "running", "cancel_requested"),
+        kind__in=sorted(LOCAL_MAINTENANCE_JOB_KINDS),
     ).order_by("-created_at")[:20]
     return JsonResponse({
         "jobs": [_job_status_json(job) for job in jobs],
@@ -1696,42 +1647,8 @@ def search_query(request):
 
 @superadmin_required
 def operations_panel(request):
-    """Environment and Data Lifecycle operations dashboard."""
-    env_identity = getattr(settings, "ENV_IDENTITY", None)
-    ctx = {"title": "Operations \u2014 Data Lifecycle"}
-    if env_identity:
-        ctx.update({
-            "app_env": env_identity.app_env.value,
-            "dataset_id": env_identity.dataset_id,
-            "authoritative_dataset_id": env_identity.authoritative_dataset_id,
-            "restore_source_dataset_id": env_identity.restore_source_dataset_id,
-            "production_source_id": env_identity.production_source_id,
-            "deployment_id": env_identity.deployment_id,
-            "instance_id": env_identity.instance_id[:20] if env_identity.instance_id else "",
-            "backup_role": env_identity.backup_role.value,
-            "backup_sync_mode": env_identity.backup_sync_mode.value,
-            "scheduler_enabled": env_identity.maintenance_scheduler_enabled,
-            "data_mode": env_identity.data_mode.value,
-            "side_effects": env_identity.external_side_effects.value,
-            "build_digest": (env_identity.build_image_digest or env_identity.app_image_digest)[:24] if env_identity.app_image_digest else "",
-            "app_release": env_identity.app_release_version or env_identity.build_release_version,
-            "digest_mismatch": bool(env_identity.build_image_digest and env_identity.app_image_digest and env_identity.build_image_digest != env_identity.app_image_digest),
-        })
-    try:
-        local_gen = ArtifactGeneration.objects.filter(status="active").order_by("-promoted_at").first()
-        if local_gen:
-            ctx["local_generation"] = local_gen.generation_id
-            age = timezone.now() - local_gen.created_at
-            ctx["local_generation_days"] = age.days
-            ctx["local_generation_hours"] = age.seconds // 3600
-    except Exception:
-        pass
-    try:
-        from .activation_journal import activation_status
-        ctx["activation_status"] = activation_status()
-    except Exception:
-        pass
-    return render(request, "dashboard_operations.html", {**ctx, "breadcrumb_items": [{"label": gettext("Dashboard"), "url": reverse("dashboard")}, {"label": gettext("Operations"), "url": None}]})
+    """Compatibility alias retained for legacy callers."""
+    return redirect(f"{reverse('operations_panel')}?section=overview")
 def health_data(request):
     """Public: return coarse data readiness status only."""
     return JsonResponse({"status": _data_readiness_check()})
@@ -1784,8 +1701,8 @@ def operations_lease(request):
 
 @superadmin_required
 def s3_operations_view(request):
-    """Redirect the retired mixed-control page to the truthful workbench."""
-    return redirect(f"{reverse('operations_panel')}?section=generations")
+    """Redirect the retired mixed-control page to the local maintenance hub."""
+    return redirect(f"{reverse('operations_panel')}?section=maintenance")
 
 
 ALLOWED_SETTING_KEYS = {

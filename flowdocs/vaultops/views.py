@@ -15,6 +15,14 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from core.views import superadmin_required
+from core.maintenance_plans import (
+    MaintenancePlanError,
+    create_plan as create_maintenance_plan,
+    queue_plan as queue_maintenance_plan,
+    workbench_maintenance_state,
+)
+from core.models import MaintenanceAuditEvent, MaintenanceJob, MaintenancePlan
+from core.emergency_recovery import create_set as create_recovery_set
 from vaultops.models import (
     ArtifactGeneration,
     GarbageCollectionPlan,
@@ -38,6 +46,7 @@ from vaultops.services.profiles import (
 )
 from vaultops.services.read_model import (
     build_workbench_state,
+    enrich_workbench_readiness,
     generation_state_digest,
     workspace_state_digest,
 )
@@ -62,6 +71,7 @@ SECTIONS = {
     "jobs",
     "retention",
     "configuration",
+    "maintenance",
 }
 IDEMPOTENCY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,159}$")
 MUTATION_RATE_LIMIT = 30
@@ -284,6 +294,20 @@ def workbench(request):
     state = build_workbench_state(
         profile_key=request.GET.get("profile") or None
     )
+    state["maintenance"] = workbench_maintenance_state(
+        selected_plan_id=request.GET.get("plan", ""),
+        selected_job_id=request.GET.get("job", ""),
+    )
+    enrich_workbench_readiness(state)
+    state["vault_state_version"] = state["state_version"]
+    state["maintenance_state_version"] = state["maintenance"]["state_version"]
+    state["combined_state_version"] = hashlib.sha256(
+        (
+            state["vault_state_version"]
+            + ":"
+            + state["maintenance_state_version"]
+        ).encode("utf-8")
+    ).hexdigest()
     return render(
         request,
         "vaultops/workbench.html",
@@ -306,6 +330,20 @@ def state_api(request):
     state = build_workbench_state(
         profile_key=request.GET.get("profile") or None
     )
+    state["maintenance"] = workbench_maintenance_state(
+        selected_plan_id=request.GET.get("plan", ""),
+        selected_job_id=request.GET.get("job", ""),
+    )
+    enrich_workbench_readiness(state)
+    state["vault_state_version"] = state["state_version"]
+    state["maintenance_state_version"] = state["maintenance"]["state_version"]
+    state["combined_state_version"] = hashlib.sha256(
+        (
+            state["vault_state_version"]
+            + ":"
+            + state["maintenance_state_version"]
+        ).encode("utf-8")
+    ).hexdigest()
     return _api_response(
         status=state["status"],
         reason_code=state["reason_code"],
@@ -314,6 +352,153 @@ def state_api(request):
         state_version=state["state_version"],
         data=state,
     )
+
+
+@superadmin_required
+@require_POST
+def maintenance_plan_create(request):
+    try:
+        idempotency_key = _request_idempotency_key(
+            request, require_admin_gate=False
+        )
+        plan = create_maintenance_plan(
+            operation=_request_value(request, "operation", "").strip(),
+            data=_request_data(request),
+            actor=request.user,
+            idempotency_key=idempotency_key,
+        )
+        if _wants_json(request):
+            return _api_response(
+                status="previewed",
+                reason_code="maintenance_plan_created",
+                state_version=plan.state_version,
+                data={
+                    "plan_id": str(plan.public_id),
+                    "operation": plan.operation,
+                    "preview": plan.preview,
+                    "expires_at": plan.expires_at,
+                    "external_embeddings_required": (
+                        plan.external_embeddings_required
+                    ),
+                },
+            )
+        messages.success(
+            request,
+            f"Preview ready: {plan.preview['pdf_count']} document(s), "
+            f"{plan.preview['folder_count']} folder(s).",
+        )
+        return HttpResponseRedirect(
+            f"{reverse('operations_panel')}?section=maintenance"
+            f"&plan={plan.public_id}"
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="maintenance")
+
+
+@superadmin_required
+@require_POST
+def maintenance_plan_queue(request, plan_id):
+    try:
+        _enforce_mutation_rate_limit(request)
+        plan = get_object_or_404(MaintenancePlan, public_id=plan_id)
+        supplied_version = _request_value(request, "state_version", "")
+        if supplied_version != plan.state_version:
+            raise MaintenancePlanError("stale_state_version")
+        job = queue_maintenance_plan(
+            plan=plan,
+            actor=request.user,
+            confirmation=_request_value(request, "typed_confirmation", ""),
+        )
+        return _mutation_success(
+            request,
+            section="maintenance",
+            reason_code="maintenance_job_queued",
+            message=f"Local maintenance job {job.public_id} queued.",
+            data={"job_id": str(job.public_id), "plan_id": str(plan.public_id)},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="maintenance")
+
+
+def _local_job_state_version(job):
+    payload = {
+        "public_id": str(job.public_id),
+        "status": job.status,
+        "completed_items": job.completed_items,
+        "failed_items": job.failed_items,
+        "updated_at": job.updated_at.isoformat(),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _local_job_action(request, job_id, *, action):
+    try:
+        _enforce_mutation_rate_limit(request)
+        job = get_object_or_404(
+            MaintenanceJob,
+            public_id=job_id,
+            kind__in={"validate", "repair_indexes", "reindex_needed", "reindex_selected"},
+        )
+        supplied_version = _request_value(request, "state_version", "")
+        if supplied_version != _local_job_state_version(job):
+            raise MaintenancePlanError("stale_state_version")
+        if action == "cancel" and job.status in {"queued", "running"}:
+            job.status = (
+                "cancel_requested" if job.status == "running" else "cancelled"
+            )
+            if job.status == "cancelled":
+                job.finished_at = timezone.now()
+            job.save(update_fields=["status", "finished_at", "updated_at"])
+            event_type = "cancelled"
+            reason_code = "maintenance_job_cancellation_recorded"
+        elif action == "retry" and job.status == "failed":
+            job.status = "queued"
+            job.error_summary = ""
+            job.finished_at = None
+            job.failed_items = 0
+            job.items.filter(status="failed").update(
+                status="queued",
+                error_code="",
+                error_message="",
+                finished_at=None,
+            )
+            job.save(update_fields=[
+                "status", "error_summary", "finished_at", "failed_items",
+                "updated_at",
+            ])
+            event_type = "retried"
+            reason_code = "maintenance_job_requeued"
+        else:
+            raise MaintenancePlanError("maintenance_job_action_not_allowed")
+        MaintenanceAuditEvent.objects.create(
+            job=job,
+            actor=request.user,
+            event_type=event_type,
+            payload={"source": "vault_workbench"},
+        )
+        return _mutation_success(
+            request,
+            section="maintenance",
+            reason_code=reason_code,
+            message=f"Local maintenance job {job.public_id} updated.",
+            data={"job_id": str(job.public_id), "status": job.status},
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="maintenance")
+
+
+@superadmin_required
+@require_POST
+def maintenance_job_cancel(request, job_id):
+    return _local_job_action(request, job_id, action="cancel")
+
+
+@superadmin_required
+@require_POST
+def maintenance_job_retry(request, job_id):
+    return _local_job_action(request, job_id, action="retry")
 
 
 @superadmin_required
@@ -1053,6 +1238,7 @@ def schedule_activation_view(request, workspace_id):
             RestoreWorkspace.objects.select_related("generation"),
             public_id=workspace_id,
         )
+        recovery_set = create_recovery_set("pre-activation")
         with transaction.atomic(using="control"):
             digest = workspace_state_digest(workspace)
             _consume(
@@ -1066,6 +1252,17 @@ def schedule_activation_view(request, workspace_id):
                 actor_id=request.user.pk,
                 actor_name=request.user.get_username(),
                 confirmed=True,
+            )
+            append_event(
+                action="activation_recovery_set_verified",
+                result="verified",
+                correlation_id=uuid.uuid4(),
+                actor_id=request.user.pk,
+                actor_name=request.user.get_username(),
+                evidence={
+                    "workspace_id": str(workspace.public_id),
+                    "recovery_set_id": recovery_set["set_id"],
+                },
             )
         return _mutation_success(
             request,

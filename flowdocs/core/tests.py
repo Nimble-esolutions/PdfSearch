@@ -26,8 +26,9 @@ from .forms import UploadForm
 from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
-from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, ArtifactGeneration, ArtifactValidation, SiteSetting
+from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
+from .maintenance_plans import queue_plan
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat, HEARTBEAT_FILE
 from .views import _parse_bulk_filters
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
@@ -322,7 +323,7 @@ class RegistrationSecurityTests(TestCase):
         response = self.client.get(reverse("vault_operations"))
         self.assertRedirects(
             response,
-            f"{reverse('operations_panel')}?section=generations",
+            f"{reverse('operations_panel')}?section=maintenance",
             fetch_redirect_response=False,
         )
 
@@ -982,10 +983,10 @@ class DashboardTests(TestCase):
         response = self.client.get(reverse("dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Categories")
         self.assertContains(response, "Operations Cockpit")
-        self.assertContains(response, "Dispatch Board")
-        self.assertContains(response, "Index Debt Queue")
+        self.assertContains(response, "Needs attention")
+        self.assertContains(response, "Category Yard")
+        self.assertContains(response, "No immediate action required")
         self.assertNotContains(response, "Safety Gates")
 
     def test_dashboard_renders_marathi_cockpit_labels(self):
@@ -1001,9 +1002,6 @@ class DashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "संचालन नियंत्रण कक्ष")
         self.assertContains(response, "श्रेणी कार्यक्षेत्र")
-        self.assertContains(response, "प्रेषण फलक")
-        self.assertContains(response, "अनुक्रमण थकबाकी रांग")
-        self.assertContains(response, "रिकामा विभाग")
 
     def test_dashboard_renders_flash_messages_with_accessible_dismissal(self):
         self.client.force_login(self.user)
@@ -1078,10 +1076,13 @@ class DashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("dashboard_folder", args=[folders[0].pk]))
-        self.assertContains(response, "Folder 24")
+        self.assertNotContains(response, "Folder 24")
+        self.assertContains(response, "Page 1 of 2")
+        page_two = self.client.get(reverse("dashboard"), {"page": 2})
+        self.assertContains(page_two, "Folder 24")
         self.assertContains(response, "Category Yard")
         self.assertContains(response, "Search readiness")
-        self.assertContains(response, 'aria-label="Close"', count=26)
+        self.assertContains(response, 'aria-label="Close"', count=25)
         self.assertContains(response, "Delete this category and all PDFs inside it")
 
     def test_dashboard_filters_categories_server_side(self):
@@ -1094,10 +1095,10 @@ class DashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Audit records")
         self.assertNotContains(response, "Housing records")
-        self.assertContains(response, "Showing 1 category matching")
+        self.assertContains(response, "1 category matches the current scope")
         self.assertContains(response, 'value="audit"')
 
-    def test_dashboard_index_debt_queue_links_actionable_categories(self):
+    def test_dashboard_prioritizes_actionable_conditions(self):
         self.client.force_login(self.user)
         index_folder = Folder.objects.create(name="Needs index lane", created_by=self.user)
         PDFFile.objects.create(
@@ -1120,17 +1121,58 @@ class DashboardTests(TestCase):
         response = self.client.get(reverse("dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Index Debt Queue")
+        self.assertContains(response, "Documents need index review")
+        self.assertContains(response, "index_debt_present")
         self.assertContains(response, "Needs index lane")
         self.assertContains(response, "Index review")
         self.assertContains(response, "Owner review lane")
-        self.assertContains(response, "Owner review")
+        self.assertContains(response, "Document provenance needs review")
+        self.assertContains(response, "provenance_review_required")
         self.assertContains(response, "Empty lane")
-        self.assertContains(response, "Empty bay")
+        self.assertContains(response, "Categories are awaiting intake")
         self.assertContains(response, reverse("dashboard_folder", args=[index_folder.pk]))
         self.assertContains(response, reverse("dashboard_folder", args=[owner_folder.pk]))
         self.assertContains(response, reverse("dashboard_folder", args=[empty_folder.pk]))
         self.assertNotContains(response, "Prefer rename or quarantine over delete")
+
+    def test_dashboard_filters_readiness_provenance_and_occupancy(self):
+        self.client.force_login(self.user)
+        ready = Folder.objects.create(name="Ready lane", created_by=self.user)
+        PDFFile.objects.create(
+            title="Ready",
+            file="pdfs/ready.pdf",
+            folder=ready,
+            uploaded_by=self.user,
+            indexed=True,
+        )
+        debt = Folder.objects.create(name="Debt lane", created_by=self.user)
+        PDFFile.objects.create(
+            title="Debt",
+            file="pdfs/debt.pdf",
+            folder=debt,
+            uploaded_by=None,
+            indexed=False,
+        )
+        Folder.objects.create(name="Empty lane", created_by=self.user)
+
+        response = self.client.get(
+            reverse("dashboard"),
+            {"readiness": "needs_index", "provenance": "unknown"},
+        )
+        category_names = [
+            folder.name
+            for folder in response.context["cockpit"]["category_page"].object_list
+        ]
+        self.assertEqual(category_names, ["Debt lane"])
+        self.assertContains(response, 'option value="needs_index" selected')
+        self.assertContains(response, 'option value="unknown" selected')
+
+        empty = self.client.get(reverse("dashboard"), {"occupancy": "empty"})
+        empty_names = [
+            folder.name
+            for folder in empty.context["cockpit"]["category_page"].object_list
+        ]
+        self.assertEqual(empty_names, ["Empty lane"])
 
     def test_folder_navigation_renders_pdfs_and_nullable_uploader(self):
         self.client.force_login(self.user)
@@ -1221,7 +1263,7 @@ class DashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_superadmin_can_cancel_and_retry_maintenance_job(self):
+    def test_legacy_job_action_cannot_cancel_or_retry_maintenance_job(self):
         superadmin = get_user_model().objects.create_user(
             username="maintenance-superadmin",
             password="test-password",
@@ -1235,9 +1277,10 @@ class DashboardTests(TestCase):
             {"action": "cancel"},
         )
 
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["error"], "operation_replaced")
         queued.refresh_from_db()
-        self.assertEqual(queued.status, "cancelled")
+        self.assertEqual(queued.status, "queued")
 
         failed = MaintenanceJob.objects.create(
             kind="validate", status="failed", failed_items=1, error_summary="old error"
@@ -1247,11 +1290,12 @@ class DashboardTests(TestCase):
             {"action": "retry"},
         )
 
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["error"], "operation_replaced")
         failed.refresh_from_db()
-        self.assertEqual(failed.status, "queued")
-        self.assertEqual(failed.failed_items, 0)
-        self.assertEqual(failed.error_summary, "")
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(failed.failed_items, 1)
+        self.assertEqual(failed.error_summary, "old error")
 
     def test_superadmin_can_repair_index_from_stored_artifacts(self):
         superadmin = get_user_model().objects.create_user(
@@ -1271,19 +1315,29 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
-        response = self.client.post(
-            reverse("folder_operations", args=[folder.pk]),
-            {"operation": "repair_stored_index"},
-            follow=True,
-        )
-        job = MaintenanceJob.objects.get(kind="repair_indexes")
+        with override_settings(
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True, ACTIVE_RUNTIME=None
+        ):
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "repair_stored_index"},
+            )
+            plan = MaintenancePlan.objects.get(operation="repair_indexes")
+            with patch(
+                "core.maintenance_plans.create_set",
+                return_value={"set_id": "rs-test"},
+            ):
+                job = queue_plan(plan=plan, actor=superadmin)
         with patch("core.maintenance.build_or_load_faiss_index_for_folder", return_value=(object(), [], [])):
             run_job(job)
 
-        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            fetch_redirect_response=False,
+        )
         pdf.refresh_from_db()
         self.assertTrue(pdf.indexed)
-        self.assertContains(response, "Repair job queued")
 
     def test_superadmin_can_reprocess_needed_documents(self):
         superadmin = get_user_model().objects.create_user(
@@ -1294,35 +1348,51 @@ class DashboardTests(TestCase):
         folder = Folder.objects.create(name="Documents", created_by=superadmin)
         needed_pdf = PDFFile.objects.create(
             title="Needs index",
-            file="pdfs/needs-index.pdf",
+            file=SimpleUploadedFile("needs-index.pdf", b"%PDF-1.4"),
             folder=folder,
             uploaded_by=superadmin,
             indexed=False,
         )
         indexed_pdf = PDFFile.objects.create(
             title="Already indexed",
-            file="pdfs/already-indexed.pdf",
+            file=SimpleUploadedFile("already-indexed.pdf", b"%PDF-1.4"),
             folder=folder,
             uploaded_by=superadmin,
             indexed=True,
+            lifecycle="ready",
+            page_chunks=["Already searchable"],
+            chunk_embeddings=[[1.0, 0.0]],
         )
         self.client.force_login(superadmin)
 
-        response = self.client.post(
-            reverse("folder_operations", args=[folder.pk]),
-            {"operation": "reprocess_needed"},
-            follow=True,
-        )
-        job = MaintenanceJob.objects.get(kind="reindex_needed")
+        with override_settings(
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            EXTERNAL_EMBEDDINGS_ENABLED=True,
+            ACTIVE_RUNTIME=None,
+        ):
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "reprocess_needed"},
+            )
+            plan = MaintenancePlan.objects.get(operation="reindex_needed")
+            with patch(
+                "core.maintenance_plans.create_set",
+                return_value={"set_id": "rs-test"},
+            ):
+                job = queue_plan(plan=plan, actor=superadmin)
         with patch("core.maintenance.precompute_pdf_embeddings") as precompute:
-            run_job(job)
+            with patch("core.maintenance._repair_folder"):
+                run_job(job)
 
-        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
-        precompute.assert_called_once_with(needed_pdf)
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            fetch_redirect_response=False,
+        )
+        precompute.assert_called_once_with(needed_pdf, rebuild_index=False)
         self.assertNotEqual(precompute.call_args.args[0].pk, indexed_pdf.pk)
-        self.assertContains(response, "Reindex job queued")
 
-    def test_reprocess_needed_preserves_ocr_artifacts_when_pdf_has_no_text(self):
+    def test_repair_stored_index_preserves_ocr_artifacts_without_embedding(self):
         superadmin = get_user_model().objects.create_user(
             username="ocr-superadmin",
             password="test-password",
@@ -1331,7 +1401,7 @@ class DashboardTests(TestCase):
         folder = Folder.objects.create(name="Scanned documents", created_by=superadmin)
         pdf = PDFFile.objects.create(
             title="Photo OCR scan",
-            file="pdfs/photo-ocr-scan.pdf",
+            file=SimpleUploadedFile("photo-ocr-scan.pdf", b"%PDF-1.4"),
             folder=folder,
             uploaded_by=superadmin,
             indexed=False,
@@ -1340,26 +1410,38 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
-        response = self.client.post(
-            reverse("folder_operations", args=[folder.pk]),
-            {"operation": "reprocess_needed"},
-            follow=True,
-        )
-        job = MaintenanceJob.objects.get(kind="reindex_needed")
+        with override_settings(
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            EXTERNAL_EMBEDDINGS_ENABLED=True,
+            ACTIVE_RUNTIME=None,
+        ):
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "repair_stored_index"},
+            )
+            plan = MaintenancePlan.objects.get(operation="repair_indexes")
+            with patch(
+                "core.maintenance_plans.create_set",
+                return_value={"set_id": "rs-test"},
+            ):
+                job = queue_plan(plan=plan, actor=superadmin)
         with patch(
-            "core.maintenance.precompute_pdf_embeddings",
-            side_effect=SearchDataIntegrityError("PDF has no extractable text"),
-        ), patch(
+            "core.maintenance.precompute_pdf_embeddings"
+        ) as precompute, patch(
             "core.maintenance.build_or_load_faiss_index_for_folder",
             return_value=(object(), [], []),
         ) as rebuild:
             run_job(job)
 
-        self.assertRedirects(response, reverse("dashboard_folder", args=[folder.pk]))
+        self.assertRedirects(
+            response,
+            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            fetch_redirect_response=False,
+        )
+        precompute.assert_not_called()
         rebuild.assert_called_once_with(folder, force_rebuild=True)
         pdf.refresh_from_db()
         self.assertTrue(pdf.indexed)
-        self.assertContains(response, "Reindex job queued")
 
     def test_pdf_rename_redirects_back_to_its_folder(self):
         self.client.force_login(self.user)
@@ -1861,13 +1943,16 @@ class GenerationLifecycleTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Data Generations")
-        self.assertContains(response, reverse("vault_operations"))
+        self.assertContains(
+            response,
+            f"{reverse('operations_panel')}?section=generations",
+        )
 
-        # The retired mixed-control page now routes to the guarded workbench.
+        # The retired mixed-control page now routes to Documents & Indexes.
         vault_response = self.client.get(reverse("vault_operations"))
         self.assertRedirects(
             vault_response,
-            f"{reverse('operations_panel')}?section=generations",
+            f"{reverse('operations_panel')}?section=maintenance",
             fetch_redirect_response=False,
         )
 class BulkFilterTests(TestCase):
@@ -1936,16 +2021,16 @@ class BulkFilterTests(TestCase):
         self.assertEqual(filters, {})
         self.assertEqual(PDFFile.objects.filter(q).count(), 2)
 
-    def test_bulk_filter_preview_endpoint(self):
+    def test_legacy_bulk_filter_preview_is_rejected(self):
         self.client.force_login(self.superadmin)
         response = self.client.get(
             reverse("bulk_filter_preview"),
             {"folder_ids": str(self.folder.pk), "filter_indexed": "true"},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 410)
         data = response.json()
-        self.assertEqual(data["count"], 1)
-        self.assertEqual(data["indexed"], 1)
+        self.assertEqual(data["error"], "operation_replaced")
+        self.assertIn("section=maintenance", data["workbench_url"])
 
     def test_bulk_filter_preview_requires_superadmin(self):
         admin = get_user_model().objects.create_user(
@@ -1960,7 +2045,14 @@ class BulkFilterTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bulk Operations")
-        self.assertContains(response, reverse("vault_operations"))
+        self.assertContains(response, 'name="readiness"')
+        self.assertContains(response, 'name="provenance"')
+        self.assertContains(response, 'name="occupancy"')
+        self.assertContains(response, 'name="ordering"')
+        self.assertContains(
+            response,
+            f"{reverse('operations_panel')}?section=maintenance",
+        )
 
 
 class JobDrawerTests(TestCase):
@@ -2000,7 +2092,9 @@ class JobDrawerTests(TestCase):
 
     def test_active_jobs_endpoint_returns_only_active(self):
         running = MaintenanceJob.objects.create(kind="validate", status="running")
-        queued = MaintenanceJob.objects.create(kind="reindex_all", status="queued")
+        queued = MaintenanceJob.objects.create(
+            kind="reindex_selected", status="queued"
+        )
         MaintenanceJob.objects.create(kind="validate", status="completed")
         MaintenanceJob.objects.create(kind="validate", status="failed")
         self.client.force_login(self.superadmin)
@@ -2012,6 +2106,23 @@ class JobDrawerTests(TestCase):
         self.assertIn(str(running.public_id), job_ids)
         self.assertIn(str(queued.public_id), job_ids)
 
+    def test_active_jobs_excludes_legacy_generation_kinds(self):
+        queued = MaintenanceJob.objects.create(
+            kind="reindex_selected",
+            status="queued",
+        )
+        MaintenanceJob.objects.create(
+            kind="sync_generation",
+            status="running",
+        )
+        self.client.force_login(self.superadmin)
+        response = self.client.get(reverse("active_jobs"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        job_ids = [j["job_id"] for j in data["jobs"]]
+        self.assertIn(str(queued.public_id), job_ids)
+        self.assertNotIn("sync_generation", [j["kind"] for j in data["jobs"]])
+
     def test_active_jobs_requires_superadmin(self):
         admin = get_user_model().objects.create_user(
             username="active-admin", password="test-password", role="admin"
@@ -2020,13 +2131,22 @@ class JobDrawerTests(TestCase):
         response = self.client.get(reverse("active_jobs"))
         self.assertEqual(response.status_code, 403)
 
-    def test_dashboard_renders_job_drawer_toggle(self):
+    def test_dashboard_renders_single_active_work_projection(self):
+        MaintenanceJob.objects.create(
+            kind="validate",
+            status="running",
+            total_items=2,
+            completed_items=1,
+            requested_by=self.superadmin,
+        )
         self.client.force_login(self.superadmin)
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "job-drawer-toggle")
-        self.assertContains(response, "Active Jobs")
-        self.assertContains(response, "job-drawer-content")
+        self.assertContains(response, "Active Work")
+        self.assertContains(response, "1/2")
+        self.assertContains(response, "?section=maintenance&job=")
+        self.assertNotContains(response, "job-drawer-toggle")
+        self.assertNotContains(response, "/dashboard/maintenance/")
 
     def test_dashboard_does_not_render_drawer_for_admin(self):
         admin = get_user_model().objects.create_user(
@@ -2036,6 +2156,21 @@ class JobDrawerTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "job-drawer-toggle")
+
+    def test_legacy_job_action_never_mutates_historical_generation_job(self):
+        self.client.force_login(self.superadmin)
+        job = MaintenanceJob.objects.create(
+            kind="restore_generation", status="running"
+        )
+        response = self.client.post(
+            reverse("maintenance_job_action", args=[job.public_id]),
+            {"action": "cancel"},
+        )
+
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["error"], "operation_replaced")
+        job.refresh_from_db()
+        self.assertEqual(job.status, "running")
 
 
 class DocumentLifecycleTests(TestCase):

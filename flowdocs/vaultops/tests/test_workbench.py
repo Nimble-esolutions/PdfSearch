@@ -5,23 +5,29 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from core.lease import acquire_lease, release_lease
 from core.models import ArtifactGeneration as LegacyGeneration
-from core.models import CustomUser
+from core.models import CustomUser, Folder, MaintenanceAuditEvent, MaintenanceJob
+from core.models import PDFFile
+from core.maintenance_plans import create_plan
 from vaultops.models import (
     ArtifactGeneration,
+    ArtifactValidation,
     ConfirmationChallenge,
     GarbageCollectionPlan,
     RetentionHold,
+    RestoreWorkspace,
     VaultConnectionProfile,
     VaultDatasetProjection,
     VaultAuditEvent,
     VaultJob,
 )
+from vaultops.services.read_model import enrich_workbench_readiness
 
 
 @override_settings(
@@ -93,6 +99,38 @@ class VaultWorkbenchTests(TestCase):
         self.assertContains(response, "vault-workbench.css")
         self.assertContains(response, "<noscript>", html=False)
         self.assertNotContains(response, "cdn.jsdelivr.net")
+
+    def test_maintenance_health_and_candidate_publication_are_evidenced(self):
+        ArtifactValidation.objects.create(
+            generation=self.candidate,
+            validation_type="full",
+            status=ArtifactValidation.Status.PASSED,
+            manifest_digest=self.candidate.manifest_digest,
+        )
+        workspace = RestoreWorkspace.objects.create(
+            generation=self.candidate,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=self.candidate.manifest_digest,
+            rehearsal_evidence={"success": True},
+            prepared_at=timezone.now(),
+        )
+        MaintenanceJob.objects.create(
+            kind="reindex_selected",
+            status="completed",
+            options={
+                "candidate_workspace_id": "mw-evidence",
+                "candidate_state": "activation_ready",
+            },
+        )
+        response = self.client.get(
+            f"{reverse('operations_panel')}?section=maintenance"
+        )
+        self.assertContains(response, "Verified Vault generations")
+        self.assertContains(response, "Free-space reserve")
+        self.assertContains(response, "passed")
+        self.assertContains(response, str(workspace.public_id))
+        self.assertContains(response, "mw-evidence")
+        self.assertContains(response, "Vault publication required")
         self.assertContains(response, "vendor/bootstrap/5.3.0")
         sync_response = self.client.get(
             reverse("operations_panel"), {"section": "sync"}
@@ -103,6 +141,94 @@ class VaultWorkbenchTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("operations_panel"))
         self.assertEqual(response.status_code, 403)
+
+    def test_readiness_exposes_typed_remediation_destinations(self):
+        state = {
+            "authority": {
+                "blocking_reasons": ["profile_unavailable", "inventory_unverified"],
+            },
+            "maintenance": {
+                "health": {
+                    "free_space_reserve": {"state": "degraded"},
+                },
+                "capabilities": {
+                    "reindex_selected": {
+                        "enabled": False,
+                        "reason_code": "external_embeddings_disabled",
+                    },
+                },
+            },
+            "environment": {"app_env": "development", "is_production": False},
+        }
+        enrich_workbench_readiness(state)
+        issues = {item["reason_code"]: item for item in state["readiness"]["issues"]}
+        self.assertEqual(issues["profile_unavailable"]["section"], "configuration")
+        self.assertEqual(issues["inventory_unverified"]["section"], "configuration")
+        self.assertEqual(issues["capacity_degraded"]["section"], "maintenance")
+        self.assertEqual(
+            state["readiness"]["disabled_capabilities"][0]["reason_code"],
+            "external_embeddings_disabled",
+        )
+        self.assertTrue(state["readiness"]["local_development"]["enabled"])
+
+    def test_workbench_renders_local_posture_and_remediation_link(self):
+        response = self.client.get(reverse("operations_panel"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Local development posture")
+        self.assertContains(response, "Remote publication and production activation")
+
+    def test_maintenance_deep_link_renders_selected_plan_and_job(self):
+        folder = Folder.objects.create(name="Law", created_by=self.superadmin)
+        PDFFile.objects.create(
+            title="Governance",
+            file=SimpleUploadedFile("governance.pdf", b"%PDF-1.4"),
+            folder=folder,
+            uploaded_by=self.superadmin,
+            indexed=False,
+            category="acts",
+            subject="governance",
+            keywords=["act"],
+        )
+        plan = create_plan(
+            operation="reindex_needed",
+            data={
+                "folder_ids": [str(folder.pk)],
+                "filter_subject": "governance",
+            },
+            actor=self.superadmin,
+            idempotency_key="selected-plan-link",
+        )
+        job = MaintenanceJob.objects.create(
+            kind="reindex_needed",
+            status="running",
+            total_items=1,
+            completed_items=0,
+            requested_by=self.superadmin,
+            options={
+                "recovery_set_id": "rs-test",
+                "candidate_workspace_id": "ws-test",
+                "candidate_state": "activation_ready",
+            },
+        )
+        MaintenanceAuditEvent.objects.create(
+            job=job,
+            actor=self.superadmin,
+            event_type="queued",
+            payload={"plan_id": str(plan.public_id)},
+        )
+        plan.job = job
+        plan.save(update_fields=["job"])
+
+        response = self.client.get(
+            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}&job={job.public_id}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Affected folders")
+        self.assertContains(response, "Focused job")
+        self.assertContains(response, "Audit history")
+        self.assertContains(response, str(job.public_id))
+        self.assertContains(response, "Recovery set")
+        self.assertContains(response, "Law")
 
     def test_create_superuser_assigns_supported_vault_role(self):
         user = CustomUser.objects.create_superuser(
@@ -536,12 +662,52 @@ class VaultWorkbenchTests(TestCase):
         generation.refresh_from_db()
         self.assertEqual(generation.status, "validated")
 
-    def test_legacy_vault_page_redirects_to_generations(self):
+    def test_legacy_vault_page_redirects_to_maintenance(self):
         response = self.client.get(reverse("vault_operations"))
         self.assertRedirects(
             response,
-            f"{reverse('operations_panel')}?section=generations",
+            f"{reverse('operations_panel')}?section=maintenance",
             fetch_redirect_response=False,
+        )
+
+    def test_operations_navigation_marks_active_section(self):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "maintenance"}
+        )
+        nav = response.content.decode("utf-8")
+        self.assertIn(
+            'href="{}" aria-current="page"'.format(reverse("operations_panel")),
+            nav,
+        )
+        self.assertNotIn(
+            'href="{}?section=generations" aria-current="page"'.format(
+                reverse("operations_panel")
+            ),
+            nav,
+        )
+
+        response = self.client.get(
+            f"{reverse('operations_panel')}?section=generations"
+        )
+        nav = response.content.decode("utf-8")
+        self.assertIn(
+            'href="{}?section=generations" aria-current="page"'.format(
+                reverse("operations_panel")
+            ),
+            nav,
+        )
+
+    def test_profile_scope_is_preserved_in_live_state_url(self):
+        response = self.client.get(
+            reverse("operations_panel"),
+            {"section": "overview", "profile": self.profile.key},
+        )
+        self.assertContains(
+            response,
+            '{}?profile={}'.format(
+                reverse("vaultops:state"),
+                self.profile.key,
+            ),
         )
 
     def test_mutation_rejects_missing_idempotency_key(self):

@@ -25,8 +25,15 @@ executor = MigrationExecutor(connection)
 sys.exit(1 if executor.migration_plan(executor.loader.graph.leaf_nodes()) else 0)
 "'
 else
+  PENDING_MIGRATIONS=$(gosu appuser:appuser bash -lc \
+    "cd /app/flowdocs && python manage.py showmigrations --plan | grep -c '\\[ \\]'" || true)
+  if [ "$PENDING_MIGRATIONS" -gt 0 ] && [ -s "${SQLITE_DB_PATH:-$DATA_ROOT/db.sqlite3}" ]; then
+    gosu appuser:appuser bash -lc \
+      'cd /app/flowdocs && python manage.py emergency_db create --reason pre-migration'
+  fi
   gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py migrate --noinput'
 fi
 gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py migrate --database control --noinput'
+gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py maintenance_preflight'
 
 exec gosu appuser:appuser bash -lc 'cd /app/flowdocs && python runtime_supervisor.py --role maintenance'

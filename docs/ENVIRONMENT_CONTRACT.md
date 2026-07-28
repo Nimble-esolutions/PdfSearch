@@ -175,7 +175,8 @@ The full pipeline is currently invoked directly by integration tests, not by
 the application entrypoints or the admin maintenance restore job. The admin
 job uses a legacy staging path and must not be treated as disaster-recovery
 activation. `RESTORE_POLICY` and `DATA_PINNED_GENERATION` are parsed policy
-inputs only until Plan 003 connects startup/operator orchestration.
+inputs only in the historical Plan 003 design. The active Vault Operations
+contract supersedes that plan.
 
 `RESTORE_WORKSPACE_ROOT`, `RESTORE_STAGE_TIMEOUT_SECONDS`,
 `RESTORE_REHEARSAL_ENABLED`, `RESTORE_SANITIZE_ENABLED`, and
@@ -279,7 +280,8 @@ Scheduled/hybrid modes are not currently production-ready: the scheduler
 requires `MAINTENANCE_SCHEDULER_ENABLED=1`, a writer identity, a non-manual
 sync mode, and a dirty-state signal, but application mutations do not yet call
 the dirty-state marker. Use explicit manual publication and verify the
-resulting immutable generation until Plan 003 closes this gap.
+resulting immutable generation. This metadata-only historical guidance is
+superseded by the active Vault Operations publication contract.
 
 ## Bootstrap Credentials
 

@@ -164,6 +164,7 @@ class MaintenanceJob(models.Model):
         ("validate", "Validate data"),
         ("reindex_needed", "Reindex needed"),
         ("reindex_all", "Reindex all"),
+        ("reindex_selected", "Reindex selected"),
         ("repair_indexes", "Repair stored indexes"),
         ("sync_generation", "Sync generation"),
         ("restore_generation", "Restore generation"),
@@ -207,6 +208,65 @@ class MaintenanceJob(models.Model):
         indexes = [
             models.Index(fields=["status", "created_at"]),
             models.Index(fields=["kind", "created_at"]),
+        ]
+
+
+class MaintenancePlan(models.Model):
+    """Short-lived, server-calculated authority for a local maintenance job."""
+
+    OPERATION_CHOICES = (
+        ("validate", "Validate files"),
+        ("repair_indexes", "Repair stored indexes"),
+        ("reindex_needed", "Reindex needed"),
+        ("reindex_selected", "Reindex selected"),
+    )
+    STATE_CHOICES = (
+        ("previewed", "Previewed"),
+        ("queued", "Queued"),
+        ("expired", "Expired"),
+        ("rejected", "Rejected"),
+    )
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    operation = models.CharField(max_length=32, choices=OPERATION_CHOICES)
+    state = models.CharField(
+        max_length=16, choices=STATE_CHOICES, default="previewed"
+    )
+    selection = models.JSONField(default=dict)
+    preview = models.JSONField(default=dict)
+    source_digest = models.CharField(max_length=64)
+    state_version = models.CharField(max_length=64)
+    idempotency_key = models.CharField(max_length=128)
+    external_embeddings_required = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="maintenance_plans",
+    )
+    job = models.OneToOneField(
+        MaintenanceJob,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="maintenance_plan",
+    )
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["operation", "idempotency_key"],
+                name="core_maintenanceplan_operation_idempotency",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["state", "expires_at"]),
+            models.Index(fields=["created_by", "created_at"]),
         ]
 
 

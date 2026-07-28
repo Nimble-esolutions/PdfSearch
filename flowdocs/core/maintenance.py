@@ -308,12 +308,13 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
         item.error_message = ""
         item.save(update_fields=["status", "attempts", "started_at", "error_code", "error_message"])
         try:
-            if job.kind in {"reindex_needed", "reindex_all"}:
+            if job.kind in {"reindex_needed", "reindex_all", "reindex_selected"}:
                 if item.pdf is None:
                     raise SearchDataIntegrityError("PDF no longer exists")
+                prior_lifecycle = item.pdf.lifecycle
                 PDFFile.objects.filter(pk=item.pdf.pk).update(lifecycle="processing")
                 item.pdf.refresh_from_db()
-                precompute_pdf_embeddings(item.pdf)
+                precompute_pdf_embeddings(item.pdf, rebuild_index=False)
                 PDFFile.objects.filter(pk=item.pdf.pk).update(lifecycle="ready")
                 item.pdf.refresh_from_db()
             elif job.kind == "repair_indexes":
@@ -328,23 +329,25 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
                 )
         except Exception as exc:
             if (
-                job.kind in {"reindex_needed", "reindex_all"}
+                job.kind in {"reindex_needed", "reindex_all", "reindex_selected"}
+                and item.pdf_id
+            ):
+                PDFFile.objects.filter(pk=item.pdf_id, lifecycle="processing").update(
+                    lifecycle=locals().get("prior_lifecycle", "uploaded")
+                )
+            if (
+                job.kind in {"reindex_needed", "reindex_all", "reindex_selected"}
                 and item.pdf is not None
                 and _has_stored_artifacts(item.pdf)
             ):
-                try:
-                    _repair_folder(item.folder)
-                except Exception:
-                    pass
-                else:
-                    item.status = "completed"
-                    item.error_code = "stored_artifact_repair"
-                    item.error_message = "Rebuilt from stored OCR/search artifacts"
-                    item.finished_at = timezone.now()
-                    item.save(update_fields=["status", "error_code", "error_message", "finished_at"])
-                    job.completed_items += 1
-                    job.save(update_fields=["completed_items", "updated_at"])
-                    continue
+                item.status = "completed"
+                item.error_code = "stored_artifact_checkpoint"
+                item.error_message = "Stored OCR/search artifacts preserved for final index build"
+                item.finished_at = timezone.now()
+                item.save(update_fields=["status", "error_code", "error_message", "finished_at"])
+                job.completed_items += 1
+                job.save(update_fields=["completed_items", "updated_at"])
+                continue
             item.status = "failed"
             item.error_code = _error_code(exc)
             item.error_message = str(exc)[:2000]
@@ -365,6 +368,38 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
             _audit(job=job, event_type="item_completed", payload={"item_id": item.pk, "pdf_id": item.pdf_id, "folder_id": item.folder_id})
 
         job.save(update_fields=["completed_items", "failed_items", "updated_at"])
+
+    if job.kind in {"reindex_needed", "reindex_all", "reindex_selected"}:
+        completed_folder_ids = set(job.options.get("completed_folder_ids", []))
+        all_folder_ids = set(
+            job.items.exclude(folder_id=None).values_list("folder_id", flat=True)
+        )
+        for folder_id in sorted(all_folder_ids - completed_folder_ids):
+            try:
+                _repair_folder(Folder.objects.get(pk=folder_id))
+            except Exception as exc:
+                job.failed_items += 1
+                job.error_summary = str(exc)[:2000]
+                _audit(
+                    job=job,
+                    event_type="item_failed",
+                    payload={
+                        "folder_id": folder_id,
+                        "error_code": _error_code(exc),
+                        "phase": "final_index_build",
+                    },
+                )
+            else:
+                completed_folder_ids.add(folder_id)
+                job.options = {
+                    **job.options,
+                    "completed_folder_ids": sorted(completed_folder_ids),
+                }
+            job.save(
+                update_fields=[
+                    "failed_items", "error_summary", "options", "updated_at"
+                ]
+            )
 
     job.refresh_from_db()
     job.status = "failed" if job.failed_items else "completed"

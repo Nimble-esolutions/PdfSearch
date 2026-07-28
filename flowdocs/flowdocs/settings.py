@@ -387,6 +387,26 @@ CHROMA_DIR = (
     else Path(os.getenv('CHROMA_DIR', str(DATA_ROOT / 'chroma_db')))
 )
 BACKUP_DIR = Path(os.getenv('BACKUP_DIR', str(DATA_ROOT / 'backups')))
+RECOVERY_SET_ROOT = Path(
+    os.getenv('RECOVERY_SET_ROOT', str(BACKUP_DIR / 'recovery-sets'))
+)
+LOCAL_INDEX_MAINTENANCE_ENABLED = _env_bool(
+    'LOCAL_INDEX_MAINTENANCE_ENABLED', False
+)
+FORCE_REINDEX_ENABLED = _env_bool('FORCE_REINDEX_ENABLED', False)
+EXTERNAL_EMBEDDINGS_ENABLED = _env_bool('EXTERNAL_EMBEDDINGS_ENABLED', False)
+MAINTENANCE_WORKSPACE_ROOT = Path(
+    os.getenv(
+        'MAINTENANCE_WORKSPACE_ROOT',
+        str(DATA_CONTROL_ROOT / 'maintenance-workspaces'),
+    )
+)
+MAINTENANCE_JOB_TIMEOUT_SECONDS = _env_positive_int(
+    'MAINTENANCE_JOB_TIMEOUT_SECONDS', 7200
+)
+MAINTENANCE_CANDIDATE_EXECUTION = _env_bool(
+    'MAINTENANCE_CANDIDATE_EXECUTION', False
+)
 PDF_CACHE_DIR = (
     ACTIVE_RUNTIME.pdf_cache_dir
     if ACTIVE_RUNTIME

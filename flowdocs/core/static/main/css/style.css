@@ -508,18 +508,200 @@ body {
 .access-form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 
 .cockpit-hero {
-  margin-bottom: 1rem;
-  padding: 1rem;
+  margin-bottom: .75rem;
+  padding: .85rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
   background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
   box-shadow: var(--admin-shadow);
 }
 
+.cockpit-observed {
+  margin-top: .5rem;
+  color: var(--admin-muted, #675f5a);
+  font-size: .75rem;
+}
+
+.admin-nav .btn-outline-light {
+  color: var(--admin-primary-strong);
+  background: #fff;
+  border-color: #fff;
+  transition: none;
+}
+
+.admin-nav .btn-outline-light:hover,
+.admin-nav .btn-outline-light:focus {
+  color: #fff;
+  background: #3a091a;
+  border-color: #fff;
+}
+
+.admin-category-card .btn-outline-danger {
+  color: #a51d2d;
+  border-color: #a51d2d;
+}
+
+.cockpit-observed time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.cockpit-posture {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: .8rem 1rem;
+  background: #fffdf8;
+  border: 1px solid #d8cec0;
+  border-left: 5px solid #681f2a;
+}
+
+.cockpit-posture--warning,
+.cockpit-posture--danger {
+  background: #fff8ec;
+  border-left-color: #8a5710;
+}
+
+.cockpit-posture--good {
+  border-left-color: #21643d;
+}
+
+.cockpit-posture__code {
+  display: block;
+  color: #675f5a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .68rem;
+}
+
+.cockpit-metrics--decisions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cockpit-attention-list {
+  display: grid;
+  gap: .65rem;
+}
+
+.cockpit-attention-item {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .9rem;
+  padding: .8rem;
+  background: #fffdf8;
+  border: 1px solid #d8cec0;
+}
+
+.cockpit-attention-item__action {
+  min-width: 9rem;
+}
+
+.cockpit-attention-item--danger,
+.cockpit-attention-item--warning {
+  border-left: 4px solid #8a5710;
+}
+
+.cockpit-attention-item__count {
+  color: #681f2a;
+  font-size: 1.45rem;
+  text-align: center;
+}
+
+.cockpit-attention-item h3,
+.cockpit-attention-item p {
+  margin: 0;
+}
+
+.cockpit-attention-item h3 {
+  font-size: .92rem;
+}
+
+.cockpit-attention-item p,
+.cockpit-attention-item code {
+  color: #675f5a;
+  font-size: .74rem;
+}
+
+.cockpit-primary-actions,
+.cockpit-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.cockpit-category-filters {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.5fr) repeat(4, minmax(8rem, 1fr));
+  gap: .7rem;
+  margin-bottom: .8rem;
+  padding: .85rem;
+  background: #f4efe6;
+  border: 1px solid #d8cec0;
+}
+
+.cockpit-category-filters label {
+  min-width: 0;
+  color: #43141c;
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.cockpit-filter-actions {
+  grid-column: 1 / -1;
+}
+
+.cockpit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem;
+  margin-top: 1rem;
+  font-size: .8rem;
+}
+
+@media (max-width: 1100px) {
+  .cockpit-category-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .cockpit-posture,
+  .cockpit-attention-item {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cockpit-posture {
+    display: grid;
+  }
+
+  .cockpit-attention-item__count {
+    text-align: left;
+  }
+
+  .cockpit-category-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cockpit-primary-actions .btn,
+  .cockpit-filter-actions .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
 .cockpit-metrics {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+/* There are four decision metrics in the cockpit. Keep each value legible
+   instead of reserving a fifth, empty column at desktop widths. */
+.cockpit-metrics.cockpit-metrics--decisions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .cockpit-metric {
@@ -876,6 +1058,7 @@ body {
   }
 
   .cockpit-metrics,
+  .cockpit-metrics.cockpit-metrics--decisions,
   .cockpit-layout {
     grid-template-columns: 1fr;
   }
@@ -891,7 +1074,8 @@ body {
 }
 
 @media (min-width: 769px) and (max-width: 1100px) {
-  .cockpit-metrics {
+  .cockpit-metrics,
+  .cockpit-metrics.cockpit-metrics--decisions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

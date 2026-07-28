@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="vault-workbench" data-state-url="{% url 'vaultops:state' %}">
+<div class="vault-workbench" data-state-url="{% url 'vaultops:state' %}{% if request.GET.profile %}?profile={{ request.GET.profile|urlencode }}{% endif %}">
   <header class="vault-heading">
     <div>
       <p class="vault-kicker">{% trans "Operations / Vault Workbench" %}</p>
@@ -41,12 +41,13 @@
     <a href="?section=sync"{% if section == "sync" %} aria-current="page"{% endif %}>{% trans "Active Sync" %}</a>
     <a href="?section=generations"{% if section == "generations" %} aria-current="page"{% endif %}>{% trans "Generations" %}</a>
     <a href="?section=restore"{% if section == "restore" %} aria-current="page"{% endif %}>{% trans "Restore & Activation" %}</a>
+    <a href="?section=maintenance"{% if section == "maintenance" %} aria-current="page"{% endif %}>{% trans "Documents & Indexes" %}</a>
     <a href="?section=jobs"{% if section == "jobs" %} aria-current="page"{% endif %}>{% trans "Jobs & Audit" %}</a>
     <a href="?section=retention"{% if section == "retention" %} aria-current="page"{% endif %}>{% trans "Retention & GC" %}</a>
     <a href="?section=configuration"{% if section == "configuration" %} aria-current="page"{% endif %}>{% trans "Configuration" %}</a>
   </nav>
 
-  {% if state.authority.blocking_reasons %}
+  {% if state.authority.blocking_reasons or state.readiness.issues %}
   <section class="vault-alert vault-alert--warning" role="status" aria-labelledby="vault-alert-heading">
     <h3 id="vault-alert-heading">{% trans "Evidence requires attention" %}</h3>
     <ul>
@@ -55,6 +56,27 @@
       {% endfor %}
     </ul>
     <p>{{ state.recommended_action }}</p>
+    {% if state.readiness.issues %}
+    <div class="vault-remediation-list" aria-label="{% trans 'Recommended remediation' %}">
+      {% for issue in state.readiness.issues %}
+      <article class="vault-remediation">
+        <div>
+          <strong>{{ issue.title }}</strong>
+          <p>{{ issue.detail }}</p>
+          <code>{{ issue.reason_code }}</code>
+        </div>
+        <a class="vault-button vault-button--secondary" href="?section={{ issue.section }}">{{ issue.label }}</a>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if state.readiness.local_development.enabled %}
+  <section class="vault-alert vault-alert--info" role="note" aria-labelledby="local-posture-heading">
+    <h3 id="local-posture-heading">{{ state.readiness.local_development.title }}</h3>
+    <p>{{ state.readiness.local_development.message }}</p>
   </section>
   {% endif %}
 
@@ -87,6 +109,267 @@
         <div><dt>{% trans "Production activation" %}</dt><dd class="status status--disabled">{% trans "Disabled" %}</dd></div>
         <div><dt>{% trans "Garbage collection" %}</dt><dd>{{ state.feature_flags.gc_enabled|yesno:_("Enabled,Disabled") }}</dd></div>
       </dl>
+    </section>
+  </div>
+  {% endif %}
+
+  {% if section == "maintenance" %}
+  <div class="vault-grid">
+      <section class="vault-panel" aria-labelledby="maintenance-heading">
+      <header><p>{% trans "Local content authority" %}</p><h3 id="maintenance-heading">{% trans "Documents & Indexes" %}</h3></header>
+      <p class="vault-note">{% trans "These operations validate or derive local document and search artifacts. They do not publish, promote, restore, or move remote Vault authority." %}</p>
+      <div class="maintenance-authority-strip" role="status">
+        <div><span>{% trans "Local maintenance" %}</span><strong>{% trans "Planned and isolated" %}</strong></div>
+        <div><span>{% trans "Active runtime" %}</span><strong>{% trans "Unchanged during processing" %}</strong></div>
+        <div><span>{% trans "Remote Vault" %}</span><strong>{% trans "Unchanged until explicit publication" %}</strong></div>
+      </div>
+      <details class="maintenance-health">
+        <summary>{% trans "Review recovery, capacity, and workspace evidence" %}</summary>
+        <dl class="vault-facts">
+        <div><dt>{% trans "Local recovery sets" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.state }} · {{ state.maintenance.health.local_recovery_sets.verified_count }}</dd></div>
+        <div><dt>{% trans "Recovery bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.bytes|filesizeformat }}</dd></div>
+        <div><dt>{% trans "Held bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.held_bytes|filesizeformat }}</dd></div>
+        <div><dt>{% trans "Prunable bytes" %}</dt><dd>{{ state.maintenance.health.local_recovery_sets.prunable_bytes|filesizeformat }}</dd></div>
+        <div><dt>{% trans "Maintenance workspaces" %}</dt><dd>{{ state.maintenance.health.maintenance_workspaces.state }} · {{ state.maintenance.health.maintenance_workspaces.active_count }} ({{ state.maintenance.health.maintenance_workspaces.activation_ready_count }} {% trans "activation-ready" %})</dd></div>
+        <div><dt>{% trans "Verified Vault generations" %}</dt><dd>{{ state.maintenance.health.verified_vault_generations.state }} · {{ state.maintenance.health.verified_vault_generations.verified_count }}</dd></div>
+        <div><dt>{% trans "Free-space reserve" %}</dt><dd>{{ state.maintenance.health.free_space_reserve.state }} · {{ state.maintenance.health.free_space_reserve.free_bytes|filesizeformat }} {% trans "free" %}</dd></div>
+        <div><dt>{% trans "Last restore drill" %}</dt><dd>{{ state.maintenance.health.last_restore_drill.state }}{% if state.maintenance.health.last_restore_drill.observed_at %} · {{ state.maintenance.health.last_restore_drill.observed_at|date:"Y-m-d H:i:s T" }}{% endif %}{% if state.maintenance.health.last_restore_drill.workspace_id %} · <code>{{ state.maintenance.health.last_restore_drill.workspace_id }}</code>{% endif %}</dd></div>
+        <div><dt>{% trans "Cleanup status" %}</dt><dd>{{ state.maintenance.health.cleanup.state }} · {{ state.maintenance.health.cleanup.prunable_bytes|filesizeformat }} {% trans "prunable" %}</dd></div>
+        </dl>
+      </details>
+      <div class="maintenance-operations" aria-labelledby="maintenance-operation-heading">
+        <h4 id="maintenance-operation-heading">{% trans "Choose the outcome you need" %}</h4>
+        {% if state.readiness.disabled_capabilities %}
+        <div class="maintenance-disabled-guidance" role="note">
+          <strong>{% trans "Some local operations are guarded" %}</strong>
+          <p>{% trans "Disabled controls reflect runtime authority, capacity, or external-service policy. Resolve the typed reason before retrying." %}</p>
+          <ul>
+            {% for item in state.readiness.disabled_capabilities %}
+            <li><code>{{ item.operation }}</code> · <code>{{ item.reason_code }}</code></li>
+            {% endfor %}
+          </ul>
+          <a class="vault-button vault-button--secondary" href="?section=configuration">{% trans "Review runtime and profile evidence" %}</a>
+        </div>
+        {% endif %}
+        <div class="maintenance-operation-grid">
+          {% with capability=state.maintenance.capabilities.validate %}
+          <article class="maintenance-operation{% if not capability.enabled %} maintenance-operation--disabled{% endif %}">
+            <h4>{% trans "Validate Files" %}</h4>
+            <p>{% trans "Read-only checks for databases, media references, and stored search artifacts." %}</p>
+            <span>{% trans "External embeddings" %}: {% trans "Never" %}</span>
+            {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          </article>
+          {% endwith %}
+          {% with capability=state.maintenance.capabilities.repair_indexes %}
+          <article class="maintenance-operation{% if not capability.enabled %} maintenance-operation--disabled{% endif %}">
+            <h4>{% trans "Repair Stored Indexes" %}</h4>
+            <p>{% trans "Rebuild folder indexes from existing chunks and embeddings." %}</p>
+            <span>{% trans "External embeddings" %}: {% trans "Never" %}</span>
+            {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          </article>
+          {% endwith %}
+          {% with capability=state.maintenance.capabilities.reindex_needed %}
+          <article class="maintenance-operation{% if not capability.enabled %} maintenance-operation--disabled{% endif %}">
+            <h4>{% trans "Reindex Needed" %}</h4>
+            <p>{% trans "Reprocess only documents whose searchable artifacts are missing or invalid." %}</p>
+            <span>{% trans "External embeddings" %}: {% trans "Required for affected documents" %}</span>
+            {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          </article>
+          {% endwith %}
+          {% with capability=state.maintenance.capabilities.reindex_selected %}
+          <article class="maintenance-operation maintenance-operation--danger{% if not capability.enabled %} maintenance-operation--disabled{% endif %}">
+            <h4>{% trans "Reindex Selected" %}</h4>
+            <p>{% trans "Deliberately regenerate text, chunks, embeddings, and indexes for the selected scope." %}</p>
+            <span>{% trans "External embeddings" %}: {% trans "Required" %}</span>
+            {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          </article>
+          {% endwith %}
+        </div>
+      </div>
+      <form class="vault-form" method="post" action="{% url 'vaultops:maintenance_plan_create' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:maintenance">
+        <fieldset class="maintenance-scope">
+          <legend>{% trans "Categories" %}</legend>
+          {% for folder in state.maintenance.folders %}
+          <label><input type="checkbox" name="folder_ids" value="{{ folder.id }}"> {{ folder.name }} ({{ folder.pdf_count }})</label>
+          {% empty %}<p>{% trans "No categories are available." %}</p>{% endfor %}
+        </fieldset>
+        <details class="maintenance-filters" open>
+          <summary>{% trans "Document filters" %}</summary>
+        <div class="maintenance-filter-grid">
+          <label>{% trans "Indexed state" %}
+            <select name="filter_indexed">
+              <option value="">{% trans "Any" %}</option>
+              <option value="true">{% trans "Indexed" %}</option>
+              <option value="false">{% trans "Needs index" %}</option>
+            </select>
+          </label>
+          <label>{% trans "Category" %}<input name="filter_category" maxlength="50"></label>
+          <label>{% trans "Subject" %}<input name="filter_subject" maxlength="50"></label>
+          <label>{% trans "Keywords" %}<input name="filter_keywords" placeholder="{% trans 'comma separated' %}"></label>
+          <label>{% trans "Uploaded after" %}<input type="date" name="filter_uploaded_after"></label>
+          <label>{% trans "Uploaded before" %}<input type="date" name="filter_uploaded_before"></label>
+        </div>
+        </details>
+        <p class="vault-field-help">{% trans "Preview is calculated by the server and expires after 15 minutes. Selection and runtime authority are checked again before queueing." %}</p>
+        <div class="vault-action-block maintenance-preview-actions">
+          {% with capability=state.maintenance.capabilities.validate %}
+          <button class="vault-button vault-button--secondary" type="submit" name="operation" value="validate"{% if not capability.enabled %} disabled{% endif %}>{% trans "Preview Validate Files" %}</button>
+          {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          {% endwith %}
+          {% with capability=state.maintenance.capabilities.repair_indexes %}
+          <button class="vault-button vault-button--secondary" type="submit" name="operation" value="repair_indexes"{% if not capability.enabled %} disabled{% endif %}>{% trans "Preview Repair Stored Indexes" %}</button>
+          {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          {% endwith %}
+          {% with capability=state.maintenance.capabilities.reindex_needed %}
+          <button class="vault-button vault-button--secondary" type="submit" name="operation" value="reindex_needed"{% if not capability.enabled %} disabled{% endif %}>{% trans "Preview Reindex Needed" %}</button>
+          {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          {% endwith %}
+          {% with capability=state.maintenance.capabilities.reindex_selected %}
+          <button class="vault-button vault-button--danger" type="submit" name="operation" value="reindex_selected"{% if not capability.enabled %} disabled{% endif %}>{% trans "Preview Reindex Selected" %}</button>
+          {% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}
+          {% endwith %}
+        </div>
+      </form>
+    </section>
+
+    <section class="vault-panel" aria-labelledby="maintenance-plans-heading">
+      <header><p>{% trans "15-minute confirmation authority" %}</p><h3 id="maintenance-plans-heading">{% trans "Maintenance previews" %}</h3></header>
+      {% if state.maintenance.selected_plan %}
+        <article class="maintenance-selected-plan" aria-labelledby="selected-plan-heading">
+          <p class="vault-kicker">{% trans "Selected preview" %}</p>
+          <h4 id="selected-plan-heading">{{ state.maintenance.selected_plan.operation }}</h4>
+          <code>{{ state.maintenance.selected_plan.public_id }}</code>
+          <p class="vault-note">
+            {% trans "Source runtime and manifest identities are embedded in the selection plan and revalidated at queue time." %}
+          </p>
+          <dl class="maintenance-preview-facts">
+            <div><dt>{% trans "Documents" %}</dt><dd>{{ state.maintenance.selected_plan.preview.pdf_count }}</dd></div>
+            <div><dt>{% trans "Folders" %}</dt><dd>{{ state.maintenance.selected_plan.preview.folder_count }}</dd></div>
+            <div><dt>{% trans "Estimated work" %}</dt><dd>{{ state.maintenance.selected_plan.preview.estimated_work_units }}</dd></div>
+            <div><dt>{% trans "External embeddings" %}</dt><dd>{{ state.maintenance.selected_plan.external_embeddings_required|yesno:_("Required,Not required") }}</dd></div>
+          </dl>
+          {% if state.maintenance.selected_plan.preview.affected_folders %}
+            <p><strong>{% trans "Affected folders" %}:</strong>
+              {% for folder in state.maintenance.selected_plan.preview.affected_folders %}
+                {{ folder.name }}{% if not forloop.last %}, {% endif %}
+              {% endfor %}
+            </p>
+          {% endif %}
+          <p>{% trans "Selection and runtime authority will be recalculated before this plan enters the queue." %}</p>
+        </article>
+      {% endif %}
+      <div class="vault-records" role="list">
+        {% for plan in state.maintenance.plans %}
+        <article class="vault-record vault-record--compact" role="listitem">
+          <h4>{{ plan.operation }}</h4>
+          <p>{{ plan.state }} · {{ plan.preview.pdf_count }} {% trans "documents" %} · {{ plan.preview.folder_count }} {% trans "folders" %}</p>
+          <p>{% trans "Estimated work" %}: {{ plan.preview.estimated_work_units }} · {% trans "Expires" %}: {{ plan.expires_at|date:"Y-m-d H:i:s T" }}</p>
+          <p>{% trans "External embeddings" %}: {{ plan.external_embeddings_required|yesno:_("Required,Not required") }}</p>
+          {% if plan.state == "previewed" %}
+          <form class="vault-form" method="post" action="{% url 'vaultops:maintenance_plan_queue' plan.public_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="state_version" value="{{ plan.state_version }}">
+            {% if plan.operation == "reindex_selected" %}
+            <label>{% blocktrans with phrase=state.maintenance.confirmation_phrase %}Type {{ phrase }} to confirm external reprocessing{% endblocktrans %}
+              <input name="typed_confirmation" autocomplete="off" required>
+            </label>
+            {% endif %}
+            <button class="vault-button{% if plan.operation == 'reindex_selected' %} vault-button--danger{% endif %}" type="submit">{% trans "Confirm and queue local maintenance" %}</button>
+          </form>
+          {% elif plan.job__public_id %}
+          <p><code>{{ plan.job__public_id }}</code> · {{ plan.job__status }}</p>
+          {% endif %}
+        </article>
+        {% empty %}<p class="vault-empty" role="listitem">{% trans "No maintenance previews are recorded." %}</p>{% endfor %}
+      </div>
+    </section>
+
+      <section class="vault-panel" aria-labelledby="maintenance-jobs-heading">
+        <header><p>{% trans "Progress and audit" %}</p><h3 id="maintenance-jobs-heading">{% trans "Local maintenance jobs" %}</h3></header>
+        {% if state.maintenance.selected_job %}
+          <article class="vault-record vault-record--compact maintenance-selected-job" aria-labelledby="selected-job-heading">
+            <p class="vault-kicker">{% trans "Focused job" %}</p>
+            <h4 id="selected-job-heading">{{ state.maintenance.selected_job.kind }} · <code>{{ state.maintenance.selected_job.public_id }}</code></h4>
+            <p>{{ state.maintenance.selected_job.status }} · {{ state.maintenance.selected_job.completed_items }}/{{ state.maintenance.selected_job.total_items }} {% trans "completed" %} · {{ state.maintenance.selected_job.failed_items }} {% trans "failed" %}</p>
+            {% widthratio state.maintenance.selected_job.completed_items state.maintenance.selected_job.total_items 100 as selected_job_progress %}
+            <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ state.maintenance.selected_job.total_items }}" aria-valuenow="{{ state.maintenance.selected_job.completed_items }}">
+              <span style="width: {{ selected_job_progress|default:0 }}%"></span>
+            </div>
+            {% if state.maintenance.selected_job.error_summary %}<code>{{ state.maintenance.selected_job.error_summary }}</code>{% endif %}
+            {% if state.maintenance.selected_job.options.candidate_workspace_id %}
+              <p>{% trans "Candidate workspace" %}: <code>{{ state.maintenance.selected_job.options.candidate_workspace_id }}</code> · {{ state.maintenance.selected_job.options.candidate_state }}</p>
+            {% endif %}
+            {% if state.maintenance.selected_job.options.recovery_set_id %}
+              <p>{% trans "Recovery set" %}: <code>{{ state.maintenance.selected_job.options.recovery_set_id }}</code></p>
+            {% endif %}
+            <div class="maintenance-job-audit">
+              <h5>{% trans "Audit history" %}</h5>
+              {% if state.maintenance.selected_job.audit_events %}
+                <ul class="vault-timeline">
+                  {% for event in state.maintenance.selected_job.audit_events %}
+                    <li><time>{{ event.created_at }}</time><strong>{{ event.event_type }}</strong>{% if event.actor %} <span>({{ event.actor }})</span>{% endif %}
+                      <span>{{ event.payload }}</span>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="vault-note">{% trans "No job audit events are available yet." %}</p>
+              {% endif %}
+            </div>
+          </article>
+        {% endif %}
+      <div class="vault-records" role="list">
+        {% for job in state.maintenance.jobs %}
+        <article
+          class="vault-record vault-record--compact{% if state.maintenance.selected_job and state.maintenance.selected_job.public_id == job.public_id %} maintenance-job--selected{% endif %}"
+          role="listitem"
+          id="maintenance-job-{{ job.public_id }}"
+        >
+          <h4>{{ job.kind }} · <code>{{ job.public_id }}</code></h4>
+          <p>{{ job.status }} · {{ job.completed_items }}/{{ job.total_items }} {% trans "completed" %} · {{ job.failed_items }} {% trans "failed" %}</p>
+          {% widthratio job.completed_items job.total_items 100 as maintenance_progress %}
+          <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ job.total_items }}" aria-valuenow="{{ job.completed_items }}">
+            <span style="width: {{ maintenance_progress|default:0 }}%"></span>
+          </div>
+          {% if job.error_summary %}<code>{{ job.error_summary }}</code>{% endif %}
+          {% if job.options.candidate_workspace_id %}
+          <p>{% trans "Candidate workspace" %}: <code>{{ job.options.candidate_workspace_id }}</code> · {{ job.options.candidate_state }}</p>
+          {% if job.options.candidate_state == "activation_ready" %}
+          <p class="vault-note"><strong>{% trans "Vault publication required" %}</strong> — {% trans "publish and verify a new immutable generation before remote authority reflects this candidate." %}</p>
+          {% endif %}
+          {% endif %}
+          {% if job.kind == "reindex_needed" or job.kind == "reindex_selected" %}
+          <p class="vault-note">{% trans "A successful reindex creates local changes that make the prior Vault generation stale. Publish a new verified generation before remote authority reflects them." %}</p>
+          {% elif job.kind == "repair_indexes" %}
+          <p class="vault-note">{% trans "A successful repair rebuilds stored indexes from existing chunks and embeddings without external embedding calls." %}</p>
+          {% else %}
+          <p class="vault-note">{% trans "Validation is read-only and does not make the current Vault generation stale." %}</p>
+          {% endif %}
+          <div class="maintenance-job-actions">
+            {% if job.allowed_actions.cancel %}
+              <form method="post" action="{% url 'vaultops:maintenance_job_cancel' job.public_id %}">
+                {% csrf_token %}
+                <input type="hidden" name="state_version" value="{{ job.state_version }}">
+                <button class="vault-button vault-button--secondary" type="submit">{% trans "Cancel job" %}</button>
+              </form>
+            {% endif %}
+            {% if job.allowed_actions.retry %}
+              <form method="post" action="{% url 'vaultops:maintenance_job_retry' job.public_id %}">
+                {% csrf_token %}
+                <input type="hidden" name="state_version" value="{{ job.state_version }}">
+                <button class="vault-button vault-button--secondary" type="submit">{% trans "Retry from checkpoints" %}</button>
+              </form>
+            {% endif %}
+            {% if job.options.candidate_state == "activation_ready" %}
+              <span class="vault-button vault-button--disabled" aria-disabled="true">{% trans "Review activation" %}</span>
+              <code>candidate_activation_unavailable</code>
+            {% endif %}
+          </div>
+        </article>
+        {% empty %}<p class="vault-empty" role="listitem">{% trans "No local maintenance jobs are recorded." %}</p>{% endfor %}
+      </div>
     </section>
   </div>
   {% endif %}

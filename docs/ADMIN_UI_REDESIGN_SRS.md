@@ -104,7 +104,11 @@ path("health/config/", config_health, name="health_config"),
 
 ---
 
-## Phase 2 — S3 & Bulk Operations Dashboard (branch: `feat/s3-operations-dashboard`)
+> Historical design only: the dedicated S3 page and direct bulk mutations are
+> retired. Current operators use Vault Operations, with local maintenance under
+> **Documents & Indexes** and remote lifecycle controls kept separate.
+
+## Phase 2 — S3 & Bulk Operations Dashboard (historical)
 
 ### 2.1 New template: `dashboard_s3ops.html`
 

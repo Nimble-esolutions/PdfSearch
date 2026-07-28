@@ -86,7 +86,12 @@ def main():
         require(dashboard.status_code == 200, f"dashboard GET failed: {dashboard.status_code}")
         require(
             "Operations Cockpit" in dashboard.text
-            and "Dispatch Board" in dashboard.text
+            and "Needs attention" in dashboard.text
+            and "Category Yard" in dashboard.text
+            and 'name="readiness"' in dashboard.text
+            and 'name="provenance"' in dashboard.text
+            and "Active Work" in dashboard.text
+            and "Vault posture" in dashboard.text
             and "Add Category" in dashboard.text
             and ("No categories yet" in dashboard.text or "admin-category-card" in dashboard.text),
             "dashboard UI missing",
@@ -108,6 +113,19 @@ def main():
             and 'method="post"' in sync.text,
             "no-JavaScript Active Sync form missing",
         )
+        maintenance = client.get("/dashboard/operations/?section=maintenance")
+        require(maintenance.status_code == 200, "maintenance workbench GET failed")
+        for expected in (
+            "Documents",
+            "Choose the outcome you need",
+            "Unchanged during processing",
+            "Preview Repair Stored Indexes",
+            'name="filter_indexed"',
+        ):
+            require(
+                expected in maintenance.text,
+                f"guided maintenance workbench missing: {expected}",
+            )
         state = client.get("/dashboard/operations/api/v1/state/")
         require(state.status_code == 200, "workbench state API failed")
         state_payload = state.json()

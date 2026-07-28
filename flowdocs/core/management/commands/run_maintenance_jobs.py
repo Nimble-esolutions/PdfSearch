@@ -127,6 +127,17 @@ def _evaluate_scheduler() -> int:
         return 0
 
 
+def _execute_local_job(job):
+    if (
+        job.options.get("candidate_required")
+        and not getattr(settings, "MAINTENANCE_CANDIDATE_EXECUTION", False)
+    ):
+        from core.candidate_maintenance import execute_candidate_job
+
+        return execute_candidate_job(job)
+    return run_job(job)
+
+
 class Command(BaseCommand):
     help = "Run queued PdfSearch maintenance jobs with optional backup scheduling"
 
@@ -218,7 +229,7 @@ class Command(BaseCommand):
                         relative_path=str(job.public_id),
                         operation=job.kind,
                     ):
-                        finished = run_job(job)
+                        finished = _execute_local_job(job)
                 except SnapshotBarrierActive:
                     job.status = "queued"
                     job.started_at = None
@@ -236,7 +247,7 @@ class Command(BaseCommand):
                         return
                     continue
             else:
-                finished = run_job(job)
+                finished = _execute_local_job(job)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Job {finished.public_id} {finished.status}: "

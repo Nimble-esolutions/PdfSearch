@@ -58,6 +58,22 @@ test.describe('Vault Operations Workbench', () => {
     await expect(page.getByText('It does not delete manifests', { exact: false })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create GC dry-run' })).toBeVisible();
 
+    await page.goto('/dashboard/operations/?section=maintenance');
+    await expect(page.getByRole('heading', { name: 'Documents & Indexes' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Choose the outcome you need' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Validate Files' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Repair Stored Indexes' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Reindex Needed' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Reindex Selected' })).toBeVisible();
+    await expect(page.getByText('Unchanged during processing')).toBeVisible();
+    await expect(page.getByText('Unchanged until explicit publication')).toBeVisible();
+    const maintenanceAxe = await new AxeBuilder({ page }).analyze();
+    expect(
+      maintenanceAxe.violations.filter(
+        violation => violation.impact === 'critical' || violation.impact === 'serious',
+      ),
+    ).toEqual([]);
+
     const storageState = await page.context().storageState();
     const origin = new URL(page.url()).origin;
     const noJsContext = await browser.newContext({
