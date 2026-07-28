@@ -558,9 +558,23 @@ def _mirror_job(candidate_db: Path, source_job: MaintenanceJob) -> None:
             parse_datetime(candidate["finished_at"])
             if candidate["finished_at"] else None
         )
+        candidate_options = json.loads(candidate["options"] or "{}")
+        cumulative_builds = {
+            str(key): int(value)
+            for key, value in source_job.options.get(
+                "candidate_folder_build_attempts", {}
+            ).items()
+        }
+        for key, value in candidate_options.get(
+            "folder_build_attempts", {}
+        ).items():
+            cumulative_builds[str(key)] = (
+                cumulative_builds.get(str(key), 0) + int(value)
+            )
         source_job.options = {
             **source_job.options,
-            "candidate_job_options": json.loads(candidate["options"] or "{}"),
+            "candidate_job_options": candidate_options,
+            "candidate_folder_build_attempts": cumulative_builds,
         }
         source_job.save(
             update_fields=[

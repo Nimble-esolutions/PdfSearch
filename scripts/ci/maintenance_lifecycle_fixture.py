@@ -319,7 +319,7 @@ def assert_maintenance_evidence() -> None:
         for item in items
     ):
         raise SystemExit("maintenance_checkpoint_recomputed")
-    attempts = job.options.get("folder_build_attempts", {})
+    attempts = job.options.get("candidate_folder_build_attempts", {})
     if list(attempts.values()) != [2]:
         raise SystemExit("maintenance_folder_build_count_invalid")
     print("maintenance_checkpoint_evidence_verified")
