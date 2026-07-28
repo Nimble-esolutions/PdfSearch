@@ -23,6 +23,7 @@ from core.candidate_maintenance import (
     validate_candidate,
     workspace_root,
 )
+from core.artifact_cleanup import capacity_report
 from core.emergency_recovery import RecoverySetError, verify_set
 from core.rehearsal import RehearsalError, rehearse_migrations
 from vaultops.models import (
@@ -215,7 +216,42 @@ def _copy_records(candidate, destination, records):
         source = candidate / record["path"]
         target = destination / record["path"]
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        shutil.copyfile(source, target, follow_symlinks=False)
+        source_descriptor = os.open(
+            source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        )
+        target_descriptor = -1
+        try:
+            source_stat = os.fstat(source_descriptor)
+            if (
+                not stat.S_ISREG(source_stat.st_mode)
+                or source_stat.st_nlink != 1
+                or source_stat.st_size != record["bytes"]
+            ):
+                raise MaintenanceImportError(
+                    "maintenance_candidate_changed"
+                )
+            target_descriptor = os.open(
+                target,
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+            )
+            with (
+                os.fdopen(source_descriptor, "rb", closefd=True) as source_stream,
+                os.fdopen(target_descriptor, "wb", closefd=True) as target_stream,
+            ):
+                source_descriptor = -1
+                target_descriptor = -1
+                shutil.copyfileobj(source_stream, target_stream, 1024 * 1024)
+                target_stream.flush()
+                os.fsync(target_stream.fileno())
+        finally:
+            if source_descriptor >= 0:
+                os.close(source_descriptor)
+            if target_descriptor >= 0:
+                os.close(target_descriptor)
         if (
             target.stat().st_size != record["bytes"]
             or _sha256(target) != record["sha256"]
@@ -233,6 +269,28 @@ def _make_read_only(root):
         for name in directories:
             os.chmod(Path(directory) / name, 0o550, follow_symlinks=False)
         os.chmod(Path(directory), 0o550, follow_symlinks=False)
+
+
+def _fsync_tree(root):
+    directories = []
+    for directory, _, files in os.walk(root, followlinks=False):
+        directory_path = Path(directory)
+        directories.append(directory_path)
+        for name in files:
+            descriptor = os.open(
+                directory_path / name,
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            )
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+    for directory in reversed(directories):
+        descriptor = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 def _remove_runtime(root):
@@ -381,6 +439,17 @@ def import_maintenance_candidate(
             return workspace
 
         records, total_bytes = _safe_files(candidate)
+        capacity = capacity_report(
+            source_bytes=total_bytes,
+            operation="activation",
+            target_root=runtime_root,
+        )
+        if not (
+            capacity["byte_capacity_ok"] and capacity["inode_capacity_ok"]
+        ):
+            raise MaintenanceImportError(
+                "maintenance_candidate_capacity_insufficient"
+            )
         incomplete = runtime_root / f".maintenance-{job.public_id}.incomplete"
         if incomplete.exists():
             raise MaintenanceImportError("maintenance_runtime_target_exists")
@@ -418,8 +487,14 @@ def import_maintenance_candidate(
                     "maintenance_job_public_id": str(job.public_id),
                 },
             )
+            _fsync_tree(incomplete)
             _make_read_only(incomplete)
             os.replace(incomplete, final_runtime)
+            root_descriptor = os.open(runtime_root, os.O_RDONLY)
+            try:
+                os.fsync(root_descriptor)
+            finally:
+                os.close(root_descriptor)
             validate_runtime_workspace(
                 final_runtime,
                 runtime_root=runtime_root,
@@ -471,6 +546,7 @@ def import_maintenance_candidate(
                     pointer_digest=parent.pointer_digest,
                     import_idempotency_key=idempotency_key,
                     runtime_path=str(final_runtime),
+                    capacity_plan=capacity,
                     validation_evidence={
                         "candidate": validation,
                         "origin": ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
