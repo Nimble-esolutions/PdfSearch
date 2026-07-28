@@ -677,7 +677,11 @@ def reconcile_activation_result(intent):
         )
     now = timezone.now()
     with transaction.atomic(using="control"):
-        intent = ActivationIntent.objects.select_for_update().get(pk=intent.pk)
+        intent = (
+            ActivationIntent.objects.using("control")
+            .select_for_update()
+            .get(pk=intent.pk)
+        )
         if (
             intent.state
             in {
@@ -690,11 +694,11 @@ def reconcile_activation_result(intent):
             and intent.checkpoint.get("protocol_state") == status
         ):
             return intent
-        target = ArtifactGeneration.objects.select_for_update().get(
+        target = ArtifactGeneration.objects.using("control").select_for_update().get(
             deployment_id=intent.deployment_id,
             generation_id=intent.target_generation_id,
         )
-        previous = ArtifactGeneration.objects.select_for_update().get(
+        previous = ArtifactGeneration.objects.using("control").select_for_update().get(
             deployment_id=intent.deployment_id,
             generation_id=intent.previous_generation_id,
         )

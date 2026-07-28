@@ -292,6 +292,19 @@ def activation_evidence() -> None:
             }
         except (OSError, ValueError):
             evidence["lock"] = {"present": True, "state": "unreadable"}
+    evidence["control_intents"] = list(
+        ActivationIntent.objects.using("control")
+        .values(
+            "public_id",
+            "state",
+            "safe_error_code",
+            "target_generation_id",
+            "previous_generation_id",
+        )
+        .order_by("created_at")
+    )
+    for item in evidence["control_intents"]:
+        item["public_id"] = str(item["public_id"])
     print(json.dumps(evidence, sort_keys=True))
 
 
