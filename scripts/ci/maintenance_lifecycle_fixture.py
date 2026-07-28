@@ -106,7 +106,7 @@ def seed_and_freeze() -> None:
                 "category": "audit",
                 "subject": "cooperation",
                 "keywords": ["audit", "लेखापरीक्षण"],
-                "lifecycle": "uploaded",
+                "lifecycle": "ready",
             },
         )
         precompute_pdf_embeddings(pdf)
