@@ -28,12 +28,21 @@ LOCAL_OPERATIONS = {
 }
 FORCE_CONFIRMATION = "REINDEX SELECTED"
 MAX_SELECTION_IDS = 5000
+# A plan is persisted in the control database and later used to construct the
+# queue scope.  Keep that persisted payload deliberately bounded.  Repairing
+# stored indexes is folder-scoped and does not need document ids, so it may
+# report a larger document count without serialising every id.
+MAX_PREVIEW_PDFS = 5000
 
 
 class MaintenancePlanError(RuntimeError):
     def __init__(self, reason_code: str, detail: str = ""):
         self.reason_code = reason_code
-        super().__init__(detail or reason_code)
+        # Keep the stable typed code at the front of the message while still
+        # exposing a safe field-level detail for operator diagnostics.
+        super().__init__(
+            f"{reason_code}: {detail}" if detail else reason_code
+        )
 
 
 def _vault_health() -> tuple[dict, dict]:
@@ -218,8 +227,20 @@ def _selection_query(selection: dict):
 
 def _source_digest(query) -> str:
     summary = query.aggregate(latest_upload=Max("uploaded_at"))
+    digest = hashlib.sha256()
+    # Stream stable identity/state tuples instead of materialising an
+    # unbounded list in memory or in a plan JSON field.  Indexed state is part
+    # of the authority digest so a document becoming indexed/unindexed causes
+    # queue-time recalculation to reject a stale plan.
+    for pdf_id, indexed, uploaded_at in query.values_list(
+        "pk", "indexed", "uploaded_at"
+    ).iterator(chunk_size=1000):
+        digest.update(
+            f"{pdf_id}:{int(bool(indexed))}:{uploaded_at or ''}\n".encode("utf-8")
+        )
     payload = {
-        "pdf_ids": list(query.values_list("pk", flat=True)),
+        "selection_digest": digest.hexdigest(),
+        "match_count": query.count(),
         "latest_upload": str(summary["latest_upload"] or ""),
         "runtime_generation": getattr(settings, "RUNTIME_GENERATION_ID", ""),
         "runtime_manifest": getattr(settings, "RUNTIME_MANIFEST_DIGEST", ""),
@@ -244,7 +265,17 @@ def calculate_preview(operation: str, selection: dict) -> dict:
     query = _selection_query(selection)
     if operation == "reindex_needed":
         query = query.filter(indexed=False)
-    pdf_ids = list(query.values_list("pk", flat=True))
+    pdf_count = query.count()
+    # Repair workers consume folders and rebuild one index per folder; they do
+    # not need a document-id payload. Other operations queue individual PDFs,
+    # therefore fail deterministically before serialising an oversized scope.
+    if operation != "repair_indexes" and pdf_count > MAX_PREVIEW_PDFS:
+        raise MaintenancePlanError("selection_too_large")
+    pdf_ids = (
+        []
+        if operation == "repair_indexes"
+        else list(query.values_list("pk", flat=True))
+    )
     folder_rows = list(
         query.values("folder_id", "folder__name").order_by("folder_id").distinct()
     )
@@ -255,10 +286,10 @@ def calculate_preview(operation: str, selection: dict) -> dict:
     return {
         "pdf_ids": pdf_ids,
         "folder_ids": folder_ids,
-        "pdf_count": len(pdf_ids),
+        "pdf_count": pdf_count,
         "folder_count": len(folder_ids),
         "indexed_count": indexed_count,
-        "needs_index_count": len(pdf_ids) - indexed_count,
+        "needs_index_count": pdf_count - indexed_count,
         "affected_folders": [
             {"id": row["folder_id"], "name": row["folder__name"]}
             for row in folder_rows if row["folder_id"]
