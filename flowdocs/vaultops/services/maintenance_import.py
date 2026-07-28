@@ -325,8 +325,21 @@ def _manifest(job, candidate_manifest, parent, records, total_bytes):
     return {**payload, "generation_id": generation_id}, digest, generation_id
 
 
-def import_maintenance_candidate(job, *, actor_id=None, actor_name=""):
+def import_maintenance_candidate(
+    job,
+    *,
+    idempotency_key,
+    actor_id=None,
+    actor_name="",
+):
     """Prepare one local candidate for the existing signed activation flow."""
+    keyed_workspace = RestoreWorkspace.objects.filter(
+        import_idempotency_key=idempotency_key
+    ).select_related("generation").first()
+    if keyed_workspace:
+        if keyed_workspace.generation.lineage_job_public_id != job.public_id:
+            raise MaintenanceImportError("idempotency_conflict")
+        return keyed_workspace
     candidate = _resolve_candidate(job)
     candidate_manifest, recovery = _validate_job_and_manifest(job, candidate)
     try:
@@ -456,6 +469,7 @@ def import_maintenance_candidate(job, *, actor_id=None, actor_name=""):
                     manifest_digest=manifest_digest,
                     profile_fingerprint=profile.fingerprint,
                     pointer_digest=parent.pointer_digest,
+                    import_idempotency_key=idempotency_key,
                     runtime_path=str(final_runtime),
                     validation_evidence={
                         "candidate": validation,

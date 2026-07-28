@@ -164,6 +164,7 @@ class MaintenanceCandidateImportTests(TestCase):
     def test_import_projects_explicit_local_origin_and_immutable_runtime(self):
         workspace = import_maintenance_candidate(
             self.job,
+            idempotency_key="maintenance-import-request-1",
             actor_id=17,
             actor_name="operator",
         )
@@ -190,8 +191,12 @@ class MaintenanceCandidateImportTests(TestCase):
         self.assertEqual(evidence["origin"], "local_maintenance")
 
     def test_exact_job_retry_reuses_projected_runtime(self):
-        first = import_maintenance_candidate(self.job)
-        second = import_maintenance_candidate(self.job)
+        first = import_maintenance_candidate(
+            self.job, idempotency_key="maintenance-import-request-1"
+        )
+        second = import_maintenance_candidate(
+            self.job, idempotency_key="maintenance-import-request-1"
+        )
 
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(
@@ -201,12 +206,42 @@ class MaintenanceCandidateImportTests(TestCase):
             1,
         )
 
+    def test_same_job_with_new_key_reuses_projected_runtime(self):
+        first = import_maintenance_candidate(
+            self.job, idempotency_key="maintenance-import-request-1"
+        )
+        second = import_maintenance_candidate(
+            self.job, idempotency_key="maintenance-import-request-2"
+        )
+
+        self.assertEqual(first.pk, second.pk)
+
+    def test_idempotency_key_cannot_be_reused_for_another_job(self):
+        import_maintenance_candidate(
+            self.job, idempotency_key="maintenance-import-request-1"
+        )
+        other_job = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="completed",
+            options={},
+        )
+
+        with self.assertRaises(MaintenanceImportError) as raised:
+            import_maintenance_candidate(
+                other_job,
+                idempotency_key="maintenance-import-request-1",
+            )
+
+        self.assertEqual(raised.exception.reason_code, "idempotency_conflict")
+
     def test_stale_parent_is_rejected_before_runtime_copy(self):
         self.manifest["source"]["runtime_manifest_digest"] = "d" * 64
         self._write_manifest()
 
         with self.assertRaises(MaintenanceImportError) as raised:
-            import_maintenance_candidate(self.job)
+            import_maintenance_candidate(
+                self.job, idempotency_key="maintenance-import-request-1"
+            )
 
         self.assertEqual(
             raised.exception.reason_code,
@@ -218,7 +253,9 @@ class MaintenanceCandidateImportTests(TestCase):
         (self.workspace / "unexpected.txt").write_text("unsafe")
 
         with self.assertRaises(MaintenanceImportError) as raised:
-            import_maintenance_candidate(self.job)
+            import_maintenance_candidate(
+                self.job, idempotency_key="maintenance-import-request-1"
+            )
 
         self.assertEqual(
             raised.exception.reason_code,

@@ -39,6 +39,7 @@ from vaultops.services.confirmations import (
 )
 from vaultops.services.jobs import request_cancellation, requeue_job
 from vaultops.services.inventory import project_verified_generation, verify_generation
+from vaultops.services.maintenance_import import import_maintenance_candidate
 from vaultops.services.profiles import (
     probe_restore_profile,
     upsert_restore_profile,
@@ -499,6 +500,56 @@ def maintenance_job_cancel(request, job_id):
 @require_POST
 def maintenance_job_retry(request, job_id):
     return _local_job_action(request, job_id, action="retry")
+
+
+@superadmin_required
+@require_POST
+def maintenance_candidate_prepare(request, job_id):
+    try:
+        if not settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:
+            raise WorkbenchRequestError(
+                "candidate_preparation_disabled", status_code=409
+            )
+        idempotency_key = _request_idempotency_key(
+            request, require_admin_gate=False
+        )
+        job = get_object_or_404(
+            MaintenanceJob,
+            public_id=job_id,
+            kind__in={
+                "repair_indexes",
+                "reindex_needed",
+                "reindex_selected",
+            },
+        )
+        if _request_value(request, "state_version", "") != (
+            _local_job_state_version(job)
+        ):
+            raise MaintenancePlanError("stale_state_version")
+        workspace = import_maintenance_candidate(
+            job,
+            idempotency_key=idempotency_key,
+            actor_id=request.user.pk,
+            actor_name=request.user.get_username(),
+        )
+        return _mutation_success(
+            request,
+            section="maintenance",
+            reason_code="maintenance_candidate_prepared",
+            message=(
+                "Local maintenance candidate prepared. Review typed "
+                "activation separately; Vault publication is still required."
+            ),
+            data={
+                "job_id": str(job.public_id),
+                "workspace_id": str(workspace.public_id),
+                "generation_id": workspace.generation.generation_id,
+                "origin": workspace.generation.origin,
+                "vault_authority_changed": False,
+            },
+        )
+    except Exception as exc:
+        return _mutation_error(request, exc, section="maintenance")
 
 
 @superadmin_required

@@ -137,6 +137,97 @@ class VaultWorkbenchTests(TestCase):
         )
         self.assertContains(sync_response, "Queue publish-only sync")
 
+    def test_ready_candidate_keeps_prepare_control_visible_with_typed_reason(self):
+        MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="completed",
+            options={
+                "candidate_workspace_id": "mw-disabled",
+                "candidate_state": "activation_ready",
+            },
+        )
+
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "maintenance"}
+        )
+
+        self.assertContains(response, "Prepare for activation")
+        self.assertContains(response, "candidate_preparation_disabled")
+
+    @override_settings(MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True)
+    @patch("vaultops.views.import_maintenance_candidate")
+    def test_superadmin_can_prepare_ready_candidate(self, importer):
+        job = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="completed",
+            options={
+                "candidate_workspace_id": "mw-ready",
+                "candidate_state": "activation_ready",
+            },
+        )
+        generation = SimpleNamespace(
+            generation_id="lm-prepared",
+            origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+        )
+        importer.return_value = SimpleNamespace(
+            public_id=uuid.uuid4(),
+            generation=generation,
+        )
+        page = self.client.get(
+            reverse("operations_panel"), {"section": "maintenance"}
+        )
+        rendered_job = next(
+            item
+            for item in page.context["state"]["maintenance"]["jobs"]
+            if item["public_id"] == str(job.public_id)
+        )
+
+        response = self.client.post(
+            reverse(
+                "vaultops:maintenance_candidate_prepare",
+                kwargs={"job_id": job.public_id},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": rendered_job["state_version"],
+            },
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 202, response.content)
+        self.assertEqual(
+            response.json()["data"]["origin"], "local_maintenance"
+        )
+        self.assertFalse(
+            response.json()["data"]["vault_authority_changed"]
+        )
+        importer.assert_called_once()
+
+    @override_settings(MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True)
+    def test_non_superadmin_cannot_prepare_candidate(self):
+        job = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="completed",
+            options={
+                "candidate_workspace_id": "mw-ready",
+                "candidate_state": "activation_ready",
+            },
+        )
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse(
+                "vaultops:maintenance_candidate_prepare",
+                kwargs={"job_id": job.public_id},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": "invalid",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_non_superadmin_is_forbidden(self):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("operations_panel"))

@@ -250,6 +250,9 @@ class RestoreWorkspace(TimeStampedModel):
         max_length=64, blank=True, default=""
     )
     pointer_digest = models.CharField(max_length=64, blank=True, default="")
+    import_idempotency_key = models.CharField(
+        max_length=160, blank=True, default=""
+    )
     quarantine_path = models.CharField(max_length=1000, blank=True, default="")
     runtime_path = models.CharField(max_length=1000, blank=True, default="")
     capacity_plan = models.JSONField(default=dict, blank=True)
@@ -264,6 +267,13 @@ class RestoreWorkspace(TimeStampedModel):
     expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["import_idempotency_key"],
+                condition=~Q(import_idempotency_key=""),
+                name="vaultops_unique_workspace_import_idempotency",
+            ),
+        ]
         ordering = ["-created_at"]
 
 
