@@ -65,10 +65,22 @@ REMEDIATION_DESTINATIONS = {
         "label": "Verify inventory",
         "section": "configuration",
     },
+    "inventory_observation_stale": {
+        "title": "Remote inventory observation is stale",
+        "detail": "Refresh the approved profile inventory before relying on remote authority evidence.",
+        "label": "Refresh inventory evidence",
+        "section": "configuration",
+    },
     "runtime_observation_unavailable": {
         "title": "Runtime authority is not observed",
         "detail": "Review runtime and job evidence before making any activation decision.",
         "label": "Review jobs and audit",
+        "section": "jobs",
+    },
+    "runtime_observation_stale": {
+        "title": "Runtime authority observation is stale",
+        "detail": "Refresh runtime evidence before changing activation state.",
+        "label": "Review runtime evidence",
         "section": "jobs",
     },
     "runtime_not_ready": {
@@ -218,6 +230,26 @@ def workspace_state_digest(workspace):
     )
 
 
+def _observation_is_fresh(value, *, observed_at):
+    if value is None:
+        return False
+    age_seconds = (observed_at - value).total_seconds()
+    return age_seconds <= settings.VAULT_VALIDATION_MAX_AGE_SECONDS
+
+
+def _job_summary(job):
+    if job is None:
+        return None
+    return {
+        "public_id": str(job.public_id),
+        "operation": job.operation,
+        "phase": job.phase,
+        "status": job.status,
+        "heartbeat_at": job.heartbeat_at,
+        "safe_error_code": job.safe_error_code,
+    }
+
+
 def _authority_state(profile, dataset_id, deployment_id):
     observed_at = timezone.now()
     projection = (
@@ -234,15 +266,25 @@ def _authority_state(profile, dataset_id, deployment_id):
         .order_by("-observed_at")
         .first()
     )
-    critical_job = (
+    unhealthy_job = (
         VaultJob.objects.filter(
             profile=profile,
             dataset_id=dataset_id,
-            status__in=ACTIVE_JOB_STATES | UNHEALTHY_JOB_STATES,
+            status__in=UNHEALTHY_JOB_STATES,
         )
         .order_by("-updated_at")
         .first()
     )
+    active_job = (
+        VaultJob.objects.filter(
+            profile=profile,
+            dataset_id=dataset_id,
+            status__in=ACTIVE_JOB_STATES,
+        )
+        .order_by("-updated_at")
+        .first()
+    )
+    critical_job = unhealthy_job or active_job
     runtime_generation = None
     if runtime and runtime.active_generation_id:
         runtime_generation = ArtifactGeneration.objects.filter(
@@ -256,15 +298,32 @@ def _authority_state(profile, dataset_id, deployment_id):
         blocking_reasons.append("inventory_unavailable")
     elif projection.inventory_state != "verified":
         blocking_reasons.append("inventory_unverified")
+    elif not _observation_is_fresh(
+        projection.inventory_observed_at,
+        observed_at=observed_at,
+    ):
+        blocking_reasons.append("inventory_observation_stale")
     if runtime is None:
         blocking_reasons.append("runtime_observation_unavailable")
     elif runtime.status != "ready":
         blocking_reasons.append("runtime_not_ready")
-    if critical_job and critical_job.status in UNHEALTHY_JOB_STATES:
+    elif not _observation_is_fresh(
+        runtime.observed_at,
+        observed_at=observed_at,
+    ):
+        blocking_reasons.append("runtime_observation_stale")
+    if unhealthy_job:
         blocking_reasons.append("critical_job_unhealthy")
 
     allowed_actions = ["refresh_inventory"]
-    if projection and projection.inventory_state == "verified":
+    if (
+        projection
+        and projection.inventory_state == "verified"
+        and _observation_is_fresh(
+            projection.inventory_observed_at,
+            observed_at=observed_at,
+        )
+    ):
         allowed_actions.extend(["plan_restore", "compare_generations"])
     return {
         "status": "healthy" if not blocking_reasons else "degraded",
@@ -303,18 +362,8 @@ def _authority_state(profile, dataset_id, deployment_id):
             ),
             "observed_at": runtime.observed_at if runtime else None,
         },
-        "critical_job": (
-            {
-                "public_id": str(critical_job.public_id),
-                "operation": critical_job.operation,
-                "phase": critical_job.phase,
-                "status": critical_job.status,
-                "heartbeat_at": critical_job.heartbeat_at,
-                "safe_error_code": critical_job.safe_error_code,
-            }
-            if critical_job
-            else None
-        ),
+        "critical_job": _job_summary(critical_job),
+        "active_job": _job_summary(active_job),
         "allowed_actions": allowed_actions,
         "blocking_reasons": blocking_reasons,
     }
@@ -333,6 +382,7 @@ def build_authority_state(*, profile_key, dataset_id, deployment_id):
             "remote": {"state": "unknown"},
             "runtime": {"state": "unknown"},
             "critical_job": None,
+            "active_job": None,
             "allowed_actions": [],
             "blocking_reasons": ["profile_unavailable"],
         }
@@ -367,6 +417,7 @@ def build_dashboard_authority_summary():
             "remote": {"state": "unknown", "observed_at": None},
             "runtime": {"state": "unknown", "observed_at": None},
             "critical_job": None,
+            "active_job": None,
             "blocking_reasons": ["profile_unavailable"],
         }
     except DatabaseError:
@@ -377,12 +428,14 @@ def build_dashboard_authority_summary():
             "remote": {"state": "unknown", "observed_at": None},
             "runtime": {"state": "unknown", "observed_at": None},
             "critical_job": None,
+            "active_job": None,
             "blocking_reasons": ["control_database_unavailable"],
         }
 
     remote = authority.get("remote") or {}
     runtime = authority.get("runtime") or {}
     critical_job = authority.get("critical_job")
+    active_job = authority.get("active_job")
     summary = {
         "status": authority.get("status") or "unknown",
         "reason_code": authority.get("reason_code") or "",
@@ -406,6 +459,15 @@ def build_dashboard_authority_summary():
                 "safe_error_code": critical_job.get("safe_error_code") or "",
             }
             if critical_job
+            else None
+        ),
+        "active_job": (
+            {
+                "operation": active_job.get("operation") or "",
+                "status": active_job.get("status") or "",
+                "safe_error_code": active_job.get("safe_error_code") or "",
+            }
+            if active_job
             else None
         ),
         "blocking_reasons": list(authority.get("blocking_reasons") or []),
@@ -800,6 +862,7 @@ def build_workbench_state(*, profile_key=None):
                 "remote": authority["remote"],
                 "runtime": authority["runtime"],
                 "critical_job": authority["critical_job"],
+                "active_job": authority["active_job"],
                 "allowed_actions": authority["allowed_actions"],
                 "blocking_reasons": authority["blocking_reasons"],
             },
