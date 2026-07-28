@@ -26,6 +26,25 @@ The Dashboard only summarizes local maintenance under **Active Work** and
 does not publish Vault generations, inspect remote manifests, or directly
 cancel/retry jobs.
 
+## Readiness and local-development posture
+
+The Workbench alert is evidence-driven. Each blocking code has one safe
+destination instead of an implicit mutation:
+
+| Code | Review next |
+|---|---|
+| `profile_unavailable`, `inventory_unavailable`, `inventory_unverified` | Configuration → run a read-only probe or verify authoritative inventory |
+| `runtime_observation_unavailable`, `critical_job_unhealthy` | Jobs & Audit → inspect the durable job and checkpoint |
+| `runtime_not_ready` | Restore & Activation → review prepared workspace evidence |
+| `capacity_degraded` | Documents & Indexes → restore free-space and inode reserve before queueing |
+
+In local development, publication, restore, production activation, and
+external embedding calls are disabled or explicitly gated by environment
+policy. The Workbench remains useful for inspecting redacted evidence and
+preparing a candidate, but no local screen silently changes remote or runtime
+authority. Disabled operation cards retain their typed reason so operators can
+distinguish policy from an outage.
+
 ## Preview and confirmation
 
 1. Select categories and optionally explicit documents.

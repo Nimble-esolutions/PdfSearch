@@ -47,7 +47,7 @@
     <a href="?section=configuration"{% if section == "configuration" %} aria-current="page"{% endif %}>{% trans "Configuration" %}</a>
   </nav>
 
-  {% if state.authority.blocking_reasons %}
+  {% if state.authority.blocking_reasons or state.readiness.issues %}
   <section class="vault-alert vault-alert--warning" role="status" aria-labelledby="vault-alert-heading">
     <h3 id="vault-alert-heading">{% trans "Evidence requires attention" %}</h3>
     <ul>
@@ -56,6 +56,27 @@
       {% endfor %}
     </ul>
     <p>{{ state.recommended_action }}</p>
+    {% if state.readiness.issues %}
+    <div class="vault-remediation-list" aria-label="{% trans 'Recommended remediation' %}">
+      {% for issue in state.readiness.issues %}
+      <article class="vault-remediation">
+        <div>
+          <strong>{{ issue.title }}</strong>
+          <p>{{ issue.detail }}</p>
+          <code>{{ issue.reason_code }}</code>
+        </div>
+        <a class="vault-button vault-button--secondary" href="?section={{ issue.section }}">{{ issue.label }}</a>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if state.readiness.local_development.enabled %}
+  <section class="vault-alert vault-alert--info" role="note" aria-labelledby="local-posture-heading">
+    <h3 id="local-posture-heading">{{ state.readiness.local_development.title }}</h3>
+    <p>{{ state.readiness.local_development.message }}</p>
   </section>
   {% endif %}
 
@@ -118,6 +139,18 @@
       </details>
       <div class="maintenance-operations" aria-labelledby="maintenance-operation-heading">
         <h4 id="maintenance-operation-heading">{% trans "Choose the outcome you need" %}</h4>
+        {% if state.readiness.disabled_capabilities %}
+        <div class="maintenance-disabled-guidance" role="note">
+          <strong>{% trans "Some local operations are guarded" %}</strong>
+          <p>{% trans "Disabled controls reflect runtime authority, capacity, or external-service policy. Resolve the typed reason before retrying." %}</p>
+          <ul>
+            {% for item in state.readiness.disabled_capabilities %}
+            <li><code>{{ item.operation }}</code> · <code>{{ item.reason_code }}</code></li>
+            {% endfor %}
+          </ul>
+          <a class="vault-button vault-button--secondary" href="?section=configuration">{% trans "Review runtime and profile evidence" %}</a>
+        </div>
+        {% endif %}
         <div class="maintenance-operation-grid">
           {% with capability=state.maintenance.capabilities.validate %}
           <article class="maintenance-operation{% if not capability.enabled %} maintenance-operation--disabled{% endif %}">

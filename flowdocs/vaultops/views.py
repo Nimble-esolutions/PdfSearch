@@ -46,6 +46,7 @@ from vaultops.services.profiles import (
 )
 from vaultops.services.read_model import (
     build_workbench_state,
+    enrich_workbench_readiness,
     generation_state_digest,
     workspace_state_digest,
 )
@@ -296,6 +297,7 @@ def workbench(request):
     state["maintenance"] = workbench_maintenance_state(
         selected_plan_id=request.GET.get("plan", ""),
     )
+    enrich_workbench_readiness(state)
     state["vault_state_version"] = state["state_version"]
     state["maintenance_state_version"] = state["maintenance"]["state_version"]
     state["combined_state_version"] = hashlib.sha256(
@@ -330,6 +332,7 @@ def state_api(request):
     state["maintenance"] = workbench_maintenance_state(
         selected_plan_id=request.GET.get("plan", ""),
     )
+    enrich_workbench_readiness(state)
     state["vault_state_version"] = state["state_version"]
     state["maintenance_state_version"] = state["maintenance"]["state_version"]
     state["combined_state_version"] = hashlib.sha256(

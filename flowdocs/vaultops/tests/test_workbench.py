@@ -24,6 +24,7 @@ from vaultops.models import (
     VaultAuditEvent,
     VaultJob,
 )
+from vaultops.services.read_model import enrich_workbench_readiness
 
 
 @override_settings(
@@ -137,6 +138,41 @@ class VaultWorkbenchTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("operations_panel"))
         self.assertEqual(response.status_code, 403)
+
+    def test_readiness_exposes_typed_remediation_destinations(self):
+        state = {
+            "authority": {
+                "blocking_reasons": ["profile_unavailable", "inventory_unverified"],
+            },
+            "maintenance": {
+                "health": {
+                    "free_space_reserve": {"state": "degraded"},
+                },
+                "capabilities": {
+                    "reindex_selected": {
+                        "enabled": False,
+                        "reason_code": "external_embeddings_disabled",
+                    },
+                },
+            },
+            "environment": {"app_env": "development", "is_production": False},
+        }
+        enrich_workbench_readiness(state)
+        issues = {item["reason_code"]: item for item in state["readiness"]["issues"]}
+        self.assertEqual(issues["profile_unavailable"]["section"], "configuration")
+        self.assertEqual(issues["inventory_unverified"]["section"], "configuration")
+        self.assertEqual(issues["capacity_degraded"]["section"], "maintenance")
+        self.assertEqual(
+            state["readiness"]["disabled_capabilities"][0]["reason_code"],
+            "external_embeddings_disabled",
+        )
+        self.assertTrue(state["readiness"]["local_development"]["enabled"])
+
+    def test_workbench_renders_local_posture_and_remediation_link(self):
+        response = self.client.get(reverse("operations_panel"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Local development posture")
+        self.assertContains(response, "Remote publication and production activation")
 
     def test_create_superuser_assigns_supported_vault_role(self):
         user = CustomUser.objects.create_superuser(

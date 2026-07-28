@@ -45,6 +45,101 @@ REDACTED_KEYS = {
 }
 
 
+REMEDIATION_DESTINATIONS = {
+    "profile_unavailable": {
+        "title": "Approved Vault profile is unavailable",
+        "detail": "Materialize or review the server-approved profile before requesting inventory evidence.",
+        "label": "Review profile configuration",
+        "section": "configuration",
+    },
+    "inventory_unavailable": {
+        "title": "Remote inventory has not been observed",
+        "detail": "Run a read-only probe, then verify the authoritative inventory from Configuration.",
+        "label": "Open profile evidence",
+        "section": "configuration",
+    },
+    "inventory_unverified": {
+        "title": "Remote inventory requires verification",
+        "detail": "Refresh the approved profile inventory before planning restore or publication work.",
+        "label": "Verify inventory",
+        "section": "configuration",
+    },
+    "runtime_observation_unavailable": {
+        "title": "Runtime authority is not observed",
+        "detail": "Review runtime and job evidence before making any activation decision.",
+        "label": "Review jobs and audit",
+        "section": "jobs",
+    },
+    "runtime_not_ready": {
+        "title": "Runtime is not ready",
+        "detail": "Inspect the runtime job and prepared workspaces; activation remains guarded until evidence is ready.",
+        "label": "Review restore evidence",
+        "section": "restore",
+    },
+    "critical_job_unhealthy": {
+        "title": "A critical Vault job needs attention",
+        "detail": "Inspect the failed or stale job and retry only from its durable checkpoint.",
+        "label": "Review jobs and audit",
+        "section": "jobs",
+    },
+    "capacity_degraded": {
+        "title": "Local capacity reserve is degraded",
+        "detail": "Free space or inode reserve is below the maintenance safety threshold. Do not queue a mutation until capacity is restored.",
+        "label": "Review maintenance capacity",
+        "section": "maintenance",
+    },
+}
+
+
+def enrich_workbench_readiness(state):
+    """Attach safe, typed remediation guidance without exposing secrets."""
+    authority = state.get("authority") or {}
+    reasons = list(authority.get("blocking_reasons") or [])
+    maintenance = state.get("maintenance") or {}
+    health = maintenance.get("health") or {}
+    reserve = health.get("free_space_reserve") or {}
+    if reserve.get("state") == "degraded":
+        reasons.append("capacity_degraded")
+
+    issues = []
+    seen = set()
+    for reason_code in reasons:
+        if reason_code in seen:
+            continue
+        seen.add(reason_code)
+        definition = REMEDIATION_DESTINATIONS.get(reason_code)
+        if not definition:
+            continue
+        issues.append({"reason_code": reason_code, **definition})
+
+    disabled_capabilities = []
+    for operation, capability in (maintenance.get("capabilities") or {}).items():
+        if not capability.get("enabled") and capability.get("reason_code"):
+            disabled_capabilities.append({
+                "operation": operation,
+                "reason_code": capability["reason_code"],
+            })
+
+    environment = state.get("environment") or {}
+    app_env = str(environment.get("app_env") or "").casefold()
+    is_local_dev = app_env in {"development", "dev", "local", "test"} or not environment.get("is_production", False)
+    state["readiness"] = {
+        "status": "degraded" if issues else "ready",
+        "issues": issues,
+        "disabled_capabilities": disabled_capabilities,
+        "local_development": {
+            "enabled": is_local_dev,
+            "title": "Local development posture" if is_local_dev else "Controlled runtime posture",
+            "message": (
+                "Remote publication and production activation stay disabled or explicitly gated in local development. Use this Workbench to inspect evidence and prepare candidates; it never changes remote authority implicitly."
+                if is_local_dev
+                else "Remote publication, restore, and activation remain separately gated by verified evidence and explicit operator confirmation."
+            ),
+        },
+    }
+    return state
+
+
 def _safe_mapping(value):
     if not isinstance(value, dict):
         return {}
