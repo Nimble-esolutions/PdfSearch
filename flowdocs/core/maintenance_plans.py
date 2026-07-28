@@ -510,8 +510,12 @@ def _job_state_version(job: dict) -> str:
 
 
 def _serialize_local_job_payload(
-    job: MaintenanceJob | dict, *, include_audit=False
+    job: MaintenanceJob | dict,
+    *,
+    prepared_workspace_by_job=None,
+    include_audit=False,
 ) -> dict:
+    prepared_workspace_by_job = prepared_workspace_by_job or {}
     payload = {
         "public_id": str(job.public_id if hasattr(job, "public_id") else job["public_id"]),
         "kind": str(job.kind if hasattr(job, "kind") else job["kind"]),
@@ -548,24 +552,14 @@ def _serialize_local_job_payload(
     elif payload["options"].get("candidate_state") != "activation_ready":
         candidate_reason = "candidate_not_ready"
     else:
-        from vaultops.models import ArtifactGeneration, RestoreWorkspace
-
-        prepared = (
-            RestoreWorkspace.objects.filter(
-                generation__origin=(
-                    ArtifactGeneration.Origin.LOCAL_MAINTENANCE
-                ),
-                generation__lineage_job_public_id=payload["public_id"],
-                state=RestoreWorkspace.State.ACTIVATION_READY,
-            )
-            .order_by("-prepared_at")
-            .first()
+        prepared_workspace_id = str(
+            prepared_workspace_by_job.get(payload["public_id"]) or ""
         )
-        if prepared:
-            prepared_workspace_id = str(prepared.public_id)
-        elif not settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:
+        if not prepared_workspace_id and not (
+            settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED
+        ):
             candidate_reason = "candidate_preparation_disabled"
-        elif settings.ENV_IDENTITY.is_production:
+        elif not prepared_workspace_id and settings.ENV_IDENTITY.is_production:
             candidate_reason = "runtime_read_only"
     payload["allowed_actions"]["prepare_activation"] = (
         not candidate_reason and not prepared_workspace_id
@@ -592,6 +586,42 @@ def _serialize_local_job_payload(
     return payload
 
 
+def _prepared_workspace_ids(job_records) -> dict[str, str]:
+    from vaultops.models import ArtifactGeneration, RestoreWorkspace
+
+    eligible_job_ids = {
+        str(job.public_id)
+        for job in job_records
+        if (
+            job.status == "completed"
+            and job.options.get("candidate_state") == "activation_ready"
+        )
+    }
+    if not eligible_job_ids:
+        return {}
+
+    prepared_by_job = {}
+    workspaces = (
+        RestoreWorkspace.objects.filter(
+            generation__origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+            generation__lineage_job_public_id__in=eligible_job_ids,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+        )
+        .order_by(
+            "generation__lineage_job_public_id",
+            "-prepared_at",
+            "-pk",
+        )
+        .values_list(
+            "generation__lineage_job_public_id",
+            "public_id",
+        )
+    )
+    for job_id, workspace_id in workspaces:
+        prepared_by_job.setdefault(str(job_id), str(workspace_id))
+    return prepared_by_job
+
+
 def workbench_maintenance_state(
     *, selected_plan_id="", selected_job_id=""
 ) -> dict:
@@ -616,13 +646,37 @@ def workbench_maintenance_state(
             "free_inodes": 0,
             "inode_reserve": 0,
         }
+    job_records = list(
+        MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).order_by(
+            "-created_at", "-pk"
+        )[:20]
+    )
+    selected_job_id = str(selected_job_id).strip()
+    selected_job_record = next(
+        (
+            job for job in job_records
+            if selected_job_id and str(job.public_id) == selected_job_id
+        ),
+        None,
+    )
+    if selected_job_id and selected_job_record is None:
+        selected_job_record = MaintenanceJob.objects.filter(
+            public_id=selected_job_id,
+            kind__in=LOCAL_OPERATIONS,
+        ).first()
+    workspace_job_records = list(job_records)
+    if (
+        selected_job_record is not None
+        and selected_job_record not in workspace_job_records
+    ):
+        workspace_job_records.append(selected_job_record)
+    prepared_workspace_by_job = _prepared_workspace_ids(workspace_job_records)
     jobs = [
-        _serialize_local_job_payload(job)
-        for job in list(
-            MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).order_by(
-                "-created_at", "-pk"
-            )[:20]
+        _serialize_local_job_payload(
+            job,
+            prepared_workspace_by_job=prepared_workspace_by_job,
         )
+        for job in job_records
     ]
     plans = list(
         MaintenancePlan.objects.select_related("job").values(
@@ -639,7 +693,6 @@ def workbench_maintenance_state(
         None,
     )
     selected_job = None
-    selected_job_id = str(selected_job_id).strip()
     if selected_job_id:
         selected_job = next(
             (
@@ -649,16 +702,12 @@ def workbench_maintenance_state(
             ),
             None,
         )
-        if selected_job is None:
-            selected_job_record = MaintenanceJob.objects.filter(
-                public_id=selected_job_id,
-                kind__in=LOCAL_OPERATIONS,
-            ).first()
-            if selected_job_record is not None:
-                selected_job = _serialize_local_job_payload(
-                    selected_job_record,
-                    include_audit=True,
-                )
+        if selected_job is None and selected_job_record is not None:
+            selected_job = _serialize_local_job_payload(
+                selected_job_record,
+                prepared_workspace_by_job=prepared_workspace_by_job,
+                include_audit=True,
+            )
         if selected_job and not selected_job["audit_events"]:
             selected_job["audit_events"] = [
                 {

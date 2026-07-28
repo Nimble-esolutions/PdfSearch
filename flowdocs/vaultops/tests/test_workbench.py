@@ -7,7 +7,9 @@ from unittest.mock import patch
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connections
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -15,7 +17,11 @@ from core.lease import acquire_lease, release_lease
 from core.models import ArtifactGeneration as LegacyGeneration
 from core.models import CustomUser, Folder, MaintenanceAuditEvent, MaintenanceJob
 from core.models import PDFFile
-from core.maintenance_plans import create_plan
+from core.maintenance_plans import (
+    _prepared_workspace_ids,
+    _serialize_local_job_payload,
+    create_plan,
+)
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -141,6 +147,75 @@ class VaultWorkbenchTests(TestCase):
             reverse("operations_panel"), {"section": "sync"}
         )
         self.assertContains(sync_response, "Queue publish-only sync")
+
+    def test_prepared_workspace_lookup_is_one_control_query_for_many_jobs(self):
+        jobs = []
+        expected = {}
+        for index in range(3):
+            job = MaintenanceJob.objects.create(
+                kind="reindex_selected",
+                status="completed",
+                options={"candidate_state": "activation_ready"},
+            )
+            generation = ArtifactGeneration.objects.create(
+                profile=self.profile,
+                origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+                dataset_id=self.profile.dataset_id,
+                generation_id=f"local-candidate-{index}",
+                manifest_digest=f"{index}" * 64,
+                vault_state=ArtifactGeneration.VaultState.UNKNOWN,
+                runtime_state=ArtifactGeneration.RuntimeState.INACTIVE,
+                local_presence=ArtifactGeneration.LocalPresence.PREPARED,
+                lineage_job_public_id=job.public_id,
+                parent_generation_id="parent-generation",
+                parent_manifest_digest="p" * 64,
+            )
+            workspace = RestoreWorkspace.objects.create(
+                generation=generation,
+                state=RestoreWorkspace.State.ACTIVATION_READY,
+                manifest_digest=generation.manifest_digest,
+                prepared_at=timezone.now(),
+            )
+            jobs.append(job)
+            expected[str(job.public_id)] = str(workspace.public_id)
+
+        with CaptureQueriesContext(connections["control"]) as queries:
+            prepared = _prepared_workspace_ids(jobs)
+        self.assertEqual(len(queries), 1)
+        self.assertEqual(prepared, expected)
+
+        with CaptureQueriesContext(connections["control"]) as queries:
+            payloads = [
+                _serialize_local_job_payload(
+                    job,
+                    prepared_workspace_by_job=prepared,
+                )
+                for job in jobs
+            ]
+        self.assertEqual(len(queries), 0)
+        self.assertEqual(
+            {payload["prepared_workspace_id"] for payload in payloads},
+            set(expected.values()),
+        )
+
+    def test_prepared_workspace_lookup_skips_query_without_eligible_jobs(self):
+        jobs = [
+            MaintenanceJob.objects.create(
+                kind="validate",
+                status="running",
+            ),
+            MaintenanceJob.objects.create(
+                kind="reindex_selected",
+                status="completed",
+                options={"candidate_state": "building"},
+            ),
+        ]
+
+        with CaptureQueriesContext(connections["control"]) as queries:
+            prepared = _prepared_workspace_ids(jobs)
+
+        self.assertEqual(prepared, {})
+        self.assertEqual(len(queries), 0)
 
     def test_ready_candidate_keeps_prepare_control_visible_with_typed_reason(self):
         MaintenanceJob.objects.create(
