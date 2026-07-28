@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -169,27 +171,47 @@ def _candidate_environment(workspace: Path) -> dict:
     return environment
 
 
-def _embedding_validation(database: Path, folder_ids: list[int]) -> dict:
+def _embedding_validation(database: Path) -> dict:
     connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
-        placeholders = ",".join("?" for _ in folder_ids) or "NULL"
         rows = connection.execute(
             "SELECT id, folder_id, page_chunks, chunk_embeddings FROM core_pdffile "
-            f"WHERE folder_id IN ({placeholders}) AND lifecycle != 'archived'",
-            folder_ids,
+            "WHERE lifecycle != 'archived'",
         )
         dimensions = set()
         vectors = 0
         folders = {}
         for pdf_id, folder_id, chunks_raw, embeddings_raw in rows:
-            chunks = json.loads(chunks_raw or "[]")
-            embeddings = json.loads(embeddings_raw or "[]")
-            if chunks and len(chunks) != len(embeddings):
+            if not isinstance(folder_id, int) or folder_id <= 0:
+                raise CandidateMaintenanceError(
+                    "candidate_folder_invalid", str(pdf_id)
+                )
+            try:
+                chunks = json.loads(chunks_raw or "[]")
+                embeddings = json.loads(embeddings_raw or "[]")
+            except (TypeError, ValueError) as exc:
+                raise CandidateMaintenanceError(
+                    "candidate_embedding_metadata_invalid", str(pdf_id)
+                ) from exc
+            if not isinstance(chunks, list) or not isinstance(embeddings, list):
+                raise CandidateMaintenanceError(
+                    "candidate_embedding_metadata_invalid", str(pdf_id)
+                )
+            if len(chunks) != len(embeddings):
                 raise CandidateMaintenanceError(
                     "candidate_embedding_count_mismatch", str(pdf_id)
                 )
             for embedding in embeddings:
-                if not isinstance(embedding, list) or not embedding:
+                if (
+                    not isinstance(embedding, list)
+                    or not embedding
+                    or any(
+                        isinstance(value, bool)
+                        or not isinstance(value, (int, float))
+                        or not math.isfinite(value)
+                        for value in embedding
+                    )
+                ):
                     raise CandidateMaintenanceError(
                         "candidate_embedding_invalid", str(pdf_id)
                     )
@@ -221,7 +243,23 @@ def _embedding_validation(database: Path, folder_ids: list[int]) -> dict:
 
 def validate_candidate(workspace: Path) -> dict:
     manifest_path = workspace / WORKSPACE_MANIFEST
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = {}
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError) as exc:
+            raise CandidateMaintenanceError(
+                "candidate_manifest_invalid"
+            ) from exc
+    try:
+        affected_folder_ids = sorted(
+            {
+                int(folder_id)
+                for folder_id in manifest.get("affected_folder_ids", [])
+            }
+        )
+    except (TypeError, ValueError) as exc:
+        raise CandidateMaintenanceError("candidate_manifest_invalid") from exc
     database = workspace / "db.sqlite3"
     connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
@@ -239,28 +277,44 @@ def validate_candidate(workspace: Path) -> dict:
         raise CandidateMaintenanceError("candidate_sqlite_integrity_failed")
     if foreign_keys:
         raise CandidateMaintenanceError("candidate_foreign_keys_failed")
-    missing_media = [
-        pdf_id for pdf_id, value in media_rows
-        if not (workspace / "media" / value).is_file()
-    ]
+    media_root = (workspace / "media").resolve()
+    missing_media = []
+    for pdf_id, value in media_rows:
+        media_path = workspace / "media" / value
+        try:
+            resolved_media = media_path.resolve(strict=True)
+            resolved_media.relative_to(media_root)
+        except (OSError, RuntimeError, ValueError):
+            missing_media.append(pdf_id)
+            continue
+        if media_path.is_symlink() or not resolved_media.is_file():
+            missing_media.append(pdf_id)
     if missing_media:
         raise CandidateMaintenanceError(
             "candidate_media_missing", str(len(missing_media))
         )
-    embedding = _embedding_validation(
-        database, manifest["affected_folder_ids"]
+    embedding = _embedding_validation(database)
+    validated_folder_ids = sorted(
+        int(folder_id)
+        for folder_id, record in embedding["folders"].items()
+        if record["vectors"]
     )
     faiss_records = {}
     try:
         import faiss as faiss_module
 
-        for folder_id in manifest["affected_folder_ids"]:
+        for folder_id in validated_folder_ids:
             path = workspace / "faiss_indexes" / f"folder_{folder_id}.index"
             if not path.is_file():
                 raise CandidateMaintenanceError(
                     "candidate_faiss_missing", str(folder_id)
                 )
-            index = faiss_module.read_index(str(path))
+            try:
+                index = faiss_module.read_index(str(path))
+            except Exception as exc:
+                raise CandidateMaintenanceError(
+                    "candidate_faiss_invalid", str(folder_id)
+                ) from exc
             faiss_records[str(folder_id)] = {
                 "vectors": int(index.ntotal),
                 "dimension": int(index.d),
@@ -268,6 +322,22 @@ def validate_candidate(workspace: Path) -> dict:
             }
     except ImportError as exc:
         raise CandidateMaintenanceError("candidate_faiss_unavailable") from exc
+    actual_folder_ids = set()
+    index_root = workspace / "faiss_indexes"
+    if not index_root.is_dir() or index_root.is_symlink():
+        raise CandidateMaintenanceError("candidate_faiss_directory_invalid")
+    for path in index_root.iterdir():
+        match = re.fullmatch(r"folder_(\d+)\.index", path.name)
+        if not match:
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise CandidateMaintenanceError("candidate_faiss_unsafe", path.name)
+        actual_folder_ids.add(int(match.group(1)))
+    unexpected = sorted(actual_folder_ids - set(validated_folder_ids))
+    if unexpected:
+        raise CandidateMaintenanceError(
+            "candidate_faiss_orphaned", ",".join(map(str, unexpected))
+        )
     dimensions = embedding["dimensions"]
     if dimensions and any(
         record["dimension"] != dimensions[0]
@@ -294,6 +364,8 @@ def validate_candidate(workspace: Path) -> dict:
         "media": {"referenced": len(media_rows), "missing": 0},
         "embeddings": embedding,
         "faiss": faiss_records,
+        "affected_folder_ids": affected_folder_ids,
+        "validated_folder_ids": validated_folder_ids,
     }
 
 

@@ -10,6 +10,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from core.candidate_maintenance import CandidateMaintenanceError
 from core.models import MaintenanceJob
 from vaultops.models import (
     ArtifactGeneration,
@@ -138,8 +139,8 @@ class MaintenanceCandidateImportTests(TestCase):
                 "vaultops.services.maintenance_import.verify_recovery_superadmin"
             ),
         ]
-        for patcher in self.patches:
-            patcher.start()
+        self.started_patches = [patcher.start() for patcher in self.patches]
+        self.validate_candidate_mock = self.started_patches[1]
 
     def tearDown(self):
         for patcher in reversed(self.patches):
@@ -204,6 +205,52 @@ class MaintenanceCandidateImportTests(TestCase):
                 origin=ArtifactGeneration.Origin.LOCAL_MAINTENANCE
             ).count(),
             1,
+        )
+        self.assertGreaterEqual(self.validate_candidate_mock.call_count, 4)
+
+    def test_post_rehearsal_coherence_failure_prevents_projection(self):
+        valid = {
+            "sqlite": {"integrity": "ok"},
+            "media": {"missing": 0},
+            "embeddings": {"vectors": 0},
+            "faiss": {},
+        }
+        self.validate_candidate_mock.side_effect = [
+            valid,
+            CandidateMaintenanceError("candidate_faiss_missing", "8"),
+        ]
+
+        with self.assertRaises(MaintenanceImportError) as raised:
+            import_maintenance_candidate(
+                self.job, idempotency_key="maintenance-import-request-1"
+            )
+
+        self.assertEqual(raised.exception.reason_code, "candidate_faiss_missing")
+        self.assertFalse(ArtifactGeneration.objects.exists())
+        self.assertFalse(RestoreWorkspace.objects.exists())
+        self.assertEqual(
+            [
+                path for path in self.runtime_root.iterdir()
+                if path.name != ".maintenance-import.lock"
+            ],
+            [],
+        )
+
+    def test_idempotent_reuse_revalidates_published_runtime(self):
+        import_maintenance_candidate(
+            self.job, idempotency_key="maintenance-import-request-1"
+        )
+        self.validate_candidate_mock.side_effect = CandidateMaintenanceError(
+            "candidate_faiss_count_mismatch", "8"
+        )
+
+        with self.assertRaises(MaintenanceImportError) as raised:
+            import_maintenance_candidate(
+                self.job, idempotency_key="maintenance-import-request-1"
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code, "candidate_faiss_count_mismatch"
         )
 
     def test_same_job_with_new_key_is_rejected(self):
