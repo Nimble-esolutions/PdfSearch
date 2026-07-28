@@ -165,7 +165,12 @@ def compile_mermaid(
             fail(f"{label}: Mermaid compilation failed: {safe_detail}", failures)
 
 
-def check_mermaid(path: Path, text: str, failures: list[str]) -> None:
+def check_mermaid(
+    path: Path,
+    text: str,
+    failures: list[str],
+    sources: list[tuple[str, str]],
+) -> None:
     for index, block in enumerate(fenced_blocks(text, "mermaid"), 1):
         if not re.search(
             r"^\s*(flowchart|graph|sequenceDiagram|stateDiagram|classDiagram|erDiagram)",
@@ -177,11 +182,102 @@ def check_mermaid(path: Path, text: str, failures: list[str]) -> None:
                 failures,
             )
             continue
-        compile_mermaid(
-            label=f"{path.relative_to(ROOT)}: Mermaid block {index}",
-            source=block,
-            failures=failures,
+        sources.append(
+            (
+                f"{path.relative_to(ROOT)}: Mermaid block {index}",
+                block,
+            )
         )
+
+
+def compile_mermaid_batch(
+    sources: list[tuple[str, str]],
+    failures: list[str],
+    *,
+    compiler=MERMAID_CLI,
+    timeout=60,
+) -> None:
+    if not sources:
+        return
+    if not compiler.is_file():
+        fail(f"Mermaid compiler unavailable: {compiler}", failures)
+        return
+    with tempfile.TemporaryDirectory() as directory:
+        directory = Path(directory)
+        source_path = directory / "diagrams.md"
+        output_path = directory / "compiled.md"
+        config_path = directory / "puppeteer.json"
+        source_path.write_text(
+            "\n\n".join(
+                (
+                    f"## Diagram {index}: {label}\n\n"
+                    f"```mermaid\n{source.rstrip()}\n```"
+                )
+                for index, (label, source) in enumerate(sources, 1)
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        playwright_executable = subprocess.run(
+            [
+                "node",
+                "-e",
+                (
+                    "process.stdout.write("
+                    "require('playwright').chromium.executablePath())"
+                ),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        command = [
+            str(compiler),
+            "--input",
+            str(source_path),
+            "--output",
+            str(output_path),
+            "--quiet",
+        ]
+        if (
+            playwright_executable.returncode == 0
+            and Path(playwright_executable.stdout).is_file()
+        ):
+            config_path.write_text(
+                json.dumps({"executablePath": playwright_executable.stdout}),
+                encoding="utf-8",
+            )
+            command.extend(["--puppeteerConfigFile", str(config_path)])
+        try:
+            result = subprocess.run(
+                command,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            fail(
+                f"Mermaid batch compilation timed out after {timeout}s",
+                failures,
+            )
+            return
+        rendered = list(directory.glob("compiled-*.svg"))
+        if (
+            result.returncode
+            or not output_path.is_file()
+            or len(rendered) != len(sources)
+        ):
+            detail = (result.stderr or result.stdout).strip().splitlines()
+            safe_detail = detail[-1][:300] if detail else "no compiler output"
+            fail(
+                "Mermaid batch compilation failed "
+                f"({len(rendered)}/{len(sources)} diagrams rendered): "
+                f"{safe_detail}",
+                failures,
+            )
 
 
 def check_shell(path: Path, text: str, failures: list[str]) -> None:
@@ -215,18 +311,29 @@ def compose_environment_names() -> set[str]:
 
 def main() -> int:
     failures = []
+    mermaid_sources = []
     compose_names = compose_environment_names()
     for path in markdown_files():
         text = path.read_text(encoding="utf-8")
         check_links(path, text, failures)
-        check_mermaid(path, text, failures)
+        check_mermaid(path, text, failures, mermaid_sources)
         check_shell(path, text, failures)
     for path in sorted(DOCS.rglob("*.mmd")):
-        compile_mermaid(
-            label=str(path.relative_to(ROOT)),
-            source=path.read_text(encoding="utf-8"),
-            failures=failures,
+        source = path.read_text(encoding="utf-8")
+        if not re.search(
+            r"^\s*(flowchart|graph|sequenceDiagram|stateDiagram|classDiagram|erDiagram)",
+            source,
+            flags=re.MULTILINE,
+        ):
+            fail(
+                f"{path.relative_to(ROOT)}: no Mermaid diagram declaration",
+                failures,
+            )
+            continue
+        mermaid_sources.append(
+            (str(path.relative_to(ROOT)), source)
         )
+    compile_mermaid_batch(mermaid_sources, failures)
 
     for path in ACTIVE_RUNBOOKS:
         if not path.is_file():

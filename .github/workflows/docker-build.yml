@@ -99,6 +99,8 @@ jobs:
         run: python3 -m compileall -q flowdocs
 
       - name: Install documentation validation tools
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
           npm ci
           npx playwright install --with-deps chromium

@@ -23,9 +23,9 @@
   "homepage": "https://github.com/Nimble-esolutions/PdfSearch#readme",
   "dependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "1.61.1",
     "axe-core": "^4.12.1",
-    "playwright": "^1.61.1"
+    "playwright": "1.61.1"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "11.12.0"

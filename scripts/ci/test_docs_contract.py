@@ -1,3 +1,4 @@
+import os
 import subprocess
 import tempfile
 import unittest
@@ -104,6 +105,37 @@ class DocumentationContractTests(unittest.TestCase):
                 )
 
         self.assertEqual(failures, ["example: Mermaid compilation timed out"])
+
+    def test_mermaid_batch_uses_one_compiler_process_for_all_diagrams(self):
+        with tempfile.TemporaryDirectory() as directory:
+            compiler = Path(directory) / "mmdc"
+            compiler.write_text(
+                "#!/bin/sh\n"
+                "while [ \"$#\" -gt 0 ]; do\n"
+                "  if [ \"$1\" = \"--output\" ]; then\n"
+                "    shift\n"
+                "    output=\"$1\"\n"
+                "  fi\n"
+                "  shift\n"
+                "done\n"
+                "touch \"$output\"\n"
+                "touch \"$(dirname \"$output\")/compiled-1.svg\"\n"
+                "touch \"$(dirname \"$output\")/compiled-2.svg\"\n",
+                encoding="utf-8",
+            )
+            os.chmod(compiler, 0o700)
+            failures = []
+
+            docs_contract.compile_mermaid_batch(
+                [
+                    ("first", "flowchart LR\nA --> B\n"),
+                    ("second", "sequenceDiagram\nA->>B: hello\n"),
+                ],
+                failures,
+                compiler=compiler,
+            )
+
+        self.assertEqual(failures, [])
 
 
 if __name__ == "__main__":
