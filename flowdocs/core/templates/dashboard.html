@@ -272,7 +272,7 @@
               </span>
             </div>
           {% empty %}
-            <div class="ops-control-note">{% trans "No maintenance jobs have been queued." %}</div>
+            <div class="ops-control-note">{% trans "No active local maintenance jobs." %}</div>
           {% endfor %}
         </div>
         <div class="mt-3">
@@ -284,7 +284,38 @@
       <section class="admin-panel">
         <div class="admin-page-heading">
           <h2>{% trans "Vault posture" %}</h2>
-          <p>{% trans "Remote authority and local maintenance stay separate. Open the Workbench for verified evidence and controls." %}</p>
+          <p>
+            <strong>{{ cockpit.vault_posture.status|default:"unknown"|title }}</strong>
+            {% if cockpit.vault_posture.reason_code %}
+              · {% trans "Reason" %}: {{ cockpit.vault_posture.reason_code }}
+            {% endif %}
+          </p>
+        </div>
+        <div class="ops-lane-list">
+          <div class="ops-lane-item">
+            <span>
+              <strong>{% trans "Remote authority" %}</strong>
+              <small>{{ cockpit.vault_posture.remote.state|default:"unknown"|title }}</small>
+            </span>
+            <span>
+              {% if cockpit.vault_posture.remote.authoritative_generation_id %}
+                <b>{{ cockpit.vault_posture.remote.authoritative_generation_id }}</b>
+              {% endif %}
+              <small>{% trans "Observed" %}: {{ cockpit.vault_posture.remote.observed_at|default:"—" }}</small>
+            </span>
+          </div>
+          <div class="ops-lane-item">
+            <span>
+              <strong>{% trans "Runtime" %}</strong>
+              <small>{{ cockpit.vault_posture.runtime.state|default:"unknown"|title }}</small>
+            </span>
+            <span>
+              {% if cockpit.vault_posture.runtime.active_generation_id %}
+                <b>{{ cockpit.vault_posture.runtime.active_generation_id }}</b>
+              {% endif %}
+              <small>{% trans "Observed" %}: {{ cockpit.vault_posture.runtime.observed_at|default:"—" }}</small>
+            </span>
+          </div>
         </div>
         <div class="d-grid gap-2">
           <a href="{% url 'operations_panel' %}" class="btn btn-outline-primary btn-sm">{% trans "Open Vault Operations" %}</a>

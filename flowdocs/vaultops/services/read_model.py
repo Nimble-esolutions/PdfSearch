@@ -2,6 +2,7 @@ import hashlib
 import json
 
 from django.conf import settings
+from django.db import DatabaseError
 from django.utils import timezone
 
 from vaultops.models import (
@@ -343,6 +344,74 @@ def build_authority_state(*, profile_key, dataset_id, deployment_id):
         "fingerprint": profile.fingerprint,
     }
     return state
+
+
+def build_dashboard_authority_summary():
+    """Return bounded, redacted Vault authority evidence for the Dashboard."""
+    observed_at = timezone.now()
+    try:
+        profile = VaultConnectionProfile.objects.get(
+            key=settings.VAULT_DEFAULT_PROFILE,
+            enabled=True,
+        )
+        authority = _authority_state(
+            profile,
+            profile.dataset_id,
+            settings.ENV_IDENTITY.deployment_id,
+        )
+    except VaultConnectionProfile.DoesNotExist:
+        authority = {
+            "status": "unknown",
+            "reason_code": "profile_unavailable",
+            "observed_at": observed_at,
+            "remote": {"state": "unknown", "observed_at": None},
+            "runtime": {"state": "unknown", "observed_at": None},
+            "critical_job": None,
+            "blocking_reasons": ["profile_unavailable"],
+        }
+    except DatabaseError:
+        authority = {
+            "status": "unknown",
+            "reason_code": "control_database_unavailable",
+            "observed_at": observed_at,
+            "remote": {"state": "unknown", "observed_at": None},
+            "runtime": {"state": "unknown", "observed_at": None},
+            "critical_job": None,
+            "blocking_reasons": ["control_database_unavailable"],
+        }
+
+    remote = authority.get("remote") or {}
+    runtime = authority.get("runtime") or {}
+    critical_job = authority.get("critical_job")
+    summary = {
+        "status": authority.get("status") or "unknown",
+        "reason_code": authority.get("reason_code") or "",
+        "observed_at": authority.get("observed_at") or observed_at,
+        "remote": {
+            "state": remote.get("state") or "unknown",
+            "authoritative_generation_id": (
+                remote.get("authoritative_generation_id") or ""
+            ),
+            "observed_at": remote.get("observed_at"),
+        },
+        "runtime": {
+            "state": runtime.get("state") or "unknown",
+            "active_generation_id": runtime.get("active_generation_id") or "",
+            "observed_at": runtime.get("observed_at"),
+        },
+        "critical_job": (
+            {
+                "operation": critical_job.get("operation") or "",
+                "status": critical_job.get("status") or "",
+                "safe_error_code": critical_job.get("safe_error_code") or "",
+            }
+            if critical_job
+            else None
+        ),
+        "blocking_reasons": list(authority.get("blocking_reasons") or []),
+    }
+    summary["state_version"] = _state_digest(summary)
+    return summary
 
 
 def _environment_summary(identity):

@@ -677,6 +677,9 @@ msgstr "पुन्हा प्रयत्न करा"
 msgid "No maintenance jobs have been queued."
 msgstr "कोणतीही देखभाल कार्ये रांगेत लावलेली नाहीत."
 
+msgid "No active local maintenance jobs."
+msgstr "कोणतीही सक्रिय स्थानिक देखभाल कार्ये नाहीत."
+
 #: core/templates/dashboard.html:354
 msgid "Dispatch Board"
 msgstr "प्रेषण फलक"

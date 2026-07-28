@@ -2056,6 +2056,8 @@ class BulkFilterTests(TestCase):
 
 
 class JobDrawerTests(TestCase):
+    databases = {"default", "control"}
+
     def setUp(self):
         self.superadmin = get_user_model().objects.create_user(
             username="drawer-superadmin",
@@ -2147,6 +2149,53 @@ class JobDrawerTests(TestCase):
         self.assertContains(response, "?section=maintenance&job=")
         self.assertNotContains(response, "job-drawer-toggle")
         self.assertNotContains(response, "/dashboard/maintenance/")
+
+    def test_dashboard_active_work_excludes_terminal_jobs(self):
+        active = MaintenanceJob.objects.create(
+            kind="validate",
+            status="running",
+            total_items=2,
+            completed_items=1,
+            requested_by=self.superadmin,
+        )
+        for status in ("completed", "failed", "cancelled"):
+            MaintenanceJob.objects.create(
+                kind="validate",
+                status=status,
+                total_items=99,
+                completed_items=99,
+                requested_by=self.superadmin,
+            )
+        self.client.force_login(self.superadmin)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(
+            [job.pk for job in response.context["cockpit"]["maintenance_jobs"]],
+            [active.pk],
+        )
+        self.assertContains(response, "1/2")
+        self.assertNotContains(response, "99/99")
+
+    def test_completed_jobs_cannot_crowd_active_work_out_of_projection(self):
+        active = MaintenanceJob.objects.create(
+            kind="validate",
+            status="queued",
+            requested_by=self.superadmin,
+        )
+        for _ in range(6):
+            MaintenanceJob.objects.create(
+                kind="validate",
+                status="completed",
+                requested_by=self.superadmin,
+            )
+        self.client.force_login(self.superadmin)
+
+        response = self.client.get(reverse("dashboard"))
+
+        jobs = response.context["cockpit"]["maintenance_jobs"]
+        self.assertEqual([job.pk for job in jobs], [active.pk])
+        self.assertContains(response, str(active.public_id))
 
     def test_dashboard_does_not_render_drawer_for_admin(self):
         admin = get_user_model().objects.create_user(

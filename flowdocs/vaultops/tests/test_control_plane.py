@@ -4,8 +4,9 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 from django.apps import apps
+from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core.models import (
@@ -39,7 +40,10 @@ from vaultops.services.lifecycle import (
     transition_generation_vault_state,
     transition_workspace,
 )
-from vaultops.services.read_model import build_authority_state
+from vaultops.services.read_model import (
+    build_authority_state,
+    build_dashboard_authority_summary,
+)
 
 
 class ControlPlaneTestCase(TestCase):
@@ -53,6 +57,46 @@ class ControlPlaneTestCase(TestCase):
             dataset_id="ai-sahakar-test",
             environment_locked=True,
         )
+
+    @override_settings(VAULT_DEFAULT_PROFILE="missing-profile")
+    def test_dashboard_authority_summary_is_unknown_without_profile(self):
+        summary = build_dashboard_authority_summary()
+
+        self.assertEqual(summary["status"], "unknown")
+        self.assertEqual(summary["reason_code"], "profile_unavailable")
+        self.assertEqual(summary["remote"]["state"], "unknown")
+        self.assertEqual(summary["runtime"]["state"], "unknown")
+        self.assertNotIn("fingerprint", summary)
+
+    @override_settings(VAULT_DEFAULT_PROFILE="test-profile")
+    def test_dashboard_authority_summary_uses_observed_authority(self):
+        now = timezone.now()
+        VaultDatasetProjection.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_state="verified",
+            authoritative_generation_id="vault-generation",
+            inventory_observed_at=now,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id=settings.ENV_IDENTITY.deployment_id,
+            status="ready",
+            active_generation_id="runtime-generation",
+            observed_at=now,
+        )
+
+        summary = build_dashboard_authority_summary()
+
+        self.assertEqual(summary["status"], "healthy")
+        self.assertEqual(
+            summary["remote"]["authoritative_generation_id"],
+            "vault-generation",
+        )
+        self.assertEqual(
+            summary["runtime"]["active_generation_id"],
+            "runtime-generation",
+        )
+        self.assertTrue(summary["state_version"])
 
     def make_generation(self, generation_id="generation-1", **kwargs):
         values = {
