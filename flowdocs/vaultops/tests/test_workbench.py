@@ -687,7 +687,7 @@ class VaultWorkbenchTests(TestCase):
         retention = self.client.get(
             reverse("operations_panel"), {"section": "retention"}
         )
-        self.assertContains(retention, "पिढी निवृत्ती")
+        self.assertContains(retention, "निर्मिती संचाची निवृत्ती")
         self.assertContains(retention, "कचरा संकलन योजना")
 
     def test_state_api_is_redacted_and_uses_contract_envelope(self):
