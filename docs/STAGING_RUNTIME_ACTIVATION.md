@@ -39,6 +39,7 @@ RUNTIME_GENERATIONS_ROOT=/app/data/runtime-generations
 
 STAGING_RUNTIME_ACTIVATION_ENABLED=0
 MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=0
+MAINTENANCE_CANDIDATE_WRITER_MODE=0
 STAGING_ACTIVATION_APPLY_MODE=auto
 ACTIVATION_INTENT_SIGNING_KEY=<at-least-32-random-characters>
 ACTIVATION_SMOKE_QUERIES_FILE=/app/data-control/config/activation-smoke-queries.json
@@ -53,6 +54,26 @@ support bundles.
 Both web and maintenance services must receive the same deployment ID, control
 root, runtime root, signing key, smoke-query path, and recovery credential.
 Both services must mount the same durable data and control volumes.
+
+Enable `MAINTENANCE_CANDIDATE_WRITER_MODE=1` on exactly one maintenance worker
+authorized to materialize candidates. Web and peer maintenance processes must
+keep it disabled so only one process advances candidate checkpoints and builds
+the final folder indexes.
+
+### Active-runtime mutability boundary
+
+Activation-ready and previous runtimes remain frozen and byte-identical.
+Current architecture thaws only the signed target after cutover because Django
+still stores application state, sessions, and authentication timestamps in the
+active SQLite database. A rollback therefore restores the prior content and
+schema identity, but subsequent reauthentication may change `django_session`
+rows and `CustomUser.last_login`. Media, manifests, document/chunk/embedding
+rows, and index bytes must remain unchanged.
+
+Separating operational/session writes from immutable content custody is
+residual architecture debt. Until that storage split exists, verification must
+compare database schema and table-level content, explicitly allow only those
+operational fields, and fail closed on any other drift.
 
 The smoke-query file must contain at least one English and one Marathi query:
 
