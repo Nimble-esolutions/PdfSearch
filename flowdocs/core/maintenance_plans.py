@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.db import IntegrityError
 from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.utils import timezone
@@ -331,19 +332,30 @@ def create_plan(*, operation: str, data, actor, idempotency_key: str) -> Mainten
     state_version = hashlib.sha256(
         json.dumps(state_payload, sort_keys=True).encode("utf-8")
     ).hexdigest()
-    return MaintenancePlan.objects.create(
-        operation=operation,
-        selection=selection,
-        preview=preview,
-        source_digest=source,
-        state_version=state_version,
-        idempotency_key=idempotency_key,
-        external_embeddings_required=operation in {
-            "reindex_needed", "reindex_selected"
-        },
-        created_by=actor,
-        expires_at=timezone.now() + timedelta(minutes=15),
-    )
+    try:
+        return MaintenancePlan.objects.create(
+            operation=operation,
+            selection=selection,
+            preview=preview,
+            source_digest=source,
+            state_version=state_version,
+            idempotency_key=idempotency_key,
+            external_embeddings_required=operation in {
+                "reindex_needed", "reindex_selected"
+            },
+            created_by=actor,
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+    except IntegrityError:
+        collision = MaintenancePlan.objects.filter(
+            idempotency_key=idempotency_key,
+            operation=operation,
+        ).first()
+        if collision is None:
+            raise
+        if collision.created_by_id != actor.pk:
+            raise MaintenancePlanError("idempotency_conflict")
+        return collision
 
 
 def queue_plan(*, plan: MaintenancePlan, actor, confirmation: str = "") -> MaintenanceJob:

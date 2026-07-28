@@ -240,33 +240,34 @@
       <div class="ops-control-group" aria-label="{% trans 'Index operations' %}">
         <div class="ops-control-group__heading">
           <strong>{% trans "Index Operations" %}</strong>
-          <span>{% trans "Scoped to this category only." %}</span>
+          <span>{% trans "Scoped to this category only; actions open a local preview in Documents & Indexes." %}</span>
         </div>
         {% if role == 'superadmin' %}
-          <form method="post" action="{% url 'folder_operations' folder.id %}">
-            {% csrf_token %}
-            <input type="hidden" name="operation" value="repair_stored_index">
-            <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if not folder_stats.total_pdfs %}disabled{% endif %}>
-              {% trans "Repair Stored Index" %}
-            </button>
-          </form>
-          <form method="post" action="{% url 'folder_operations' folder.id %}">
-            {% csrf_token %}
-            <input type="hidden" name="operation" value="reprocess_needed">
-            <button type="submit" class="btn btn-outline-warning btn-sm w-100" {% if not folder_stats.needs_index_pdfs %}disabled{% endif %}>
-              {% trans "Reprocess Needed" %}
-            </button>
-          </form>
-          <form method="post" action="{% url 'folder_operations' folder.id %}">
-            {% csrf_token %}
-            <input type="hidden" name="operation" value="reprocess_all">
-            <button type="submit"
+        <form method="post" action="{% url 'folder_operations' folder.id %}">
+          {% csrf_token %}
+          <input type="hidden" name="operation" value="repair_stored_index">
+          <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if not folder_stats.total_pdfs %}disabled{% endif %} title="{% trans 'Builds or rebuilds searchable indexes for this category without editing source PDFs.' %}">
+            {% trans "Repair Stored Index" %}
+          </button>
+        </form>
+        <form method="post" action="{% url 'folder_operations' folder.id %}">
+          {% csrf_token %}
+          <input type="hidden" name="operation" value="reprocess_needed">
+          <button type="submit" class="btn btn-outline-warning btn-sm w-100" {% if not folder_stats.needs_index_pdfs %}disabled{% endif %} title="{% trans 'Previews only documents needing reindex and uses embedding for missing text artifacts.' %}">
+            {% trans "Reprocess Needed" %}
+          </button>
+        </form>
+        <form method="post" action="{% url 'folder_operations' folder.id %}">
+          {% csrf_token %}
+          <input type="hidden" name="operation" value="reprocess_all">
+          <button type="submit"
                     class="btn btn-outline-danger btn-sm w-100"
                     {% if not folder_stats.total_pdfs %}disabled{% endif %}
-                    onclick="return confirm('{% trans 'Reprocess every PDF in this category? This may call the embedding service and overwrite stored chunks.' %}')">
-              {% trans "Reprocess All" %}
-            </button>
-          </form>
+                    onclick="return confirm('{% trans 'Reprocess every PDF in this category? This may call the embedding service and overwrite stored chunks.' %}')"
+                    title="{% trans 'Reprocess all documents with explicit confirmation; this is a full selected-folder reindex.' %}">
+            {% trans "Reprocess All" %}
+          </button>
+        </form>
         {% else %}
           <div class="ops-control-note">
             {% trans "Superadmin access is required for reindexing and reprocessing controls." %}

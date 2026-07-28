@@ -316,6 +316,13 @@ code { overflow-wrap: anywhere; color: var(--vault-maroon-dark); }
   overflow: hidden;
   background: #ddd4c8;
 }
+.maintenance-job--selected {
+  border-color: #f2b75a;
+  box-shadow: 0 0 0 2px #f5d79a inset;
+}
+.maintenance-selected-job {
+  border-left: 4px solid #d98f4e;
+}
 .maintenance-progress span {
   display: block;
   height: 100%;

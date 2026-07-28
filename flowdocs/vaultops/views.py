@@ -296,6 +296,7 @@ def workbench(request):
     )
     state["maintenance"] = workbench_maintenance_state(
         selected_plan_id=request.GET.get("plan", ""),
+        selected_job_id=request.GET.get("job", ""),
     )
     enrich_workbench_readiness(state)
     state["vault_state_version"] = state["state_version"]
@@ -331,6 +332,7 @@ def state_api(request):
     )
     state["maintenance"] = workbench_maintenance_state(
         selected_plan_id=request.GET.get("plan", ""),
+        selected_job_id=request.GET.get("job", ""),
     )
     enrich_workbench_readiness(state)
     state["vault_state_version"] = state["state_version"]

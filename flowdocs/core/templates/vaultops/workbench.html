@@ -115,7 +115,7 @@
 
   {% if section == "maintenance" %}
   <div class="vault-grid">
-    <section class="vault-panel" aria-labelledby="maintenance-heading">
+      <section class="vault-panel" aria-labelledby="maintenance-heading">
       <header><p>{% trans "Local content authority" %}</p><h3 id="maintenance-heading">{% trans "Documents & Indexes" %}</h3></header>
       <p class="vault-note">{% trans "These operations validate or derive local document and search artifacts. They do not publish, promote, restore, or move remote Vault authority." %}</p>
       <div class="maintenance-authority-strip" role="status">
@@ -241,12 +241,22 @@
           <p class="vault-kicker">{% trans "Selected preview" %}</p>
           <h4 id="selected-plan-heading">{{ state.maintenance.selected_plan.operation }}</h4>
           <code>{{ state.maintenance.selected_plan.public_id }}</code>
+          <p class="vault-note">
+            {% trans "Source runtime and manifest identities are embedded in the selection plan and revalidated at queue time." %}
+          </p>
           <dl class="maintenance-preview-facts">
             <div><dt>{% trans "Documents" %}</dt><dd>{{ state.maintenance.selected_plan.preview.pdf_count }}</dd></div>
             <div><dt>{% trans "Folders" %}</dt><dd>{{ state.maintenance.selected_plan.preview.folder_count }}</dd></div>
             <div><dt>{% trans "Estimated work" %}</dt><dd>{{ state.maintenance.selected_plan.preview.estimated_work_units }}</dd></div>
             <div><dt>{% trans "External embeddings" %}</dt><dd>{{ state.maintenance.selected_plan.external_embeddings_required|yesno:_("Required,Not required") }}</dd></div>
           </dl>
+          {% if state.maintenance.selected_plan.preview.affected_folders %}
+            <p><strong>{% trans "Affected folders" %}:</strong>
+              {% for folder in state.maintenance.selected_plan.preview.affected_folders %}
+                {{ folder.name }}{% if not forloop.last %}, {% endif %}
+              {% endfor %}
+            </p>
+          {% endif %}
           <p>{% trans "Selection and runtime authority will be recalculated before this plan enters the queue." %}</p>
         </article>
       {% endif %}
@@ -276,11 +286,47 @@
       </div>
     </section>
 
-    <section class="vault-panel" aria-labelledby="maintenance-jobs-heading">
-      <header><p>{% trans "Progress and audit" %}</p><h3 id="maintenance-jobs-heading">{% trans "Local maintenance jobs" %}</h3></header>
+      <section class="vault-panel" aria-labelledby="maintenance-jobs-heading">
+        <header><p>{% trans "Progress and audit" %}</p><h3 id="maintenance-jobs-heading">{% trans "Local maintenance jobs" %}</h3></header>
+        {% if state.maintenance.selected_job %}
+          <article class="vault-record vault-record--compact maintenance-selected-job" aria-labelledby="selected-job-heading">
+            <p class="vault-kicker">{% trans "Focused job" %}</p>
+            <h4 id="selected-job-heading">{{ state.maintenance.selected_job.kind }} · <code>{{ state.maintenance.selected_job.public_id }}</code></h4>
+            <p>{{ state.maintenance.selected_job.status }} · {{ state.maintenance.selected_job.completed_items }}/{{ state.maintenance.selected_job.total_items }} {% trans "completed" %} · {{ state.maintenance.selected_job.failed_items }} {% trans "failed" %}</p>
+            {% widthratio state.maintenance.selected_job.completed_items state.maintenance.selected_job.total_items 100 as selected_job_progress %}
+            <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ state.maintenance.selected_job.total_items }}" aria-valuenow="{{ state.maintenance.selected_job.completed_items }}">
+              <span style="width: {{ selected_job_progress|default:0 }}%"></span>
+            </div>
+            {% if state.maintenance.selected_job.error_summary %}<code>{{ state.maintenance.selected_job.error_summary }}</code>{% endif %}
+            {% if state.maintenance.selected_job.options.candidate_workspace_id %}
+              <p>{% trans "Candidate workspace" %}: <code>{{ state.maintenance.selected_job.options.candidate_workspace_id }}</code> · {{ state.maintenance.selected_job.options.candidate_state }}</p>
+            {% endif %}
+            {% if state.maintenance.selected_job.options.recovery_set_id %}
+              <p>{% trans "Recovery set" %}: <code>{{ state.maintenance.selected_job.options.recovery_set_id }}</code></p>
+            {% endif %}
+            <div class="maintenance-job-audit">
+              <h5>{% trans "Audit history" %}</h5>
+              {% if state.maintenance.selected_job.audit_events %}
+                <ul class="vault-timeline">
+                  {% for event in state.maintenance.selected_job.audit_events %}
+                    <li><time>{{ event.created_at }}</time><strong>{{ event.event_type }}</strong>{% if event.actor %} <span>({{ event.actor }})</span>{% endif %}
+                      <span>{{ event.payload }}</span>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="vault-note">{% trans "No job audit events are available yet." %}</p>
+              {% endif %}
+            </div>
+          </article>
+        {% endif %}
       <div class="vault-records" role="list">
         {% for job in state.maintenance.jobs %}
-        <article class="vault-record vault-record--compact" role="listitem">
+        <article
+          class="vault-record vault-record--compact{% if state.maintenance.selected_job and state.maintenance.selected_job.public_id == job.public_id %} maintenance-job--selected{% endif %}"
+          role="listitem"
+          id="maintenance-job-{{ job.public_id }}"
+        >
           <h4>{{ job.kind }} · <code>{{ job.public_id }}</code></h4>
           <p>{{ job.status }} · {{ job.completed_items }}/{{ job.total_items }} {% trans "completed" %} · {{ job.failed_items }} {% trans "failed" %}</p>
           {% widthratio job.completed_items job.total_items 100 as maintenance_progress %}

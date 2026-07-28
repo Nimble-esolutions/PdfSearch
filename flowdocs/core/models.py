@@ -236,7 +236,7 @@ class MaintenancePlan(models.Model):
     preview = models.JSONField(default=dict)
     source_digest = models.CharField(max_length=64)
     state_version = models.CharField(max_length=64)
-    idempotency_key = models.CharField(max_length=128, unique=True)
+    idempotency_key = models.CharField(max_length=128)
     external_embeddings_required = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -258,6 +258,12 @@ class MaintenancePlan(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["operation", "idempotency_key"],
+                name="core_maintenanceplan_operation_idempotency",
+            ),
+        ]
         indexes = [
             models.Index(fields=["state", "expires_at"]),
             models.Index(fields=["created_by", "created_at"]),

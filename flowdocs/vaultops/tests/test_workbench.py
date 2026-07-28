@@ -11,7 +11,9 @@ from django.utils import timezone
 
 from core.lease import acquire_lease, release_lease
 from core.models import ArtifactGeneration as LegacyGeneration
-from core.models import CustomUser, MaintenanceJob
+from core.models import CustomUser, Folder, MaintenanceAuditEvent, MaintenanceJob
+from core.models import PDFFile
+from core.maintenance_plans import create_plan
 from vaultops.models import (
     ArtifactGeneration,
     ArtifactValidation,
@@ -173,6 +175,59 @@ class VaultWorkbenchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Local development posture")
         self.assertContains(response, "Remote publication and production activation")
+
+    def test_maintenance_deep_link_renders_selected_plan_and_job(self):
+        folder = Folder.objects.create(name="Law", created_by=self.superadmin)
+        PDFFile.objects.create(
+            title="Governance",
+            file="pdfs/governance.pdf",
+            folder=folder,
+            uploaded_by=self.superadmin,
+            indexed=False,
+            category="acts",
+            subject="governance",
+            keywords=["act"],
+        )
+        plan = create_plan(
+            operation="reindex_needed",
+            data={
+                "folder_ids": [str(folder.pk)],
+                "filter_subject": "governance",
+            },
+            actor=self.superadmin,
+            idempotency_key="selected-plan-link",
+        )
+        job = MaintenanceJob.objects.create(
+            kind="reindex_needed",
+            status="running",
+            total_items=1,
+            completed_items=0,
+            requested_by=self.superadmin,
+            options={
+                "recovery_set_id": "rs-test",
+                "candidate_workspace_id": "ws-test",
+                "candidate_state": "activation_ready",
+            },
+        )
+        MaintenanceAuditEvent.objects.create(
+            job=job,
+            actor=self.superadmin,
+            event_type="queued",
+            payload={"plan_id": str(plan.public_id)},
+        )
+        plan.job = job
+        plan.save(update_fields=["job"])
+
+        response = self.client.get(
+            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}&job={job.public_id}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Affected folders")
+        self.assertContains(response, "Focused job")
+        self.assertContains(response, "Audit history")
+        self.assertContains(response, str(job.public_id))
+        self.assertContains(response, "Recovery set")
+        self.assertContains(response, "Law")
 
     def test_create_superuser_assigns_supported_vault_role(self):
         user = CustomUser.objects.create_superuser(

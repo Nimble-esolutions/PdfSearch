@@ -35,4 +35,20 @@
   };
 
   window.setInterval(refresh, 15000);
+
+  const highlightJob = () => {
+    const params = new URLSearchParams(window.location.search);
+    const jobId = params.get("job");
+    if (!jobId) {
+      return;
+    }
+    const selector = document.querySelector(`#maintenance-job-${jobId}`);
+    if (!selector) {
+      return;
+    }
+    selector.classList.add("maintenance-job--selected");
+    selector.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  highlightJob();
 })();
