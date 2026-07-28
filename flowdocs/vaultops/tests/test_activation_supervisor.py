@@ -994,6 +994,52 @@ class SupervisorProtocolTests(SimpleTestCase):
         )
         return document
 
+    def _replace_with_rollback_intent(self):
+        self.paths["intents"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).unlink()
+        active_document = make_pointer(
+            self.target_runtime,
+            TARGET_GENERATION,
+            TARGET_DIGEST,
+            "active-local-candidate",
+        )
+        atomic_write_json(self.paths["active"], active_document)
+        atomic_write_json(
+            self.paths["previous"], self.current_pointer_document
+        )
+        intent_id = str(uuid.uuid4())
+        document = sign_document(
+            {
+                "schema_version": 1,
+                "kind": "activation_intent",
+                "intent_id": intent_id,
+                "deployment_id": DEPLOYMENT_ID,
+                "target_generation_id": CURRENT_GENERATION,
+                "target_manifest_digest": CURRENT_DIGEST,
+                "target_runtime_path": str(self.current_runtime),
+                "previous_generation_id": TARGET_GENERATION,
+                "previous_pointer_digest": active_document[
+                    "document_digest"
+                ],
+                "activation_mode": "rollback",
+                "rollback_previous_generation_id": CURRENT_GENERATION,
+                "rollback_previous_manifest_digest": CURRENT_DIGEST,
+                "rollback_previous_pointer_digest": (
+                    self.current_pointer_document["document_digest"]
+                ),
+                "smoke_queries_digest": "c" * 64,
+                "expires_at_unix": int(time.time()) + 300,
+                "state_version": 1,
+            },
+            SIGNING_KEY,
+        )
+        atomic_write_json(
+            self.paths["intents"] / f"{intent_id}.json", document
+        )
+        self.intent = document
+        return active_document
+
     def _urlopen(self, request, timeout=5):
         active = read_runtime_pointer(
             self.paths["active"],
@@ -1153,6 +1199,180 @@ class SupervisorProtocolTests(SimpleTestCase):
 
         self.assertEqual(self._result()["status"], "committed")
         self.assertFalse(self.paths["lock"].exists())
+
+    def test_restart_acquires_after_signed_checkpoint_before_lock(self):
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_restart_recovers_legacy_lock_before_signed_checkpoint(self):
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._acquire_lock(self.intent)
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_forward_restart_after_previous_pointer_write_is_idempotent(self):
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+        first_web._acquire_lock(self.intent)
+        atomic_write_json(
+            self.paths["previous"], self.current_pointer_document
+        )
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+        active_after = self.paths["active"].read_bytes()
+        result_after = self.paths["results"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).read_bytes()
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertEqual(self.paths["active"].read_bytes(), active_after)
+        self.assertEqual(
+            self.paths["results"].joinpath(
+                f"{self.intent['intent_id']}.json"
+            ).read_bytes(),
+            result_after,
+        )
+
+    def test_rollback_rechecks_exact_authority_under_acquired_lock(self):
+        active_document = self._replace_with_rollback_intent()
+        maintenance = self._quiesce()
+        web = self._supervisor("web", maintenance=maintenance)
+        acquire = web._acquire_or_resume_pre_cutover_lock
+
+        def acquire_then_change_previous(intent):
+            resumed = acquire(intent)
+            atomic_write_json(
+                self.paths["previous"],
+                active_document,
+            )
+            return resumed
+
+        web._acquire_or_resume_pre_cutover_lock = (
+            acquire_then_change_previous
+        )
+        web.web_tick()
+
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, TARGET_GENERATION)
+        self.assertEqual(
+            self._result()["safe_error_code"],
+            "rollback_previous_pointer_changed",
+        )
+        self.assertFalse(self.paths["lock"].exists())
+
+    def test_rollback_restart_after_previous_write_completes_once(self):
+        active_document = self._replace_with_rollback_intent()
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+        first_web._acquire_lock(self.intent)
+        atomic_write_json(self.paths["previous"], active_document)
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+        active_after = self.paths["active"].read_bytes()
+        previous_after = self.paths["previous"].read_bytes()
+        result_after = self.paths["results"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).read_bytes()
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        previous = read_runtime_pointer(
+            self.paths["previous"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, CURRENT_GENERATION)
+        self.assertEqual(previous.generation_id, TARGET_GENERATION)
+        self.assertEqual(self.paths["active"].read_bytes(), active_after)
+        self.assertEqual(
+            self.paths["previous"].read_bytes(), previous_after
+        )
+        self.assertEqual(
+            self.paths["results"].joinpath(
+                f"{self.intent['intent_id']}.json"
+            ).read_bytes(),
+            result_after,
+        )
+
+    def test_rollback_restart_after_active_write_recovers_once(self):
+        active_document = self._replace_with_rollback_intent()
+        maintenance = self._quiesce()
+        first_web = self._supervisor("web")
+        first_web._write_ack(self.intent, "applying")
+        first_web._acquire_lock(self.intent)
+        atomic_write_json(self.paths["previous"], active_document)
+        atomic_write_json(
+            self.paths["active"],
+            make_pointer(
+                self.current_runtime,
+                CURRENT_GENERATION,
+                CURRENT_DIGEST,
+                self.intent["document_digest"],
+            ),
+        )
+
+        restarted_web = self._supervisor(
+            "web", maintenance=maintenance
+        )
+        restarted_web.web_tick()
+        active_after = self.paths["active"].read_bytes()
+        result_after = self.paths["results"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).read_bytes()
+        restarted_web.web_tick()
+
+        self.assertEqual(self._result()["status"], "rolled_back")
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, TARGET_GENERATION)
+        self.assertEqual(self.paths["active"].read_bytes(), active_after)
+        self.assertEqual(
+            self.paths["results"].joinpath(
+                f"{self.intent['intent_id']}.json"
+            ).read_bytes(),
+            result_after,
+        )
 
     def test_committed_intent_replay_is_idempotent(self):
         maintenance = self._quiesce()
