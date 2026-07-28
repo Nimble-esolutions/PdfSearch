@@ -67,6 +67,9 @@ services:
   web:
     image: ${PDFSEARCH_IMAGE:-pdfsearch-maintenance-e2e:local}
     build: .
+    # The activation supervisor exits cleanly after moving a signed pointer.
+    # Model the production orchestrator by restarting that expected handoff.
+    restart: unless-stopped
     volumes:
       - lifecycle_data:/app/data
       - lifecycle_control:/app/data-control

@@ -50,4 +50,12 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
     --project=desktop --reporter=list
 
+web_container="$("${COMPOSE[@]}" ps -q web)"
+web_restarts="$(docker inspect --format '{{.RestartCount}}' "$web_container")"
+web_state="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$web_container")"
+if [ "$web_restarts" -lt 2 ] || [ "$web_state" != "running:0" ]; then
+  echo "Expected two clean orchestrator handoffs; observed restarts=$web_restarts state=$web_state" >&2
+  exit 1
+fi
+
 echo "Disposable maintenance lifecycle verified."
