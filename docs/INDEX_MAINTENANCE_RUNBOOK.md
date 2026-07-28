@@ -92,7 +92,11 @@ coherence, and derived hashes validate.
 When `MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=1` in an activation-enabled
 staging environment, **Prepare for activation** revalidates the completed job,
 its verified recovery set, current signed parent pointer, SQLite/media/
-embedding/FAISS evidence, and migration rehearsal. It then copies only the
+embedding/FAISS evidence, and migration rehearsal. Candidate readiness is a
+whole-runtime assertion: every non-archived document and every searchable
+folder is checked, including folders outside the maintenance selection. The
+same coherence checks run again against the exact post-rehearsal database,
+media, and indexes before immutable publication. It then copies only the
 allowlisted runtime artifacts into a digest-addressed temporary directory,
 fsyncs and atomically publishes an immutable runtime, and records an explicit
 `local_maintenance` generation with parent lineage. Exact retries reuse the
@@ -120,9 +124,14 @@ python manage.py artifact_cleanup plan
 ```
 
 The plan inventories recovery sets, source snapshots, quarantine, maintenance
-workspaces, and runtime generations. Active/previous runtimes, incident holds,
-activation references, resumable checkpoints, and activation-ready maintenance
-candidates are protected. Apply only the current plan identifier:
+workspaces, and runtime generations, including runtimes identified by
+`local-generation-manifest.json`. Active/previous runtimes, incident holds,
+activation intents, live workspaces, current jobs, resumable checkpoints, and
+activation-ready maintenance candidates are protected. An unreferenced,
+unpublished local-maintenance runtime becomes eligible only after seven days.
+Unknown or malformed runtime manifests are retained, and cleanup planning fails
+closed when control-plane protection state cannot be read. Apply only the
+current plan identifier:
 
 ```bash
 python manage.py artifact_cleanup apply --confirm <plan-id>
