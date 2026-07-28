@@ -394,6 +394,7 @@ def schedule_activation(
     idempotency_key="",
     request_state_digest="",
     rollback=False,
+    recovery_set_id="",
 ):
     """Create one signed intent; the web supervisor performs the cutover."""
     _guard_activation_enabled()
@@ -516,6 +517,7 @@ def schedule_activation(
         "actor_name": actor_name,
         "expires_at_unix": int(expires_at.timestamp()),
         "state_version": 1,
+        "recovery_set_id": recovery_set_id,
     }
     if rollback_previous_pointer is not None:
         payload.update(
@@ -577,6 +579,7 @@ def schedule_activation(
                     "smoke_queries_digest": smoke_queries_digest,
                     "protocol_state": "scheduled",
                     "capacity_plan": activation_capacity,
+                    "recovery_set_id": recovery_set_id,
                 },
                 actor_id=actor_id,
                 actor_name=actor_name,

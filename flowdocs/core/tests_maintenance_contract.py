@@ -472,6 +472,10 @@ class MaintenanceWorkerGroupingTests(TestCase):
         self.assertEqual(
             finished.options["completed_folder_ids"], [self.folder.pk]
         )
+        self.assertEqual(
+            finished.options["folder_build_attempts"],
+            {str(self.folder.pk): 1},
+        )
 
         finished.status = "queued"
         finished.failed_items = 0
@@ -480,6 +484,11 @@ class MaintenanceWorkerGroupingTests(TestCase):
         run_job(finished)
         self.assertEqual(precompute.call_count, 2)
         repair.assert_called_once()
+        finished.refresh_from_db()
+        self.assertEqual(
+            finished.options["folder_build_attempts"],
+            {str(self.folder.pk): 1},
+        )
 
     @patch(
         "core.maintenance.precompute_pdf_embeddings",

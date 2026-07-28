@@ -1400,6 +1400,7 @@ def _schedule_workspace_activation(
             idempotency_key=idempotency_key,
             request_state_digest=digest,
             rollback=confirmation_action == "rollback_runtime",
+            recovery_set_id=recovery_set["set_id"],
         )
         append_event(
             action=f"{reason_code}_recovery_set_verified",
