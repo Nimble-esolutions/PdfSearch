@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from .emergency_recovery import create_set, list_sets, plan_prune
 from .artifact_cleanup import (
+    CleanupError,
     capacity_report,
     cleanup_plan,
     inventory_local_artifacts,
@@ -628,8 +629,19 @@ def workbench_maintenance_state(
     reasons = capability_reasons()
     recovery_sets = list_sets()
     cleanup = plan_prune()
-    local_cleanup = cleanup_plan()
-    local_inventory = inventory_local_artifacts()
+    try:
+        local_cleanup = cleanup_plan()
+        local_inventory = inventory_local_artifacts()
+        cleanup_inventory_reason = ""
+    except (CleanupError, OSError):
+        local_cleanup = {
+            "plan_id": "",
+            "candidate_bytes": 0,
+            "protected_bytes": 0,
+            "apply_allowed": False,
+        }
+        local_inventory = []
+        cleanup_inventory_reason = "cleanup_inventory_unavailable"
     maintenance_workspaces = [
         item for item in local_inventory
         if item["category"] == "maintenance_workspace"
@@ -812,6 +824,7 @@ def workbench_maintenance_state(
                 "plan_id": local_cleanup["plan_id"],
                 "prunable_bytes": local_cleanup["candidate_bytes"],
                 "protected_bytes": local_cleanup["protected_bytes"],
+                "reason_code": cleanup_inventory_reason,
             },
             "last_restore_drill": last_restore_drill,
         },

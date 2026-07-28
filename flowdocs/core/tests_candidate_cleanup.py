@@ -22,6 +22,7 @@ from core.candidate_maintenance import (
     create_workspace,
     validate_candidate,
 )
+from core.maintenance_plans import workbench_maintenance_state
 
 
 class _Values:
@@ -593,3 +594,33 @@ class ArtifactCleanupPlannerTests(TestCase):
             CleanupError, "cleanup_protection_state_unavailable"
         ):
             cleanup_plan()
+
+    @patch(
+        "core.artifact_cleanup._manifest",
+        side_effect=PermissionError("private runtime path"),
+    )
+    def test_unreadable_inventory_returns_typed_bounded_failure(self, _mock):
+        with self.assertRaisesRegex(
+            CleanupError, "^cleanup_inventory_unavailable$"
+        ) as raised:
+            cleanup_plan()
+
+        self.assertNotIn("private runtime path", str(raised.exception))
+
+    @patch(
+        "core.maintenance_plans.cleanup_plan",
+        side_effect=CleanupError("cleanup_inventory_unavailable"),
+    )
+    def test_workbench_blocks_cleanup_without_crashing_or_candidates(
+        self, _mock
+    ):
+        state = workbench_maintenance_state()
+
+        cleanup = state["health"]["cleanup"]
+        self.assertEqual(cleanup["state"], "blocked")
+        self.assertEqual(
+            cleanup["reason_code"], "cleanup_inventory_unavailable"
+        )
+        self.assertEqual(cleanup["prunable_bytes"], 0)
+        self.assertEqual(cleanup["protected_bytes"], 0)
+        self.assertEqual(cleanup["plan_id"], "")

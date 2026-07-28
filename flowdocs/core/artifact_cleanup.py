@@ -46,33 +46,40 @@ def _manifest(path: Path, names: tuple[str, ...]) -> dict:
 
 
 def _records(root: Path, category: str, manifests=()) -> list[dict]:
-    if not root.is_dir():
-        return []
-    records = []
-    for path in root.iterdir():
-        if path.name.startswith(".") or path.is_symlink():
-            continue
-        manifest = _manifest(path, tuple(manifests))
-        raw_created = manifest.get("created_at")
-        try:
-            created = datetime.fromisoformat(raw_created) if raw_created else None
-        except ValueError:
-            created = None
-        created = created or datetime.fromtimestamp(
-            path.stat().st_mtime, tz=timezone.utc
-        )
-        records.append(
-            {
-                "category": category,
-                "path": str(path.resolve()),
-                "name": path.name,
-                "bytes": _tree_bytes(path),
-                "created_at": created.isoformat(),
-                "state": manifest.get("state", "unknown"),
-                "manifest": manifest,
-            }
-        )
-    return records
+    try:
+        if not root.is_dir():
+            return []
+        records = []
+        for path in root.iterdir():
+            if path.name.startswith(".") or path.is_symlink():
+                continue
+            manifest = _manifest(path, tuple(manifests))
+            raw_created = manifest.get("created_at")
+            try:
+                created = (
+                    datetime.fromisoformat(raw_created)
+                    if raw_created
+                    else None
+                )
+            except ValueError:
+                created = None
+            created = created or datetime.fromtimestamp(
+                path.stat().st_mtime, tz=timezone.utc
+            )
+            records.append(
+                {
+                    "category": category,
+                    "path": str(path.resolve()),
+                    "name": path.name,
+                    "bytes": _tree_bytes(path),
+                    "created_at": created.isoformat(),
+                    "state": manifest.get("state", "unknown"),
+                    "manifest": manifest,
+                }
+            )
+        return records
+    except OSError as exc:
+        raise CleanupError("cleanup_inventory_unavailable") from exc
 
 
 def _runtime_protections() -> dict:
