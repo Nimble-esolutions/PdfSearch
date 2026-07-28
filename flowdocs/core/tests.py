@@ -1938,7 +1938,10 @@ class GenerationLifecycleTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Data Generations")
-        self.assertContains(response, reverse("vault_operations"))
+        self.assertContains(
+            response,
+            f"{reverse('operations_panel')}?section=generations",
+        )
 
         # The retired mixed-control page now routes to the guarded workbench.
         vault_response = self.client.get(reverse("vault_operations"))
@@ -2037,7 +2040,14 @@ class BulkFilterTests(TestCase):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bulk Operations")
-        self.assertContains(response, reverse("vault_operations"))
+        self.assertContains(response, 'name="readiness"')
+        self.assertContains(response, 'name="provenance"')
+        self.assertContains(response, 'name="occupancy"')
+        self.assertContains(response, 'name="ordering"')
+        self.assertContains(
+            response,
+            f"{reverse('operations_panel')}?section=maintenance",
+        )
 
 
 class JobDrawerTests(TestCase):
