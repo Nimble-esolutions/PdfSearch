@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import fcntl
 import json
 import math
 import os
@@ -12,8 +13,10 @@ import sqlite3
 import subprocess
 import sys
 import uuid
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.db import transaction
@@ -67,27 +70,63 @@ def _copy_tree(source: Path, target: Path) -> None:
         target.mkdir(parents=True)
 
 
-def _source_identity(job: MaintenanceJob) -> dict:
+def _tree_identity(root: Path) -> dict:
+    """Return a content identity without exposing document names."""
+    digest = hashlib.sha256()
+    file_count = 0
+    byte_count = 0
+    if not root.is_dir() or root.is_symlink():
+        raise CandidateMaintenanceError("maintenance_source_runtime_unsafe")
+    for path in sorted(root.rglob("*"), key=lambda value: value.as_posix()):
+        if path.is_symlink():
+            raise CandidateMaintenanceError("maintenance_source_runtime_unsafe")
+        relative = path.relative_to(root).as_posix()
+        if path.is_dir():
+            digest.update(f"d\\0{relative}\\0".encode())
+            continue
+        if not path.is_file():
+            raise CandidateMaintenanceError("maintenance_source_runtime_unsafe")
+        size = path.stat().st_size
+        file_hash = _sha256(path)
+        digest.update(
+            f"f\\0{relative}\\0{size}\\0{file_hash}\\0".encode()
+        )
+        file_count += 1
+        byte_count += size
+    return {
+        "sha256": digest.hexdigest(),
+        "files": file_count,
+        "bytes": byte_count,
+    }
+
+
+@contextmanager
+def _source_snapshot_lock():
+    root = Path(settings.DATA_CONTROL_ROOT)
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / ".maintenance-source-snapshot.lock"
+    descriptor = os.open(
+        lock_path,
+        os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def _source_identity(job: MaintenanceJob, parent) -> dict:
     database = Path(settings.DATABASES["default"]["NAME"]).resolve()
-    runtime_generation_id = getattr(
-        settings, "RUNTIME_GENERATION_ID", ""
-    )
-    runtime_manifest_digest = getattr(
-        settings, "RUNTIME_MANIFEST_DIGEST", ""
-    )
-    if (
-        settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED
-        and getattr(settings, "ACTIVE_RUNTIME", None) is None
-    ):
-        (
-            runtime_generation_id,
-            runtime_manifest_digest,
-        ) = _verified_mutable_source_runtime_identity()
     return {
         "job_id": str(job.public_id),
         "database_sha256": _sha256(database),
-        "runtime_generation_id": runtime_generation_id,
-        "runtime_manifest_digest": runtime_manifest_digest,
+        "runtime_generation_id": parent.generation_id,
+        "runtime_manifest_digest": parent.manifest_digest,
+        "runtime_pointer_digest": parent.pointer_digest,
+        "parent_tree": _tree_identity(Path(parent.runtime_path)),
         "recovery_set_id": job.options.get("recovery_set_id", ""),
     }
 
@@ -144,6 +183,36 @@ def _verified_mutable_source_runtime_identity():
     return pointer.generation_id, pointer.manifest_digest
 
 
+def _verified_mutable_source_runtime():
+    """Return the verified parent pointer while preserving the public helper."""
+    from vaultops.runtime_control import read_runtime_pointer, runtime_control_paths
+
+    _verified_mutable_source_runtime_identity()
+    return read_runtime_pointer(
+        runtime_control_paths(settings.DATA_CONTROL_ROOT)["active"],
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+    )
+
+
+def _maintenance_source_parent():
+    if settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:
+        return _verified_mutable_source_runtime()
+    generation_id = getattr(settings, "RUNTIME_GENERATION_ID", "")
+    manifest_digest = getattr(settings, "RUNTIME_MANIFEST_DIGEST", "")
+    if not generation_id or not manifest_digest:
+        raise CandidateMaintenanceError("maintenance_source_pointer_unverified")
+    return SimpleNamespace(
+        generation_id=generation_id,
+        manifest_digest=manifest_digest,
+        pointer_digest=hashlib.sha256(
+            f"{generation_id}:{manifest_digest}".encode()
+        ).hexdigest(),
+        runtime_path=str(Path(settings.DATA_ROOT).resolve()),
+    )
+
+
 def estimate_workspace_bytes(job: MaintenanceJob) -> int:
     database = Path(settings.DATABASES["default"]["NAME"])
     roots = [
@@ -171,19 +240,35 @@ def create_workspace(job: MaintenanceJob) -> Path:
     temporary = root / f".{workspace.name}.tmp"
     temporary.mkdir(mode=0o700)
     try:
-        _copy_sqlite(
-            Path(settings.DATABASES["default"]["NAME"]).resolve(),
-            temporary / "db.sqlite3",
-        )
-        _copy_tree(Path(settings.MEDIA_ROOT).resolve(), temporary / "media")
-        _copy_tree(
-            Path(settings.FAISS_INDEX_DIR).resolve(),
-            temporary / "faiss_indexes",
-        )
-        _copy_tree(Path(settings.CHROMA_DIR).resolve(), temporary / "chroma_db")
-        (temporary / "pdf_cache").mkdir()
-        (temporary / "backups").mkdir()
-        source = _source_identity(job)
+        with _source_snapshot_lock():
+            parent = _maintenance_source_parent()
+            parent_tree_before = _tree_identity(Path(parent.runtime_path))
+            _copy_sqlite(
+                Path(settings.DATABASES["default"]["NAME"]).resolve(),
+                temporary / "db.sqlite3",
+            )
+            _copy_tree(Path(settings.MEDIA_ROOT).resolve(), temporary / "media")
+            _copy_tree(
+                Path(settings.FAISS_INDEX_DIR).resolve(),
+                temporary / "faiss_indexes",
+            )
+            _copy_tree(
+                Path(settings.CHROMA_DIR).resolve(), temporary / "chroma_db"
+            )
+            (temporary / "pdf_cache").mkdir()
+            (temporary / "backups").mkdir()
+            source = _source_identity(job, parent)
+            parent_after = _maintenance_source_parent()
+            parent_tree_after = _tree_identity(Path(parent_after.runtime_path))
+            if (
+                parent_after.pointer_digest != parent.pointer_digest
+                or parent_tree_after != parent_tree_before
+                or source["parent_tree"] != parent_tree_before
+            ):
+                raise CandidateMaintenanceError(
+                    "maintenance_source_authority_changed"
+                )
+            source["snapshot"] = _tree_identity(temporary)
         (temporary / WORKSPACE_MANIFEST).write_text(
             json.dumps(
                 {

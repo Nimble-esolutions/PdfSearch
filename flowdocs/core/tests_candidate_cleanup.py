@@ -125,6 +125,79 @@ class CandidateWorkspaceTests(SimpleTestCase):
             hashlib.sha256((workspace / "db.sqlite3").read_bytes()).hexdigest(),
             before,
         )
+        manifest = json.loads(
+            (workspace / WORKSPACE_MANIFEST).read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["source"]["runtime_generation_id"], "source-runtime")
+        self.assertRegex(manifest["source"]["parent_tree"]["sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(manifest["source"]["snapshot"]["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_workspace_rejects_pointer_change_during_snapshot(self):
+        job = SimpleNamespace(
+            public_id=uuid.uuid4(),
+            kind="reindex_selected",
+            options={"recovery_set_id": "rs-test"},
+            items=_Values([1], [7]),
+        )
+        first = SimpleNamespace(
+            generation_id="source-runtime",
+            manifest_digest="source-manifest",
+            pointer_digest="1" * 64,
+            runtime_path=str(self.data),
+        )
+        second = SimpleNamespace(**{**first.__dict__, "pointer_digest": "2" * 64})
+        with (
+            patch("core.candidate_maintenance.capacity_report", return_value={
+                "byte_capacity_ok": True, "inode_capacity_ok": True,
+            }),
+            patch(
+                "core.candidate_maintenance._maintenance_source_parent",
+                side_effect=[first, second],
+            ),
+            self.assertRaises(CandidateMaintenanceError) as raised,
+        ):
+            create_workspace(job)
+        self.assertEqual(
+            raised.exception.reason_code, "maintenance_source_authority_changed"
+        )
+        self.assertFalse(any(self.control.glob("maintenance-workspaces/mw-*")))
+
+    def test_workspace_rejects_parent_byte_change_during_snapshot(self):
+        job = SimpleNamespace(
+            public_id=uuid.uuid4(),
+            kind="reindex_selected",
+            options={"recovery_set_id": "rs-test"},
+            items=_Values([1], [7]),
+        )
+        parent = SimpleNamespace(
+            generation_id="source-runtime",
+            manifest_digest="source-manifest",
+            pointer_digest="1" * 64,
+            runtime_path=str(self.data),
+        )
+
+        def resolve_parent():
+            if resolve_parent.calls:
+                (self.data / "media" / "pdfs" / "one.pdf").write_bytes(b"changed")
+            resolve_parent.calls += 1
+            return parent
+
+        resolve_parent.calls = 0
+        with (
+            patch("core.candidate_maintenance.capacity_report", return_value={
+                "byte_capacity_ok": True, "inode_capacity_ok": True,
+            }),
+            patch(
+                "core.candidate_maintenance._maintenance_source_parent",
+                side_effect=resolve_parent,
+            ),
+            self.assertRaises(CandidateMaintenanceError) as raised,
+        ):
+            create_workspace(job)
+        self.assertEqual(
+            raised.exception.reason_code, "maintenance_source_authority_changed"
+        )
+        self.assertFalse(any(self.control.glob("maintenance-workspaces/mw-*")))
 
     def test_candidate_validation_checks_media_embeddings_and_faiss(self):
         import faiss
