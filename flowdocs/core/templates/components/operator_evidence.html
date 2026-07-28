@@ -1,0 +1,19 @@
+{% load i18n %}
+<div class="operator-guidance operator-guidance--{{ presentation.severity|default:'warning' }}">
+  <strong>{{ presentation.title }}</strong>
+  {% if presentation.detail %}<p>{{ presentation.detail }}</p>{% endif %}
+  {% if presentation.consequence %}<p class="operator-guidance__consequence">{{ presentation.consequence }}</p>{% endif %}
+  {% if show_action and presentation.action_url %}
+    <a class="btn btn-outline-primary btn-sm" href="{{ presentation.action_url }}">{{ presentation.action_label }}</a>
+  {% endif %}
+  {% if technical_code %}
+    <details class="operator-evidence">
+      <summary>{% trans "Technical details" %}</summary>
+      <dl>
+        <div><dt>{% trans "Code" %}</dt><dd><code lang="en" dir="ltr">{{ technical_code }}</code></dd></div>
+        {% if observed_at %}<div><dt>{% trans "Observed" %}</dt><dd><time datetime="{{ observed_at|date:'c' }}">{{ observed_at|date:"Y-m-d H:i:s T" }}</time></dd></div>{% endif %}
+        {% if evidence_id %}<div><dt>{% trans "Evidence ID" %}</dt><dd><code lang="en" dir="ltr">{{ evidence_id }}</code></dd></div>{% endif %}
+      </dl>
+    </details>
+  {% endif %}
+</div>

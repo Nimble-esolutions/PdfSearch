@@ -17,6 +17,11 @@
 - [ ] Django checks and migration checks pass
 - [ ] Health/readiness behavior tested
 - [ ] Admin UI smoke tested when UI/admin workflows changed
+- [ ] Human title, meaning, consequence, and next action are authored for new UI reasons
+- [ ] Machine codes appear only in collapsed, redacted technical evidence
+- [ ] English and Marathi copy have equivalent meaning and action
+- [ ] Keyboard, screen-reader, 200% zoom, and visible-token checks pass
+- [ ] English/Marathi desktop and mobile visual evidence is attached for UI changes
 - [ ] Persistent data impact documented
 - [ ] Backup and rollback plan documented
 - [ ] Dokploy port/network/volume behavior verified

@@ -1,6 +1,6 @@
 # PdfSearch implementation roadmap
 
-Reviewed against commit `6c9a262` on 2026-07-28. These files are handoff
+Reviewed against commit `f7d0536` on 2026-07-28. These files are handoff
 contracts for future developers and AI agents. Read the selected plan fully,
 run its drift check, and stop when a stated assumption is false.
 
@@ -30,7 +30,13 @@ run its drift check, and stop when a stated assumption is false.
 | 013 | Restore task-first Operations Cockpit hierarchy | P1 | M | — | DONE |
 | 014 | Correct maintenance capability gates and filter validation | P1 | M | 013 | DONE |
 | 015 | Make Workbench readiness failures actionable | P1 | M | 013, 014 | DONE |
-| 016 | Bound maintenance read models and verify full workflow | P2 | M | 014, 015 | RECONCILE |
+| 016 | Bound maintenance read models and verify full workflow | P2 | M | 014, 015 | DONE |
+| 017 | Human-centred operator evidence | P1 | M | 015, 016 | DONE |
+| 018 | Complete the UI reason presentation registry | P1 | M | — | DONE |
+| 019 | Redact operator technical evidence | P1 | M | 018 | DONE |
+| 020 | Enforce Marathi operator-copy parity | P1 | M | 018 | DONE |
+| 021 | Strengthen rendered/accessibility anti-slop gates | P1 | M | 018, 019, 020 | DONE |
+| 022 | Reconcile roadmap and stacked-PR readiness | P2 | S | 018, 019, 020, 021 | DONE |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -63,6 +69,11 @@ run its drift check, and stop when a stated assumption is false.
                                       └──────┬───────┘
                                              v
                                       010 platform evolution
+
+015 readiness remediation ─> 017 operator evidence ─> 018 registry
+                                                     ├─> 019 redaction
+                                                     └─> 020 Marathi parity
+018 + 019 + 020 ─> 021 enforcement ─> 022 stack reconciliation
 ```
 
 Plan 011 comes before database replacement because recovery must not depend on
@@ -158,7 +169,13 @@ These findings were observed against the local authenticated deployment at
 `http://127.0.0.1:8000` and verified against source at commit `6c9a262`. The
 visual audit did not modify application source or enable production mutations.
 
-Plan 016 remains `RECONCILE` until an end-to-end browser gate proves filtered
-preview, repair and reindex queueing, progress and retry, candidate preparation,
-signed activation, English and Marathi search, and rollback. Focused Django and
-surface-level Playwright checks do not satisfy that full lifecycle contract.
+Plan 016 is `DONE`: PR #102 added the required disposable lifecycle covering
+filtered preview, repair and reindex queueing, progress and retry, candidate
+preparation, signed activation, English and Marathi search, rollback, and
+post-rollback content custody.
+
+Plan 017 is `DONE`. Plans 018–022 closed the 2026-07-28 completion-audit gaps:
+all inventoried UI reasons resolve to authored guidance, browser projections
+redact raw exception and audit messages, Marathi has reviewed copy for every
+active registry string, and the anti-slop gate proves visible and accessible
+machine-token containment across the Dashboard and every Workbench section.

@@ -1,5 +1,6 @@
 msgid ""
-msgstr "Project-Id-Version: PdfSearch\n"
+msgstr ""
+"Project-Id-Version: PdfSearch\n"
 "Language: mr\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -14,10 +15,15 @@ msgstr "Project-Id-Version: PdfSearch\n"
 msgid "Ask AI Sahakar"
 msgstr "सहकार AI ला विचारा"
 
-msgid "Search Maharashtra cooperative laws, rules, circulars and department guidance in plain language."
-msgstr "महाराष्ट्रातील सहकारी कायदे, नियम, परिपत्रके आणि विभागीय मार्गदर्शन सोप्या भाषेत शोधा."
+msgid ""
+"Search Maharashtra cooperative laws, rules, circulars and department "
+"guidance in plain language."
+msgstr ""
+"महाराष्ट्रातील सहकारी कायदे, नियम, परिपत्रके आणि विभागीय मार्गदर्शन सोप्या भाषेत शोधा."
 
-msgid "Answers are prepared from the department's indexed documents and include source references."
+msgid ""
+"Answers are prepared from the department's indexed documents and include "
+"source references."
 msgstr "उत्तरे विभागाच्या उपलब्ध दस्तऐवजांवर आधारित असून संबंधित संदर्भांसह दिली जातात."
 
 msgid "Common topics"
@@ -35,13 +41,16 @@ msgstr "नवा प्रश्न"
 msgid "How to ask a useful question"
 msgstr "उपयुक्त प्रश्न कसा विचारावा"
 
-msgid "Include the Act, Rule, section number, society type or topic when you know it."
+msgid ""
+"Include the Act, Rule, section number, society type or topic when you know "
+"it."
 msgstr "माहित असल्यास अधिनियम, नियम, कलम क्रमांक, संस्थेचा प्रकार किंवा विषय नमूद करा."
 
 msgid "Human department support"
 msgstr "विभागाचे मानवी सहाय्य"
 
-msgid "For official guidance, contact the department or visit the official website."
+msgid ""
+"For official guidance, contact the department or visit the official website."
 msgstr "अधिकृत मार्गदर्शनासाठी विभागाशी संपर्क साधा किंवा अधिकृत संकेतस्थळाला भेट द्या."
 
 msgid "Contact on WhatsApp"
@@ -71,8 +80,11 @@ msgstr "शोधण्यासाठी Enter दाबा"
 msgid "of 30 words"
 msgstr "३० शब्दांपैकी"
 
-msgid "Answers are informational. Check the cited document before making an important decision."
-msgstr "उत्तरे माहितीच्या स्वरूपाची आहेत. महत्त्वाचा निर्णय घेण्यापूर्वी संदर्भित दस्तऐवज तपासा."
+msgid ""
+"Answers are informational. Check the cited document before making an "
+"important decision."
+msgstr ""
+"उत्तरे माहितीच्या स्वरूपाची आहेत. महत्त्वाचा निर्णय घेण्यापूर्वी संदर्भित दस्तऐवज तपासा."
 
 msgid "Evidence and help"
 msgstr "पुरावे आणि मदत"
@@ -80,8 +92,12 @@ msgstr "पुरावे आणि मदत"
 msgid "Search official documents with confidence"
 msgstr "विश्वासाने अधिकृत दस्तऐवज शोधा"
 
-msgid "Ask in English or Marathi. AI Sahakar searches official department documents and shows the sources used for the answer."
-msgstr "इंग्रजी किंवा मराठीत विचारा. सहकार AI अधिकृत विभागीय दस्तऐवज शोधतो आणि उत्तरासाठी वापरलेले स्रोत दाखवतो."
+msgid ""
+"Ask in English or Marathi. AI Sahakar searches official department documents "
+"and shows the sources used for the answer."
+msgstr ""
+"इंग्रजी किंवा मराठीत विचारा. सहकार AI अधिकृत विभागीय दस्तऐवज शोधतो आणि उत्तरासाठी "
+"वापरलेले स्रोत दाखवतो."
 
 msgid "Ask plainly"
 msgstr "सोप्या भाषेत विचारा"
@@ -184,6 +200,7 @@ msgstr "संबंधित स्रोत तपासत आहोत…"
 
 msgid "Preparing an answer…"
 msgstr "उत्तर तयार करत आहोत…"
+
 #: core/templates/base.html:8 core/templates/home.html:8
 msgid ""
 "Commissioner for Cooperation and Registrar, Cooperative Societies, "
@@ -256,20 +273,16 @@ msgid "Operations Cockpit - CC & RCS Maharashtra"
 msgstr "संचालन नियंत्रण कक्ष - सीसी आणि आरसीएस महाराष्ट्र"
 
 #: core/templates/dashboard.html:8
-#, fuzzy
-#| msgid "Active"
 msgid "Active jobs"
-msgstr "सक्रिय"
+msgstr "सक्रिय कार्ये"
 
 #: core/templates/dashboard.html:12
 msgid "Active maintenance jobs"
 msgstr "सक्रिय देखभाल कार्ये"
 
 #: core/templates/dashboard.html:14
-#, fuzzy
-#| msgid "Active"
 msgid "Active Jobs"
-msgstr "सक्रिय"
+msgstr "सक्रिय कार्ये"
 
 #: core/templates/dashboard.html:18
 msgid "Loading..."
@@ -348,36 +361,28 @@ msgstr ""
 "प्रत्येक श्रेणी एक कार्य विभाग आहे: PDF, तयारी आणि अपलोड स्थिती तपासण्यासाठी ती उघडा."
 
 #: core/templates/dashboard.html:82
-#, fuzzy
-#| msgid "Document operations"
 msgid "Bulk Data Operations"
-msgstr "दस्तऐवज संचालन"
+msgstr "मोठ्या प्रमाणातील डेटा संचालन"
 
 #: core/templates/dashboard.html:83
 msgid ""
 "Select categories, then queue a resumable operation. Work is processed by "
 "the maintenance worker."
 msgstr ""
-"श्रेणी निवडा, मग पुनरुत्पादित करण्यायोग्य ऑपरेशन रांगेत लावा. कार्य देखभाल "
-"कार्यकर्त्याद्वारे प्रक्रिया केले जाते."
+"श्रेणी निवडा, मग पुनरुत्पादित करण्यायोग्य ऑपरेशन रांगेत लावा. कार्य देखभाल कार्यकर्त्याद्वारे "
+"प्रक्रिया केले जाते."
 
 #: core/templates/dashboard.html:86
-#, fuzzy
-#| msgid "Reprocess Needed"
 msgid "Reindex Needed"
-msgstr "आवश्यक पुनर्प्रक्रिया करा"
+msgstr "पुनःअनुक्रमण आवश्यक"
 
 #: core/templates/dashboard.html:87
-#, fuzzy
-#| msgid "indexed"
 msgid "Reindex Selected"
-msgstr "अनुक्रमित"
+msgstr "निवडलेल्यांचे पुनःअनुक्रमण करा"
 
 #: core/templates/dashboard.html:88
-#, fuzzy
-#| msgid "Repair Stored Index"
 msgid "Repair Indexes"
-msgstr "संग्रहित अनुक्रमणिका दुरुस्त करा"
+msgstr "अनुक्रमणिका दुरुस्त करा"
 
 #: core/templates/dashboard.html:89
 msgid "Validate Files"
@@ -396,16 +401,12 @@ msgstr ""
 "विद्यमान यशस्वी वस्तू तशाच राहतात."
 
 #: core/templates/dashboard.html:96
-#, fuzzy
-#| msgid "Document"
 msgid "Filter Documents"
-msgstr "दस्तऐवज"
+msgstr "दस्तऐवज गाळा"
 
 #: core/templates/dashboard.html:99
-#, fuzzy
-#| msgid "Add Category"
 msgid "Category"
-msgstr "श्रेणी जोडा"
+msgstr "श्रेणी"
 
 #: core/templates/dashboard.html:100
 msgid "acts / rules / bylaws"
@@ -430,10 +431,8 @@ msgid "Any"
 msgstr "कोणतेही"
 
 #: core/templates/dashboard.html:111
-#, fuzzy
-#| msgid "indexed"
 msgid "Not indexed"
-msgstr "अनुक्रमित"
+msgstr "अनुक्रमित नाही"
 
 #: core/templates/dashboard.html:115
 msgid "Keywords (comma-separated)"
@@ -460,35 +459,33 @@ msgid ""
 "Filters apply to reindex and validate operations. Select categories above, "
 "then set filters to narrow the scope."
 msgstr ""
-"फिल्टर्स पुन्हा अनुक्रमण आणि पडताळणी कार्यांवर लागू होतात. वरील श्रेणी निवडा, "
-"मग फिल्टर्स सेट करून व्याप्ती कमी करा."
+"फिल्टर्स पुन्हा अनुक्रमण आणि पडताळणी कार्यांवर लागू होतात. वरील श्रेणी निवडा, मग फिल्टर्स "
+"सेट करून व्याप्ती कमी करा."
 
 #: core/templates/dashboard.html:135
 msgid "Available generation"
-msgstr "उपलब्ध पिढी"
+msgstr "उपलब्ध निर्मिती संच"
 
 #: core/templates/dashboard.html:136
 msgid "Choose a generation or enter one below"
-msgstr "पिढी निवडा किंवा खाली एक प्रविष्ट करा"
+msgstr "निर्मिती संच निवडा किंवा खाली आयडी प्रविष्ट करा"
 
 #: core/templates/dashboard.html:144
 msgid "Pull Generation to Staging"
-msgstr "पिढी स्टेजिंगवर आणा"
+msgstr "निर्मिती संच चाचणी वातावरणात आणा"
 
 #: core/templates/dashboard.html:146
 msgid "Or enter an immutable generation id"
-msgstr "किंवा एक अपरिवर्तनीय पिढी आयडी प्रविष्ट करा"
+msgstr "किंवा अपरिवर्तनीय निर्मिती संच आयडी प्रविष्ट करा"
 
 #: core/templates/dashboard.html:150
 msgid "Generation Lifecycle"
-msgstr "पिढी जीवनचक्र"
+msgstr "निर्मिती संचाचे जीवनचक्र"
 
 #: core/templates/dashboard.html:155
 #: core/templates/dashboard_operations.html:94
-#, fuzzy
-#| msgid "Document operations"
 msgid "Generation"
-msgstr "दस्तऐवज संचालन"
+msgstr "निर्मिती संच"
 
 #: core/templates/dashboard.html:156 core/templates/user_list.html:38
 #: core/templates/user_list.html:57
@@ -533,8 +530,7 @@ msgstr "स्टेज केलेले"
 #: core/templates/dashboard.html:189
 msgid ""
 "Promote this generation to active? The current active will be superseded."
-msgstr ""
-"ही पिढी सक्रिय करा? सध्याची सक्रिय पिढी बदलली जाईल."
+msgstr "हा निर्मिती संच सक्रिय करायचा? सध्याचा सक्रिय निर्मिती संच बदलला जाईल."
 
 #: core/templates/dashboard.html:189
 msgid "Promote"
@@ -542,7 +538,7 @@ msgstr "प्रमोट करा"
 
 #: core/templates/dashboard.html:195
 msgid "Roll back to this generation? This will supersede the current active."
-msgstr "या पिढीवर परत जायचे? यामुळे सध्याची सक्रिय पिढी बदलली जाईल."
+msgstr "या निर्मिती संचावर परत जायचे? यामुळे सध्याचा सक्रिय निर्मिती संच बदलला जाईल."
 
 #: core/templates/dashboard.html:195
 msgid "Rollback"
@@ -553,7 +549,7 @@ msgid ""
 "Purge this generation? This marks it purged and removes it from active "
 "rotation."
 msgstr ""
-"ही पिढी काढून टाकायची? यामुळे ती काढून टाकलेली म्हणून चिन्हांकित केली जाईल आणि "
+"हा निर्मिती संच काढून टाकायचा? यामुळे तो काढून टाकलेला म्हणून चिन्हांकित केला जाईल आणि "
 "सक्रिय फिरण्यातून काढून टाकली जाईल."
 
 #: core/templates/dashboard.html:201
@@ -565,10 +561,8 @@ msgid "Purge Expired"
 msgstr "कालबाह्य काढून टाका"
 
 #: core/templates/dashboard.html:225
-#, fuzzy
-#| msgid "Delete category"
 msgid "Select category"
-msgstr "श्रेणी हटवा"
+msgstr "श्रेणी निवडा"
 
 #: core/templates/dashboard.html:231
 #, python-format
@@ -761,30 +755,24 @@ msgid "PDFs in"
 msgstr "मधील PDF"
 
 #: core/templates/dashboard.html:524
-#, fuzzy
-#| msgid "Categories"
 msgid "categories"
-msgstr "श्रेणी"
+msgstr "श्रेण्या"
 
 #: core/templates/dashboard.html:524 core/templates/dashboard_pdfs.html:36
 msgid "indexed"
 msgstr "अनुक्रमित"
 
 #: core/templates/dashboard.html:524
-#, fuzzy
-#| msgid "Needs index"
 msgid "need index"
-msgstr "अनुक्रमण आवश्यक"
+msgstr "अनुक्रमण आवश्यक आहे"
 
 #: core/templates/dashboard.html:527
 msgid "Preview failed."
 msgstr "पूर्वावलोकन अपयशी."
 
 #: core/templates/dashboard.html:549
-#, fuzzy
-#| msgid "Choose active user"
 msgid "No active jobs."
-msgstr "सक्रिय वापरकर्ता निवडा"
+msgstr "कोणतीही सक्रिय कार्ये नाहीत."
 
 #: core/templates/dashboard.html:567
 msgid "Items"
@@ -799,27 +787,23 @@ msgid "Failed to load jobs."
 msgstr "कार्ये लोड करण्यात अपयशी."
 
 #: core/templates/dashboard_operations.html:4
-#, fuzzy
-#| msgid "Operations Cockpit - CC & RCS Maharashtra"
 msgid "Operations — Data Lifecycle - CC & RCS Maharashtra"
-msgstr "संचालन नियंत्रण कक्ष - सीसी आणि आरसीएस महाराष्ट्र"
+msgstr "संचालन — डेटा जीवनचक्र - सीसी आणि आरसीएस महाराष्ट्र"
 
 #: core/templates/dashboard_operations.html:9
 msgid "Environment & Data Lifecycle"
 msgstr "पर्यावरण आणि डेटा जीवनचक्र"
 
 #: core/templates/dashboard_operations.html:10
-#, fuzzy
-#| msgid "Index Operations"
 msgid "Operations"
-msgstr "अनुक्रमण कार्ये"
+msgstr "संचालन"
 
 #: core/templates/dashboard_operations.html:11
 msgid ""
 "Dataset identity, writer authority, generation status, and restore workspace "
 "state."
 msgstr ""
-"डेटासेट ओळख, लेखक अधिकार, पिढी स्थिती आणि कार्यक्षेत्र स्थिती पुनर्संचयित करा."
+"डेटासेट ओळख, लेखन अधिकार, निर्मिती संचाची स्थिती आणि पुनर्स्थापना कार्यक्षेत्राची स्थिती."
 
 #: core/templates/dashboard_operations.html:17
 msgid "Environment"
@@ -827,7 +811,7 @@ msgstr "पर्यावरण"
 
 #: core/templates/dashboard_operations.html:20
 msgid "APP_ENV"
-msgstr "अॅप_पर्यावरण"
+msgstr "APP_ENV"
 
 #: core/templates/dashboard_operations.html:23
 msgid "Dataset"
@@ -851,10 +835,8 @@ msgid "Deployment"
 msgstr "तैनाती"
 
 #: core/templates/dashboard_operations.html:44
-#, fuzzy
-#| msgid "Department"
 msgid "Deployment ID"
-msgstr "विभाग"
+msgstr "तैनाती आयडी"
 
 #: core/templates/dashboard_operations.html:47
 msgid "Instance ID"
@@ -873,10 +855,8 @@ msgid "Digest mismatch"
 msgstr "डायजेस्ट विसंगती"
 
 #: core/templates/dashboard_operations.html:67
-#, fuzzy
-#| msgid "Back to Dashboard"
 msgid "Backup & Data"
-msgstr "डॅशबोर्डवर परत"
+msgstr "बॅकअप आणि डेटा"
 
 #: core/templates/dashboard_operations.html:70
 msgid "Backup Role"
@@ -903,10 +883,8 @@ msgid "Disabled"
 msgstr "अक्षम"
 
 #: core/templates/dashboard_operations.html:91
-#, fuzzy
-#| msgid "Document operations"
 msgid "Local Generation"
-msgstr "दस्तऐवज संचालन"
+msgstr "स्थानिक निर्मिती संच"
 
 #: core/templates/dashboard_operations.html:97
 msgid "Age"
@@ -1038,10 +1016,8 @@ msgid "Deprecated"
 msgstr "अप्रचलित"
 
 #: core/templates/dashboard_pdfs.html:133
-#, fuzzy
-#| msgid "Received"
 msgid "Archived"
-msgstr "प्राप्त"
+msgstr "संग्रहित"
 
 #: core/templates/dashboard_pdfs.html:135
 msgid "Processing"
@@ -1453,15 +1429,14 @@ msgid ""
 "assistance. Sahakar AI provides instant answers from official government "
 "documents."
 msgstr ""
-"AI सहाय्याने महाराष्ट्र सहकारी संस्था कायदे, नियम आणि उपविधी शोधा. सहकार AI "
-"अधिकृत सरकारी दस्तऐवजांमधून त्वरित उत्तरे प्रदान करते."
+"AI सहाय्याने महाराष्ट्र सहकारी संस्था कायदे, नियम आणि उपविधी शोधा. सहकार AI अधिकृत "
+"सरकारी दस्तऐवजांमधून त्वरित उत्तरे प्रदान करते."
 
 #: core/templates/search.html:16 core/templates/search.html:23
 msgid ""
 "Search Maharashtra cooperative society acts, rules, and bylaws with AI "
 "assistance."
-msgstr ""
-"AI सहाय्याने महाराष्ट्र सहकारी संस्था कायदे, नियम आणि उपविधी शोधा."
+msgstr "AI सहाय्याने महाराष्ट्र सहकारी संस्था कायदे, नियम आणि उपविधी शोधा."
 
 #: core/templates/search.html:100
 msgid "Admin Login"
@@ -1472,10 +1447,8 @@ msgid "Locate Us"
 msgstr "आम्हाला शोधा"
 
 #: core/templates/search.html:124
-#, fuzzy
-#| msgid "Registrar Co-operative Societies banner"
 msgid "Registrar Co-operative Societies, Maharashtra — official banner"
-msgstr "निबंधक सहकारी संस्था बॅनर"
+msgstr "सहकारी संस्था निबंधक, महाराष्ट्र — अधिकृत फलक"
 
 #: core/templates/search.html:128
 msgid "AI Enabled Search"
@@ -1509,9 +1482,9 @@ msgid ""
 "official government documents quickly, with answers generated in English and "
 "Marathi."
 msgstr ""
-"सहकार AI हे महाराष्ट्र सहकारी संस्था कायदे, अधिनियम, नियम आणि उपविधींसाठी "
-"AI-आधारित शोध साधन आहे. हे तुम्हाला अधिकृत सरकारी दस्तऐवजांमधून संबंधित माहिती "
-"त्वरित शोधण्यास मदत करते, इंग्रजी आणि मराठीमध्ये उत्तरे तयार करते."
+"सहकार AI हे महाराष्ट्र सहकारी संस्था कायदे, अधिनियम, नियम आणि उपविधींसाठी AI-आधारित "
+"शोध साधन आहे. हे तुम्हाला अधिकृत सरकारी दस्तऐवजांमधून संबंधित माहिती त्वरित शोधण्यास मदत "
+"करते, इंग्रजी आणि मराठीमध्ये उत्तरे तयार करते."
 
 #: core/templates/search.html:185
 msgid "How to ask better questions"
@@ -1522,8 +1495,8 @@ msgid ""
 "Use specific terms like act names, section numbers, or subject areas (e.g., "
 "housing, audit, agriculture)."
 msgstr ""
-"कायद्यांची नावे, विभाग क्रमांक किंवा विषय क्षेत्रे (उदा., गृहनिर्माण, लेखापरीक्षण, "
-"कृषी) यांसारखे विशिष्ट शब्द वापरा."
+"कायद्यांची नावे, विभाग क्रमांक किंवा विषय क्षेत्रे (उदा., गृहनिर्माण, लेखापरीक्षण, कृषी) "
+"यांसारखे विशिष्ट शब्द वापरा."
 
 #: core/templates/search.html:188
 msgid "Ask in English or Marathi — both are supported."
@@ -1533,28 +1506,21 @@ msgstr "इंग्रजी किंवा मराठीत विचार
 msgid ""
 "Review the source references provided with each answer before making "
 "official decisions."
-msgstr ""
-"अधिकृत निर्णय घेण्यापूर्वी प्रत्येक उत्तरासह प्रदान केलेले स्रोत संदर्भ तपासा."
+msgstr "अधिकृत निर्णय घेण्यापूर्वी प्रत्येक उत्तरासह प्रदान केलेले स्रोत संदर्भ तपासा."
 
 #: core/templates/search.html:191
-#, fuzzy
-#| msgid "Important Links"
 msgid "Important disclaimer"
-msgstr "महत्त्वाचे दुवे"
+msgstr "महत्त्वाचा अस्वीकरण संदेश"
 
 #: core/templates/search.html:193
-#, fuzzy
-#| msgid ""
-#| "⚠️ AI-generated answers should not be used for legal purposes. The AI may "
-#| "provide incomplete or incorrect responses. Please contact the main office "
-#| "for further information."
 msgid ""
 "Answers are AI-generated assistance, not legal advice. The AI may provide "
 "incomplete or incorrect responses. Always verify with the source documents "
 "and contact the Registrar's office for official guidance."
 msgstr ""
-"⚠️ AI ने दिलेल्या उत्तरांचा कायदेशीर बाबींसाठी वापर करू नये. AI उत्तरे तयार करतांना अपूर्ण "
-"उत्तर अथवा चुकीचे उत्तर देऊ शकतो.कृपया अधिक माहितीसाठी मुख्य कार्यालयाशी संपर्क करावा."
+"ही उत्तरे एआयने तयार केलेली सहाय्यक माहिती आहेत; ती कायदेशीर सल्ला नाहीत. एआय अपूर्ण "
+"किंवा चुकीची उत्तरे देऊ शकते. अधिकृत मार्गदर्शनासाठी नेहमी मूळ दस्तऐवज तपासा आणि निबंधक "
+"कार्यालयाशी संपर्क साधा."
 
 #: core/templates/search.html:206
 msgid "Nimble eSolutions — technology partner"
@@ -1619,16 +1585,12 @@ msgid "Departments"
 msgstr "विभाग"
 
 #: core/templates/user_list.html:27
-#, fuzzy
-#| msgid "Search"
 msgid "Search users"
-msgstr "शोधा "
+msgstr "वापरकर्ते शोधा"
 
 #: core/templates/user_list.html:28
-#, fuzzy
-#| msgid "Username"
 msgid "Username or email"
-msgstr "वापरकर्तानाव"
+msgstr "वापरकर्तानाव किंवा ईमेल"
 
 #: core/templates/user_list.html:30 core/templates/user_list.html:57
 msgid "Role"
@@ -1716,8 +1678,12 @@ msgid "Click Here"
 msgstr "इथे क्लिक करा"
 
 #: core/views.py:1368
-msgid "I am Sahakar AI. Learn how to ask better questions and get more useful answers."
-msgstr "मी सहकार AI आहे. अधिक उपयुक्त उत्तरे मिळविण्यासाठी चांगले प्रश्न कसे विचारावेत ते जाणून घ्या."
+msgid ""
+"I am Sahakar AI. Learn how to ask better questions and get more useful "
+"answers."
+msgstr ""
+"मी सहकार AI आहे. अधिक उपयुक्त उत्तरे मिळविण्यासाठी चांगले प्रश्न कसे विचारावेत ते जाणून "
+"घ्या."
 
 #: core/views.py:1378
 msgid "Try asking"
@@ -1818,42 +1784,6 @@ msgid ""
 "Sorry, the requested information was not found in the available documents."
 msgstr "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही."
 
-#~ msgid "Search With AI - CC & RCS Maharashtra"
-#~ msgstr "एआयसह शोधा - सीसी आणि आरसीएस महाराष्ट्र"
-
-#~ msgid ""
-#~ "Commissioner for Co-operation and Registrar, Cooperative Societies, "
-#~ "Maharashtra State, Pune"
-#~ msgstr "सहकार आयुक्त व निबंधक, सहकारी संस्था, महाराष्ट्र राज्य, पुणे"
-
-#~ msgid "Registration Form"
-#~ msgstr "नोंदणी फॉर्म"
-
-#~ msgid "Register"
-#~ msgstr "नोंदणी करा"
-
-#~ msgid "Already have an account?"
-#~ msgstr "आधीच खाते आहे?"
-
-#~ msgid "Login here"
-#~ msgstr "येथे लॉगिन करा"
-
-#~ msgid "Registered Users"
-#~ msgstr "नोंदणीकृत वापरकर्ते"
-
-#~ msgid "Review user access, account status, role, and department."
-#~ msgstr "वापरकर्ता प्रवेश, खाते स्थिती, भूमिका आणि विभाग तपासा."
-
-#~ msgid "Delete user"
-#~ msgstr "वापरकर्ता हटवा"
-
-#~ msgid "Delete this user? This cannot be undone."
-#~ msgstr "हा वापरकर्ता हटवायचा? ही क्रिया पूर्ववत करता येणार नाही."
-
-#~ msgid "No users found."
-#~ msgstr "वापरकर्ते आढळले नाहीत."
-
-
 #: core/templates/vaultops/workbench.html:69
 #| msgid "%(counter)s empty"
 #| msgid_plural "%(counter)s empty"
@@ -1946,7 +1876,9 @@ msgid "Current posture"
 msgstr "सध्याची स्थिती"
 
 #: core/templates/vaultops/workbench.html:75
-msgid "Database projections never move the remote pointer or runtime pointer implicitly."
+msgid ""
+"Database projections never move the remote pointer or runtime pointer "
+"implicitly."
 msgstr "डेटाबेस प्रक्षेपणे दूरस्थ निर्देशांक किंवा कार्यरत निर्देशांक कधीही आपोआप बदलत नाहीत."
 
 #: core/templates/vaultops/workbench.html:30
@@ -2005,8 +1937,12 @@ msgid "Independent projections"
 msgstr "स्वतंत्र प्रक्षेपणे"
 
 #: core/templates/vaultops/workbench.html:279
-msgid "JavaScript is disabled. All critical forms remain available; refresh the page to update evidence."
-msgstr "JavaScript अक्षम आहे. सर्व महत्त्वाचे फॉर्म उपलब्ध आहेत; पुरावा अद्ययावत करण्यासाठी पृष्ठ रीफ्रेश करा."
+msgid ""
+"JavaScript is disabled. All critical forms remain available; refresh the "
+"page to update evidence."
+msgstr ""
+"जावास्क्रिप्ट बंद आहे. सर्व महत्त्वाचे अर्ज उपलब्ध आहेत; पुरावा अद्ययावत करण्यासाठी पृष्ठ "
+"पुन्हा उघडा."
 
 #: core/templates/vaultops/workbench.html:44
 msgid "Jobs & Audit"
@@ -2081,8 +2017,12 @@ msgid "Overview"
 msgstr "आढावा"
 
 #: core/templates/vaultops/workbench.html:273
-msgid "Owner tokens and raw lease records are never sent to the browser. Recovery requires a separately guarded operator flow."
-msgstr "मालक टोकन आणि कच्च्या भाडेपट्टा नोंदी ब्राउझरला कधीही पाठवल्या जात नाहीत. पुनर्प्राप्तीसाठी स्वतंत्र संरक्षित प्रक्रिया आवश्यक आहे."
+msgid ""
+"Owner tokens and raw lease records are never sent to the browser. Recovery "
+"requires a separately guarded operator flow."
+msgstr ""
+"मालक टोकन आणि कच्च्या भाडेपट्टा नोंदी ब्राउझरला कधीही पाठवल्या जात नाहीत. "
+"पुनर्प्राप्तीसाठी स्वतंत्र संरक्षित प्रक्रिया आवश्यक आहे."
 
 #: core/templates/vaultops/workbench.html:102
 msgid "Pending epoch"
@@ -2171,8 +2111,12 @@ msgid "Remote authority"
 msgstr "दूरस्थ अधिकृत स्थिती"
 
 #: core/templates/vaultops/workbench.html:16
-msgid "Remote authority, restore preparation, runtime state, jobs, and configuration are shown as separate evidence."
-msgstr "दूरस्थ अधिकृत स्थिती, पुनर्संचयन तयारी, कार्यरत स्थिती, कार्ये आणि संरचना स्वतंत्र पुरावा म्हणून दाखवली आहेत."
+msgid ""
+"Remote authority, restore preparation, runtime state, jobs, and "
+"configuration are shown as separate evidence."
+msgstr ""
+"दूरस्थ अधिकृत स्थिती, पुनर्संचयन तयारी, कार्यरत स्थिती, कार्ये आणि संरचना स्वतंत्र पुरावा "
+"म्हणून दाखवली आहेत."
 
 #: core/templates/vaultops/workbench.html:83
 msgid "Remote inventory"
@@ -2195,8 +2139,12 @@ msgid "Restore & Activation"
 msgstr "पुनर्संचयन आणि सक्रियकरण"
 
 #: core/templates/vaultops/workbench.html:167
-msgid "Restore prepares quarantine and an immutable runtime workspace. It never activates automatically."
-msgstr "पुनर्संचयन विलगीकरण आणि अपरिवर्तनीय कार्यरत कार्यक्षेत्र तयार करते. ते कधीही आपोआप सक्रिय होत नाही."
+msgid ""
+"Restore prepares quarantine and an immutable runtime workspace. It never "
+"activates automatically."
+msgstr ""
+"पुनर्संचयन विलगीकरण आणि अपरिवर्तनीय कार्यरत कार्यक्षेत्र तयार करते. ते कधीही आपोआप "
+"सक्रिय होत नाही."
 
 #: core/templates/vaultops/workbench.html:173
 #| msgid "Restore Source"
@@ -2208,8 +2156,12 @@ msgid "Retry from checkpoint"
 msgstr "तपासणी बिंदूपासून पुन्हा प्रयत्न करा"
 
 #: core/templates/vaultops/confirmation.html:14
-msgid "Review the action and observed-state binding. This challenge can be used once and expires shortly."
-msgstr "कार्यवाही आणि निरीक्षित स्थितीशी असलेली जोडणी तपासा. हे पुष्टीकरण एकदाच वापरता येते आणि लवकरच कालबाह्य होते."
+msgid ""
+"Review the action and observed-state binding. This challenge can be used "
+"once and expires shortly."
+msgstr ""
+"कार्यवाही आणि निरीक्षित स्थितीशी असलेली जोडणी तपासा. हे पुष्टीकरण एकदाच वापरता येते "
+"आणि लवकरच कालबाह्य होते."
 
 #: core/templates/vaultops/workbench.html:258
 msgid "Run read-only probe"
@@ -2263,8 +2215,11 @@ msgid "Target"
 msgstr "लक्ष्य"
 
 #: core/templates/vaultops/workbench.html:106
-msgid "This queues a consistent snapshot and immutable candidate. It does not move the authoritative pointer."
-msgstr "यामुळे सुसंगत स्नॅपशॉट आणि अपरिवर्तनीय उमेदवार रांगेत जातो. अधिकृत निर्देशांक बदलत नाही."
+msgid ""
+"This queues a consistent snapshot and immutable candidate. It does not move "
+"the authoritative pointer."
+msgstr ""
+"यामुळे सुसंगत स्नॅपशॉट आणि अपरिवर्तनीय उमेदवार रांगेत जातो. अधिकृत निर्देशांक बदलत नाही."
 
 #: core/templates/vaultops/workbench.html:63
 msgid "Trust chain"
@@ -2335,11 +2290,15 @@ msgstr "पूर्ववत करता येणारे जीवनचक
 
 #: core/templates/vaultops/workbench.html
 msgid "Generation retirement"
-msgstr "पिढी निवृत्ती"
+msgstr "निर्मिती संचाची निवृत्ती"
 
 #: core/templates/vaultops/workbench.html
-msgid "Retirement removes promotion eligibility. It does not delete manifests or content-addressed objects."
-msgstr "निवृत्तीमुळे बढतीची पात्रता काढली जाते. त्यामुळे मॅनिफेस्ट किंवा सामग्री-पत्तायुक्त वस्तू हटवल्या जात नाहीत."
+msgid ""
+"Retirement removes promotion eligibility. It does not delete manifests or "
+"content-addressed objects."
+msgstr ""
+"निवृत्तीमुळे बढतीची पात्रता काढली जाते. त्यामुळे मॅनिफेस्ट किंवा सामग्री-पत्तायुक्त वस्तू "
+"हटवल्या जात नाहीत."
 
 #: core/templates/vaultops/workbench.html
 msgid "Prepare retirement confirmation"
@@ -2363,7 +2322,7 @@ msgstr "जतन स्थगिती तयार करा"
 
 #: core/templates/vaultops/workbench.html
 msgid "No generation projections are available."
-msgstr "पिढीची कोणतीही प्रक्षेपित नोंद उपलब्ध नाही."
+msgstr "निर्मिती संचाची कोणतीही सत्यापित नोंद उपलब्ध नाही."
 
 #: core/templates/vaultops/workbench.html
 msgid "Deletion protection"
@@ -2394,16 +2353,21 @@ msgid "Garbage collection plans"
 msgstr "कचरा संकलन योजना"
 
 #: core/templates/vaultops/workbench.html
-msgid "Plans use a fresh verified inventory, pointer version, retirement grace period, retention holds, runtime references, workspaces, jobs, and shared-object accounting."
-msgstr "योजना ताजी पडताळलेली सूची, सूचक आवृत्ती, निवृत्ती सवलत कालावधी, जतन स्थगिती, रनटाइम संदर्भ, कार्यक्षेत्रे, कार्ये आणि सामायिक वस्तूंचा हिशोब वापरतात."
+msgid ""
+"Plans use a fresh verified inventory, pointer version, retirement grace "
+"period, retention holds, runtime references, workspaces, jobs, and shared-"
+"object accounting."
+msgstr ""
+"योजना ताजी पडताळलेली सूची, सूचक आवृत्ती, निवृत्ती सवलत कालावधी, जतन स्थगिती, रनटाइम "
+"संदर्भ, कार्यक्षेत्रे, कार्ये आणि सामायिक वस्तूंचा हिशोब वापरतात."
 
 #: core/templates/vaultops/workbench.html
 msgid "Create GC dry-run"
-msgstr "GC पूर्वचाचणी तयार करा"
+msgstr "जीसी पूर्वचाचणी तयार करा"
 
 #: core/templates/vaultops/workbench.html
 msgid "candidate generations"
-msgstr "उमेदवार पिढ्या"
+msgstr "उमेदवार निर्मिती संच"
 
 #: core/templates/vaultops/workbench.html
 msgid "Exclusive objects"
@@ -2423,11 +2387,11 @@ msgstr "हटविणे"
 
 #: core/templates/vaultops/workbench.html
 msgid "GC execution disabled"
-msgstr "GC अंमलबजावणी बंद आहे"
+msgstr "जीसी अंमलबजावणी बंद आहे"
 
 #: core/templates/vaultops/workbench.html
 msgid "No GC dry-runs are recorded."
-msgstr "कोणतीही GC पूर्वचाचणी नोंदवलेली नाही."
+msgstr "कोणतीही जीसी पूर्वचाचणी नोंदवलेली नाही."
 
 #: core/templates/vaultops/workbench.html
 msgid "Signed runtime control"
@@ -2438,8 +2402,13 @@ msgid "Roll back the latest maintenance activation"
 msgstr "नवीनतम देखभाल सक्रियकरण मागे घ्या"
 
 #: core/templates/vaultops/workbench.html
-msgid "This deliberately restores the exact signed previous runtime only when the active runtime is its verified local-maintenance child. Vault authority is not changed."
-msgstr "सक्रिय रनटाइम हा मागील स्वाक्षरीत रनटाइमचा सत्यापित स्थानिक-देखभाल वारस असेल तरच ही कृती तो मागील रनटाइम जाणीवपूर्वक पुनर्स्थापित करते. तिजोरी अधिकार बदलत नाही."
+msgid ""
+"This deliberately restores the exact signed previous runtime only when the "
+"active runtime is its verified local-maintenance child. Vault authority is "
+"not changed."
+msgstr ""
+"सक्रिय रनटाइम हा मागील स्वाक्षरीत रनटाइमचा सत्यापित स्थानिक-देखभाल वारस असेल तरच ही "
+"कृती तो मागील रनटाइम जाणीवपूर्वक पुनर्स्थापित करते. तिजोरी अधिकार बदलत नाही."
 
 #: core/templates/vaultops/workbench.html
 msgid "Review signed rollback"
@@ -2448,3 +2417,650 @@ msgstr "स्वाक्षरीत रोलबॅक तपासा"
 #: core/templates/vaultops/workbench.html
 msgid "Verified previous runtime:"
 msgstr "सत्यापित मागील रनटाइम:"
+
+msgid "Technical details"
+msgstr "तांत्रिक तपशील"
+
+msgid "Code"
+msgstr "कोड"
+
+msgid "Evidence ID"
+msgstr "पुरावा आयडी"
+
+msgid "Housekeeping"
+msgstr "नियमित देखभाल"
+
+msgid "Unavailable"
+msgstr "उपलब्ध नाही"
+
+msgid "Reason for hold"
+msgstr "जतन स्थगितीचे कारण"
+
+msgid "Incident investigation"
+msgstr "घटना तपास"
+
+msgid "Legal or policy review"
+msgstr "कायदेशीर किंवा धोरणात्मक आढावा"
+
+msgid "Operator-requested preservation"
+msgstr "ऑपरेटरने विनंती केलेले जतन"
+
+msgid "Deletion protection is active"
+msgstr "हटविण्यापासून संरक्षण सक्रिय आहे"
+
+msgid "Additional technical evidence requires review."
+msgstr "अतिरिक्त तांत्रिक पुराव्याचा आढावा आवश्यक आहे."
+
+msgid ""
+"The system recorded evidence that does not yet have approved operator "
+"guidance."
+msgstr ""
+"प्रणालीने असा पुरावा नोंदवला आहे ज्यासाठी अद्याप मंजूर ऑपरेटर मार्गदर्शन उपलब्ध नाही."
+
+msgid "Do not infer a recovery action from the technical code alone."
+msgstr "केवळ तांत्रिक कोडवरून पुनर्प्राप्ती कृती ठरवू नका."
+
+msgid "Review operations evidence"
+msgstr "संचालन पुराव्याचा आढावा घ्या"
+
+msgid "Embedding service is unavailable"
+msgstr "एम्बेडिंग सेवा उपलब्ध नाही"
+
+msgid "New embeddings cannot be generated in this environment."
+msgstr "या वातावरणात नवीन एम्बेडिंग तयार करता येत नाहीत."
+
+msgid "Reindex operations remain disabled."
+msgstr "पुनःअनुक्रमणिका कृती बंद राहतील."
+
+msgid "Review embedding configuration"
+msgstr "एम्बेडिंग संरचनेचा आढावा घ्या"
+
+msgid "Retry available"
+msgstr "पुन्हा प्रयत्न उपलब्ध"
+
+msgid "Observation is stale"
+msgstr "निरीक्षण कालबाह्य आहे"
+
+msgid "Additional evidence"
+msgstr "अतिरिक्त पुरावा"
+
+msgid "Ready for activation review"
+msgstr "सक्रियकरण आढाव्यासाठी तयार"
+
+msgid "Vault changes are disabled"
+msgstr "तिजोरीतील बदल बंद आहेत"
+
+msgid "This environment does not permit administrative Vault mutations."
+msgstr "या वातावरणात प्रशासकीय तिजोरी बदलांना परवानगी नाही."
+
+msgid "The control remains unavailable."
+msgstr "नियंत्रण उपलब्ध राहणार नाही."
+
+msgid "Review configuration"
+msgstr "संरचनेचा आढावा घ्या"
+
+msgid "Rollback evidence is incomplete"
+msgstr "रोलबॅक पुरावा अपूर्ण आहे"
+
+msgid "The signed active or previous runtime pointer is missing."
+msgstr "स्वाक्षरीत सक्रिय किंवा मागील रनटाइम निर्देशांक उपलब्ध नाही."
+
+msgid "Signed rollback remains unavailable."
+msgstr "स्वाक्षरीत रोलबॅक उपलब्ध राहणार नाही."
+
+msgid "Review runtime evidence"
+msgstr "रनटाइम पुराव्याचा आढावा घ्या"
+
+msgid "A retention hold is active"
+msgstr "जतन होल्ड सक्रिय आहे"
+
+msgid "An operator hold requires this generation to be preserved."
+msgstr "ऑपरेटर होल्डमुळे ही आवृत्ती जतन करणे आवश्यक आहे."
+
+msgid "It remains protected from deletion."
+msgstr "ही आवृत्ती हटविण्यापासून संरक्षित राहील."
+
+msgid "Review retention holds"
+msgstr "जतन होल्डचा आढावा घ्या"
+
+msgid "Approved Vault profile is unavailable"
+msgstr "मंजूर तिजोरी प्रोफाइल उपलब्ध नाही"
+
+msgid "The server-approved remote profile could not be loaded."
+msgstr "सर्व्हरने मंजूर केलेले दूरस्थ प्रोफाइल लोड करता आले नाही."
+
+msgid "Remote inventory and restore work remain unavailable."
+msgstr "दूरस्थ सूची आणि पुनर्स्थापना कार्य उपलब्ध राहणार नाही."
+
+msgid "Review profile configuration"
+msgstr "प्रोफाइल संरचनेचा आढावा घ्या"
+
+msgid "Local development posture"
+msgstr "स्थानिक विकास स्थिती"
+
+msgid "Controlled runtime posture"
+msgstr "नियंत्रित रनटाइम स्थिती"
+
+msgid ""
+"Remote publication and production activation stay disabled or explicitly "
+"gated in local development. Use this Workbench to inspect evidence and "
+"prepare candidates; it never changes remote authority implicitly."
+msgstr ""
+"स्थानिक विकासात दूरस्थ प्रकाशन आणि उत्पादन सक्रियकरण बंद किंवा स्पष्टपणे नियंत्रित राहते. "
+"पुरावा तपासण्यासाठी आणि उमेदवार तयार करण्यासाठी हे कार्यपटल वापरा; ते दूरस्थ अधिकार "
+"आपोआप बदलत नाही."
+
+msgid ""
+"Remote publication, restore, and activation remain separately gated by "
+"verified evidence and explicit operator confirmation."
+msgstr ""
+"दूरस्थ प्रकाशन, पुनर्स्थापना आणि सक्रियकरण यांना सत्यापित पुरावा आणि स्पष्ट ऑपरेटर पुष्टीची "
+"स्वतंत्र अट लागू राहते."
+
+# Operator presentation registry. These entries are intentionally maintained
+# here because the registry resolves gettext keys dynamically.
+msgid "Operations are ready"
+msgstr "संचालनासाठी प्रणाली तयार आहे"
+
+msgid "No immediate document operations need attention."
+msgstr "दस्तऐवजांशी संबंधित कोणत्याही तातडीच्या संचालनाकडे लक्ष देण्याची आवश्यकता नाही."
+
+msgid "Routine work can continue."
+msgstr "नियमित काम सुरू ठेवता येईल."
+
+msgid "Review operations"
+msgstr "संचालनाचा आढावा घ्या"
+
+msgid "Maintenance work needs review"
+msgstr "देखभाल कामाचा आढावा आवश्यक आहे"
+
+msgid "A local maintenance job did not complete."
+msgstr "स्थानिक देखभाल कार्य पूर्ण झाले नाही."
+
+msgid ""
+"The active runtime remains unchanged, but the requested work is incomplete."
+msgstr "सक्रिय रनटाइम बदललेला नाही; मात्र विनंती केलेले काम अपूर्ण आहे."
+
+msgid "Review jobs"
+msgstr "कार्यांचा आढावा घ्या"
+
+msgid "Documents need index review"
+msgstr "दस्तऐवजांच्या अनुक्रमणिकेचा आढावा आवश्यक आहे"
+
+msgid "Some documents are not available to search yet."
+msgstr "काही दस्तऐवज अद्याप शोधासाठी उपलब्ध नाहीत."
+
+msgid "Search results may omit those documents."
+msgstr "शोध परिणामांमध्ये ते दस्तऐवज दिसणार नाहीत."
+
+msgid "Maintain documents and indexes"
+msgstr "दस्तऐवज आणि अनुक्रमणिकांची देखभाल करा"
+
+msgid "Document provenance needs review"
+msgstr "दस्तऐवजाच्या मूळ नोंदीचा आढावा आवश्यक आहे"
+
+msgid "Some documents do not have an accountable uploader recorded."
+msgstr "काही दस्तऐवजांसाठी जबाबदार अपलोडकर्त्याची नोंद उपलब्ध नाही."
+
+msgid "Their custody record remains incomplete."
+msgstr "त्या दस्तऐवजांची ताबा नोंद अपूर्ण राहील."
+
+msgid "Review categories"
+msgstr "श्रेण्यांचा आढावा घ्या"
+
+msgid "Maintenance is in progress"
+msgstr "देखभाल सुरू आहे"
+
+msgid "A bounded maintenance job is still running."
+msgstr "मर्यादित व्याप्तीचे देखभाल कार्य अद्याप सुरू आहे."
+
+msgid "The active runtime remains unchanged while work continues."
+msgstr "काम सुरू असताना सक्रिय रनटाइम बदलणार नाही."
+
+msgid "View active work"
+msgstr "सक्रिय काम पहा"
+
+msgid "Categories are awaiting intake"
+msgstr "श्रेण्या दस्तऐवजांच्या प्रतीक्षेत आहेत"
+
+msgid "Some categories do not contain documents."
+msgstr "काही श्रेण्यांमध्ये दस्तऐवज नाहीत."
+
+msgid "They are housekeeping items and do not affect search readiness."
+msgstr ""
+"या नियमित देखभालीच्या नोंदी आहेत आणि शोधाच्या तयारीवर त्यांचा परिणाम होत नाही."
+
+msgid "Show empty categories"
+msgstr "रिकाम्या श्रेण्या दाखवा"
+
+msgid "Remote inventory is unavailable"
+msgstr "दूरस्थ सूची उपलब्ध नाही"
+
+msgid "No verified remote inventory observation is available."
+msgstr "दूरस्थ सूचीचे कोणतेही सत्यापित निरीक्षण उपलब्ध नाही."
+
+msgid "Remote authority cannot be relied on for recovery decisions."
+msgstr "पुनर्प्राप्तीच्या निर्णयांसाठी दूरस्थ अधिकृत स्थितीवर अवलंबून राहता येणार नाही."
+
+msgid "Open profile evidence"
+msgstr "प्रोफाइलचा पुरावा उघडा"
+
+msgid "Remote inventory requires verification"
+msgstr "दूरस्थ सूचीची पडताळणी आवश्यक आहे"
+
+msgid "The latest inventory evidence has not passed verification."
+msgstr "सूचीचा नवीनतम पुरावा पडताळणीत उत्तीर्ण झालेला नाही."
+
+msgid "Restore and publication decisions remain guarded."
+msgstr "पुनर्स्थापना आणि प्रकाशनाचे निर्णय सुरक्षितता अटींमुळे उपलब्ध राहणार नाहीत."
+
+msgid "Verify inventory"
+msgstr "सूचीची पडताळणी करा"
+
+msgid "Remote inventory observation is stale"
+msgstr "दूरस्थ सूचीचे निरीक्षण जुने झाले आहे"
+
+msgid "The last verified inventory is older than the allowed evidence window."
+msgstr "शेवटची सत्यापित सूची अनुमत पुरावा कालावधीपेक्षा जुनी आहे."
+
+msgid "Refresh it before relying on remote authority."
+msgstr "दूरस्थ अधिकृत स्थितीवर अवलंबून राहण्यापूर्वी सूची अद्ययावत करा."
+
+msgid "Refresh inventory evidence"
+msgstr "सूचीचा पुरावा अद्ययावत करा"
+
+msgid "Runtime observation is unavailable"
+msgstr "रनटाइमचे निरीक्षण उपलब्ध नाही"
+
+msgid "The active runtime has not been observed safely."
+msgstr "सक्रिय रनटाइमचे सुरक्षित निरीक्षण झालेले नाही."
+
+msgid "Activation and rollback decisions remain guarded."
+msgstr "सक्रियकरण आणि रोलबॅकचे निर्णय सुरक्षितता अटींमुळे उपलब्ध राहणार नाहीत."
+
+msgid "Review jobs and audit"
+msgstr "कार्ये आणि लेखापरीक्षण नोंदींचा आढावा घ्या"
+
+msgid "Runtime observation is stale"
+msgstr "रनटाइमचे निरीक्षण जुने झाले आहे"
+
+msgid "The last runtime observation is older than the allowed evidence window."
+msgstr "रनटाइमचे शेवटचे निरीक्षण अनुमत पुरावा कालावधीपेक्षा जुने आहे."
+
+msgid "Refresh runtime evidence before changing activation state."
+msgstr "सक्रियकरण स्थिती बदलण्यापूर्वी रनटाइमचा पुरावा अद्ययावत करा."
+
+msgid "Runtime is not ready"
+msgstr "रनटाइम तयार नाही"
+
+msgid "The runtime does not yet satisfy the verified readiness conditions."
+msgstr "रनटाइम अद्याप सत्यापित तयारीच्या अटी पूर्ण करत नाही."
+
+msgid "Activation remains unavailable."
+msgstr "सक्रियकरण उपलब्ध राहणार नाही."
+
+msgid "Review restore evidence"
+msgstr "पुनर्स्थापना पुराव्याचा आढावा घ्या"
+
+msgid "A critical Vault job needs attention"
+msgstr "तिजोरीतील एका गंभीर कार्याकडे लक्ष देणे आवश्यक आहे"
+
+msgid "A critical job failed or stopped reporting progress."
+msgstr "एक गंभीर कार्य अपयशी ठरले किंवा त्याने प्रगती कळवणे थांबवले."
+
+msgid "Dependent Vault work remains guarded."
+msgstr "त्यावर अवलंबून असलेले तिजोरीचे काम सुरक्षितता अटींमुळे उपलब्ध राहणार नाही."
+
+msgid "Local capacity reserve is low"
+msgstr "स्थानिक क्षमतेचा राखीव साठा कमी आहे"
+
+msgid "Free space or inode reserve is below the maintenance safety threshold."
+msgstr "मोकळी जागा किंवा आयनोडचा राखीव साठा देखभाल सुरक्षा मर्यादेपेक्षा कमी आहे."
+
+msgid "New mutation work remains disabled until capacity is restored."
+msgstr "क्षमता पूर्ववत होईपर्यंत नवीन बदल करणारी कार्ये बंद राहतील."
+
+msgid "Review maintenance capacity"
+msgstr "देखभाल क्षमतेचा आढावा घ्या"
+
+msgid "Activation is unavailable in production"
+msgstr "उत्पादन वातावरणात सक्रियकरण उपलब्ध नाही"
+
+msgid "This browser workflow cannot activate a production runtime."
+msgstr "ही ब्राउझर कार्यपद्धती उत्पादन रनटाइम सक्रिय करू शकत नाही."
+
+msgid "Use the separately controlled production promotion process."
+msgstr "स्वतंत्रपणे नियंत्रित उत्पादन पदोन्नती प्रक्रिया वापरा."
+
+msgid "Staging activation is disabled"
+msgstr "चाचणी वातावरणातील सक्रियकरण बंद आहे"
+
+msgid "This environment is not configured for staging runtime activation."
+msgstr "हे वातावरण चाचणी रनटाइमच्या सक्रियकरणासाठी संरचित केलेले नाही."
+
+msgid "Activation and signed rollback remain unavailable."
+msgstr "सक्रियकरण आणि स्वाक्षरीत रोलबॅक उपलब्ध राहणार नाहीत."
+
+msgid "A runtime change is already in progress"
+msgstr "रनटाइममधील बदल आधीच सुरू आहे"
+
+msgid "Another activation request is being applied or recovered."
+msgstr "दुसरी सक्रियकरण विनंती लागू केली जात आहे किंवा तिची पुनर्प्राप्ती सुरू आहे."
+
+msgid "Rollback remains unavailable until it reaches a durable outcome."
+msgstr "त्या विनंतीचा टिकाऊ निकाल लागेपर्यंत रोलबॅक उपलब्ध राहणार नाही."
+
+msgid "Rollback evidence could not be verified"
+msgstr "रोलबॅक पुराव्याची पडताळणी होऊ शकली नाही"
+
+msgid "The signed runtime pointers did not pass verification."
+msgstr "स्वाक्षरीत रनटाइम निर्देशक पडताळणीत उत्तीर्ण झाले नाहीत."
+
+msgid "Rollback generation is not projected"
+msgstr "रोलबॅकचा निर्मिती संच सत्यापित नोंदीत नाही"
+
+msgid ""
+"The previous runtime is not present in the verified generation projection."
+msgstr "मागील रनटाइम सत्यापित निर्मिती संच नोंदीत उपलब्ध नाही."
+
+msgid "Review generations"
+msgstr "निर्मिती संचांचा आढावा घ्या"
+
+msgid "The active runtime is not eligible for this rollback"
+msgstr "सक्रिय रनटाइम या रोलबॅकसाठी पात्र नाही"
+
+msgid "Only a verified local-maintenance child can use this rollback control."
+msgstr "फक्त सत्यापित स्थानिक-देखभाल वारस हा रोलबॅक नियंत्रण वापरू शकतो."
+
+msgid "Rollback lineage could not be verified"
+msgstr "रोलबॅकची वंशसाखळी पडताळता आली नाही"
+
+msgid ""
+"The active and previous runtimes do not have the required parent "
+"relationship."
+msgstr "सक्रिय आणि मागील रनटाइममध्ये आवश्यक पालक संबंध नाही."
+
+msgid "Rollback observation is stale"
+msgstr "रोलबॅकचे निरीक्षण जुने झाले आहे"
+
+msgid "The signed runtime pointer evidence is older than the allowed window."
+msgstr "स्वाक्षरीत रनटाइम निर्देशकाचा पुरावा अनुमत कालावधीपेक्षा जुना आहे."
+
+msgid "Refresh evidence before reviewing rollback."
+msgstr "रोलबॅकचा आढावा घेण्यापूर्वी पुरावा अद्ययावत करा."
+
+msgid "Recovery authority is not verified"
+msgstr "पुनर्प्राप्तीचा अधिकार सत्यापित नाही"
+
+msgid "The required recovery superadmin evidence could not be proven."
+msgstr "आवश्यक पुनर्प्राप्ती सुपरॲडमिनचा पुरावा सिद्ध होऊ शकला नाही."
+
+msgid "Review recovery evidence"
+msgstr "पुनर्प्राप्ती पुराव्याचा आढावा घ्या"
+
+msgid "Writer lease observation is unavailable"
+msgstr "लेखन परवान्याचे निरीक्षण उपलब्ध नाही"
+
+msgid "The current writer lease could not be observed safely."
+msgstr "सध्याच्या लेखन परवान्याचे सुरक्षित निरीक्षण करता आले नाही."
+
+msgid "Do not assume that the dataset is available for writes."
+msgstr "डेटासेटमध्ये लेखन करता येईल असे गृहीत धरू नका."
+
+msgid "A worker stopped reporting progress"
+msgstr "कार्यकर्त्याने प्रगती कळवणे थांबवले"
+
+msgid "The job heartbeat expired before the work reached a durable outcome."
+msgstr "कामाचा टिकाऊ निकाल लागण्यापूर्वी कार्याचा संपर्क संकेत कालबाह्य झाला."
+
+msgid "Review the checkpoint before retrying."
+msgstr "पुन्हा प्रयत्न करण्यापूर्वी तपासणी बिंदूचा आढावा घ्या."
+
+msgid "Restore preparation did not complete"
+msgstr "पुनर्स्थापनेची तयारी पूर्ण झाली नाही"
+
+msgid "The restore workspace could not be prepared safely."
+msgstr "पुनर्स्थापना कार्यक्षेत्र सुरक्षितपणे तयार करता आले नाही."
+
+msgid "Nothing was activated."
+msgstr "काहीही सक्रिय करण्यात आले नाही."
+
+msgid "Activation did not complete"
+msgstr "सक्रियकरण पूर्ण झाले नाही"
+
+msgid "The runtime change did not reach a verified durable outcome."
+msgstr "रनटाइम बदलाचा सत्यापित आणि टिकाऊ निकाल लागला नाही."
+
+msgid "Review recovery evidence before retrying."
+msgstr "पुन्हा प्रयत्न करण्यापूर्वी पुनर्प्राप्ती पुराव्याचा आढावा घ्या."
+
+msgid "Publication did not complete"
+msgstr "प्रकाशन पूर्ण झाले नाही"
+
+msgid "The candidate was not published as verified remote authority."
+msgstr "उमेदवाराचे सत्यापित दूरस्थ अधिकृत आवृत्ती म्हणून प्रकाशन झाले नाही."
+
+msgid "Remote authority remains unchanged."
+msgstr "दूरस्थ अधिकृत स्थिती बदललेली नाही."
+
+msgid "Candidate import did not complete"
+msgstr "उमेदवार आयात पूर्ण झाली नाही"
+
+msgid "The maintenance candidate could not be imported safely."
+msgstr "देखभाल उमेदवार सुरक्षितपणे आयात करता आला नाही."
+
+msgid "The active runtime remains unchanged."
+msgstr "सक्रिय रनटाइम बदललेला नाही."
+
+msgid "Review maintenance jobs"
+msgstr "देखभाल कार्यांचा आढावा घ्या"
+
+msgid "Bulk reindexing is unavailable"
+msgstr "मोठ्या प्रमाणातील पुनःअनुक्रमण उपलब्ध नाही"
+
+msgid "This environment does not permit a bulk reindex."
+msgstr "या वातावरणात मोठ्या प्रमाणातील पुनःअनुक्रमणास परवानगी नाही."
+
+msgid "Existing search artifacts remain unchanged."
+msgstr "विद्यमान शोध कलाकृती बदलणार नाहीत."
+
+msgid "Review maintenance controls"
+msgstr "देखभाल नियंत्रणांचा आढावा घ्या"
+
+msgid "Candidate preparation is unavailable"
+msgstr "उमेदवाराची तयारी उपलब्ध नाही"
+
+msgid "A bounded maintenance candidate cannot be prepared in this environment."
+msgstr "या वातावरणात मर्यादित व्याप्तीचा देखभाल उमेदवार तयार करता येत नाही."
+
+msgid "The candidate is not ready"
+msgstr "उमेदवार तयार नाही"
+
+msgid "Required validation evidence is incomplete."
+msgstr "आवश्यक पडताळणी पुरावा अपूर्ण आहे."
+
+msgid "Activation review remains unavailable."
+msgstr "सक्रियकरणाचा आढावा उपलब्ध राहणार नाही."
+
+msgid "Review candidate evidence"
+msgstr "उमेदवाराच्या पुराव्याचा आढावा घ्या"
+
+msgid "Maintenance capacity is insufficient"
+msgstr "देखभालीसाठी क्षमता अपुरी आहे"
+
+msgid "The operation cannot preserve the required free-space or inode reserve."
+msgstr "या संचालनात आवश्यक मोकळी जागा किंवा आयनोडचा राखीव साठा टिकवता येणार नाही."
+
+msgid "The maintenance control remains unavailable."
+msgstr "देखभाल नियंत्रण उपलब्ध राहणार नाही."
+
+msgid "This generation is authoritative"
+msgstr "हा निर्मिती संच अधिकृत आहे"
+
+msgid "The generation is the verified remote authority."
+msgstr "हा निर्मिती संच सत्यापित दूरस्थ अधिकृत आवृत्ती आहे."
+
+msgid "This generation is referenced by the runtime"
+msgstr "रनटाइममध्ये या निर्मिती संचाचा संदर्भ आहे"
+
+msgid "An active or previous runtime pointer refers to this generation."
+msgstr "सक्रिय किंवा मागील रनटाइम निर्देशक या निर्मिती संचाचा संदर्भ देतो."
+
+msgid "A restore workspace uses this generation"
+msgstr "पुनर्स्थापना कार्यक्षेत्र हा निर्मिती संच वापरते"
+
+msgid "A non-expired restore workspace still refers to this generation."
+msgstr "कालबाह्य न झालेले पुनर्स्थापना कार्यक्षेत्र अजूनही या निर्मिती संचाचा संदर्भ देते."
+
+msgid "Review restore workspaces"
+msgstr "पुनर्स्थापना कार्यक्षेत्रांचा आढावा घ्या"
+
+msgid "A Vault job is using this generation"
+msgstr "तिजोरीतील कार्य हा निर्मिती संच वापरत आहे"
+
+msgid "An active job still refers to this generation."
+msgstr "सक्रिय कार्य अजूनही या निर्मिती संचाचा संदर्भ देते."
+
+msgid "This generation is preserved for an incident investigation."
+msgstr "घटना तपासासाठी हा निर्मिती संच जतन केला आहे."
+
+msgid "Deletion remains blocked until the hold is released."
+msgstr "जतन स्थगिती मुक्त होईपर्यंत हटविणे बंद राहील."
+
+msgid "This generation is preserved for a legal or policy review."
+msgstr "कायदेशीर किंवा धोरणात्मक आढाव्यासाठी हा निर्मिती संच जतन केला आहे."
+
+msgid "An operator explicitly requested that this generation be preserved."
+msgstr "हा निर्मिती संच जतन करण्याची स्पष्ट विनंती ऑपरेटरने केली आहे."
+
+msgid "Available"
+msgstr "उपलब्ध"
+
+msgid "Passed"
+msgstr "उत्तीर्ण"
+
+msgid "No work in progress"
+msgstr "कोणतेही काम सुरू नाही"
+
+msgid "Needs attention"
+msgstr "लक्ष देणे आवश्यक"
+
+msgid "Healthy"
+msgstr "सुस्थितीत"
+
+msgid "Not held"
+msgstr "जतन स्थगिती नाही"
+
+msgid "Held"
+msgstr "जतन स्थगित"
+
+msgid "Queued"
+msgstr "रांगेत"
+
+msgid "Claimed by a worker"
+msgstr "कार्यकर्त्याने स्वीकारले"
+
+msgid "Running"
+msgstr "सुरू"
+
+msgid "Waiting"
+msgstr "प्रतीक्षेत"
+
+msgid "Cancellation in progress"
+msgstr "रद्द करण्याची प्रक्रिया सुरू"
+
+msgid "Cancellation requested"
+msgstr "रद्द करण्याची विनंती केली"
+
+msgid "Cancelled"
+msgstr "रद्द"
+
+msgid "Completed"
+msgstr "पूर्ण"
+
+msgid "Candidate"
+msgstr "उमेदवार"
+
+msgid "Retired"
+msgstr "निवृत्त"
+
+msgid "Prepared"
+msgstr "तयार केलेले"
+
+msgid "Verified"
+msgstr "सत्यापित"
+
+msgid "Local only"
+msgstr "केवळ स्थानिक"
+
+msgid "Remote only"
+msgstr "केवळ दूरस्थ"
+
+msgid "Present"
+msgstr "उपस्थित"
+
+msgid "Not present"
+msgstr "उपस्थित नाही"
+
+msgid "Skipped"
+msgstr "वगळले"
+
+msgid "Pending"
+msgstr "प्रलंबित"
+
+msgid "Released"
+msgstr "मुक्त"
+
+msgid "Expired"
+msgstr "कालबाह्य"
+
+msgid "Created"
+msgstr "तयार केले"
+
+msgid "Planned"
+msgstr "नियोजित"
+
+msgid "Restore preparation"
+msgstr "पुनर्स्थापनेची तयारी"
+
+msgid "Publish candidate"
+msgstr "उमेदवार प्रकाशित करा"
+
+msgid "Promotion"
+msgstr "पदोन्नती"
+
+msgid "Inventory verification"
+msgstr "सूचीची पडताळणी"
+
+msgid "Read-only profile probe"
+msgstr "केवळ-वाचन प्रोफाइल तपासणी"
+
+msgid "Active synchronization"
+msgstr "सक्रिय समक्रमण"
+
+msgid "Artifact cleanup"
+msgstr "कलाकृती स्वच्छता"
+
+msgid "Reindex documents"
+msgstr "दस्तऐवजांचे पुनःअनुक्रमण करा"
+
+msgid "Validate documents"
+msgstr "दस्तऐवजांची पडताळणी करा"
+
+msgid "Repair stored indexes"
+msgstr "संग्रहित अनुक्रमणिका दुरुस्त करा"
+
+msgid "Reindex documents that need attention"
+msgstr "लक्ष देणे आवश्यक असलेल्या दस्तऐवजांचे पुनःअनुक्रमण करा"
+
+msgid "Reindex selected documents"
+msgstr "निवडलेल्या दस्तऐवजांचे पुनःअनुक्रमण करा"
+
+msgid "Prepare maintenance candidate"
+msgstr "देखभाल उमेदवार तयार करा"
+
+msgid "Repair document text"
+msgstr "दस्तऐवजातील मजकूर दुरुस्त करा"
+
+msgid "Candidate preparation in progress"
+msgstr "उमेदवाराची तयारी सुरू आहे"

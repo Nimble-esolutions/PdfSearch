@@ -524,8 +524,16 @@ def _serialize_local_job_payload(
         "total_items": int(job.total_items if hasattr(job, "total_items") else job["total_items"]),
         "completed_items": int(job.completed_items if hasattr(job, "completed_items") else job["completed_items"]),
         "failed_items": int(job.failed_items if hasattr(job, "failed_items") else job["failed_items"]),
-        "error_summary": str(
-            job.error_summary if hasattr(job, "error_summary") else job["error_summary"]
+        # Keep raw error_summary server-side for the existing audit/support
+        # contract. Browser read models expose only a bounded stable code.
+        "safe_error_code": (
+            "maintenance_job_failed"
+            if str(
+                job.error_summary
+                if hasattr(job, "error_summary")
+                else job["error_summary"]
+            )
+            else ""
         ),
         "updated_at": (
             job.updated_at.isoformat() if hasattr(job, "updated_at")
@@ -575,7 +583,13 @@ def _serialize_local_job_payload(
             {
                 "event_type": event.event_type,
                 "created_at": event.created_at.isoformat(),
-                "payload": event.payload,
+                "safe_error_code": str(event.payload.get("error_code") or ""),
+                "evidence_id": str(
+                    event.payload.get("item_id")
+                    or event.payload.get("folder_id")
+                    or event.payload.get("pdf_id")
+                    or ""
+                ),
                 "actor": event.actor.username if event.actor else None,
             }
             for event in MaintenanceAuditEvent.objects.filter(
@@ -725,7 +739,15 @@ def workbench_maintenance_state(
                 {
                     "event_type": event["event_type"],
                     "created_at": event["created_at"].isoformat(),
-                    "payload": event["payload"],
+                    "safe_error_code": str(
+                        event["payload"].get("error_code") or ""
+                    ),
+                    "evidence_id": str(
+                        event["payload"].get("item_id")
+                        or event["payload"].get("folder_id")
+                        or event["payload"].get("pdf_id")
+                        or ""
+                    ),
                     "actor": event["actor__username"],
                 }
                 for event in MaintenanceAuditEvent.objects.filter(

@@ -29,6 +29,51 @@ accessibility, or performance without changing the protected direction.
 Use existing Django partials, translation tags, `json_script`, and CSS tokens.
 Do not copy production data or secrets into fixtures.
 
+## Operator presentation API
+
+`flowdocs/core/operator_presentation.py` is the sole presentation boundary for
+Dashboard and Workbench machine evidence. Keep `reason_code`,
+`safe_error_code`, state, operation, and job fields stable. Add the adjacent
+`presentation` or `*_label` fields by calling `decorate_operator_state`; JSON
+responses keep the code and add a sibling presentation object.
+
+Templates render guidance with:
+
+```django
+{% include "components/operator_evidence.html" with
+  presentation=item.presentation technical_code=item.reason_code only %}
+```
+
+The component presents title, explanation, consequence, and action first. It
+places the exact code in collapsed, LTR Technical details. Unknown codes use
+neutral review guidance and must never be formatted by replacing underscores.
+Register new UI reasons with authored English and Marathi copy before use.
+
+Marathi terminology follows a reviewed glossary:
+
+| English concept | Required Marathi rendering |
+| --- | --- |
+| Dashboard | डॅशबोर्ड |
+| Workbench | कार्यपटल |
+| operator | ऑपरेटर |
+| Vault | तिजोरी |
+| runtime | रनटाइम |
+| profile | प्रोफाइल |
+| rollback | रोलबॅक |
+| embedding | एम्बेडिंग |
+| manifest | मॅनिफेस्ट |
+| checkpoint | तपासणी बिंदू |
+| garbage collection / GC | कचरा संकलन / जीसी |
+| retention hold | जतन स्थगिती |
+| generation | निर्मिती संच |
+| reindex | पुनःअनुक्रमण |
+
+Prefer an established literal Marathi term where it stays precise; otherwise
+use the glossary's Marathi-script transliteration and explain the operational
+meaning in Marathi. Latin-script English is reserved for exact technical
+evidence such as codes, API fields, UUIDs, hashes, filenames, and paths. Do not
+translate those identifiers.
+
 ## Safe UI change workflow
 
 1. Inspect the current implementation and the relevant browser tests.
@@ -37,7 +82,9 @@ Do not copy production data or secrets into fixtures.
 3. Make a small patch. Keep search routes, CSRF, auth, PDF access, feedback,
    WhatsApp, and response fields unchanged.
 4. Add or update English/Marathi copy in catalogs; never concatenate translated
-   fragments in JavaScript or mutate user-entered questions.
+   fragments in JavaScript or mutate user-entered questions. Remove fuzzy flags
+   only after reviewing the complete Marathi sentence in context; a successful
+   locale compilation does not establish translation parity.
 5. Test static and dynamic states, including no-result and failure paths.
 6. Update the contract or this guide if the rule itself changed.
 
@@ -54,6 +101,9 @@ git diff --check
 python manage.py check
 python manage.py makemigrations --check --dry-run
 msgfmt --check flowdocs/locale/mr/LC_MESSAGES/django.po -o /tmp/django-mr.mo
+msgattrib --only-fuzzy flowdocs/locale/mr/LC_MESSAGES/django.po
+python3 -m unittest scripts.ci.test_operator_language
+python3 scripts/ci/validate_operator_language.py
 node --check flowdocs/core/static/main/js/search.js
 ```
 

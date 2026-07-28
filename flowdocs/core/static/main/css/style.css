@@ -1611,3 +1611,12 @@ body {
 .footer-links a:hover {
   color: #fff;
 }
+.cockpit-housekeeping__link {
+  color: #6b1f2a;
+  font-weight: 600;
+}
+
+.cockpit-housekeeping__link:hover,
+.cockpit-housekeeping__link:focus-visible {
+  color: #42131a;
+}

@@ -75,6 +75,7 @@ from .maintenance_plans import (
 from .forms import UploadForm
 from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
 from .services.dashboard_read_model import build_dashboard_state
+from .operator_presentation import present_reason
 from datetime import datetime
 from .utils import (
     detect_language,
@@ -855,7 +856,7 @@ def folder_operations(request, folder_id):
             idempotency_key=f"folder:{folder.pk}:{uuid.uuid4()}",
         )
     except MaintenancePlanError as exc:
-        messages.error(request, exc.reason_code.replace("_", " "))
+        messages.error(request, present_reason(exc.reason_code)["title"])
         return redirect("dashboard_folder", folder_id=folder.pk)
     messages.success(
         request,

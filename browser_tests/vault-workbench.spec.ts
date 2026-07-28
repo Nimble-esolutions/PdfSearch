@@ -1,8 +1,22 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import {
+  expectNoVisibleMachineTokens,
+  expectTechnicalEvidence,
+} from './helpers/operator-language';
 
 const username = 'ci-admin';
 const password = 'ci-only-password-not-for-production';
+const workbenchSections = [
+  'overview',
+  'sync',
+  'generations',
+  'restore',
+  'maintenance',
+  'jobs',
+  'retention',
+  'configuration',
+] as const;
 
 async function login(page: Page, next = '/dashboard/operations/') {
   await page.goto(`/login/?next=${encodeURIComponent(next)}`);
@@ -28,6 +42,7 @@ async function switchLanguage(page: Page, language: 'en' | 'mr') {
 
 test.describe('Vault Operations Workbench', () => {
   test('passes authority, a11y, locale, no-JS, and zoom gates', async ({ browser, page }) => {
+    test.setTimeout(90_000);
     const externalRequests: string[] = [];
     page.on('request', request => {
       const url = new URL(request.url());
@@ -40,6 +55,11 @@ test.describe('Vault Operations Workbench', () => {
     await expect(page.locator('[data-summary="remote"]')).toBeVisible();
     await expect(page.locator('link[href*="vendor/bootstrap/5.3.0"]')).toHaveCount(1);
     expect(externalRequests).toEqual([]);
+    await expectNoVisibleMachineTokens(page);
+    const firstTechnicalCode = (
+      await page.locator('details.operator-evidence code').first().textContent()
+    )?.trim();
+    if (firstTechnicalCode) await expectTechnicalEvidence(page, firstTechnicalCode);
 
     const results = await new AxeBuilder({ page }).analyze();
     expect(
@@ -48,9 +68,32 @@ test.describe('Vault Operations Workbench', () => {
       ),
     ).toEqual([]);
 
+    for (const section of workbenchSections) {
+      await page.goto(`/dashboard/operations/?section=${section}`);
+      await expect(
+        page.locator('.vault-section-nav a[aria-current="page"]'),
+        `current navigation item for en/${section}`,
+      ).toHaveAttribute('href', `?section=${section}`);
+      await expectNoVisibleMachineTokens(page);
+    }
+
     await switchLanguage(page, 'mr');
     await expect(page.getByRole('heading', { name: 'तिजोरी संचालन कार्यपटल' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'अधिकृत स्थिती तुलना' })).toBeVisible();
+    for (const section of workbenchSections) {
+      await page.goto(`/dashboard/operations/?section=${section}`);
+      await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
+      await expect(
+        page.locator('.vault-section-nav a[aria-current="page"]'),
+        `current navigation item for mr/${section}`,
+      ).toHaveAttribute('href', `?section=${section}`);
+      await expectNoVisibleMachineTokens(page);
+    }
+    const marathiResults = await new AxeBuilder({ page }).analyze();
+    expect(
+      marathiResults.violations.filter(
+        violation => violation.impact === 'critical' || violation.impact === 'serious',
+      ),
+    ).toEqual([]);
     await switchLanguage(page, 'en');
 
     await page.goto('/dashboard/operations/?section=retention');

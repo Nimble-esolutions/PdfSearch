@@ -5,11 +5,13 @@ from pathlib import Path
 from django.conf import settings
 from django.db import DatabaseError
 from django.utils import timezone
+from django.utils.translation import gettext
 
 from core.recovery_auth import (
     RecoveryAuthenticationError,
     verify_recovery_superadmin_database,
 )
+from core.operator_presentation import present_reason
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -130,10 +132,16 @@ def enrich_workbench_readiness(state):
         if reason_code in seen:
             continue
         seen.add(reason_code)
-        definition = REMEDIATION_DESTINATIONS.get(reason_code)
-        if not definition:
-            continue
-        issues.append({"reason_code": reason_code, **definition})
+        presentation = present_reason(reason_code)
+        issues.append({
+            "reason_code": reason_code,
+            "title": presentation["title"],
+            "detail": presentation["detail"],
+            "label": presentation["action_label"],
+            "section": REMEDIATION_DESTINATIONS.get(reason_code, {}).get(
+                "section", "jobs"
+            ),
+        })
 
     disabled_capabilities = []
     for operation, capability in (maintenance.get("capabilities") or {}).items():
@@ -152,11 +160,19 @@ def enrich_workbench_readiness(state):
         "disabled_capabilities": disabled_capabilities,
         "local_development": {
             "enabled": is_local_dev,
-            "title": "Local development posture" if is_local_dev else "Controlled runtime posture",
-            "message": (
-                "Remote publication and production activation stay disabled or explicitly gated in local development. Use this Workbench to inspect evidence and prepare candidates; it never changes remote authority implicitly."
+            "title": (
+                gettext("Local development posture")
                 if is_local_dev
-                else "Remote publication, restore, and activation remain separately gated by verified evidence and explicit operator confirmation."
+                else gettext("Controlled runtime posture")
+            ),
+            "message": (
+                gettext(
+                    "Remote publication and production activation stay disabled or explicitly gated in local development. Use this Workbench to inspect evidence and prepare candidates; it never changes remote authority implicitly."
+                )
+                if is_local_dev
+                else gettext(
+                    "Remote publication, restore, and activation remain separately gated by verified evidence and explicit operator confirmation."
+                )
             ),
         },
     }
