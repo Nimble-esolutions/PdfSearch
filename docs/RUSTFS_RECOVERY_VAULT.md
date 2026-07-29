@@ -1,7 +1,7 @@
 Status: Active, constrained
 Audience: Recovery, Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-26
+Last verified: 2026-07-29
 Canonical source: docs/RUSTFS_RECOVERY_VAULT.md
 Supersedes: Earlier claims that S3 restore or scheduled backup is automatic
 
@@ -13,40 +13,36 @@ The vault is a working set of storage, publication, and restore primitives, but
 the deployed application is **not yet a hands-off backup and disaster-recovery
 system**.
 
-Verified against a disposable MinIO service on 2026-07-26:
+Verified against disposable MinIO services through 2026-07-29:
 
 - checksum-verified object put/get and immutable-key validation work;
 - S3 conditional create/replace and concurrent CAS fencing work;
 - authoritative dataset registration, global-writer fencing, generation
   publication, and pointer update work;
 - the full library-level pipeline can publish, download, validate, sanitize,
-  rehearse, activate, and roll back a generation.
+  rehearse, activate, and roll back a generation;
+- the active Workbench path publishes dataset-scoped generations, performs
+  separate CAS promotion, prepares a verified and rehearsed restore workspace,
+  and activates it only through a separately confirmed signed intent;
+- one CI-enforced journey carries the exact generation and manifest through
+  authoritative selection, restore, dual-supervisor cutover, fresh Gunicorn
+  readiness, English/Marathi search, and final signed evidence reconciliation;
+- the production web and maintenance services receive the same
+  lifecycle-critical environment contract, and durable mutation epochs drive
+  coalesced scheduled publication.
 
-Not yet operationally connected:
+Still environment-dependent:
 
-- `RESTORE_POLICY=startup-latest|startup-pinned` is parsed and enforced by both
-  entrypoints as a fail-closed empty-database guard, but neither entrypoint
-  invokes the restore pipeline;
-- the admin/maintenance `restore_generation` job calls the older
-  `stage_generation()` path, not `run_restore_pipeline()`;
-- publication writes
-  `datasets/{dataset}/generations/{generation}/manifest.json`, while the
-  admin staging path reads `manifests/{generation}.json`;
-- admin “promote” and “rollback” update `ArtifactGeneration` database status;
-  they do not activate the staged database, media, or indexes;
-- scheduled backup requires a dirty flag, but current application mutations do
-  not call `mark_data_dirty()`;
-- the production `maintenance` Compose service does not explicitly receive the
-  complete vault, restore, scheduler, and release-identity environment contract;
-- the checked-in disposable integration gate now proves real MinIO conditional
-  operations, candidate-only publication, separate CAS promotion, trust-chain
-  inventory, quarantine/runtime preparation, Redis lease fencing, and signed
-  runtime rollback after a deliberate container kill. This is application
-  evidence, not a substitute for an environment-specific recovery drill.
+- `RESTORE_POLICY=startup-latest|startup-pinned` is deliberately a fail-closed
+  empty-database guard, not an automatic remote restore switch;
+- accumulated named-volume redeploy and genuinely fresh-volume restore drills
+  remain unrecorded;
+- production RustFS capabilities and recovery remain unproved without an
+  operator-approved, non-destructive drill.
 
-Until Plan 003 closes these gaps and a clean-volume restore drill passes, treat
-the vault as an **explicit, operator-controlled recovery component**, not as the
-only production backup and not as proof that a fresh deployment can self-heal.
+Treat the vault as an **explicit, operator-controlled recovery component**, not
+as the only production backup and not as proof that a fresh deployment can
+self-heal.
 
 ## What is authoritative today
 
@@ -225,10 +221,13 @@ The 2026-07-26 local audit ran:
 7 real publish/restore/sanitize/rehearse/activate/rollback tests: passed
 ```
 
-The checked-in disposable integration stack now supplies its own entrypoint,
-bucket initialization, shared MinIO/Redis network, immutable dependency-image
-requirements, process-death proof, and automatic cleanup. It validates the
-local lifecycle mechanism, not deployed Dokploy wiring or production RustFS.
+The checked-in disposable gates supply their own entrypoints, bucket
+initialization, shared MinIO/Redis network, immutable dependency-image
+requirements, process-death proof, and automatic cleanup. The maintenance
+lifecycle additionally proves one exact generation and manifest through
+publication, authoritative selection, restore rehearsal, signed activation,
+fresh Gunicorn readiness, and bilingual search. This validates the local
+lifecycle mechanism, not deployed Dokploy wiring or production RustFS.
 
 A production readiness claim additionally requires a non-destructive,
 clean-volume restore drill against the configured RustFS service. This audit
@@ -252,10 +251,9 @@ did not access or mutate production RustFS data.
 
 The active `vaultops` path now provides dataset-scoped publication,
 activation-ready restore preparation, separately confirmed runtime activation,
-durable mutation epochs, snapshot barriers, and a disposable integration gate.
-Plan 003 must still enforce the complete lifecycle environment on the worker,
-decide the fail-closed startup-restore contract, join publication through
-runtime readiness in one disposable proof, and prove both:
+durable mutation epochs, snapshot barriers, a fail-closed startup posture, and
+a CI-enforced same-generation disposable proof. Plan 003 must still prove both
+deployment boundaries:
 
 1. an intact accumulated volume is preserved across redeploy; and
 2. a fresh disposable volume can restore the selected generation with no

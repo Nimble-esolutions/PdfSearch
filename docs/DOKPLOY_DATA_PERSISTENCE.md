@@ -165,9 +165,9 @@ restarting again.
   Maintain an independent recovery copy and perform periodic restore drills.
 - A successful vault health probe is not a successful backup. Require an
   immutable generation, manifest/checksum evidence, and a tested restore.
-- Do not use the current admin “promote” or “rollback” status as byte-level
-  activation evidence until Plan 003 connects those actions to the full restore
-  pipeline.
+- Do not use an admin “promote” status alone as byte-level activation evidence.
+  Require the signed activation result, runtime pointer, exact generation and
+  manifest digest, and post-cutover readiness evidence.
 
 ## Options and recommendation
 

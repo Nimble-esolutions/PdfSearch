@@ -187,8 +187,9 @@ access, or activation. `disabled` and `manual` retain normal startup.
 but stop an absent or zero-byte database with
 `startup_restore_required_but_unavailable`; they do not perform a restore.
 `startup-pinned` requires `DATA_PINNED_GENERATION` even when `DATA_MODE` is not
-`s3-pinned`. Plan 003 still tracks approved restore orchestration and deployment
-proof.
+`s3-pinned`. Plan 003 still tracks the accumulated-volume and genuinely fresh
+volume deployment proofs; production RustFS remains separately
+operator-authorized.
 
 `RESTORE_WORKSPACE_ROOT`, `RESTORE_STAGE_TIMEOUT_SECONDS`,
 `RESTORE_REHEARSAL_ENABLED`, `RESTORE_SANITIZE_ENABLED`, and

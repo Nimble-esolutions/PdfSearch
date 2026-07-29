@@ -209,38 +209,33 @@ activate_generation()
 
 ### Current orchestration boundary
 
-The diagram above describes the tested library-level publication and full
-restore pipeline. It is not the current admin/worker call graph:
+The active Workbench and maintenance-worker call graph uses the `vaultops`
+control plane:
 
 ```text
-admin Sync
-  -> maintenance job
-  -> sync_active_generation()
-  -> dataset-scoped generation manifest
+Workbench Sync
+  -> durable VaultJob
+  -> consistent snapshot and dataset-scoped candidate
+  -> separate confirmed CAS authoritative promotion
 
-admin Pull to Staging
-  -> maintenance job
-  -> stage_generation()
-  -> legacy flat manifest lookup
-  -> checksum/SQLite staging only
+Workbench Restore
+  -> authoritative inventory verification
+  -> isolated compatibility, sanitization, and migration rehearsal
+  -> activation-ready RestoreWorkspace
 
-admin Promote/Rollback
-  -> ArtifactGeneration status update
-  -X-> activate_generation()
+Workbench Activate/Rollback
+  -> separately confirmed signed intent
+  -> web and maintenance runtime supervisors
+  -> atomic pointer switch
+  -> exact generation + manifest readiness
+  -> signed result reconciliation
 ```
 
-Consequences:
-
-- a generation created by current sync is not addressable through the legacy
-  admin staging lookup;
-- the admin path does not run compatibility, sanitization, rehearsal, or
-  byte-level activation;
-- database “active” status is not proof that `/app/data` switched generation;
-- the full `run_restore_pipeline()` path is currently reached by direct
-  integration tests/tooling, not startup or the maintenance job.
-
-Plan 003 owns reconciliation to one namespace and one activation-aware
-orchestrator.
+Promotion remains remote-authority evidence, not byte-level activation.
+Runtime-ready language requires the signed activation result, switched runtime
+pointer, and post-cutover readiness evidence. The retired
+`core.maintenance.stage_generation()` compatibility path is not the operator
+contract.
 
 ### Activation Journal Crash Recovery
 

@@ -142,12 +142,17 @@ data custody, manual restore/promotion gates, environment identity in CI
 dataset registration, restore pipeline with compatibility checks, sanitization,
 migration rehearsal, activation journal, writer lease, backup policy, object
 store capabilities, namespace, metrics, and the data release contract
-(`inventory_artifacts`, `validate_data_release`).
+(`inventory_artifacts`, `validate_data_release`). The Workbench and
+maintenance worker now connect authoritative publication to isolated,
+validated restore preparation and separately confirmed signed runtime
+activation; CI proves one exact generation and manifest through readiness and
+bilingual search.
 
 Planned: separately published versioned data artifacts, automatic FAISS recovery,
 and automatic cross-environment synchronization. The restore pipeline and
 activation journal provide the foundation for these; full automation of artifact
-publishing and cross-environment sync remains a future target. The current
-admin/worker restore path is not wired to the full pipeline. Startup restore
-policies are consumed only as a fail-closed empty-database posture check, not
-as automatic restore orchestration; see Plan 003 and the audited vault guide.
+publishing and cross-environment sync remains a future target. Startup restore
+policies remain a fail-closed empty-database posture check rather than
+automatic restore orchestration. Accumulated-volume redeploy, genuinely fresh
+volume recovery, and production RustFS certification remain Plan 003
+deployment proofs; see the audited vault guide.
