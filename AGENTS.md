@@ -106,6 +106,13 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   forms must preserve secret-free input, identify the exact invalid fields,
   and keep local Documents & Indexes capability independent from remote Vault
   profile availability.
+- **Operations journey boundary:** Dashboard document-readiness actions must
+  open Documents & Search directly. Keep remote publication, generations,
+  restore, activation, retention, and profile setup under advanced Vault &
+  Recovery disclosure. Never imply that local validation or index repair
+  requires a remote profile. In Marathi, prefer established literal terms such
+  as `संचालक`, `रूपरेषा`, and `कार्यरत प्रणाली`; use Marathi-script
+  transliteration only when a specialist term has no precise translation.
 
 ## Local Validation
 

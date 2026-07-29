@@ -15,8 +15,8 @@ search page and it does not replace source review.
 The current composition is the **Operations Cockpit**: official header, dark
 console navigation, an observed operational posture, prioritized attention,
 Category Yard, Recent Intake, Active Work, and a compact Vault posture. It is
-the daily triage surface; the Vault Operations Workbench remains the specialist
-control plane.
+the daily triage surface. **Documents & Search** is the ordinary maintenance
+destination; **Vault & Recovery** is the specialist control plane.
 
 ## Sign in and navigation
 
@@ -52,11 +52,12 @@ category sets are paginated; changing pages does not change document state.
 
 ## Operations and maintenance
 
-Use the Dashboard's **Active Work** projection for quick triage, then open the
-Workbench for full progress, cancellation, retry, checkpoints, failures, and
-candidate evidence. Dashboard links never queue index mutations directly.
+Use the Dashboard's **Active Work** projection for quick triage, then open
+**Documents & Search** for validation, repair, bounded reindexing, progress,
+cancellation, retry, checkpoints, and failures. Dashboard links never queue
+index mutations directly.
 
-Superadmins use the **Vault Operations Workbench** under Operations for vault
+Superadmins use **Vault & Recovery** under Operations for remote Vault
 and runtime custody. Its persistent summary deliberately shows remote
 authoritative generation, locally prepared workspace, runtime generation,
 Active Sync, writer lease, and critical job as independent evidence. Unknown
@@ -94,7 +95,7 @@ Legacy Promote, Rollback, and Purge controls no longer relabel or delete data;
 use the guarded Workbench flow. Never run production cleanup from a local
 browser session.
 
-Under **Documents & Indexes**, the guided sequence is:
+Under **Documents & Search**, the guided sequence is:
 
 ```text
 choose operation → define scope → preview → confirm → monitor job
@@ -107,19 +108,25 @@ typed confirmation. The active runtime and remote Vault remain unchanged while
 maintenance runs. A successful reindex creates a derived candidate and makes
 the prior published generation stale.
 
-Documents & Indexes is local maintenance and does not require a remote Vault
+Documents & Search is local maintenance and does not require a remote Vault
 profile. If a control is disabled, read its adjacent guidance: local
 maintenance policy, runtime read-only posture, external embedding policy, and
 force-reindex approval are independent gates.
 
-Under **Configuration → Vault profiles**, an **Environment Vault** profile is
+Advanced Vault and runtime evidence is collapsed on the Documents & Search
+page. Expand it only when diagnosing publication or recovery; routine document
+care does not require interpreting generation, lease, or authority identifiers.
+
+Under **Vault & Recovery → Configuration → Vault profiles**, an
+**Environment Vault** profile is
 created automatically when the server has a complete `ARTIFACT_VAULT_*`
 configuration. A **Legacy application database** record is historical
 projection evidence, not an S3 connection; its probe and inventory controls
 are disabled. A read-only probe confirms endpoint and bucket reachability.
 Authoritative inventory verification additionally requires a published dataset
-registration, pointer, manifest, and objects. An empty reachable bucket is
-reported as “No published Vault inventory is available yet.”
+registration, pointer, manifest, and objects. A configured but empty Vault is
+presented as a healthy first-run condition: storage access can be probed, while
+authoritative inventory becomes meaningful only after the first publication.
 
 The profile form never accepts secret values. Correct highlighted fields using
 the server-approved endpoint, dataset identity, and credential alias supplied
