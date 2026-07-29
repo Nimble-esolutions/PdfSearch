@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import re
 import uuid
 
@@ -38,6 +39,9 @@ from vaultops.services.activation import (
     schedule_activation,
     validate_previous_runtime_rollback,
 )
+
+
+logger = logging.getLogger(__name__)
 from vaultops.services.audit import append_event
 from vaultops.services.confirmations import (
     consume_confirmation,
@@ -325,6 +329,12 @@ def _mutation_success(
 def _mutation_error(request, exc, *, section="overview"):
     reason_code = getattr(exc, "reason_code", "operation_failed")
     http_status = getattr(exc, "status_code", 409)
+    if reason_code == "operation_failed":
+        logger.exception(
+            "vaultops mutation failed section=%s exception_type=%s",
+            section,
+            type(exc).__name__,
+        )
     if _wants_json(request):
         return _api_response(
             status="blocked",
