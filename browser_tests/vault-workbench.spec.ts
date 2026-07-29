@@ -108,9 +108,13 @@ test.describe('Documents & Search and Vault & Recovery', () => {
     await expect(page.locator('.vault-advanced-summary')).not.toHaveAttribute('open', '');
     await expect(page.getByRole('heading', { name: 'Choose the outcome you need' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Validate Files' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Repair Stored Indexes' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Repair Stored Indexes', exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Reindex Needed' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Reindex Selected' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Reindex Selected', exact: true }),
+    ).toBeVisible();
     await expect(page.getByText('Unchanged during processing')).toBeVisible();
     await expect(page.getByText('Unchanged until explicit publication')).toBeVisible();
     const maintenanceAxe = await new AxeBuilder({ page }).analyze();

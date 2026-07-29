@@ -299,7 +299,7 @@
             <h4 id="selected-job-heading">{{ state.maintenance.selected_job.kind_label }} · <code lang="en" dir="ltr">{{ state.maintenance.selected_job.public_id }}</code></h4>
             <p>{{ state.maintenance.selected_job.status_label }} · {{ state.maintenance.selected_job.completed_items }}/{{ state.maintenance.selected_job.total_items }} {% trans "completed" %} · {{ state.maintenance.selected_job.failed_items }} {% trans "failed" %}</p>
             {% widthratio state.maintenance.selected_job.completed_items state.maintenance.selected_job.total_items 100 as selected_job_progress %}
-            <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ state.maintenance.selected_job.total_items }}" aria-valuenow="{{ state.maintenance.selected_job.completed_items }}">
+            <div class="maintenance-progress" role="progressbar" aria-label="{% trans 'Maintenance job progress' %}" aria-valuemin="0" aria-valuemax="{{ state.maintenance.selected_job.total_items }}" aria-valuenow="{{ state.maintenance.selected_job.completed_items }}">
               <span style="width: {{ selected_job_progress|default:0 }}%"></span>
             </div>
             {% if state.maintenance.selected_job.safe_error_code %}{% include "components/operator_evidence.html" with presentation=state.maintenance.selected_job.error_presentation technical_code=state.maintenance.selected_job.safe_error_code evidence_id=state.maintenance.selected_job.public_id show_action=False only %}{% endif %}
@@ -335,7 +335,7 @@
           <h4>{{ job.kind_label }} · <code lang="en" dir="ltr">{{ job.public_id }}</code></h4>
           <p>{{ job.status_label }} · {{ job.completed_items }}/{{ job.total_items }} {% trans "completed" %} · {{ job.failed_items }} {% trans "failed" %}</p>
           {% widthratio job.completed_items job.total_items 100 as maintenance_progress %}
-          <div class="maintenance-progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ job.total_items }}" aria-valuenow="{{ job.completed_items }}">
+          <div class="maintenance-progress" role="progressbar" aria-label="{% trans 'Maintenance job progress' %}" aria-valuemin="0" aria-valuemax="{{ job.total_items }}" aria-valuenow="{{ job.completed_items }}">
             <span style="width: {{ maintenance_progress|default:0 }}%"></span>
           </div>
           {% if job.safe_error_code %}{% include "components/operator_evidence.html" with presentation=job.error_presentation technical_code=job.safe_error_code evidence_id=job.public_id show_action=False only %}{% endif %}
