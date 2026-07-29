@@ -92,6 +92,29 @@ async function waitForActivationSettlement(page: Page) {
   }, { timeout: 120_000 }).toBe('settled');
 }
 
+async function waitForRuntimeIdentity(
+  page: Page,
+  generationId: string,
+  manifestDigest: string,
+) {
+  await expect.poll(async () => {
+    try {
+      const response = await page.request.get('/readyz');
+      if (!response.ok()) return { generationId: '', manifestDigest: '' };
+      const payload = await response.json();
+      return {
+        generationId: payload.runtime_generation_id || '',
+        manifestDigest: payload.runtime_manifest_digest || '',
+      };
+    } catch {
+      return { generationId: '', manifestDigest: '' };
+    }
+  }, { timeout: 120_000, intervals: [500, 1000, 2000] }).toEqual({
+    generationId,
+    manifestDigest,
+  });
+}
+
 test.describe('disposable maintenance lifecycle', () => {
   test.setTimeout(180_000);
   test.skip(({ browserName }) => browserName !== 'chromium');
@@ -126,6 +149,47 @@ test.describe('disposable maintenance lifecycle', () => {
         .getByRole('button', { name: 'Prepare for activation' })
         .click();
       await expect(page.getByText('Local maintenance candidate prepared')).toBeVisible();
+      return;
+    }
+
+    if (phase === 'vault-activate') {
+      const generationId = process.env.VAULT_E2E_TARGET_GENERATION_ID || '';
+      const manifestDigest = process.env.VAULT_E2E_TARGET_MANIFEST_DIGEST || '';
+      expect(generationId, 'VAULT_E2E_TARGET_GENERATION_ID is required').not.toBe('');
+      expect(
+        manifestDigest,
+        'VAULT_E2E_TARGET_MANIFEST_DIGEST is required',
+      ).toMatch(/^[0-9a-f]{64}$/);
+
+      await login(page, '/dashboard/operations/?section=restore');
+      const activationForm = page
+        .locator('.vault-record', {
+          has: page.getByRole('heading', {
+            name: generationId,
+            exact: true,
+          }),
+        })
+        .locator('form:has(button:has-text("Prepare staging activation"))');
+      await expect(activationForm).toHaveCount(1);
+      await activationForm
+        .getByRole('button', { name: 'Prepare staging activation' })
+        .click();
+      await page.locator('input[name="confirmation_phrase"]').fill(
+        (await page.getByLabel('Required confirmation phrase').textContent())?.trim() || '',
+      );
+      await page.getByRole('button', { name: /confirm/i }).click();
+
+      await waitForRuntimeIdentity(page, generationId, manifestDigest);
+      await login(page, '/dashboard/operations/?section=restore');
+      await waitForActivationSettlement(page);
+      await page.reload();
+
+      for (const [query, language] of [
+        ['cooperative audit evidence', 'en'],
+        ['सहकारी लेखापरीक्षण पुरावा', 'mr'],
+      ]) {
+        await assertExpectedSearch(page, query, language);
+      }
       return;
     }
 
