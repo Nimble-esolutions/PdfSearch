@@ -78,7 +78,7 @@ test.describe('Documents & Search and Vault & Recovery', () => {
     }
 
     await switchLanguage(page, 'mr');
-    await expect(page.getByRole('heading', { name: 'तिजोरी आणि पुनर्प्राप्ती' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'व्हॉल्ट आणि पुनर्प्राप्ती' })).toBeVisible();
     for (const section of workbenchSections) {
       await page.goto(`/dashboard/operations/?section=${section}`);
       await expect(page.locator('html')).toHaveAttribute('lang', 'mr');

@@ -261,7 +261,7 @@ USE_I18N = True
 USE_L10N = True
 
 LOCALE_PATHS = [
-    BASE_DIR / "locale",   # 👈 where .po files will live
+    BASE_DIR / "locale",  # Canonical catalogs live under flowdocs/locale only.
 ]
 
 

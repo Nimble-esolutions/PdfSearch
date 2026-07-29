@@ -146,17 +146,22 @@ intentional English/LTR exceptions are immutable machine evidence: exact
 codes, API field names, hashes, UUIDs, filenames, paths, versions, and
 correlation identifiers.
 
-Prefer precise Marathi vocabulary for ordinary and established operational
-concepts—for example संचालक (operator), रूपरेषा (profile), कार्यरत प्रणाली
-(runtime), and मागील स्थितीकडे परतणे (rollback). Use Marathi-script
-transliteration only for specialist terms whose literal rendering would
-mislead, such as एम्बेडिंग or मॅनिफेस्ट.
+Prefer precise Marathi vocabulary for ordinary concepts. For specialist
+product and infrastructure concepts, use the reviewed Marathi-script forms:
+ऑपरेटर (operator), प्रोफाइल (profile), रनटाइम (runtime), व्हॉल्ट (Vault),
+रोलबॅक (rollback), रायटर लीज (writer lease), एम्बेडिंग (embedding),
+मॅनिफेस्ट (manifest), चेकपॉइंट (checkpoint), and जीसी (garbage collection).
+Explain the effect in ordinary Marathi. Do not force literal renderings such as
+`तिजोरी`, `लेखक भाडेपट्टा`, `रूपरेषा`, or `कार्यरत प्रणाली` when they change
+the technical meaning.
 
 Every registry title, detail, consequence, action, and state label must have a
 non-empty, non-fuzzy Marathi catalog entry before merge. Review older
 Dashboard and Workbench translations in the same affected area; gettext fuzzy
 matches are suggestions, not approved translations. Reviewers must check
-semantic accuracy rather than accepting a catalog that only compiles.
+semantic accuracy rather than accepting a catalog that only compiles. The
+operator-language CI gate inventories the complete registry and rejects a
+missing, fuzzy, empty, or unchanged-English Marathi entry.
 
 Motion is utility only. Shared motion tokens are micro-interactions around
 120–160ms and surface/state transitions around 180–240ms, using opacity and

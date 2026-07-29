@@ -14,6 +14,8 @@ documentation.
 1. Read [`docs/design/AI_SAHAKAR_UI_CONTRACT.md`](../../docs/design/AI_SAHAKAR_UI_CONTRACT.md).
 2. Inspect the existing template, CSS, JavaScript, locale, and browser tests
    before editing. Preserve user changes and the existing search contract.
+   Treat `flowdocs/locale/` as the only canonical catalog root; never recreate
+   the retired repository-root `locale/` catalog.
 3. Inventory every reason code, safe error, state, operation, job kind, audit
    action, and result that the changed surface can expose. Resolve each through
    `core.operator_presentation`; do not infer copy from the token.
@@ -28,12 +30,14 @@ documentation.
 6. Review equivalent authored English and Marathi meaning, consequence, and
    next-action copy. Inventory existing translations for the affected
    Dashboard/Workbench area and correct stale fuzzy or misleading entries.
-   Prefer precise Marathi literal translations; use the contract glossary's
-   Marathi-script transliteration only when a specialized term has no safe
-   Marathi equivalent. Ordinary interface copy must not fall back to
-   Latin-script English. Scan visible text and accessibility output for machine
-   tokens, then expand Technical details and verify the exact bounded code is
-   copyable, LTR, and redacted.
+   Translate ordinary Marathi precisely. Use the contract glossary's reviewed
+   Marathi-script transliteration when a specialist product or infrastructure
+   term would be inaccurate as a literal Marathi word; never force a misleading
+   literal solely to avoid transliteration. Ordinary interface copy must not
+   fall back to Latin-script English. Run the registry-wide catalog parity gate.
+   Scan visible text and accessibility output for machine tokens, then expand
+   Technical details and verify the exact bounded code is copyable, LTR, and
+   redacted.
    Review existing affected translations as well as new strings. Translate
    ordinary words literally where Marathi remains precise; retain identifiers
    such as S3, HTTP, HTTPS, DNS, codes, aliases, and environment keys as
@@ -61,11 +65,15 @@ documentation.
 - Raw `reason_code`, `safe_error_code`, error summaries, protection/blocking
   reasons, and state-machine values never become primary copy.
 - Every registry title, detail, consequence, action, and label has a reviewed,
-  non-fuzzy Marathi entry. A compiling catalog or automatic fuzzy match is not
-  translation approval.
+  non-fuzzy Marathi entry. The registry-wide validator must report no missing,
+  empty, fuzzy, or unchanged-English entries. A compiling catalog or automatic
+  fuzzy match is not translation approval.
 - Exact codes, API fields, hashes, UUIDs, filenames, and paths remain
-  English/LTR technical evidence; user-facing technical concepts use Marathi
-  literals or the approved Marathi-script transliteration glossary.
+  English/LTR technical evidence; user-facing specialist concepts use the
+  approved Marathi-script transliteration glossary and ordinary Marathi
+  explanations. Reviewed forms include `ऑपरेटर`, `प्रोफाइल`, `रनटाइम`,
+  `व्हॉल्ट`, `रोलबॅक`, `रायटर लीज`, `एम्बेडिंग`, `मॅनिफेस्ट`,
+  `चेकपॉइंट`, and `जीसी`.
 
 ## Minimum review commands
 

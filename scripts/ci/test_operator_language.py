@@ -67,6 +67,7 @@ class OperatorLanguageValidatorTests(unittest.TestCase):
                 app_roots=(app,),
                 approved_component=templates / "components/operator_evidence.html",
                 display_root=root,
+                check_catalog=False,
             )
 
         self.assertEqual(len(errors), 4)
@@ -101,6 +102,63 @@ class OperatorLanguageValidatorTests(unittest.TestCase):
                 app_roots=(),
                 approved_component=component,
                 display_root=root,
+                check_catalog=False,
             )
 
         self.assertEqual(errors, [])
+
+    def test_registry_catalog_fixture_rejects_missing_fuzzy_and_english(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registry = root / "registry.py"
+            catalog = root / "django.po"
+            registry.write_text(
+                "\n".join(
+                    (
+                        'UNKNOWN_REASON = {"title": "Unknown title", '
+                        '"detail": "Unknown detail", '
+                        '"consequence": "Unknown consequence", '
+                        '"action_label": "Review"}',
+                        'REASONS = {"ready": ("Ready title", "Ready detail", '
+                        '"Ready consequence", "Continue", "overview", "success")}',
+                        'REASONS.update({"queued": _authored("Queued title", '
+                        '"Queued detail", "Queued consequence", "Wait", '
+                        '"jobs", "info")})',
+                        'LABELS = {"ready": "Ready"}',
+                    )
+                ),
+                encoding="utf-8",
+            )
+            catalog.write_text(
+                "\n".join(
+                    (
+                        'msgid ""',
+                        'msgstr ""',
+                        "",
+                        'msgid "Ready title"',
+                        'msgstr "तयार शीर्षक"',
+                        "",
+                        "#, fuzzy",
+                        'msgid "Ready detail"',
+                        'msgstr "तयार तपशील"',
+                        "",
+                        'msgid "Ready consequence"',
+                        'msgstr "Ready consequence"',
+                        "",
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            errors = validate_operator_language.catalog_violations(
+                registry_path=registry,
+                catalog_path=catalog,
+                display_root=root,
+            )
+
+        self.assertTrue(any("missing Marathi" in error for error in errors))
+        self.assertTrue(any("fuzzy Marathi" in error for error in errors))
+        self.assertTrue(any("English fallback" in error for error in errors))
+
+    def test_repository_registry_is_fully_authored_in_marathi(self):
+        self.assertEqual(validate_operator_language.catalog_violations(), [])
