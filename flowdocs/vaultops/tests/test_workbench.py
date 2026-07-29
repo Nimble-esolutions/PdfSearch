@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -46,6 +46,7 @@ from vaultops.services.profiles import (
     ensure_environment_profile,
     profile_fingerprint,
 )
+from vaultops.views import WorkbenchRequestError, _mutation_error
 
 
 @override_settings(
@@ -1340,6 +1341,35 @@ class VaultWorkbenchTests(TestCase):
             payload["reason_code"], "idempotency_key_required"
         )
         self.assertIn("correlation_id", payload)
+
+    @patch("vaultops.views.logger.exception")
+    def test_unexpected_mutation_error_is_logged_without_request_values(
+        self, log_exception
+    ):
+        request = RequestFactory().post(
+            "/dashboard/operations/api/v1/restore/",
+            HTTP_ACCEPT="application/json",
+        )
+
+        response = _mutation_error(
+            request,
+            RuntimeError("secret-bearing upstream detail"),
+            section="restore",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        log_exception.assert_called_once_with(
+            "vaultops mutation failed section=%s exception_type=%s",
+            "restore",
+            "RuntimeError",
+        )
+        log_exception.reset_mock()
+        _mutation_error(
+            request,
+            WorkbenchRequestError("idempotency_key_required"),
+            section="restore",
+        )
+        log_exception.assert_not_called()
 
     @override_settings(VAULT_ADMIN_MUTATIONS_ENABLED=False)
     def test_server_rejects_post_when_admin_mutations_are_disabled(self):
