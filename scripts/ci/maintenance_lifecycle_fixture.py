@@ -9,8 +9,10 @@ import os
 import shutil
 import sqlite3
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, "/app/flowdocs")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "flowdocs.settings")
@@ -23,21 +25,34 @@ import fitz
 from django.conf import settings
 from django.utils import timezone
 
+from core.artifact_vault import ArtifactVault
 from core.models import CustomUser, Folder, PDFFile
 from core.utils import precompute_pdf_embeddings
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
     ConfirmationChallenge,
+    RestoreWorkspace,
     RuntimePointerObservation,
     VaultConnectionProfile,
+    VaultDatasetProjection,
+    VaultJob,
 )
 from vaultops.runtime_control import (
     atomic_write_json,
     build_runtime_pointer,
+    read_runtime_pointer,
     runtime_control_paths,
     read_signed_document,
 )
+from vaultops.services.inventory import verify_generation
+from vaultops.services.profiles import profile_fingerprint
+from vaultops.services.publication import (
+    promote_candidate,
+    publish_snapshot_candidate,
+)
+from vaultops.services.restore import run_restore_job
+from vaultops.services.snapshot import create_consistent_snapshot
 
 
 GENERATION_ID = "maintenance-e2e-parent"
@@ -45,6 +60,9 @@ MANIFEST_DIGEST = hashlib.sha256(GENERATION_ID.encode()).hexdigest()
 USERNAME = "ci-admin"
 PASSWORD = "ci-only-password-not-for-production"
 PARENT_EVIDENCE = Path(settings.DATA_CONTROL_ROOT) / "e2e-parent-tree.json"
+VAULT_ACTIVATION_JOURNEY = (
+    Path(settings.DATA_CONTROL_ROOT) / "vault-activation-journey.json"
+)
 
 
 def _pdf(path: Path, text: str) -> None:
@@ -293,6 +311,263 @@ def seed_and_freeze() -> None:
     print("fixture_ready")
 
 
+def publish_and_restore() -> None:
+    """Publish current live custody and prepare that exact generation."""
+    vault = ArtifactVault()
+    endpoint = urlsplit(vault.config.endpoint)
+    endpoint_origin = f"{endpoint.scheme}://{endpoint.netloc}"
+    profile, _ = VaultConnectionProfile.objects.update_or_create(
+        key=settings.VAULT_DEFAULT_PROFILE,
+        defaults={
+            "display_name": "Disposable lifecycle profile",
+            "source": VaultConnectionProfile.Source.ENVIRONMENT,
+            "enabled": True,
+            "read_only": False,
+            "environment_locked": True,
+            "endpoint_origin": endpoint_origin,
+            "bucket": vault.config.bucket,
+            "region": vault.config.region,
+            "dataset_id": settings.ENV_IDENTITY.dataset_id,
+            "production_source_id": (
+                settings.ENV_IDENTITY.production_source_id
+            ),
+            "credential_alias": "environment:ARTIFACT_VAULT",
+        },
+    )
+    profile.fingerprint = profile_fingerprint(profile)
+    profile.save(update_fields=["fingerprint", "updated_at"])
+
+    actor = CustomUser.objects.get(username=USERNAME)
+    publication_job = VaultJob.objects.create(
+        operation="active_sync",
+        status=VaultJob.Status.RUNNING,
+        profile=profile,
+        profile_fingerprint=profile.fingerprint,
+        dataset_id=profile.dataset_id,
+        idempotency_key=f"maintenance-e2e-publish:{uuid.uuid4()}",
+        requested_by_id=actor.pk,
+        requested_by_name=actor.username,
+    )
+    snapshot = create_consistent_snapshot(publication_job)
+    generation = publish_snapshot_candidate(
+        snapshot=snapshot,
+        profile=profile,
+        job=publication_job,
+        vault=vault,
+    )
+    generation, _ = promote_candidate(
+        generation=generation,
+        job=publication_job,
+        profile=profile,
+        confirmed=True,
+        vault=vault,
+    )
+    verified = verify_generation(
+        vault,
+        profile,
+        generation_id=generation.generation_id,
+        require_authoritative=True,
+        verify_objects=True,
+    )
+    if (
+        not verified.authoritative
+        or generation.vault_state
+        != ArtifactGeneration.VaultState.AUTHORITATIVE
+        or verified.manifest_digest != generation.manifest_digest
+    ):
+        raise SystemExit("published_generation_identity_invalid")
+
+    restore_job = VaultJob.objects.create(
+        operation="restore_generation",
+        status=VaultJob.Status.RUNNING,
+        profile=profile,
+        profile_fingerprint=profile.fingerprint,
+        dataset_id=profile.dataset_id,
+        generation_id=generation.generation_id,
+        idempotency_key=f"maintenance-e2e-restore:{uuid.uuid4()}",
+        requested_by_id=actor.pk,
+        requested_by_name=actor.username,
+    )
+    workspace = run_restore_job(
+        restore_job,
+        vault=vault,
+        run_rehearsal=True,
+    )
+    if (
+        workspace.state != RestoreWorkspace.State.ACTIVATION_READY
+        or workspace.generation_id != generation.pk
+        or workspace.manifest_digest != verified.manifest_digest
+        or workspace.validation_evidence.get("manifest_digest")
+        != verified.manifest_digest
+        or not workspace.rehearsal_evidence
+    ):
+        raise SystemExit("restored_generation_identity_invalid")
+    runtime_evidence = json.loads(
+        (Path(workspace.runtime_path) / "runtime-evidence.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if (
+        runtime_evidence.get("generation_id") != generation.generation_id
+        or runtime_evidence.get("manifest_digest")
+        != verified.manifest_digest
+    ):
+        raise SystemExit("restored_runtime_evidence_invalid")
+
+    journey = {
+        "schema_version": 1,
+        "profile_key": profile.key,
+        "publication_job_id": str(publication_job.public_id),
+        "restore_job_id": str(restore_job.public_id),
+        "workspace_id": str(workspace.public_id),
+        "generation_id": generation.generation_id,
+        "manifest_digest": verified.manifest_digest,
+        "vault_pointer_digest": verified.pointer_digest,
+        "vault_pointer_etag": verified.pointer_etag,
+    }
+    VAULT_ACTIVATION_JOURNEY.parent.mkdir(
+        parents=True, exist_ok=True, mode=0o700
+    )
+    atomic_write_json(VAULT_ACTIVATION_JOURNEY, journey)
+    os.chown(VAULT_ACTIVATION_JOURNEY, 1000, 1000)
+    print(json.dumps(journey, sort_keys=True))
+
+
+def assert_vault_activation_evidence() -> None:
+    """Prove activation retained the published Vault generation identity."""
+    journey = json.loads(
+        VAULT_ACTIVATION_JOURNEY.read_text(encoding="utf-8")
+    )
+    generation_id = journey["generation_id"]
+    manifest_digest = journey["manifest_digest"]
+    profile = VaultConnectionProfile.objects.get(
+        key=journey["profile_key"]
+    )
+    verified = verify_generation(
+        ArtifactVault(),
+        profile,
+        generation_id=generation_id,
+        require_authoritative=True,
+        verify_objects=True,
+    )
+    if (
+        not verified.authoritative
+        or verified.generation_id != generation_id
+        or verified.manifest_digest != manifest_digest
+        or verified.pointer_digest != journey["vault_pointer_digest"]
+        or verified.pointer_etag != journey["vault_pointer_etag"]
+    ):
+        raise SystemExit("vault_authoritative_identity_changed")
+    projection = VaultDatasetProjection.objects.get(
+        profile=profile,
+        dataset_id=profile.dataset_id,
+    )
+    generation = ArtifactGeneration.objects.get(
+        profile=profile,
+        dataset_id=profile.dataset_id,
+        generation_id=generation_id,
+    )
+    workspace = RestoreWorkspace.objects.get(
+        public_id=journey["workspace_id"]
+    )
+    if (
+        projection.authoritative_generation_id != generation_id
+        or projection.pointer_digest != verified.pointer_digest
+        or generation.manifest_digest != manifest_digest
+        or generation.vault_state
+        != ArtifactGeneration.VaultState.AUTHORITATIVE
+        or generation.runtime_state
+        != ArtifactGeneration.RuntimeState.ACTIVE
+        or workspace.generation_id != generation.pk
+        or workspace.manifest_digest != manifest_digest
+    ):
+        raise SystemExit("vault_control_projection_identity_changed")
+
+    intent = ActivationIntent.objects.get(
+        target_generation_id=generation_id,
+        manifest_digest=manifest_digest,
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+    )
+    if (
+        intent.state != ActivationIntent.State.COMMITTED
+        or intent.safe_error_code
+        or not intent.committed_at
+    ):
+        raise SystemExit("vault_activation_intent_not_committed")
+    paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    intent_document = read_signed_document(
+        paths["intents"] / f"{intent.public_id}.json",
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        expected_kind="activation_intent",
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+    )
+    result = read_signed_document(
+        paths["results"] / f"{intent.public_id}.json",
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        expected_kind="activation_result",
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+    )
+    active = read_runtime_pointer(
+        paths["active"],
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+    )
+    previous = read_runtime_pointer(
+        paths["previous"],
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+    )
+    readiness = result.get("readiness_evidence", {})
+    process_identity = result.get("process_identity", {})
+    if (
+        intent_document.get("document_digest") != intent.intent_digest
+        or intent_document.get("target_generation_id") != generation_id
+        or intent_document.get("target_manifest_digest") != manifest_digest
+        or intent_document.get("previous_generation_id")
+        != intent.previous_generation_id
+        or intent_document.get("previous_pointer_digest")
+        != previous.pointer_digest
+        or active.generation_id != generation_id
+        or active.manifest_digest != manifest_digest
+        or active.intent_digest != intent.intent_digest
+        or previous.generation_id != intent.previous_generation_id
+        or result.get("status") != "committed"
+        or result.get("intent_digest") != intent.intent_digest
+        or result.get("active_generation_id") != generation_id
+        or result.get("active_manifest_digest") != manifest_digest
+        or result.get("previous_generation_id")
+        != intent.previous_generation_id
+        or result.get("active_pointer_digest") != active.pointer_digest
+        or readiness.get("runtime_generation_id") != generation_id
+        or readiness.get("runtime_manifest_digest") != manifest_digest
+        or readiness.get("livez") != "ok"
+        or readiness.get("readyz") != "ready"
+        or process_identity.get("role") != "web"
+        or not process_identity.get("supervisor_pid")
+        or not process_identity.get("child_pid")
+        or intent.checkpoint.get("protocol_state") != "committed"
+        or intent.checkpoint.get("active_pointer_digest")
+        != active.pointer_digest
+    ):
+        raise SystemExit("signed_activation_identity_changed")
+    observation = RuntimePointerObservation.objects.filter(
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        active_generation_id=generation_id,
+        pointer_digest=active.pointer_digest,
+    ).latest("observed_at")
+    if (
+        observation.status != "committed"
+        or observation.readiness_evidence.get("runtime_generation_id")
+        != generation_id
+        or observation.readiness_evidence.get("runtime_manifest_digest")
+        != manifest_digest
+    ):
+        raise SystemExit("activation_observation_identity_changed")
+    print("vault_activation_evidence_verified")
+
+
 def remove_retry_file() -> None:
     path = Path(settings.MEDIA_ROOT) / "pdfs/e2e-retry.pdf"
     if path.exists():
@@ -524,6 +799,10 @@ if __name__ == "__main__":
     operation = sys.argv[1] if len(sys.argv) > 1 else ""
     if operation == "seed-and-freeze":
         seed_and_freeze()
+    elif operation == "publish-and-restore":
+        publish_and_restore()
+    elif operation == "assert-vault-activation-evidence":
+        assert_vault_activation_evidence()
     elif operation == "remove-retry-file":
         remove_retry_file()
     elif operation == "repair-retry-file":
@@ -540,7 +819,8 @@ if __name__ == "__main__":
         assert_final_control_evidence()
     else:
         raise SystemExit(
-            "expected seed-and-freeze, remove-retry-file, "
+            "expected seed-and-freeze, publish-and-restore, "
+            "assert-vault-activation-evidence, remove-retry-file, "
             "repair-retry-file, activation-evidence, assert-parent-tree, "
             "assert-final-parent-custody, assert-maintenance-evidence, "
             "or assert-final-control-evidence"
