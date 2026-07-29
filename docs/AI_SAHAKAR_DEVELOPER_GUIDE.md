@@ -55,24 +55,28 @@ Marathi terminology follows a reviewed glossary:
 | --- | --- |
 | Dashboard | डॅशबोर्ड |
 | Workbench | कार्यपटल |
-| operator | संचालक |
-| Vault | तिजोरी |
-| runtime | कार्यरत प्रणाली |
-| profile | रूपरेषा |
-| rollback | मागील स्थितीकडे परतणे |
+| operator | ऑपरेटर |
+| Vault | व्हॉल्ट |
+| runtime | रनटाइम |
+| profile | प्रोफाइल |
+| rollback | रोलबॅक |
+| writer lease | रायटर लीज |
+| credentials | क्रेडेन्शियल्स |
 | embedding | एम्बेडिंग |
 | manifest | मॅनिफेस्ट |
-| checkpoint | तपासणी बिंदू |
-| garbage collection / GC | कचरा संकलन / जीसी |
+| checkpoint | चेकपॉइंट |
+| garbage collection / GC | जीसी (सुरक्षित साफसफाई) |
 | retention hold | जतन स्थगिती |
 | generation | निर्मिती संच |
 | reindex | पुनःअनुक्रमण |
 
-Prefer an established literal Marathi term where it stays precise; otherwise
-use the glossary's Marathi-script transliteration and explain the operational
-meaning in Marathi. Latin-script English is reserved for exact technical
-evidence such as codes, API fields, UUIDs, hashes, filenames, and paths. Do not
-translate those identifiers.
+Use an established literal Marathi term where it stays precise. Use the
+glossary's Marathi-script transliteration for specialist terms whose literal
+rendering changes the technical meaning, and explain the operational effect in
+ordinary Marathi. Do not force misleading literal forms such as physical-vault
+or property-lease vocabulary. Latin-script English is reserved for exact
+technical evidence such as codes, API fields, UUIDs, hashes, filenames, and
+paths. Do not translate those identifiers.
 
 ## Operations information architecture
 
@@ -106,7 +110,9 @@ generation or weaken inventory verification to manufacture a healthy state.
 4. Add or update English/Marathi copy in catalogs; never concatenate translated
    fragments in JavaScript or mutate user-entered questions. Remove fuzzy flags
    only after reviewing the complete Marathi sentence in context; a successful
-   locale compilation does not establish translation parity.
+   locale compilation does not establish translation parity. Run the
+   registry-wide operator-language validator; it rejects missing, fuzzy, empty,
+   and unchanged-English Marathi registry entries.
 5. Test static and dynamic states, including no-result and failure paths.
 6. Update the contract or this guide if the rule itself changed.
 

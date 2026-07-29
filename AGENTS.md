@@ -94,11 +94,16 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   `python3 scripts/ci/validate_operator_language.py` for every operator UI
   change and preserve equivalent authored English/Marathi guidance. Every
   registry title, detail, consequence, action, and label requires a reviewed,
-  non-fuzzy Marathi entry. Prefer precise Marathi literal translations; for
-  specialized terms without a safe equivalent, use the repository glossary's
-  consistent Marathi-script transliteration. Do not leave ordinary interface
-  words in Latin-script English. Preserve exact codes, API fields, hashes,
-  UUIDs, filenames, and paths as English/LTR technical evidence.
+  non-fuzzy Marathi entry and must pass the registry-wide catalog parity gate.
+  Translate ordinary language precisely. Use the repository glossary's
+  consistent Marathi-script transliteration when a specialist product or
+  infrastructure term would become inaccurate or comic as a literal Marathi
+  word. Do not force a literal translation merely to avoid transliteration, and
+  do not leave ordinary interface words in Latin-script English. Preserve exact
+  codes, API fields, hashes, UUIDs, filenames, and paths as English/LTR
+  technical evidence.
+- **Canonical locale path:** `flowdocs/locale/` is the only active locale
+  catalog root. Do not recreate or edit a repository-root `locale/` tree.
 - **Vault profile UX:** Never expose probe or authoritative-inventory controls
   for migration-only legacy projections. Materialize a locked environment
   profile only from a complete deployed `ARTIFACT_VAULT_*` contract; never
@@ -110,9 +115,9 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   open Documents & Search directly. Keep remote publication, generations,
   restore, activation, retention, and profile setup under advanced Vault &
   Recovery disclosure. Never imply that local validation or index repair
-  requires a remote profile. In Marathi, prefer established literal terms such
-  as `संचालक`, `रूपरेषा`, and `कार्यरत प्रणाली`; use Marathi-script
-  transliteration only when a specialist term has no precise translation.
+  requires a remote profile. In Marathi, use the reviewed specialist terms
+  `ऑपरेटर`, `प्रोफाइल`, `रनटाइम`, `व्हॉल्ट`, and `रोलबॅक`; pair them with
+  ordinary Marathi explanations of meaning, consequence, and action.
 
 ## Local Validation
 
