@@ -1,0 +1,118 @@
+Status: Active, operator-controlled
+Audience: Recovery, Operator
+Owner: FlowDocs maintainers
+Last verified: 2026-07-30
+Canonical source: docs/RECOVERY_CERTIFICATION.md
+
+# Isolated Recovery Certification
+
+This procedure proves recovery mechanics without mounting or changing the live
+application, control, Redis, or legacy volumes. It is a certification drill,
+not a production cutover.
+
+## Required authorization and evidence
+
+Record the immutable application image, selected Vault generation and manifest
+digest, source backup references, recovery-point age, maintenance window, and
+the unique certification run ID. Never put credentials or document contents in
+the evidence directory.
+
+The drill requires an existing Docker network that reaches the approved Vault.
+That network must not provide public ingress. The application is exposed only
+on an unused `127.0.0.1` port; its other network is Docker-internal.
+
+## Fresh-volume drill
+
+Set the approved environment through the deployment secret provider, including
+the Vault endpoint, bucket, region, credential alias material, dataset identity,
+activation signing key, recovery-superadmin smoke credentials, and isolated
+bootstrap `DJANGO_SUPERUSER_*` credentials with `CREATE_SUPERUSER=1`. These
+values are inputs to the disposable target only and must not be written to the
+evidence directory. Then run:
+
+```bash
+export PDFSEARCH_IMAGE='<repository>@sha256:<digest>'
+export CERT_VAULT_NETWORK='<approved-vault-only-network>'
+export CERT_WEB_PORT='<unused-localhost-port>'
+export CERT_RUN_ID='<unique-lowercase-run-id>'
+bash scripts/ops/run_recovery_certification.sh fresh start
+```
+
+The wrapper creates paired empty data and control volumes, an empty legacy
+substitute, isolated Redis storage, and a private network. It renders the final
+Compose model and stops if the mounts, networks, image identity, or localhost
+binding differ from the certification contract.
+
+Use the localhost Workbench as an authorized superadmin:
+
+1. probe the environment-backed Vault profile;
+2. verify the authoritative inventory;
+3. select the recorded generation and confirm its manifest digest;
+4. prepare the restore through download, checksum validation, sanitization,
+   compatibility checking, and migration rehearsal;
+5. separately confirm signed activation;
+6. require the exact generation and manifest in the active pointer and signed
+   result;
+7. test English and Marathi search, document/source access, login, PDF/FAISS
+   counts, `/livez`, `/readyz`, and `/health/data/`.
+
+Do not promote, retire, garbage-collect, or publish a generation during this
+drill. The wrapper disables writer and scheduler roles.
+
+## Accumulated-volume redeploy preflight
+
+First create and record independent backups of both the application data and
+control volumes. Quiesce every container that mounts the source pair. The
+wrapper refuses to copy a source mounted by a running container.
+
+```bash
+export CERT_SOURCE_DATA_VOLUME='<quiesced-backed-up-data-volume>'
+export CERT_SOURCE_CONTROL_VOLUME='<matching-quiesced-control-volume>'
+bash scripts/ops/run_recovery_certification.sh accumulated start
+```
+
+This copies the source pair through read-only source mounts into uniquely named
+targets and starts only the copied targets. Passing this preflight does not by
+itself prove the live orchestrator retained its mount. The exact production
+boundary still requires a separately authorized maintenance-window recreation
+of `web` and `maintenance`, followed by proof that both retained the original
+data and control volume identities.
+
+Never use `docker compose down -v`. A code rollback uses the recorded previous
+immutable image. A data rollback uses the matching data **and control** backup;
+rolling back only one volume can make lifecycle and runtime evidence disagree.
+
+## Evidence and cleanup
+
+After the Workbench journey and operator checks pass:
+
+```bash
+export CERT_OPERATOR_ACCEPTED=1
+export CERT_GENERATION_ID='<exact-activated-generation>'
+export CERT_MANIFEST_DIGEST='<64-character-manifest-digest>'
+export CERT_ACTIVATION_INTENT_ID='<signed-activation-intent-uuid>'
+bash scripts/ops/run_recovery_certification.sh fresh evidence
+```
+
+Use the same mode, run ID, port, image, and Vault network as `start`. The
+evidence is bounded to resource identities, service health, endpoint results,
+SQLite integrity/foreign-key status, and artifact inventory. Add the signed
+activation result, generation/manifest identities, bilingual search result,
+and operator decision to the approved incident or release record.
+
+Failed targets are retained automatically. After successful evidence review:
+
+```bash
+bash scripts/ops/run_recovery_certification.sh fresh cleanup
+```
+
+Cleanup refuses unowned or mounted resources. Preserve any target referenced by
+an incident, failed restore, activation journal, or unresolved discrepancy.
+
+## Stop conditions
+
+Stop when any source is still mounted, a target name matches an active volume,
+the image is mutable, data/control backups are not paired, the Vault pointer
+changes unexpectedly, integrity or foreign-key checks fail, migrations remain,
+an index or bilingual search fails, external side effects are enabled, ingress
+is not localhost-only, or only a root-page HTTP response is available.

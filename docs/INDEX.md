@@ -65,6 +65,7 @@ source, and supersession relationship.
 
 - [`DATA_CUSTODY_AND_PROMOTION.md`](DATA_CUSTODY_AND_PROMOTION.md) — quarantine, reconciliation, staging, and explicit promotion
 - [`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) — audited vault verdict, generation contents, intact/fresh/lost-volume behavior, restore limits, and completion gate
+- [`RECOVERY_CERTIFICATION.md`](RECOVERY_CERTIFICATION.md) — isolated fresh-volume and accumulated-volume certification with paired data/control custody
 - [`INTERNAL_VAULT_MIGRATION.md`](INTERNAL_VAULT_MIGRATION.md) — dry-run-first legacy volume migration and candidate-generation publish tool
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — recovery-set contents and compatibility rules
 - [`FAISS_COMPATIBILITY.md`](FAISS_COMPATIBILITY.md) — index fingerprint validation

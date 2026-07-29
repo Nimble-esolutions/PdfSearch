@@ -1,0 +1,99 @@
+# Isolated production-data recovery certification.
+#
+# This file is intentionally an override of docker-compose.yml. The wrapper in
+# scripts/ops/run_recovery_certification.sh creates and labels every external
+# resource, renders the merged model, and rejects live/legacy mounts or public
+# networking before starting it.
+services:
+  redis:
+    volumes: !override
+      - cert_redis:/data
+    networks: !override
+      - cert_internal
+
+  web:
+    volumes: !override
+      - cert_data:/app/data
+      - cert_control:/app/data-control
+      - cert_empty_legacy:/mnt/legacy:ro
+    ports: !override
+      - "127.0.0.1:${CERT_WEB_PORT:?CERT_WEB_PORT is required}:8000"
+    networks: !override
+      - cert_internal
+      - cert_vault
+    environment:
+      APP_ENV: staging
+      DEPLOYMENT_ID: ${CERT_DEPLOYMENT_ID:?CERT_DEPLOYMENT_ID is required}
+      DATA_MODE: exact-production
+      DATA_BOOTSTRAP_MODE: empty
+      NONPROD_DATA_POLICY: exact
+      EXACT_PRODUCTION_DATA_APPROVED: "1"
+      EXTERNAL_SIDE_EFFECTS_MODE: sandbox
+      BACKUP_ROLE: disabled
+      BACKUP_SYNC_MODE: manual
+      MAINTENANCE_SCHEDULER_ENABLED: "0"
+      VAULT_SYNC_ENABLED: "0"
+      VAULT_SYNC_MODE: manual
+      VAULT_SYNC_PROMOTION_MODE: manual
+      VAULT_MUTATION_TRACKING_ENABLED: "0"
+      VAULT_RESTORE_ENABLED: "1"
+      VAULT_ADMIN_MUTATIONS_ENABLED: "1"
+      STAGING_RUNTIME_ACTIVATION_ENABLED: "1"
+      MAINTENANCE_CANDIDATE_PREPARATION_ENABLED: "0"
+      MAINTENANCE_CANDIDATE_WRITER_MODE: "0"
+      PUBLIC_SEARCH_ENABLED: "0"
+      EMAIL_HOST: ""
+      SENTRY_DSN: ""
+
+  maintenance:
+    volumes: !override
+      - cert_data:/app/data
+      - cert_control:/app/data-control
+      - cert_empty_legacy:/mnt/legacy:ro
+    networks: !override
+      - cert_internal
+      - cert_vault
+    environment:
+      APP_ENV: staging
+      DEPLOYMENT_ID: ${CERT_DEPLOYMENT_ID:?CERT_DEPLOYMENT_ID is required}
+      DATA_MODE: exact-production
+      DATA_BOOTSTRAP_MODE: empty
+      NONPROD_DATA_POLICY: exact
+      EXACT_PRODUCTION_DATA_APPROVED: "1"
+      EXTERNAL_SIDE_EFFECTS_MODE: sandbox
+      BACKUP_ROLE: disabled
+      BACKUP_SYNC_MODE: manual
+      MAINTENANCE_SCHEDULER_ENABLED: "0"
+      VAULT_SYNC_ENABLED: "0"
+      VAULT_SYNC_MODE: manual
+      VAULT_SYNC_PROMOTION_MODE: manual
+      VAULT_MUTATION_TRACKING_ENABLED: "0"
+      VAULT_RESTORE_ENABLED: "1"
+      VAULT_ADMIN_MUTATIONS_ENABLED: "1"
+      STAGING_RUNTIME_ACTIVATION_ENABLED: "1"
+      MAINTENANCE_CANDIDATE_PREPARATION_ENABLED: "0"
+      MAINTENANCE_CANDIDATE_WRITER_MODE: "0"
+
+volumes:
+  cert_redis:
+    external: true
+    name: ${CERT_REDIS_VOLUME:?CERT_REDIS_VOLUME is required}
+  cert_data:
+    external: true
+    name: ${CERT_DATA_VOLUME:?CERT_DATA_VOLUME is required}
+  cert_control:
+    external: true
+    name: ${CERT_CONTROL_VOLUME:?CERT_CONTROL_VOLUME is required}
+  cert_empty_legacy:
+    external: true
+    name: ${CERT_EMPTY_LEGACY_VOLUME:?CERT_EMPTY_LEGACY_VOLUME is required}
+
+networks:
+  cert_internal:
+    internal: true
+    name: ${CERT_INTERNAL_NETWORK:?CERT_INTERNAL_NETWORK is required}
+    labels:
+      net.ai-sahakar.recovery-cert: ${CERT_RUN_ID:?CERT_RUN_ID is required}
+  cert_vault:
+    external: true
+    name: ${CERT_VAULT_NETWORK:?CERT_VAULT_NETWORK is required}
