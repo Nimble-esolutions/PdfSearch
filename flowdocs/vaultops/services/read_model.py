@@ -71,6 +71,18 @@ REMEDIATION_DESTINATIONS = {
         "label": "Open profile evidence",
         "section": "configuration",
     },
+    "vault_inventory_setup_required": {
+        "title": "Vault storage is ready for its first generation",
+        "detail": "Publish and verify the first dataset generation before using remote authority or recovery actions.",
+        "label": "Review first-generation publication",
+        "section": "sync",
+    },
+    "maintenance_worker_unavailable": {
+        "title": "Document maintenance is temporarily unavailable",
+        "detail": "Start or recover the maintenance worker before queueing local document work.",
+        "label": "Review maintenance worker status",
+        "section": "jobs",
+    },
     "inventory_unverified": {
         "title": "Remote inventory requires verification",
         "detail": "Refresh the approved profile inventory before planning restore or publication work.",
@@ -319,9 +331,27 @@ def _authority_state(profile, dataset_id, deployment_id):
             generation_id=runtime.active_generation_id,
         ).first()
 
+    probe = profile.capability_evidence or {}
+    probe_is_fresh = _observation_is_fresh(
+        profile.last_probed_at,
+        observed_at=observed_at,
+    )
+    first_generation_required = (
+        projection is None
+        and probe_is_fresh
+        and probe.get("configured") is True
+        and probe.get("reachable") is True
+        and probe.get("bucket_exists") is True
+        and not probe.get("error_code")
+    )
+
     blocking_reasons = []
     if projection is None:
-        blocking_reasons.append("inventory_unavailable")
+        blocking_reasons.append(
+            "vault_inventory_setup_required"
+            if first_generation_required
+            else "inventory_unavailable"
+        )
     elif projection.inventory_state != "verified":
         blocking_reasons.append("inventory_unverified")
     elif not _observation_is_fresh(
@@ -340,6 +370,14 @@ def _authority_state(profile, dataset_id, deployment_id):
         blocking_reasons.append("runtime_observation_stale")
     if unhealthy_job:
         blocking_reasons.append("critical_job_unhealthy")
+    first_run_posture = first_generation_required and set(
+        blocking_reasons
+    ).issubset(
+        {
+            "vault_inventory_setup_required",
+            "runtime_observation_unavailable",
+        }
+    )
 
     allowed_actions = ["refresh_inventory"]
     if (
@@ -352,14 +390,24 @@ def _authority_state(profile, dataset_id, deployment_id):
     ):
         allowed_actions.extend(["plan_restore", "compare_generations"])
     return {
-        "status": "healthy" if not blocking_reasons else "degraded",
+        "status": (
+            "healthy"
+            if not blocking_reasons
+            else "setup_required"
+            if first_run_posture
+            else "degraded"
+        ),
         "reason_code": (
             "" if not blocking_reasons else blocking_reasons[0]
         ),
         "observed_at": observed_at,
         "remote": {
             "state": (
-                projection.inventory_state if projection else "unknown"
+                projection.inventory_state
+                if projection
+                else "setup_required"
+                if first_generation_required
+                else "unknown"
             ),
             "authoritative_generation_id": (
                 projection.authoritative_generation_id

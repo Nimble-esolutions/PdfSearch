@@ -248,6 +248,9 @@ services:
       EXTERNAL_EMBEDDINGS_ENABLED: ${EXTERNAL_EMBEDDINGS_ENABLED:-0}
       MAINTENANCE_WORKSPACE_ROOT: /app/data-control/maintenance-workspaces
       MAINTENANCE_JOB_TIMEOUT_SECONDS: ${MAINTENANCE_JOB_TIMEOUT_SECONDS:-7200}
+      MAINTENANCE_WORKER_HEARTBEAT_PATH: /app/data-control/runtime/maintenance-worker.heartbeat
+      MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS: ${MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS:-30}
+      MAINTENANCE_WORKER_READINESS_REQUIRED: ${MAINTENANCE_WORKER_READINESS_REQUIRED:-1}
       VAULT_UI_PROFILE_CONFIGURATION_ENABLED: ${VAULT_UI_PROFILE_CONFIGURATION_ENABLED:-0}
       VAULT_UI_SECRET_ENTRY_ENABLED: ${VAULT_UI_SECRET_ENTRY_ENABLED:-0}
       VAULT_PROFILE_ENCRYPTION_KEY: ${VAULT_PROFILE_ENCRYPTION_KEY:-}
@@ -274,7 +277,7 @@ services:
         condition: service_healthy
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "kill -0 $$(head -1 /tmp/worker_heartbeat 2>/dev/null) 2>/dev/null && test $$(( $$(date +%s) - $$(tail -1 /tmp/worker_heartbeat 2>/dev/null || echo 0) )) -lt 60 || exit 1"]
+      test: ["CMD", "python", "-c", "import os,time; p=os.environ['MAINTENANCE_WORKER_HEARTBEAT_PATH']; assert time.time()-os.stat(p).st_mtime <= int(os.environ['MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS'])"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -80,7 +80,7 @@ def metrics_view(request):
         gauge("pdfsearch_backup_last_failure_timestamp", 0)
 
     try:
-        heartbeat_file = Path("/tmp/worker_heartbeat")
+        heartbeat_file = Path(settings.MAINTENANCE_WORKER_HEARTBEAT_PATH)
         if heartbeat_file.is_file():
             gauge("pdfsearch_worker_heartbeat_age_seconds",
                   time_module.time() - heartbeat_file.stat().st_mtime,

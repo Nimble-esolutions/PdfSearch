@@ -1316,7 +1316,9 @@ class DashboardTests(TestCase):
         self.client.force_login(superadmin)
 
         with override_settings(
-            LOCAL_INDEX_MAINTENANCE_ENABLED=True, ACTIVE_RUNTIME=None
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            MAINTENANCE_WORKER_READINESS_REQUIRED=False,
+            ACTIVE_RUNTIME=None,
         ):
             response = self.client.post(
                 reverse("folder_operations", args=[folder.pk]),
@@ -1367,6 +1369,7 @@ class DashboardTests(TestCase):
 
         with override_settings(
             LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             EXTERNAL_EMBEDDINGS_ENABLED=True,
             ACTIVE_RUNTIME=None,
         ):
@@ -1412,6 +1415,7 @@ class DashboardTests(TestCase):
 
         with override_settings(
             LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             EXTERNAL_EMBEDDINGS_ENABLED=True,
             ACTIVE_RUNTIME=None,
         ):

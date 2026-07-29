@@ -1,4 +1,5 @@
 import uuid
+import tempfile
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -30,6 +31,7 @@ LOCAL_GATES = override_settings(
     LOCAL_INDEX_MAINTENANCE_ENABLED=True,
     FORCE_REINDEX_ENABLED=True,
     EXTERNAL_EMBEDDINGS_ENABLED=True,
+    MAINTENANCE_WORKER_READINESS_REQUIRED=False,
     ACTIVE_RUNTIME=None,
     RUNTIME_GENERATION_ID="",
     RUNTIME_MANIFEST_DIGEST="",
@@ -138,6 +140,25 @@ class MaintenancePlanningTests(TestCase):
                 self.assertEqual(reasons["validate"], reasons["repair_indexes"])
                 self.assertEqual(reasons["reindex_needed"], needed)
                 self.assertEqual(reasons["reindex_selected"], selected)
+
+    def test_queue_rechecks_worker_availability_after_preview(self):
+        plan = self._plan(operation="validate")
+        with tempfile.TemporaryDirectory() as temporary:
+            with override_settings(
+                MAINTENANCE_WORKER_READINESS_REQUIRED=True,
+                MAINTENANCE_WORKER_HEARTBEAT_PATH=(
+                    f"{temporary}/missing-worker.heartbeat"
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    MaintenancePlanError,
+                    "^maintenance_worker_unavailable$",
+                ):
+                    queue_plan(plan=plan, actor=self.superadmin)
+
+        plan.refresh_from_db()
+        self.assertEqual(plan.state, "previewed")
+        self.assertIsNone(plan.job_id)
 
     def test_normalize_selection_rejects_inverted_date_range(self):
         with self.assertRaisesRegex(MaintenancePlanError, "malformed_filters"):
