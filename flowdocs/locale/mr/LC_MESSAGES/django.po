@@ -494,7 +494,7 @@ msgstr "स्थिती"
 
 #: core/templates/dashboard.html:157
 msgid "Retention"
-msgstr "धारणा"
+msgstr "जतन"
 
 #: core/templates/dashboard.html:158 core/templates/dashboard_pdfs.html:111
 #: core/templates/user_list.html:57
@@ -1856,7 +1856,7 @@ msgstr "संरचना"
 #: core/templates/vaultops/confirmation.html:4
 #| msgid "Create user - CC & RCS Maharashtra"
 msgid "Confirm vault operation — CC & RCS Maharashtra"
-msgstr "तिजोरी कार्यवाहीची पुष्टी करा — सीसी आणि आरसीएस महाराष्ट्र"
+msgstr "व्हॉल्ट कार्यवाहीची पुष्टी करा — सीसी आणि आरसीएस महाराष्ट्र"
 
 #: core/templates/vaultops/confirmation.html:26
 msgid "Confirmation phrase"
@@ -1864,7 +1864,7 @@ msgstr "पुष्टीकरण वाक्यांश"
 
 #: core/templates/vaultops/workbench.html:252
 msgid "Credentials"
-msgstr "प्रमाणपत्रे"
+msgstr "क्रेडेन्शियल्स"
 
 #: core/templates/vaultops/workbench.html:35
 msgid "Critical job"
@@ -1913,7 +1913,7 @@ msgstr "कुंपण कालखंड"
 
 #: core/templates/vaultops/workbench.html:87
 msgid "Garbage collection"
-msgstr "अनावश्यक वस्तू संकलन"
+msgstr "जीसी (सुरक्षित साफसफाई)"
 
 #: core/templates/dashboard_s3ops.html:244
 #: core/templates/vaultops/workbench.html:165
@@ -1984,7 +1984,7 @@ msgstr "कोणतीही पुनर्संचयन कार्यक�
 
 #: core/templates/vaultops/workbench.html:225
 msgid "No vault jobs are recorded."
-msgstr "तिजोरीची कोणतीही कार्ये नोंदलेली नाहीत."
+msgstr "व्हॉल्टची कोणतीही कार्ये नोंदलेली नाहीत."
 
 #: core/templates/vaultops/workbench.html:145
 msgid "No verified generation projections are available."
@@ -2009,7 +2009,7 @@ msgstr "निरीक्षित स्थिती"
 
 #: core/templates/vaultops/workbench.html:14
 msgid "Operations / Vault Workbench"
-msgstr "संचालन / तिजोरी कार्यपटल"
+msgstr "संचालन / व्हॉल्ट कार्यपटल"
 
 #: core/templates/vaultops/workbench.html:40
 #| msgid "Owner review"
@@ -2170,7 +2170,7 @@ msgstr "केवळ-वाचन तपासणी चालवा"
 #: core/templates/dashboard_settings.html:185
 #: core/templates/vaultops/workbench.html:129
 msgid "Runtime"
-msgstr "कार्यरत प्रणाली"
+msgstr "रनटाइम"
 
 #: core/templates/vaultops/workbench.html:72
 msgid "Runtime authority"
@@ -2184,7 +2184,7 @@ msgstr "कार्यरत निर्मिती संच"
 #: core/templates/vaultops/workbench.html:84
 #| msgid "Index readiness"
 msgid "Runtime readiness"
-msgstr "कार्यरत प्रणालीची तयारी"
+msgstr "रनटाइमची तयारी"
 
 #: core/templates/vaultops/workbench.html:243
 msgid "Server-approved sources"
@@ -2236,26 +2236,26 @@ msgstr "अज्ञात किंवा भिन्न"
 
 #: core/templates/base.html:67 core/templates/vaultops/workbench.html:128
 msgid "Vault"
-msgstr "कलाकृती तिजोरी"
+msgstr "व्हॉल्ट"
 
 #: core/templates/vaultops/workbench.html:15
 #| msgid "Document operations"
 msgid "Vault Operations Workbench"
-msgstr "तिजोरी संचालन कार्यपटल"
+msgstr "व्हॉल्ट संचालन कार्यपटल"
 
 #: core/templates/vaultops/workbench.html:4
 #| msgid "Operations Cockpit - CC & RCS Maharashtra"
 msgid "Vault Operations Workbench — CC & RCS Maharashtra"
-msgstr "तिजोरी संचालन कार्यपटल — सीसी आणि आरसीएस महाराष्ट्र"
+msgstr "व्हॉल्ट संचालन कार्यपटल — सीसी आणि आरसीएस महाराष्ट्र"
 
 #: core/templates/vaultops/workbench.html:201
 msgid "Vault jobs"
-msgstr "तिजोरी कार्ये"
+msgstr "व्हॉल्ट कार्ये"
 
 #: core/templates/vaultops/workbench.html:243
 #| msgid "Validate Files"
 msgid "Vault profiles"
-msgstr "तिजोरी प्रोफाइल"
+msgstr "व्हॉल्ट प्रोफाइल"
 
 #: core/templates/vaultops/workbench.html:39
 msgid "Workbench sections"
@@ -2269,7 +2269,7 @@ msgstr "लेखन-सक्षम"
 #: core/templates/vaultops/workbench.html:266
 #| msgid "Release"
 msgid "Writer lease"
-msgstr "लेखक भाडेपट्टा"
+msgstr "रायटर लीज"
 
 #: core/templates/vaultops/workbench.html:178
 #| msgid "Subject"
@@ -2408,7 +2408,7 @@ msgid ""
 "not changed."
 msgstr ""
 "सक्रिय रनटाइम हा मागील स्वाक्षरीत रनटाइमचा सत्यापित स्थानिक-देखभाल वारस असेल तरच ही "
-"कृती तो मागील रनटाइम जाणीवपूर्वक पुनर्स्थापित करते. तिजोरी अधिकार बदलत नाही."
+"कृती तो मागील रनटाइम जाणीवपूर्वक पुनर्स्थापित करते. व्हॉल्ट अधिकार बदलत नाही."
 
 #: core/templates/vaultops/workbench.html
 msgid "Review signed rollback"
@@ -2428,7 +2428,7 @@ msgid "Documents & Search — CC & RCS Maharashtra"
 msgstr "दस्तऐवज आणि शोध — सीसी आणि आरसीएस महाराष्ट्र"
 
 msgid "Vault & Recovery — CC & RCS Maharashtra"
-msgstr "तिजोरी आणि पुनर्प्राप्ती — सीसी आणि आरसीएस महाराष्ट्र"
+msgstr "व्हॉल्ट आणि पुनर्प्राप्ती — सीसी आणि आरसीएस महाराष्ट्र"
 
 msgid "Operations / Daily document care"
 msgstr "संचालन / दैनंदिन दस्तऐवज देखभाल"
@@ -2441,26 +2441,26 @@ msgid ""
 "reindex. Remote Vault authority is not changed."
 msgstr ""
 "स्थानिक दस्तऐवज तपासा, साठवलेल्या शोध अनुक्रमणिका दुरुस्त करा किंवा मर्यादित "
-"पुनःअनुक्रमणाची तयारी करा. दूरस्थ तिजोरीची अधिकृत स्थिती बदलत नाही."
+"पुनःअनुक्रमणाची तयारी करा. दूरस्थ व्हॉल्टची अधिकृत स्थिती बदलत नाही."
 
 msgid "Operations / Advanced recovery"
 msgstr "संचालन / प्रगत पुनर्प्राप्ती"
 
 msgid "Vault & Recovery"
-msgstr "तिजोरी आणि पुनर्प्राप्ती"
+msgstr "व्हॉल्ट आणि पुनर्प्राप्ती"
 
 msgid ""
 "Specialist controls for remote authority, publication, restore preparation, "
 "retention, and runtime recovery."
 msgstr ""
-"दूरस्थ अधिकृत स्थिती, प्रकाशन, पुनर्संचयन तयारी, जतन आणि कार्यरत प्रणालीच्या "
+"दूरस्थ अधिकृत स्थिती, प्रकाशन, पुनर्संचयन तयारी, जतन आणि रनटाइमच्या "
 "पुनर्प्राप्तीसाठी तज्ज्ञ नियंत्रणे."
 
 msgid "Show advanced Vault and runtime evidence"
-msgstr "तिजोरी आणि कार्यरत प्रणालीचा प्रगत पुरावा दाखवा"
+msgstr "व्हॉल्ट आणि रनटाइमचा प्रगत पुरावा दाखवा"
 
 msgid "Advanced Vault & Recovery"
-msgstr "प्रगत तिजोरी आणि पुनर्प्राप्ती"
+msgstr "प्रगत व्हॉल्ट आणि पुनर्प्राप्ती"
 
 msgid "Daily document care"
 msgstr "दैनंदिन दस्तऐवज देखभाल"
@@ -2469,28 +2469,26 @@ msgid ""
 "Start with Validate Files. Use repair when stored indexes are incomplete, "
 "and reindex only when searchable content must be regenerated."
 msgstr ""
-"प्रथम फाइल पडताळणी करा. साठवलेल्या अनुक्रमणिका अपूर्ण असतील तेव्हा दुरुस्ती "
-"वापरा आणि शोधता येणारी सामग्री पुन्हा तयार करणे आवश्यक असेल तेव्हाच "
-"पुनःअनुक्रमण करा."
+"प्रथम फाइल पडताळणी करा. साठवलेल्या अनुक्रमणिका अपूर्ण असतील तेव्हा दुरुस्ती वापरा आणि "
+"शोधता येणारी सामग्री पुन्हा तयार करणे आवश्यक असेल तेव्हाच पुनःअनुक्रमण करा."
 
 msgid ""
 "Document-maintenance progress appears in Documents & Search. This advanced "
 "list records Vault publication, inventory, restore, and recovery work."
 msgstr ""
-"दस्तऐवज देखभालीची प्रगती दस्तऐवज आणि शोध विभागात दिसते. ही प्रगत सूची "
-"तिजोरी प्रकाशन, सूची पडताळणी, पुनर्संचयन आणि पुनर्प्राप्तीची कार्ये नोंदवते."
+"दस्तऐवज देखभालीची प्रगती दस्तऐवज आणि शोध विभागात दिसते. ही प्रगत सूची व्हॉल्ट "
+"प्रकाशन, सूची पडताळणी, पुनर्संचयन आणि पुनर्प्राप्तीची कार्ये नोंदवते."
 
 msgid "Vault storage is configured"
-msgstr "तिजोरी साठवण संरचित आहे"
+msgstr "व्हॉल्ट साठवण संरचित आहे"
 
 msgid ""
 "No published generation is recorded yet. A read-only probe checks storage "
 "access; authoritative inventory becomes meaningful after the first "
 "generation is published."
 msgstr ""
-"अद्याप कोणताही प्रकाशित निर्मिती संच नोंदलेला नाही. केवळ-वाचन तपासणी "
-"साठवण प्रवेश तपासते; पहिला निर्मिती संच प्रकाशित झाल्यानंतर अधिकृत सूचीची "
-"पडताळणी उपयुक्त ठरते."
+"अद्याप कोणताही प्रकाशित निर्मिती संच नोंदलेला नाही. केवळ-वाचन तपासणी साठवण प्रवेश "
+"तपासते; पहिला निर्मिती संच प्रकाशित झाल्यानंतर अधिकृत सूचीची पडताळणी उपयुक्त ठरते."
 
 msgid "Open Documents & Search"
 msgstr "दस्तऐवज आणि शोध उघडा"
@@ -2499,31 +2497,31 @@ msgid ""
 "Recent document-maintenance progress. Open Documents & Search for controls "
 "and detailed guidance."
 msgstr ""
-"अलीकडील दस्तऐवज देखभाल प्रगती. नियंत्रणे आणि सविस्तर मार्गदर्शनासाठी "
-"दस्तऐवज आणि शोध उघडा."
+"अलीकडील दस्तऐवज देखभाल प्रगती. नियंत्रणे आणि सविस्तर मार्गदर्शनासाठी दस्तऐवज आणि शोध "
+"उघडा."
 
 msgid "Maintain Documents & Search"
 msgstr "दस्तऐवज आणि शोध सांभाळा"
 
 msgid "Open advanced Vault & Recovery"
-msgstr "प्रगत तिजोरी आणि पुनर्प्राप्ती उघडा"
+msgstr "प्रगत व्हॉल्ट आणि पुनर्प्राप्ती उघडा"
 
 msgid "Vault storage is ready for its first generation"
-msgstr "तिजोरी साठवण पहिल्या निर्मिती संचासाठी तयार आहे"
+msgstr "व्हॉल्ट साठवण पहिल्या निर्मिती संचासाठी तयार आहे"
 
 msgid ""
 "The approved profile reached its bucket, but no verified dataset inventory "
 "has been observed yet."
 msgstr ""
-"मान्य रूपरेषा तिच्या बकेटशी जोडली गेली आहे; मात्र अद्याप कोणतीही पडताळलेली "
-"डेटासेट सूची आढळलेली नाही."
+"मान्य प्रोफाइल तिच्या बकेटशी जोडली गेली आहे; मात्र अद्याप कोणतीही पडताळलेली डेटासेट सूची "
+"आढळलेली नाही."
 
 msgid ""
 "Restore and authority decisions remain guarded until a generation is "
 "published and verified."
 msgstr ""
-"निर्मिती संच प्रकाशित करून पडताळला जाईपर्यंत पुनर्संचयन आणि अधिकृत "
-"स्थितीविषयक निर्णय संरक्षित राहतील."
+"निर्मिती संच प्रकाशित करून पडताळला जाईपर्यंत पुनर्संचयन आणि अधिकृत स्थितीविषयक निर्णय "
+"संरक्षित राहतील."
 
 msgid "Review first-generation publication"
 msgstr "पहिल्या निर्मिती संचाच्या प्रकाशनाचा आढावा घ्या"
@@ -2535,14 +2533,10 @@ msgid ""
 "No maintenance worker has reported through the shared control channel "
 "recently."
 msgstr ""
-"सामायिक नियंत्रण माध्यमातून अलीकडे कोणत्याही देखभाल कार्यकर्त्याने स्थिती "
-"कळवलेली नाही."
+"सामायिक नियंत्रण माध्यमातून अलीकडे कोणत्याही देखभाल कार्यकर्त्याने स्थिती कळवलेली नाही."
 
-msgid ""
-"New validation, repair, and reindex work cannot be queued safely."
-msgstr ""
-"नवीन पडताळणी, दुरुस्ती आणि पुनःअनुक्रमण कार्ये सुरक्षितपणे रांगेत लावता "
-"येणार नाहीत."
+msgid "New validation, repair, and reindex work cannot be queued safely."
+msgstr "नवीन पडताळणी, दुरुस्ती आणि पुनःअनुक्रमण कार्ये सुरक्षितपणे रांगेत लावता येणार नाहीत."
 
 msgid "Review maintenance worker status"
 msgstr "देखभाल कार्यकर्त्याच्या स्थितीचा आढावा घ्या"
@@ -2611,10 +2605,10 @@ msgid "Ready for activation review"
 msgstr "सक्रियकरण आढाव्यासाठी तयार"
 
 msgid "Vault changes are disabled"
-msgstr "तिजोरीतील बदल बंद आहेत"
+msgstr "व्हॉल्टमधील बदल बंद आहेत"
 
 msgid "This environment does not permit administrative Vault mutations."
-msgstr "या वातावरणात प्रशासकीय तिजोरी बदलांना परवानगी नाही."
+msgstr "या वातावरणात प्रशासकीय व्हॉल्ट बदलांना परवानगी नाही."
 
 msgid "The control remains unavailable."
 msgstr "नियंत्रण उपलब्ध राहणार नाही."
@@ -2647,7 +2641,7 @@ msgid "Review retention holds"
 msgstr "जतन होल्डचा आढावा घ्या"
 
 msgid "Approved Vault profile is unavailable"
-msgstr "मंजूर तिजोरी प्रोफाइल उपलब्ध नाही"
+msgstr "मंजूर व्हॉल्ट प्रोफाइल उपलब्ध नाही"
 
 msgid "The server-approved remote profile could not be loaded."
 msgstr "सर्व्हरने मंजूर केलेले दूरस्थ प्रोफाइल लोड करता आले नाही."
@@ -2826,13 +2820,13 @@ msgid "Review restore evidence"
 msgstr "पुनर्स्थापना पुराव्याचा आढावा घ्या"
 
 msgid "A critical Vault job needs attention"
-msgstr "तिजोरीतील एका गंभीर कार्याकडे लक्ष देणे आवश्यक आहे"
+msgstr "व्हॉल्टमधील एका गंभीर कार्याकडे लक्ष देणे आवश्यक आहे"
 
 msgid "A critical job failed or stopped reporting progress."
 msgstr "एक गंभीर कार्य अपयशी ठरले किंवा त्याने प्रगती कळवणे थांबवले."
 
 msgid "Dependent Vault work remains guarded."
-msgstr "त्यावर अवलंबून असलेले तिजोरीचे काम सुरक्षितता अटींमुळे उपलब्ध राहणार नाही."
+msgstr "त्यावर अवलंबून असलेले व्हॉल्टचे काम सुरक्षितता अटींमुळे उपलब्ध राहणार नाही."
 
 msgid "Local capacity reserve is low"
 msgstr "स्थानिक क्षमतेचा राखीव साठा कमी आहे"
@@ -3039,7 +3033,7 @@ msgid "Review restore workspaces"
 msgstr "पुनर्स्थापना कार्यक्षेत्रांचा आढावा घ्या"
 
 msgid "A Vault job is using this generation"
-msgstr "तिजोरीतील कार्य हा निर्मिती संच वापरत आहे"
+msgstr "व्हॉल्टमधील कार्य हा निर्मिती संच वापरत आहे"
 
 msgid "An active job still refers to this generation."
 msgstr "सक्रिय कार्य अजूनही या निर्मिती संचाचा संदर्भ देते."
@@ -3186,114 +3180,124 @@ msgid "Repair document text"
 msgstr "दस्तऐवजातील मजकूर दुरुस्त करा"
 
 msgid "Historical profile has no remote Vault connection"
-msgstr "ऐतिहासिक रूपरेषेला दूरस्थ तिजोरी जोडणी नाही"
+msgstr "ऐतिहासिक प्रोफाइलला दूरस्थ व्हॉल्ट जोडणी नाही"
 
-msgid "This record preserves earlier application evidence and is not an S3 connection profile."
-msgstr "ही नोंद अनुप्रयोगाचा जुना पुरावा जतन करते; ती S3 जोडणी रूपरेषा नाही."
+msgid ""
+"This record preserves earlier application evidence and is not an S3 "
+"connection profile."
+msgstr "ही नोंद अनुप्रयोगाचा जुना पुरावा जतन करते; ती S3 जोडणी प्रोफाइल नाही."
 
 msgid "Remote probe and inventory controls do not apply to it."
 msgstr "दूरस्थ तपासणी आणि सूची नियंत्रणे या नोंदीला लागू होत नाहीत."
 
 msgid "Review the environment Vault profile"
-msgstr "पर्यावरण तिजोरी रूपरेषेचा आढावा घ्या"
+msgstr "पर्यावरण व्हॉल्ट प्रोफाइलचा आढावा घ्या"
 
 msgid "Vault profile configuration is incomplete"
-msgstr "तिजोरी रूपरेषेची संरचना अपूर्ण आहे"
+msgstr "व्हॉल्ट प्रोफाइलची संरचना अपूर्ण आहे"
 
 msgid "The profile is missing server-approved connection information."
-msgstr "रूपरेषेत सर्व्हरने मान्य केलेली जोडणी माहिती उपलब्ध नाही."
+msgstr "प्रोफाइलमध्ये सर्व्हरने मान्य केलेली जोडणी माहिती उपलब्ध नाही."
 
 msgid "Remote probe and inventory controls remain unavailable."
 msgstr "दूरस्थ तपासणी आणि सूची नियंत्रणे अनुपलब्ध राहतील."
 
 msgid "Complete profile configuration"
-msgstr "रूपरेषेची संरचना पूर्ण करा"
+msgstr "प्रोफाइलची संरचना पूर्ण करा"
 
 msgid "Vault profile fields need attention"
-msgstr "तिजोरी रूपरेषेतील क्षेत्रांकडे लक्ष देणे आवश्यक आहे"
+msgstr "व्हॉल्ट प्रोफाइलमधील क्षेत्रांकडे लक्ष देणे आवश्यक आहे"
 
 msgid "One or more required profile values are missing or invalid."
-msgstr "रूपरेषेतील एक किंवा अधिक आवश्यक मूल्ये उपलब्ध नाहीत किंवा अवैध आहेत."
+msgstr "प्रोफाइलमधील एक किंवा अधिक आवश्यक मूल्ये उपलब्ध नाहीत किंवा अवैध आहेत."
 
 msgid "No profile change was saved."
-msgstr "रूपरेषेतील कोणताही बदल जतन केला नाही."
+msgstr "प्रोफाइलमधील कोणताही बदल जतन केला नाही."
 
 msgid "Correct the highlighted fields"
 msgstr "ठळक केलेली क्षेत्रे दुरुस्त करा"
 
 msgid "Browser profile configuration is disabled"
-msgstr "ब्राउझरमधील रूपरेषा संरचना बंद आहे"
+msgstr "ब्राउझरमधील प्रोफाइल संरचना बंद आहे"
 
-msgid "This environment accepts Vault profiles only from deployed configuration."
-msgstr "हे पर्यावरण तिजोरी रूपरेषा केवळ तैनात संरचनेतून स्वीकारते."
+msgid ""
+"This environment accepts Vault profiles only from deployed configuration."
+msgstr "हे पर्यावरण व्हॉल्ट प्रोफाइल केवळ तैनात संरचनेतून स्वीकारते."
 
 msgid "No browser-submitted profile can be saved."
-msgstr "ब्राउझरमधून सादर केलेली कोणतीही रूपरेषा जतन करता येणार नाही."
+msgstr "ब्राउझरमधून सादर केलेली कोणतीही प्रोफाइल जतन करता येणार नाही."
 
 msgid "Review deployed Vault configuration"
-msgstr "तैनात तिजोरी संरचनेचा आढावा घ्या"
+msgstr "तैनात व्हॉल्ट संरचनेचा आढावा घ्या"
 
 msgid "Vault endpoint is not approved"
-msgstr "तिजोरी अंतिमबिंदू मान्य नाही"
+msgstr "व्हॉल्ट अंतिमबिंदू मान्य नाही"
 
 msgid "The endpoint does not exactly match a server-approved S3 origin."
 msgstr "अंतिमबिंदू सर्व्हरने मान्य केलेल्या S3 उगमाशी तंतोतंत जुळत नाही."
 
 msgid "The profile cannot connect to that endpoint."
-msgstr "रूपरेषा त्या अंतिमबिंदूशी जोडली जाऊ शकत नाही."
+msgstr "प्रोफाइल त्या अंतिमबिंदूशी जोडली जाऊ शकत नाही."
 
 msgid "Review the endpoint allowlist"
 msgstr "अंतिमबिंदू मान्य-सूचीचा आढावा घ्या"
 
 msgid "Vault endpoint needs correction"
-msgstr "तिजोरी अंतिमबिंदू दुरुस्त करणे आवश्यक आहे"
+msgstr "व्हॉल्ट अंतिमबिंदू दुरुस्त करणे आवश्यक आहे"
 
-msgid "Enter only an HTTP or HTTPS origin without credentials, a path, query, or fragment."
-msgstr "ओळखपत्रे, मार्ग, प्रश्न किंवा तुकडा नसलेला केवळ HTTP किंवा HTTPS उगम प्रविष्ट करा."
+msgid ""
+"Enter only an HTTP or HTTPS origin without credentials, a path, query, or "
+"fragment."
+msgstr "क्रेडेन्शियल्स, मार्ग, प्रश्न किंवा तुकडा नसलेला केवळ HTTP किंवा HTTPS उगम प्रविष्ट करा."
 
 msgid "The profile was not saved."
-msgstr "रूपरेषा जतन केली नाही."
+msgstr "प्रोफाइल जतन केली नाही."
 
 msgid "Correct the endpoint"
 msgstr "अंतिमबिंदू दुरुस्त करा"
 
 msgid "Credential alias is not approved"
-msgstr "ओळखपत्र पर्यायी नाव मान्य नाही"
+msgstr "क्रेडेन्शियल पर्यायी नाव मान्य नाही"
 
 msgid "The alias is not mapped to a server-managed credential source."
-msgstr "हे पर्यायी नाव सर्व्हर-व्यवस्थापित ओळखपत्र स्रोताशी जोडलेले नाही."
+msgstr "हे पर्यायी नाव सर्व्हर-व्यवस्थापित क्रेडेन्शियल स्रोताशी जोडलेले नाही."
 
 msgid "The browser cannot create or use the profile."
-msgstr "ब्राउझर ही रूपरेषा तयार करू किंवा वापरू शकत नाही."
+msgstr "ब्राउझर ही प्रोफाइल तयार करू किंवा वापरू शकत नाही."
 
 msgid "Review approved credential aliases"
-msgstr "मान्य ओळखपत्र पर्यायी नावांचा आढावा घ्या"
+msgstr "मान्य क्रेडेन्शियल पर्यायी नावांचा आढावा घ्या"
 
 msgid "Approved credentials are unavailable"
-msgstr "मान्य ओळखपत्रे उपलब्ध नाहीत"
+msgstr "मान्य क्रेडेन्शियल्स उपलब्ध नाहीत"
 
-msgid "The server-approved alias is present, but its credential variables are incomplete."
-msgstr "सर्व्हरने मान्य केलेले पर्यायी नाव आहे; मात्र त्याची ओळखपत्र चल अपूर्ण आहेत."
+msgid ""
+"The server-approved alias is present, but its credential variables are "
+"incomplete."
+msgstr "सर्व्हरने मान्य केलेले पर्यायी नाव आहे; मात्र त्याची क्रेडेन्शियल चल अपूर्ण आहेत."
 
 msgid "Remote Vault operations remain unavailable."
-msgstr "दूरस्थ तिजोरी कार्ये अनुपलब्ध राहतील."
+msgstr "दूरस्थ व्हॉल्ट कार्ये अनुपलब्ध राहतील."
 
 msgid "Review deployed credentials"
-msgstr "तैनात ओळखपत्रांचा आढावा घ्या"
+msgstr "तैनात क्रेडेन्शियल्सचा आढावा घ्या"
 
 msgid "Vault profile evidence changed"
-msgstr "तिजोरी रूपरेषेचा पुरावा बदलला आहे"
+msgstr "व्हॉल्ट प्रोफाइलचा पुरावा बदलला आहे"
 
-msgid "The stored profile no longer matches its verified connection fingerprint."
-msgstr "जतन केलेली रूपरेषा तिच्या पडताळलेल्या जोडणी ठशाशी आता जुळत नाही."
+msgid ""
+"The stored profile no longer matches its verified connection fingerprint."
+msgstr "जतन केलेली प्रोफाइल तिच्या पडताळलेल्या जोडणी ठशाशी आता जुळत नाही."
 
 msgid "Remote operations remain blocked until the profile is reviewed."
-msgstr "रूपरेषेचा आढावा होईपर्यंत दूरस्थ कार्ये रोखलेली राहतील."
+msgstr "प्रोफाइलचा आढावा होईपर्यंत दूरस्थ कार्ये रोखलेली राहतील."
 
 msgid "No published Vault inventory is available yet"
-msgstr "अद्याप कोणतीही प्रकाशित तिजोरी सूची उपलब्ध नाही"
+msgstr "अद्याप कोणतीही प्रकाशित व्हॉल्ट सूची उपलब्ध नाही"
 
-msgid "The bucket is reachable, but it does not contain a readable dataset registration."
+msgid ""
+"The bucket is reachable, but it does not contain a readable dataset "
+"registration."
 msgstr "बकेटशी जोडणी होते; मात्र त्यात वाचता येणारी डेटासेट नोंदणी नाही."
 
 msgid "There is no authoritative remote generation to verify."
@@ -3303,31 +3307,37 @@ msgid "Publish the first verified generation"
 msgstr "पहिला पडताळलेला निर्मिती संच प्रकाशित करा"
 
 msgid "Vault endpoint could not be approved"
-msgstr "तिजोरी अंतिमबिंदू मान्य करता आला नाही"
+msgstr "व्हॉल्ट अंतिमबिंदू मान्य करता आला नाही"
 
-msgid "The endpoint did not satisfy the deployed transport, DNS, or network safety policy."
+msgid ""
+"The endpoint did not satisfy the deployed transport, DNS, or network safety "
+"policy."
 msgstr "अंतिमबिंदूने तैनात वाहतूक, DNS किंवा जाळे सुरक्षा धोरण पूर्ण केले नाही."
 
 msgid "The profile was not saved and no connection was attempted."
-msgstr "रूपरेषा जतन केली नाही आणि कोणताही जोडणी प्रयत्न केला नाही."
+msgstr "प्रोफाइल जतन केली नाही आणि कोणताही जोडणी प्रयत्न केला नाही."
 
 msgid "Review the endpoint and allowlist"
 msgstr "अंतिमबिंदू आणि मान्य-सूचीचा आढावा घ्या"
 
 msgid "Vault profile cannot be changed"
-msgstr "तिजोरी रूपरेषा बदलता येत नाही"
+msgstr "व्हॉल्ट प्रोफाइल बदलता येत नाही"
 
-msgid "The requested profile or credential source is controlled by deployed configuration."
-msgstr "विनंती केलेली रूपरेषा किंवा ओळखपत्र स्रोत तैनात संरचनेद्वारे नियंत्रित केला जातो."
+msgid ""
+"The requested profile or credential source is controlled by deployed "
+"configuration."
+msgstr "विनंती केलेली प्रोफाइल किंवा क्रेडेन्शियल स्रोत तैनात संरचनेद्वारे नियंत्रित केला जातो."
 
 msgid "No profile change was made."
-msgstr "रूपरेषेत कोणताही बदल केला नाही."
+msgstr "प्रोफाइलमध्ये कोणताही बदल केला नाही."
 
 msgid "Add another read-only profile"
-msgstr "आणखी एक केवळ-वाचन रूपरेषा जोडा"
+msgstr "आणखी एक केवळ-वाचन प्रोफाइल जोडा"
 
-msgid "Additional profiles are managed by deployed configuration in this environment."
-msgstr "या पर्यावरणातील अतिरिक्त रूपरेषा तैनात संरचनेद्वारे व्यवस्थापित केल्या जातात."
+msgid ""
+"Additional profiles are managed by deployed configuration in this "
+"environment."
+msgstr "या पर्यावरणातील अतिरिक्त प्रोफाइल तैनात संरचनेद्वारे व्यवस्थापित केल्या जातात."
 
 msgid "Candidate preparation in progress"
 msgstr "उमेदवाराची तयारी सुरू आहे"
@@ -3342,15 +3352,624 @@ msgid ""
 "This environment cannot prove that source documents stay consistent while a "
 "maintenance candidate is prepared."
 msgstr ""
-"देखभाल उमेदवार तयार करताना स्रोत दस्तऐवज सुसंगत राहतात, हे या पर्यावरणात "
-"सिद्ध करता येत नाही."
+"देखभाल उमेदवार तयार करताना स्रोत दस्तऐवज सुसंगत राहतात, हे या पर्यावरणात सिद्ध करता "
+"येत नाही."
 
 msgid ""
 "Repair and reindex work remain disabled; read-only validation is still "
 "available."
-msgstr ""
-"दुरुस्ती आणि पुनःअनुक्रमणाचे काम बंद राहील; केवळ-वाचन पडताळणी अजूनही उपलब्ध "
-"आहे."
+msgstr "दुरुस्ती आणि पुनःअनुक्रमणाचे काम बंद राहील; केवळ-वाचन पडताळणी अजूनही उपलब्ध आहे."
 
 msgid "Review maintenance safety configuration"
 msgstr "देखभाल सुरक्षा संरचना तपासा"
+
+msgid "A candidate can only be prepared from a completed maintenance job."
+msgstr "कॅन्डिडेट फक्त पूर्ण झालेल्या देखभाल कार्यातूनच तयार करता येतो."
+
+msgid "A maintenance filter is invalid"
+msgstr "देखभालीसाठी वापरलेला फिल्टर अवैध आहे"
+
+msgid "A protected snapshot is in progress"
+msgstr "संरक्षित स्नॅपशॉट तयार करण्याचे काम सुरू आहे"
+
+msgid ""
+"A short-lived confirmation was issued for the reviewed action and target."
+msgstr "पुनरावलोकन केलेल्या कृतीसाठी आणि लक्ष्याकरिता अल्पकालीन पुष्टी जारी केली आहे."
+
+msgid "A valid request key is required"
+msgstr "वैध विनंती कळ आवश्यक आहे"
+
+msgid "A worker will prepare and verify an isolated restore workspace."
+msgstr "वर्कर स्वतंत्र रिस्टोअर कार्यक्षेत्र तयार करून त्याची पडताळणी करेल."
+
+msgid "A worker will prepare and verify the requested synchronization."
+msgstr "वर्कर विनंती केलेले समक्रमण तयार करून त्याची पडताळणी करेल."
+
+msgid "Activation confirmation required"
+msgstr "सक्रियकरणासाठी पुष्टी आवश्यक आहे"
+
+msgid "Activation was not scheduled."
+msgstr "सक्रियकरण नियोजित केले नाही."
+
+msgid "Authority remains unchanged until the retry succeeds and is verified."
+msgstr "पुनर्प्रयत्न यशस्वी होऊन त्याची पडताळणी होईपर्यंत अधिकृत स्थिती बदलणार नाही."
+
+msgid "Browser cleanup execution is unavailable"
+msgstr "ब्राउझरमधून साफसफाई चालवणे उपलब्ध नाही"
+
+msgid "Cancellation was requested"
+msgstr "रद्द करण्याची विनंती केली आहे"
+
+msgid "Candidate preparation remains unavailable."
+msgstr "कॅन्डिडेट तयार करणे अद्याप उपलब्ध नाही."
+
+msgid "Choose a different scope"
+msgstr "वेगळी व्याप्ती निवडा"
+
+msgid "Choose a smaller scope"
+msgstr "लहान व्याप्ती निवडा"
+
+msgid "Choose an available operation"
+msgstr "उपलब्ध कार्यवाही निवडा"
+
+msgid "Cleanup cannot remove it while the hold remains active."
+msgstr "जतन स्थगिती सक्रिय असेपर्यंत साफसफाईदरम्यान ते काढता येणार नाही."
+
+msgid "Cleanup inventory is unavailable"
+msgstr "साफसफाईची सूची उपलब्ध नाही"
+
+msgid "Cleanup plan is ready"
+msgstr "साफसफाईची योजना तयार आहे"
+
+msgid ""
+"Cleanup plans can be reviewed here but cannot be executed from this "
+"interface."
+msgstr ""
+"साफसफाईच्या योजनांचे येथे पुनरावलोकन करता येते; मात्र या इंटरफेसमधून त्या चालवता येत नाहीत."
+
+msgid "Cleanup remains unavailable."
+msgstr "साफसफाई अद्याप उपलब्ध नाही."
+
+msgid "Complete the confirmed action"
+msgstr "पुष्टी केलेली कृती पूर्ण करा"
+
+msgid "Confirmation is ready"
+msgstr "पुष्टी तयार आहे"
+
+msgid "Control evidence is unavailable"
+msgstr "नियंत्रणाचा पुरावा उपलब्ध नाही"
+
+msgid "Correct the expiry and try again"
+msgstr "समाप्तीची वेळ दुरुस्त करून पुन्हा प्रयत्न करा"
+
+msgid "Correct the filters and review again"
+msgstr "फिल्टर दुरुस्त करून पुन्हा पुनरावलोकन करा"
+
+msgid "Correct the request and try again"
+msgstr "विनंती दुरुस्त करून पुन्हा प्रयत्न करा"
+
+msgid "Duplicate or ambiguous work was not created."
+msgstr "दुबार किंवा संदिग्ध काम तयार केले नाही."
+
+msgid ""
+"Eligible artifacts and their protection evidence were recorded for review."
+msgstr "पात्र आर्टिफॅक्ट आणि त्यांच्या संरक्षणाचे पुरावे पुनरावलोकनासाठी नोंदवले आहेत."
+
+msgid "Enter the confirmation and review again"
+msgstr "पुष्टी प्रविष्ट करून पुन्हा पुनरावलोकन करा"
+
+msgid "Fresh Workbench evidence is required"
+msgstr "कार्यपटलाचा अद्ययावत पुरावा आवश्यक आहे"
+
+msgid "Generation is available for review again"
+msgstr "निर्मिती संच पुन्हा पुनरावलोकनासाठी उपलब्ध आहे"
+
+msgid "Generation is retired"
+msgstr "निर्मिती संच निवृत्त केला आहे"
+
+msgid "It is not authoritative unless separately promoted and verified."
+msgstr "स्वतंत्रपणे प्रमोट करून पडताळणी केल्याशिवाय तो अधिकृत मानला जाणार नाही."
+
+msgid "Its bounded review window ended before the work was queued."
+msgstr "काम रांगेत ठेवण्यापूर्वीच त्याचा मर्यादित पुनरावलोकन कालावधी संपला."
+
+msgid "Its current lifecycle state is not eligible for retirement."
+msgstr "त्याची सध्याची जीवनचक्र स्थिती निवृत्तीसाठी पात्र नाही."
+
+msgid "Job cancellation was requested"
+msgstr "कार्य रद्द करण्याची विनंती केली आहे"
+
+msgid "Job retry is queued"
+msgstr "कार्याचा पुनर्प्रयत्न रांगेत आहे"
+
+msgid "Maintenance candidate is prepared"
+msgstr "देखभाल कॅन्डिडेट तयार आहे"
+
+msgid "Maintenance evidence has changed"
+msgstr "देखभालीचा पुरावा बदलला आहे"
+
+msgid ""
+"Maintenance must wait while the current snapshot or publication work "
+"completes."
+msgstr "सध्याचे स्नॅपशॉट किंवा प्रकाशनाचे काम पूर्ण होईपर्यंत देखभाल थांबवावी लागेल."
+
+msgid "Maintenance plan is ready"
+msgstr "देखभाल योजना तयार आहे"
+
+msgid "Maintenance work is not complete"
+msgstr "देखभालीचे काम पूर्ण झालेले नाही"
+
+msgid "Maintenance work is queued"
+msgstr "देखभालीचे काम रांगेत आहे"
+
+msgid "Maintenance work is queued again"
+msgstr "देखभालीचे काम पुन्हा रांगेत ठेवले आहे"
+
+msgid "Mutation controls are unavailable"
+msgstr "बदल नियंत्रणे उपलब्ध नाहीत"
+
+msgid "No additional request was accepted."
+msgstr "अतिरिक्त विनंती स्वीकारली नाही."
+
+msgid "No artifacts were deleted."
+msgstr "कोणतेही आर्टिफॅक्ट हटवले नाहीत."
+
+msgid "No document data has changed yet."
+msgstr "दस्तऐवजांचा कोणताही डेटा अद्याप बदललेला नाही."
+
+msgid "No documents match this maintenance scope"
+msgstr "या देखभाल व्याप्तीशी कोणतेही दस्तऐवज जुळत नाहीत"
+
+msgid "No maintenance change was accepted."
+msgstr "देखभालीतील कोणताही बदल स्वीकारला नाही."
+
+msgid "No maintenance plan was created."
+msgstr "देखभाल योजना तयार केली नाही."
+
+msgid "No maintenance work was created."
+msgstr "देखभालीचे काम तयार केले नाही."
+
+msgid "No maintenance work was queued."
+msgstr "देखभालीचे कोणतेही काम रांगेत ठेवले नाही."
+
+msgid "No mutation request was accepted."
+msgstr "बदलाची कोणतीही विनंती स्वीकारली नाही."
+
+msgid "No new candidate or publication job was created."
+msgstr "नवीन कॅन्डिडेट किंवा प्रकाशन कार्य तयार केले नाही."
+
+msgid "No operational change was made."
+msgstr "कार्यप्रणालीत कोणताही बदल केला नाही."
+
+msgid "No retention hold was created."
+msgstr "जतन स्थगिती तयार केली नाही."
+
+msgid "No source changes need synchronization"
+msgstr "स्रोतामधील कोणत्याही बदलांचे समक्रमण आवश्यक नाही"
+
+msgid "Nothing has been deleted."
+msgstr "काहीही हटवलेले नाही."
+
+msgid "One or more filter values could not be interpreted safely."
+msgstr "एक किंवा अधिक फिल्टर मूल्यांचा सुरक्षितपणे अर्थ लावता आला नाही."
+
+msgid "Only a retired generation can be returned to candidate review."
+msgstr "फक्त निवृत्त निर्मिती संचच कॅन्डिडेट पुनरावलोकनासाठी परत आणता येतो."
+
+msgid "Only a verified candidate generation can be promoted."
+msgstr "फक्त पडताळलेला कॅन्डिडेट निर्मिती संचच प्रमोट करता येतो."
+
+msgid "Only the operator who prepared the plan can queue it."
+msgstr "योजना तयार करणारा ऑपरेटरच ती रांगेत ठेवू शकतो."
+
+msgid "Other protections may still prevent cleanup."
+msgstr "इतर संरक्षणांमुळे साफसफाई अजूनही रोखली जाऊ शकते."
+
+msgid "Prepare a new maintenance plan"
+msgstr "नवीन देखभाल योजना तयार करा"
+
+msgid "Prepare and review a new plan"
+msgstr "नवीन योजना तयार करून तिचे पुनरावलोकन करा"
+
+msgid "Profile probe completed"
+msgstr "प्रोफाइल तपासणी पूर्ण झाली"
+
+msgid "Protected and eligible local artifacts could not be inventoried safely."
+msgstr ""
+"संरक्षित आणि पात्र स्थानिक कृतीउत्पादनांची सुरक्षितपणे वस्तुसूची तयार करता आली नाही."
+
+msgid ""
+"Protected evidence is retained until cleanup is separately planned and "
+"approved."
+msgstr "स्वच्छतेचे स्वतंत्र नियोजन आणि अनुमोदन होईपर्यंत संरक्षित पुरावा राखून ठेवला जाईल."
+
+msgid "Publication is queued"
+msgstr "प्रकाशन रांगेत आहे"
+
+msgid "Publication was not queued."
+msgstr "प्रकाशन रांगेत ठेवले गेले नाही."
+
+msgid "Recovery planning may rely on this observation until it becomes stale."
+msgstr "हे निरीक्षण कालबाह्य होईपर्यंत पुनर्प्राप्ती नियोजनासाठी त्याचा आधार घेता येईल."
+
+msgid "Refresh and review the maintenance job"
+msgstr "पृष्ठ ताजे करून देखभाल कामाचे पुनरावलोकन करा"
+
+msgid "Refresh and submit a new request"
+msgstr "पृष्ठ ताजे करून नवीन विनंती सादर करा"
+
+msgid "Refresh maintenance evidence and review again"
+msgstr "देखभाल पुरावा ताजा करून पुन्हा पुनरावलोकन करा"
+
+msgid "Refresh the Workbench and review again"
+msgstr "कार्यपीठ ताजे करून पुन्हा पुनरावलोकन करा"
+
+msgid "Refresh the Workbench and try again"
+msgstr "कार्यपीठ ताजे करून पुन्हा प्रयत्न करा"
+
+msgid "Refresh the form and try again"
+msgstr "अर्ज ताजा करून पुन्हा प्रयत्न करा"
+
+msgid "Remote authority remains unchanged until publication completes."
+msgstr "प्रकाशन पूर्ण होईपर्यंत दूरस्थ प्राधिकरण अपरिवर्तित राहील."
+
+msgid "Remote authority remains unchanged until publication succeeds."
+msgstr "प्रकाशन यशस्वी होईपर्यंत दूरस्थ प्राधिकरण अपरिवर्तित राहील."
+
+msgid ""
+"Remote evidence is not trusted until the profile is probed and verified."
+msgstr ""
+"प्रोफाइलची तपासणी आणि पडताळणी होईपर्यंत दूरस्थ पुरावा विश्वसनीय मानला जाणार नाही."
+
+msgid "Remote inventory is verified"
+msgstr "दूरस्थ वस्तुसूचीची पडताळणी झाली आहे"
+
+msgid "Required request evidence was missing or invalid."
+msgstr "विनंतीसाठी आवश्यक पुरावा गहाळ किंवा अवैध होता."
+
+msgid "Required restore validation evidence is incomplete."
+msgstr "पुनर्स्थापनेसाठी आवश्यक पडताळणी पुरावा अपूर्ण आहे."
+
+msgid "Restore preparation is queued"
+msgstr "पुनर्स्थापनेची तयारी रांगेत आहे"
+
+msgid "Retention hold is active"
+msgstr "धारण स्थगिती सक्रिय आहे"
+
+msgid "Retention hold is released"
+msgstr "धारण स्थगिती हटवली आहे"
+
+msgid "Review activation evidence"
+msgstr "सक्रियीकरण पुराव्याचे पुनरावलोकन करा"
+
+msgid "Review activation jobs"
+msgstr "सक्रियीकरण कामांचे पुनरावलोकन करा"
+
+msgid "Review active jobs"
+msgstr "सक्रिय कामांचे पुनरावलोकन करा"
+
+msgid "Review cleanup evidence"
+msgstr "स्वच्छता पुराव्याचे पुनरावलोकन करा"
+
+msgid "Review cleanup plan"
+msgstr "स्वच्छता योजनेचे पुनरावलोकन करा"
+
+msgid "Review current evidence before retrying."
+msgstr "पुन्हा प्रयत्न करण्यापूर्वी सध्याच्या पुराव्याचे पुनरावलोकन करा."
+
+msgid "Review generation evidence"
+msgstr "आवृत्ती पुराव्याचे पुनरावलोकन करा"
+
+msgid "Review generation protections"
+msgstr "आवृत्ती संरक्षणांचे पुनरावलोकन करा"
+
+msgid "Review maintenance evidence"
+msgstr "देखभाल पुराव्याचे पुनरावलोकन करा"
+
+msgid "Review maintenance plan"
+msgstr "देखभाल योजनेचे पुनरावलोकन करा"
+
+msgid "Review profile evidence"
+msgstr "प्रोफाइल पुराव्याचे पुनरावलोकन करा"
+
+msgid "Review publication jobs"
+msgstr "प्रकाशन कामांचे पुनरावलोकन करा"
+
+msgid "Review restore jobs"
+msgstr "पुनर्स्थापना कामांचे पुनरावलोकन करा"
+
+msgid "Review rollback evidence"
+msgstr "रोलबॅक पुराव्याचे पुनरावलोकन करा"
+
+msgid "Review rollback jobs"
+msgstr "रोलबॅक कामांचे पुनरावलोकन करा"
+
+msgid "Review runtime configuration"
+msgstr "रनटाइम संरचनेचे पुनरावलोकन करा"
+
+msgid "Review service health"
+msgstr "सेवेच्या आरोग्यस्थितीचे पुनरावलोकन करा"
+
+msgid "Review synchronization evidence"
+msgstr "समक्रमण पुराव्याचे पुनरावलोकन करा"
+
+msgid "Review synchronization jobs"
+msgstr "समक्रमण कामांचे पुनरावलोकन करा"
+
+msgid "Review the request and try again"
+msgstr "विनंतीचे पुनरावलोकन करून पुन्हा प्रयत्न करा"
+
+msgid "Rollback confirmation required"
+msgstr "रोलबॅकची पुष्टी आवश्यक आहे"
+
+msgid "Rollback was not scheduled."
+msgstr "रोलबॅक नियोजित केला गेला नाही."
+
+msgid "Runtime activation is scheduled"
+msgstr "रनटाइम सक्रियीकरण नियोजित आहे"
+
+msgid "Runtime rollback is scheduled"
+msgstr "रनटाइम रोलबॅक नियोजित आहे"
+
+msgid "Secrets cannot be entered here"
+msgstr "गुप्त मूल्ये येथे भरता येत नाहीत"
+
+msgid "Setup required"
+msgstr "मांडणी आवश्यक आहे"
+
+msgid "Source or runtime evidence changed after the plan was prepared."
+msgstr "योजना तयार झाल्यानंतर स्रोत किंवा रनटाइम पुरावा बदलला."
+
+msgid "Synchronization is queued"
+msgstr "समक्रमण रांगेत आहे"
+
+msgid "The Workbench could not reach a verified outcome."
+msgstr "कार्यपीठाला पडताळलेला निष्कर्ष गाठता आला नाही."
+
+msgid "The Workbench could not read its control database safely."
+msgstr "कार्यपीठाला त्याचा नियंत्रण डेटाबेस सुरक्षितपणे वाचता आला नाही."
+
+msgid "The Workbench could not verify its request safety controls."
+msgstr "कार्यपीठाला विनंतीच्या सुरक्षा नियंत्रणांची पडताळणी करता आली नाही."
+
+msgid "The action is still unchanged until the confirmation is submitted."
+msgstr "पुष्टी सादर होईपर्यंत कृतीची स्थिती अपरिवर्तित राहील."
+
+msgid "The active runtime remains unchanged while the retry runs."
+msgstr "पुनर्प्रयत्न सुरू असताना सक्रिय रनटाइम अपरिवर्तित राहील."
+
+msgid "The active runtime remains unchanged while the work is prepared."
+msgstr "कामाची तयारी सुरू असताना सक्रिय रनटाइम अपरिवर्तित राहील."
+
+msgid "The approved maintenance plan is waiting for a worker."
+msgstr "अनुमोदित देखभाल योजना कार्यकर्त्याची प्रतीक्षा करत आहे."
+
+msgid ""
+"The approved profile completed its bounded read-only connectivity check."
+msgstr "अनुमोदित प्रोफाइलने मर्यादित केवळ-वाचन संपर्क तपासणी पूर्ण केली."
+
+msgid "The approved profile inventory passed bounded verification."
+msgstr "अनुमोदित प्रोफाइलची वस्तुसूची मर्यादित पडताळणीत उत्तीर्ण झाली."
+
+msgid "The candidate is not active until a separately verified activation."
+msgstr "स्वतंत्रपणे पडताळलेले सक्रियीकरण होईपर्यंत उमेदवार सक्रिय नाही."
+
+msgid ""
+"The completed maintenance result was imported as a reviewable candidate."
+msgstr "पूर्ण झालेला देखभाल निष्कर्ष पुनरावलोकनयोग्य उमेदवार म्हणून आयात केला."
+
+msgid "The confirmed candidate is waiting for verified publication."
+msgstr "पुष्टी झालेला उमेदवार पडताळलेल्या प्रकाशनाची प्रतीक्षा करत आहे."
+
+msgid "The confirmed previous runtime is queued for signed rollback."
+msgstr "पुष्टी झालेला मागील रनटाइम स्वाक्षरीत रोलबॅकसाठी रांगेत आहे."
+
+msgid "The confirmed workspace is queued for a verified runtime change."
+msgstr "पुष्टी झालेले कार्यक्षेत्र पडताळलेल्या रनटाइम बदलासाठी रांगेत आहे."
+
+msgid "The current runtime remains authoritative until activation succeeds."
+msgstr "सक्रियीकरण यशस्वी होईपर्यंत सध्याचा रनटाइम अधिकृत राहील."
+
+msgid "The current runtime remains authoritative until rollback succeeds."
+msgstr "रोलबॅक यशस्वी होईपर्यंत सध्याचा रनटाइम अधिकृत राहील."
+
+msgid "The environment does not permit document mutation work."
+msgstr "हे पर्यावरण दस्तऐवजांमध्ये बदल करण्याच्या कामाला परवानगी देत नाही."
+
+msgid "The failed maintenance job was returned to the worker queue."
+msgstr "अयशस्वी देखभाल कार्य कार्यकर्त्याच्या रांगेत परत पाठवले."
+
+msgid "The generation remains unchanged."
+msgstr "निर्मिती संच बदललेला नाही."
+
+msgid "The generation was placed under the recorded preservation reason."
+msgstr "निर्मिती संच नोंदवलेल्या जतन कारणाअंतर्गत ठेवला."
+
+msgid "The generation was removed from normal candidate use."
+msgstr "निर्मिती संच नियमित उमेदवार वापरातून काढला."
+
+msgid "The hold expiry is invalid"
+msgstr "होल्डची समाप्ती अवैध आहे"
+
+msgid "The job may continue briefly while it reaches that checkpoint."
+msgstr "त्या चेकपॉइंटपर्यंत पोहोचेपर्यंत कार्य काही काळ सुरू राहू शकते."
+
+msgid "The job remains unchanged."
+msgstr "कार्य बदललेले नाही."
+
+msgid "The job will resume from its recorded durable checkpoint."
+msgstr "कार्य त्याच्या नोंदवलेल्या टिकाऊ चेकपॉइंटपासून पुन्हा सुरू होईल."
+
+msgid ""
+"The maintenance job is not in a state that permits the requested action."
+msgstr "देखभाल कार्याची सध्याची स्थिती विनंती केलेल्या कृतीला परवानगी देत नाही."
+
+msgid "The maintenance plan expired"
+msgstr "देखभाल योजना कालबाह्य झाली"
+
+msgid "The maintenance plan is stale"
+msgstr "देखभाल योजना जुनी झाली आहे"
+
+msgid "The maintenance request key does not meet the required format."
+msgstr "देखभाल विनंतीची कळ आवश्यक स्वरूपात नाही."
+
+msgid "The maintenance selection is too large"
+msgstr "देखभालीसाठी केलेली निवड खूप मोठी आहे"
+
+msgid "The maintenance worker has been asked to stop at a safe checkpoint."
+msgstr "देखभाल कार्यकर्त्याला सुरक्षित चेकपॉइंटवर थांबण्यास सांगितले आहे."
+
+msgid "The mutation needs a bounded idempotency key to prevent duplicate work."
+msgstr "दुबार काम टाळण्यासाठी या बदलाला मर्यादित आयडेम्पोटन्सी कळ आवश्यक आहे."
+
+msgid ""
+"The mutation request limit was reached for this operator and connection."
+msgstr "या ऑपरेटर आणि जोडणीसाठी बदल विनंत्यांची मर्यादा गाठली आहे."
+
+msgid "The operation did not complete"
+msgstr "प्रक्रिया पूर्ण झाली नाही"
+
+msgid "The optional expiry must be a valid future date and time."
+msgstr "पर्यायी समाप्ती ही भविष्यातील वैध तारीख आणि वेळ असणे आवश्यक आहे."
+
+msgid "The request could not be accepted"
+msgstr "विनंती स्वीकारता आली नाही"
+
+msgid "The request did not include the observed state version."
+msgstr "विनंतीमध्ये निरीक्षण केलेल्या स्थितीची आवृत्ती समाविष्ट नव्हती."
+
+msgid "The request format is invalid"
+msgstr "विनंतीचे स्वरूप अवैध आहे"
+
+msgid "The request key is invalid"
+msgstr "विनंतीची कळ अवैध आहे"
+
+msgid "The request was based on an older maintenance plan or job state."
+msgstr "विनंती जुन्या देखभाल योजनेवर किंवा कार्यस्थितीवर आधारित होती."
+
+msgid "The request was based on an older observed state."
+msgstr "विनंती जुन्या निरीक्षित स्थितीवर आधारित होती."
+
+msgid ""
+"The requested action and target do not match an approved confirmation flow."
+msgstr "विनंती केलेली कृती आणि लक्ष्य मंजूर पुष्टीकरण प्रक्रियेशी जुळत नाहीत."
+
+msgid "The requested maintenance control remains unavailable."
+msgstr "विनंती केलेले देखभाल नियंत्रण अद्याप उपलब्ध नाही."
+
+msgid "The requested operation is not an approved Workbench operation."
+msgstr "विनंती केलेली प्रक्रिया मंजूर कार्यपीठ प्रक्रिया नाही."
+
+msgid "The requested scope and safety evidence were recorded for review."
+msgstr "विनंती केलेली व्याप्ती आणि सुरक्षा पुरावा आढाव्यासाठी नोंदवला."
+
+msgid "The retired generation was restored to its eligible review state."
+msgstr "निवृत्त निर्मिती संच पुन्हा त्याच्या पात्र आढावा स्थितीत आणला."
+
+msgid ""
+"The reviewed previous runtime requires explicit confirmation before "
+"scheduling."
+msgstr "आढावा घेतलेल्या मागील रनटाइमचे नियोजन करण्यापूर्वी स्पष्ट पुष्टीकरण आवश्यक आहे."
+
+msgid ""
+"The reviewed workspace requires explicit confirmation before scheduling."
+msgstr "आढावा घेतलेल्या कार्यक्षेत्राचे नियोजन करण्यापूर्वी स्पष्ट पुष्टीकरण आवश्यक आहे."
+
+msgid "The same request key refers to different work."
+msgstr "हीच विनंती कळ वेगळ्या कामाचा संदर्भ देते."
+
+msgid "The selected folders, documents, and filters produced no eligible work."
+msgstr "निवडलेले फोल्डर, दस्तऐवज आणि गाळण्यांमधून कोणतेही पात्र काम मिळाले नाही."
+
+msgid "The selected preservation hold is no longer active."
+msgstr "निवडलेला जतन होल्ड आता सक्रिय नाही."
+
+msgid "The selected scope exceeds the bounded preview or work limit."
+msgstr "निवडलेली व्याप्ती मर्यादित पूर्वावलोकन किंवा कामाच्या मर्यादेपेक्षा मोठी आहे."
+
+msgid "The server-approved read-only connection profile was recorded."
+msgstr "सर्व्हरने मंजूर केलेली केवळ-वाचन जोडणी प्रोफाइल नोंदवली."
+
+msgid "The submitted JSON body could not be read as an object."
+msgstr "सादर केलेला JSON मजकूर ऑब्जेक्ट म्हणून वाचता आला नाही."
+
+msgid "The submitted profile was not changed."
+msgstr "सादर केलेली प्रोफाइल बदलली नाही."
+
+msgid ""
+"The verified source state already matches the latest synchronization "
+"evidence."
+msgstr "सत्यापित स्रोतस्थिती आधीच नवीनतम समक्रमण पुराव्याशी जुळते."
+
+msgid "The worker has been asked to stop at a durable checkpoint."
+msgstr "कार्यकर्त्याला टिकाऊ चेकपॉइंटवर थांबण्यास सांगितले आहे."
+
+msgid "The workspace is not verified for the one-step rollback purpose."
+msgstr "एक-टप्पा रोलबॅकसाठी कार्यक्षेत्र सत्यापित केलेले नाही."
+
+msgid "This confirmation action is unavailable"
+msgstr "ही पुष्टीकरण कृती उपलब्ध नाही"
+
+msgid "This generation cannot be retired"
+msgstr "हा निर्मिती संच निवृत्त करता येत नाही"
+
+msgid "This generation is not a candidate"
+msgstr "हा निर्मिती संच उमेदवार नाही"
+
+msgid "This generation is not retired"
+msgstr "हा निर्मिती संच निवृत्त केलेला नाही"
+
+msgid "This job action is unavailable"
+msgstr "ही कार्य कृती उपलब्ध नाही"
+
+msgid "This maintenance operation is unavailable"
+msgstr "ही देखभाल प्रक्रिया उपलब्ध नाही"
+
+msgid "This maintenance operation needs the displayed confirmation phrase."
+msgstr "या देखभाल प्रक्रियेसाठी दाखवलेले पुष्टीकरण वाक्य आवश्यक आहे."
+
+msgid "This plan belongs to another operator"
+msgstr "ही योजना दुसऱ्या ऑपरेटरची आहे"
+
+msgid "This request key was already used"
+msgstr "ही विनंती कळ आधीच वापरली आहे"
+
+msgid "This runtime is read-only"
+msgstr "हा रनटाइम केवळ-वाचन आहे"
+
+msgid "This workspace cannot be used for rollback"
+msgstr "हे कार्यक्षेत्र रोलबॅकसाठी वापरता येत नाही"
+
+msgid "This workspace is not ready for activation"
+msgstr "हे कार्यक्षेत्र सक्रियकरणासाठी तयार नाही"
+
+msgid "Too many requests were submitted"
+msgstr "खूप जास्त विनंत्या सादर केल्या"
+
+msgid "Typed confirmation is required"
+msgstr "टाइप केलेले पुष्टीकरण आवश्यक आहे"
+
+msgid ""
+"Vault credentials must come from the approved server-side credential source."
+msgstr "व्हॉल्टची क्रेडेन्शियल्स मंजूर सर्व्हर-पक्षीय क्रेडेन्शियल स्रोताकडूनच आली पाहिजेत."
+
+msgid "Vault decisions remain guarded until control evidence is restored."
+msgstr "नियंत्रण पुरावा पुनर्स्थापित होईपर्यंत व्हॉल्टचे निर्णय संरक्षित राहतील."
+
+msgid "Vault profile is configured"
+msgstr "व्हॉल्ट प्रोफाइल संरचित आहे"
+
+msgid "Verify inventory evidence before relying on remote authority."
+msgstr "दूरस्थ अधिकृत स्रोतावर अवलंबून राहण्यापूर्वी सूची पुरावा पडताळा."
+
+msgid "Wait before trying again"
+msgstr "पुन्हा प्रयत्न करण्यापूर्वी थांबा"
+
+msgid "Work may continue briefly until that checkpoint is reached."
+msgstr "त्या चेकपॉइंटपर्यंत पोहोचेपर्यंत काम काही काळ सुरू राहू शकते."
+
+msgid "Workbench evidence has changed"
+msgstr "कार्यपीठाचा पुरावा बदलला आहे"
+
+msgid "Worker unavailable"
+msgstr "कार्यकर्ता उपलब्ध नाही"

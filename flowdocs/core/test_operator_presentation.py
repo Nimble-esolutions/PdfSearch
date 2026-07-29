@@ -5,6 +5,7 @@ from django.test import SimpleTestCase
 from django.utils import translation
 
 from core.operator_presentation import (
+    LABELS,
     REASONS,
     UNKNOWN_REASON,
     UI_REASON_CODES,
@@ -184,9 +185,25 @@ class OperatorPresentationTests(SimpleTestCase):
                 self.assertIn(presentation["severity"], {"success", "info"})
 
     def test_marathi_catalog_resolves_authored_copy(self):
+        fields = ("title", "detail", "consequence", "action_label")
+        english_reasons = {
+            code: present_reason(code) for code in sorted(REASONS)
+        }
+        english_unknown = present_reason("test_unknown_reason")
+        english_labels = {value: label_for(value) for value in LABELS}
+
         with translation.override("mr"):
-            self.assertNotEqual(
-                present_reason("external_embeddings_disabled")["title"],
-                "Embedding service is unavailable",
-            )
-            self.assertNotEqual(label_for("retryable_failed"), "Retry available")
+            for code, english in english_reasons.items():
+                marathi = present_reason(code)
+                for field in fields:
+                    with self.subTest(code=code, field=field):
+                        self.assertNotEqual(marathi[field], english[field])
+            marathi_unknown = present_reason("test_unknown_reason")
+            for field in fields:
+                with self.subTest(code="unknown", field=field):
+                    self.assertNotEqual(
+                        marathi_unknown[field], english_unknown[field]
+                    )
+            for value, english in english_labels.items():
+                with self.subTest(label=value):
+                    self.assertNotEqual(label_for(value), english)

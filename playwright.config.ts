@@ -17,7 +17,7 @@ export default defineConfig({
     },
     {
       name: 'laptop',
-      use: { viewport: { width: 1280, height: 800 } },
+      use: { viewport: { width: 1024, height: 800 } },
     },
     {
       name: 'tablet',
