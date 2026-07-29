@@ -19,6 +19,16 @@ esac
 export MINIO_IMAGE
 COMPOSE=(docker compose -p "$PROJECT" -f "$ROOT/docker-compose.maintenance-e2e.yml")
 
+require_running_service() {
+  service="$1"
+  container="$("${COMPOSE[@]}" ps -q "$service")"
+  state="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$container")"
+  if [ "$state" != "running:0" ]; then
+    echo "Expected $service to be running; observed state=$state" >&2
+    exit 1
+  fi
+}
+
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then
@@ -49,7 +59,9 @@ fi
 "${COMPOSE[@]}" up -d --wait minio redis web browser-proxy
 "${COMPOSE[@]}" stop web
 "${COMPOSE[@]}" run --rm fixture seed-and-freeze
-"${COMPOSE[@]}" up -d --wait web maintenance browser-proxy
+"${COMPOSE[@]}" up -d maintenance
+"${COMPOSE[@]}" up -d --wait web browser-proxy
+require_running_service maintenance
 
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=queue \
@@ -79,9 +91,12 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
 "${COMPOSE[@]}" exec --no-TTY redis redis-cli -n 7 FLUSHDB >/dev/null
 "${COMPOSE[@]}" stop web maintenance
 LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
-  "${COMPOSE[@]}" up -d --wait --force-recreate web maintenance
+  "${COMPOSE[@]}" up -d --force-recreate maintenance
+LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
+  "${COMPOSE[@]}" up -d --wait --force-recreate web
 LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
   "${COMPOSE[@]}" up -d --wait browser-proxy
+require_running_service maintenance
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=activate \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
@@ -124,9 +139,12 @@ if [ -z "$vault_generation_id" ] \
   exit 1
 fi
 LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
-  "${COMPOSE[@]}" up -d --wait --force-recreate web maintenance
+  "${COMPOSE[@]}" up -d --force-recreate maintenance
+LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
+  "${COMPOSE[@]}" up -d --wait --force-recreate web
 LIFECYCLE_ACTIVATION_ENABLED=1 LIFECYCLE_WRITER_MODE=0 \
   "${COMPOSE[@]}" up -d --wait browser-proxy
+require_running_service maintenance
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=vault-activate \
   VAULT_E2E_TARGET_GENERATION_ID="$vault_generation_id" \
