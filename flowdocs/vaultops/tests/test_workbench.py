@@ -776,6 +776,15 @@ class VaultWorkbenchTests(TestCase):
     def test_profile_inventory_verifies_and_projects(
         self, vault_for_profile, verify_generation, project_generation
     ):
+        updated_fields = []
+        if not self.profile.dataset_id:
+            self.profile.dataset_id = "test-dataset"
+            updated_fields.append("dataset_id")
+        if not self.profile.production_source_id:
+            self.profile.production_source_id = "test-production-source"
+            updated_fields.append("production_source_id")
+        if updated_fields:
+            self.profile.save(update_fields=updated_fields)
         verified = SimpleNamespace(
             generation_id="generation-authoritative",
             authoritative=True,
@@ -799,7 +808,7 @@ class VaultWorkbenchTests(TestCase):
             },
             HTTP_ACCEPT="application/json",
         )
-        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.status_code, 202, response.content)
         payload = response.json()
         self.assertEqual(payload["reason_code"], "profile_inventory_verified")
         self.assertEqual(payload["data"]["file_count"], 564)
