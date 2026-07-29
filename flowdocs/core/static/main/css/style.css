@@ -1364,6 +1364,16 @@ body {
   color: var(--admin-primary);
 }
 
+/* Bootstrap's default link blue misses AA contrast on the cockpit paper tone. */
+.admin-button--quiet {
+  color: #0756b3;
+}
+
+.admin-button--quiet:hover,
+.admin-button--quiet:focus-visible {
+  color: #063f83;
+}
+
 @media print {
   .legal-header,
   .legal-nav,

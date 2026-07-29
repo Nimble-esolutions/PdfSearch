@@ -115,7 +115,7 @@ class VaultWorkbenchTests(TestCase):
     def test_superadmin_workbench_is_server_rendered_and_no_js_required(self):
         response = self.client.get(reverse("operations_panel"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Vault Operations Workbench")
+        self.assertContains(response, "Vault & Recovery")
         self.assertContains(response, "Authority comparison")
         self.assertContains(response, "vault-workbench.css")
         self.assertContains(response, "<noscript>", html=False)
@@ -822,9 +822,9 @@ class VaultWorkbenchTests(TestCase):
         self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
         response = self.client.get(reverse("operations_panel"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "तिजोरी संचालन कार्यपटल")
+        self.assertContains(response, "तिजोरी आणि पुनर्प्राप्ती")
         self.assertContains(response, "अधिकृत स्थिती तुलना")
-        self.assertNotContains(response, "Vault Operations Workbench")
+        self.assertNotContains(response, "Vault &amp; Recovery")
         retention = self.client.get(
             reverse("operations_panel"), {"section": "retention"}
         )

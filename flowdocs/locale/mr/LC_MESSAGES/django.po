@@ -2424,6 +2424,129 @@ msgstr "तांत्रिक तपशील"
 msgid "Code"
 msgstr "कोड"
 
+msgid "Documents & Search — CC & RCS Maharashtra"
+msgstr "दस्तऐवज आणि शोध — सीसी आणि आरसीएस महाराष्ट्र"
+
+msgid "Vault & Recovery — CC & RCS Maharashtra"
+msgstr "तिजोरी आणि पुनर्प्राप्ती — सीसी आणि आरसीएस महाराष्ट्र"
+
+msgid "Operations / Daily document care"
+msgstr "संचालन / दैनंदिन दस्तऐवज देखभाल"
+
+msgid "Documents & Search"
+msgstr "दस्तऐवज आणि शोध"
+
+msgid ""
+"Check local documents, repair stored search indexes, or prepare a bounded "
+"reindex. Remote Vault authority is not changed."
+msgstr ""
+"स्थानिक दस्तऐवज तपासा, साठवलेल्या शोध अनुक्रमणिका दुरुस्त करा किंवा मर्यादित "
+"पुनःअनुक्रमणाची तयारी करा. दूरस्थ तिजोरीची अधिकृत स्थिती बदलत नाही."
+
+msgid "Operations / Advanced recovery"
+msgstr "संचालन / प्रगत पुनर्प्राप्ती"
+
+msgid "Vault & Recovery"
+msgstr "तिजोरी आणि पुनर्प्राप्ती"
+
+msgid ""
+"Specialist controls for remote authority, publication, restore preparation, "
+"retention, and runtime recovery."
+msgstr ""
+"दूरस्थ अधिकृत स्थिती, प्रकाशन, पुनर्संचयन तयारी, जतन आणि कार्यरत प्रणालीच्या "
+"पुनर्प्राप्तीसाठी तज्ज्ञ नियंत्रणे."
+
+msgid "Show advanced Vault and runtime evidence"
+msgstr "तिजोरी आणि कार्यरत प्रणालीचा प्रगत पुरावा दाखवा"
+
+msgid "Advanced Vault & Recovery"
+msgstr "प्रगत तिजोरी आणि पुनर्प्राप्ती"
+
+msgid "Daily document care"
+msgstr "दैनंदिन दस्तऐवज देखभाल"
+
+msgid ""
+"Start with Validate Files. Use repair when stored indexes are incomplete, "
+"and reindex only when searchable content must be regenerated."
+msgstr ""
+"प्रथम फाइल पडताळणी करा. साठवलेल्या अनुक्रमणिका अपूर्ण असतील तेव्हा दुरुस्ती "
+"वापरा आणि शोधता येणारी सामग्री पुन्हा तयार करणे आवश्यक असेल तेव्हाच "
+"पुनःअनुक्रमण करा."
+
+msgid ""
+"Document-maintenance progress appears in Documents & Search. This advanced "
+"list records Vault publication, inventory, restore, and recovery work."
+msgstr ""
+"दस्तऐवज देखभालीची प्रगती दस्तऐवज आणि शोध विभागात दिसते. ही प्रगत सूची "
+"तिजोरी प्रकाशन, सूची पडताळणी, पुनर्संचयन आणि पुनर्प्राप्तीची कार्ये नोंदवते."
+
+msgid "Vault storage is configured"
+msgstr "तिजोरी साठवण संरचित आहे"
+
+msgid ""
+"No published generation is recorded yet. A read-only probe checks storage "
+"access; authoritative inventory becomes meaningful after the first "
+"generation is published."
+msgstr ""
+"अद्याप कोणताही प्रकाशित निर्मिती संच नोंदलेला नाही. केवळ-वाचन तपासणी "
+"साठवण प्रवेश तपासते; पहिला निर्मिती संच प्रकाशित झाल्यानंतर अधिकृत सूचीची "
+"पडताळणी उपयुक्त ठरते."
+
+msgid "Open Documents & Search"
+msgstr "दस्तऐवज आणि शोध उघडा"
+
+msgid ""
+"Recent document-maintenance progress. Open Documents & Search for controls "
+"and detailed guidance."
+msgstr ""
+"अलीकडील दस्तऐवज देखभाल प्रगती. नियंत्रणे आणि सविस्तर मार्गदर्शनासाठी "
+"दस्तऐवज आणि शोध उघडा."
+
+msgid "Maintain Documents & Search"
+msgstr "दस्तऐवज आणि शोध सांभाळा"
+
+msgid "Open advanced Vault & Recovery"
+msgstr "प्रगत तिजोरी आणि पुनर्प्राप्ती उघडा"
+
+msgid "Vault storage is ready for its first generation"
+msgstr "तिजोरी साठवण पहिल्या निर्मिती संचासाठी तयार आहे"
+
+msgid ""
+"The approved profile reached its bucket, but no verified dataset inventory "
+"has been observed yet."
+msgstr ""
+"मान्य रूपरेषा तिच्या बकेटशी जोडली गेली आहे; मात्र अद्याप कोणतीही पडताळलेली "
+"डेटासेट सूची आढळलेली नाही."
+
+msgid ""
+"Restore and authority decisions remain guarded until a generation is "
+"published and verified."
+msgstr ""
+"निर्मिती संच प्रकाशित करून पडताळला जाईपर्यंत पुनर्संचयन आणि अधिकृत "
+"स्थितीविषयक निर्णय संरक्षित राहतील."
+
+msgid "Review first-generation publication"
+msgstr "पहिल्या निर्मिती संचाच्या प्रकाशनाचा आढावा घ्या"
+
+msgid "Document maintenance is temporarily unavailable"
+msgstr "दस्तऐवज देखभाल तात्पुरती अनुपलब्ध आहे"
+
+msgid ""
+"No maintenance worker has reported through the shared control channel "
+"recently."
+msgstr ""
+"सामायिक नियंत्रण माध्यमातून अलीकडे कोणत्याही देखभाल कार्यकर्त्याने स्थिती "
+"कळवलेली नाही."
+
+msgid ""
+"New validation, repair, and reindex work cannot be queued safely."
+msgstr ""
+"नवीन पडताळणी, दुरुस्ती आणि पुनःअनुक्रमण कार्ये सुरक्षितपणे रांगेत लावता "
+"येणार नाहीत."
+
+msgid "Review maintenance worker status"
+msgstr "देखभाल कार्यकर्त्याच्या स्थितीचा आढावा घ्या"
+
 msgid "Evidence ID"
 msgstr "पुरावा आयडी"
 
@@ -3208,3 +3331,6 @@ msgstr "या पर्यावरणातील अतिरिक्त र
 
 msgid "Candidate preparation in progress"
 msgstr "उमेदवाराची तयारी सुरू आहे"
+
+msgid "Maintenance job progress"
+msgstr "देखभाल कामाची प्रगती"

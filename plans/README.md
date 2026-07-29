@@ -37,6 +37,7 @@ run its drift check, and stop when a stated assumption is false.
 | 020 | Enforce Marathi operator-copy parity | P1 | M | 018 | DONE |
 | 021 | Strengthen rendered/accessibility anti-slop gates | P1 | M | 018, 019, 020 | DONE |
 | 022 | Reconcile roadmap and stacked-PR readiness | P2 | S | 018, 019, 020, 021 | DONE |
+| 023 | Separate Documents & Search from advanced Vault & Recovery | P1 | M | 013–022 | RECONCILE |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -74,6 +75,7 @@ run its drift check, and stop when a stated assumption is false.
                                                      ├─> 019 redaction
                                                      └─> 020 Marathi parity
 018 + 019 + 020 ─> 021 enforcement ─> 022 stack reconciliation
+022 ─> 023 Documents & Search / Vault & Recovery journey boundary
 ```
 
 Plan 011 comes before database replacement because recovery must not depend on

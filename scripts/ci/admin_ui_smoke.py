@@ -100,11 +100,11 @@ def main():
         operations = client.get("/dashboard/operations/")
         require(
             operations.status_code == 200
-            and "Vault Operations Workbench" in operations.text
+            and "Vault & Recovery" in operations.text
             and "Authority comparison" in operations.text
             and "vendor/bootstrap/5.3.0" in operations.text
             and "cdn.jsdelivr.net" not in operations.text,
-            "vault operations workbench missing or externally dependent",
+            "Vault and recovery workbench missing or externally dependent",
         )
         sync = client.get("/dashboard/operations/?section=sync")
         require(
@@ -164,7 +164,7 @@ def main():
         operations_mr = client.get("/dashboard/operations/")
         require(
             operations_mr.status_code == 200
-            and "तिजोरी संचालन कार्यपटल" in operations_mr.text,
+            and "तिजोरी आणि पुनर्प्राप्ती" in operations_mr.text,
             "reviewed Marathi workbench language missing",
         )
         token = csrf_token(operations_mr.text)

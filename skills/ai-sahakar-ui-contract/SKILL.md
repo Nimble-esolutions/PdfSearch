@@ -38,6 +38,10 @@ documentation.
    ordinary words literally where Marathi remains precise; retain identifiers
    such as S3, HTTP, HTTPS, DNS, codes, aliases, and environment keys as
    technical evidence rather than inventing misleading translations.
+   Treat ordinary document maintenance and advanced Vault recovery as separate
+   journeys: confirm Dashboard links enter Documents & Search directly, local
+   maintenance does not imply profile setup, and advanced authority evidence is
+   collapsed on the ordinary path.
 7. Verify the affected English, Marathi, mobile, desktop, keyboard, reduced
    motion, source, loading, error, and admin states.
 8. Update the developer/user guide or contract when behavior or rules change.

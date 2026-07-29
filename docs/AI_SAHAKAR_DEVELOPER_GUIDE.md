@@ -55,11 +55,11 @@ Marathi terminology follows a reviewed glossary:
 | --- | --- |
 | Dashboard | डॅशबोर्ड |
 | Workbench | कार्यपटल |
-| operator | ऑपरेटर |
+| operator | संचालक |
 | Vault | तिजोरी |
-| runtime | रनटाइम |
-| profile | प्रोफाइल |
-| rollback | रोलबॅक |
+| runtime | कार्यरत प्रणाली |
+| profile | रूपरेषा |
+| rollback | मागील स्थितीकडे परतणे |
 | embedding | एम्बेडिंग |
 | manifest | मॅनिफेस्ट |
 | checkpoint | तपासणी बिंदू |
@@ -73,6 +73,28 @@ use the glossary's Marathi-script transliteration and explain the operational
 meaning in Marathi. Latin-script English is reserved for exact technical
 evidence such as codes, API fields, UUIDs, hashes, filenames, and paths. Do not
 translate those identifiers.
+
+## Operations information architecture
+
+Keep the two operator journeys distinct even though they share the existing
+Django route and backend read model:
+
+- **Documents & Search** is the ordinary, local document-care journey:
+  validate, repair stored indexes, bounded reindex, and monitor maintenance.
+- **Vault & Recovery** is the advanced custody journey: publication,
+  authoritative inventory, generations, restore, activation, retention, and
+  recovery evidence.
+
+Dashboard document-readiness actions must deep-link to `?section=maintenance`.
+Do not force an administrator through remote authority or profile setup before
+local maintenance. On that section, advanced generation/runtime evidence is
+collapsed by default. Other sections retain complete operator evidence and all
+existing authorization and confirmation gates.
+
+A reachable profile with no published generation is a first-run state, not a
+failed connection. Explain that the read-only probe checks storage access and
+that inventory verification applies after publication. Never invent a
+generation or weaken inventory verification to manufacture a healthy state.
 
 ## Safe UI change workflow
 

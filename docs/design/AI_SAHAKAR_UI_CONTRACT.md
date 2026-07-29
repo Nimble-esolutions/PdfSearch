@@ -67,6 +67,13 @@ Cockpit** and prioritises:
   actions;
 - explicit confirmation for destructive category/document actions.
 
+Routine local document care and advanced data custody are separate operator
+journeys. Dashboard readiness actions lead directly to **Documents & Search**.
+Remote publication, generations, restore, activation, retention, and profile
+controls belong to **Vault & Recovery** and use progressive disclosure. Local
+validation, stored-index repair, and bounded reindexing must never appear to
+require a remote Vault profile.
+
 Role visibility is part of the product contract. Do not expose admin actions by
 moving them into decorative menus or by bypassing existing authorization.
 
@@ -138,6 +145,12 @@ words in Latin script merely because they originated in English. The only
 intentional English/LTR exceptions are immutable machine evidence: exact
 codes, API field names, hashes, UUIDs, filenames, paths, versions, and
 correlation identifiers.
+
+Prefer precise Marathi vocabulary for ordinary and established operational
+concepts—for example संचालक (operator), रूपरेषा (profile), कार्यरत प्रणाली
+(runtime), and मागील स्थितीकडे परतणे (rollback). Use Marathi-script
+transliteration only for specialist terms whose literal rendering would
+mislead, such as एम्बेडिंग or मॅनिफेस्ट.
 
 Every registry title, detail, consequence, action, and state label must have a
 non-empty, non-fuzzy Marathi catalog entry before merge. Review older
