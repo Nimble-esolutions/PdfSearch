@@ -989,7 +989,8 @@ class DashboardTests(TestCase):
         self.assertContains(response, "Operations Cockpit")
         self.assertContains(response, "Needs attention")
         self.assertContains(response, "Category Yard")
-        self.assertContains(response, "No immediate action required")
+        self.assertContains(response, "Search readiness is unavailable")
+        self.assertContains(response, "Verified runtime authority is required")
         self.assertNotContains(response, "Safety Gates")
 
     def test_dashboard_renders_marathi_cockpit_labels(self):
@@ -1005,6 +1006,10 @@ class DashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "संचालन नियंत्रण कक्ष")
         self.assertContains(response, "श्रेणी कार्यक्षेत्र")
+        self.assertContains(response, "शोध तयारीची स्थिती उपलब्ध नाही")
+        self.assertContains(
+            response, "पडताळलेली अधिकृत कार्यरत स्थिती आवश्यक आहे"
+        )
 
     def test_dashboard_renders_flash_messages_with_accessible_dismissal(self):
         self.client.force_login(self.user)
@@ -1124,7 +1129,10 @@ class DashboardTests(TestCase):
         response = self.client.get(reverse("dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Documents need index review")
+        self.assertContains(response, "Search readiness is unavailable")
+        self.assertContains(response, "Index debt cannot be assessed safely")
+        self.assertNotContains(response, "Documents need index review")
+        self.assertNotContains(response, "1/2")
         self.assertNotContains(response, "index_debt_present")
         self.assertContains(response, "Needs index lane")
         self.assertContains(response, "Index review")
