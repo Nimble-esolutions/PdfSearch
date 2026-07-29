@@ -173,6 +173,14 @@ REASONS = {
         "jobs",
         "warning",
     ),
+    "mutation_tracking_disabled": (
+        "Safe document preparation is unavailable",
+        "This environment cannot prove that source documents stay consistent while a maintenance candidate is prepared.",
+        "Repair and reindex work remain disabled; read-only validation is still available.",
+        "Review maintenance safety configuration",
+        "configuration",
+        "warning",
+    ),
     "inventory_unavailable": (
         "Remote inventory is unavailable",
         "No verified remote inventory observation is available.",

@@ -141,6 +141,10 @@ def capability_reasons() -> dict[str, str]:
     if common:
         return reasons
 
+    if not getattr(settings, "VAULT_MUTATION_TRACKING_ENABLED", False):
+        for operation in ("repair_indexes", "reindex_needed", "reindex_selected"):
+            reasons[operation] = "mutation_tracking_disabled"
+
     # ``reindex_needed`` calls the embedding provider for missing artifacts.
     # Force-reindexing has both this prerequisite and a separate operator gate.
     if not getattr(settings, "EXTERNAL_EMBEDDINGS_ENABLED", False):

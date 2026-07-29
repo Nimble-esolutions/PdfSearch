@@ -3334,3 +3334,23 @@ msgstr "उमेदवाराची तयारी सुरू आहे"
 
 msgid "Maintenance job progress"
 msgstr "देखभाल कामाची प्रगती"
+
+msgid "Safe document preparation is unavailable"
+msgstr "दस्तऐवजांची सुरक्षित तयारी उपलब्ध नाही"
+
+msgid ""
+"This environment cannot prove that source documents stay consistent while a "
+"maintenance candidate is prepared."
+msgstr ""
+"देखभाल उमेदवार तयार करताना स्रोत दस्तऐवज सुसंगत राहतात, हे या पर्यावरणात "
+"सिद्ध करता येत नाही."
+
+msgid ""
+"Repair and reindex work remain disabled; read-only validation is still "
+"available."
+msgstr ""
+"दुरुस्ती आणि पुनःअनुक्रमणाचे काम बंद राहील; केवळ-वाचन पडताळणी अजूनही उपलब्ध "
+"आहे."
+
+msgid "Review maintenance safety configuration"
+msgstr "देखभाल सुरक्षा संरचना तपासा"

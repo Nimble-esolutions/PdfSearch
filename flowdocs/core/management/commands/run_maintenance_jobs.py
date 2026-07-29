@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import threading
@@ -17,6 +18,7 @@ from core.worker_readiness import write_worker_heartbeat
 ORPHAN_TIMEOUT_MINUTES = 5
 SCHEDULER_INTERVAL_SECONDS = 60
 LAST_SCHEDULER_TICK = "/tmp/worker_last_scheduler_tick"
+logger = logging.getLogger(__name__)
 
 _shutdown_flag = False
 
@@ -147,6 +149,34 @@ def _execute_local_job(job):
     return run_job(job)
 
 
+def _fail_unhandled_local_job(job, exc):
+    """Persist a bounded failure instead of terminating the worker process."""
+    reason_code = getattr(exc, "reason_code", "maintenance_job_failed")
+    job.refresh_from_db()
+    job.status = "failed"
+    job.failed_items = max(
+        job.failed_items,
+        max(0, job.total_items - job.completed_items),
+    )
+    job.error_summary = reason_code
+    job.finished_at = timezone.now()
+    job.save(
+        update_fields=[
+            "status",
+            "failed_items",
+            "error_summary",
+            "finished_at",
+            "updated_at",
+        ]
+    )
+    MaintenanceAuditEvent.objects.create(
+        job=job,
+        event_type="failed",
+        payload={"reason_code": reason_code, "result": "failed"},
+    )
+    return job
+
+
 def _requires_source_mutation_scope(job):
     """Candidate preparation owns the source barrier before copying."""
     return not (
@@ -240,40 +270,47 @@ class Command(BaseCommand):
                 continue
 
             self.stdout.write(f"Running maintenance job {job.public_id} ({job.kind})")
-            if (
-                getattr(settings, "VAULT_MUTATION_TRACKING_ENABLED", False)
-                and _requires_source_mutation_scope(job)
-            ):
-                from vaultops.services.mutations import (
-                    SnapshotBarrierActive,
-                    mutation_scope,
-                )
-
-                try:
-                    with mutation_scope(
-                        category="maintenance",
-                        relative_path=str(job.public_id),
-                        operation=job.kind,
-                    ):
-                        finished = _execute_local_job(job)
-                except SnapshotBarrierActive:
-                    job.status = "queued"
-                    job.started_at = None
-                    job.save(update_fields=["status", "started_at"])
-                    MaintenanceAuditEvent.objects.create(
-                        job=job,
-                        event_type="retried",
-                        payload={
-                            "reason_code": "snapshot_barrier_active",
-                            "result": "deferred",
-                        },
+            try:
+                if (
+                    getattr(settings, "VAULT_MUTATION_TRACKING_ENABLED", False)
+                    and _requires_source_mutation_scope(job)
+                ):
+                    from vaultops.services.mutations import (
+                        SnapshotBarrierActive,
+                        mutation_scope,
                     )
-                    _write_heartbeat()
-                    if options["once"]:
-                        return
-                    continue
-            else:
-                finished = _execute_local_job(job)
+
+                    try:
+                        with mutation_scope(
+                            category="maintenance",
+                            relative_path=str(job.public_id),
+                            operation=job.kind,
+                        ):
+                            finished = _execute_local_job(job)
+                    except SnapshotBarrierActive:
+                        job.status = "queued"
+                        job.started_at = None
+                        job.save(update_fields=["status", "started_at"])
+                        MaintenanceAuditEvent.objects.create(
+                            job=job,
+                            event_type="retried",
+                            payload={
+                                "reason_code": "snapshot_barrier_active",
+                                "result": "deferred",
+                            },
+                        )
+                        _write_heartbeat()
+                        if options["once"]:
+                            return
+                        continue
+                else:
+                    finished = _execute_local_job(job)
+            except Exception as exc:
+                logger.exception(
+                    "Maintenance job %s failed outside item execution",
+                    job.public_id,
+                )
+                finished = _fail_unhandled_local_job(job, exc)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Job {finished.public_id} {finished.status}: "
