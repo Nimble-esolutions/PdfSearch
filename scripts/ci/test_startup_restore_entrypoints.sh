@@ -3,7 +3,14 @@ set -euo pipefail
 
 image="${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE is required}"
 probe_root="$(mktemp -d)"
-trap 'rm -r "$probe_root"' EXIT
+
+cleanup() {
+    docker run --rm --entrypoint chmod \
+        -v "$probe_root:/probe" \
+        "$image" -R a+rwX /probe >/dev/null 2>&1 || true
+    rm -r "$probe_root"
+}
+trap cleanup EXIT
 
 run_probe() {
     local role="$1"
