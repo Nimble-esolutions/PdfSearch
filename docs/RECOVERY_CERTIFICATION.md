@@ -25,10 +25,25 @@ on an unused `127.0.0.1` port; its other network is Docker-internal.
 
 Set the approved environment through the deployment secret provider, including
 the Vault endpoint, bucket, region, credential alias material, dataset identity,
-activation signing key, recovery-superadmin smoke credentials, and isolated
-bootstrap `DJANGO_SUPERUSER_*` credentials with `CREATE_SUPERUSER=1`. These
-values are inputs to the disposable target only and must not be written to the
-evidence directory. Then run:
+activation signing key and recovery-superadmin credentials. Generate unique,
+ephemeral values for this disposable target and inject them through the
+deployment secret provider as
+`CERT_ACTIVATION_INTENT_SIGNING_KEY`,
+`CERT_ACTIVATION_RECOVERY_SUPERADMIN_USERNAME`, and
+`CERT_ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD`. They must not be written to the
+evidence directory.
+
+Startup account creation is always disabled (`CREATE_SUPERUSER=0`). If the
+restored database does not contain an authorized operator, create one explicitly
+inside the disposable target with the normal Django administration command;
+never enable the startup bootstrap switch.
+
+The activation phase enables both ordinary staging activation and the narrower
+initial-activation gate. The latter is still rejected unless the disposable
+target has no active or previous runtime pointer and no generation projected as
+active.
+
+Then run:
 
 ```bash
 export PDFSEARCH_IMAGE='<repository>@sha256:<digest>'
@@ -41,7 +56,9 @@ bash scripts/ops/run_recovery_certification.sh fresh start
 The wrapper creates paired empty data and control volumes, an empty legacy
 substitute, isolated Redis storage, and a private network. It renders the final
 Compose model and stops if the mounts, networks, image identity, or localhost
-binding differ from the certification contract.
+binding differ from the certification contract. Redis, web, and maintenance
+start sequentially so the two application roles cannot race SQLite migrations.
+Runtime activation remains disabled throughout this pre-restore phase.
 
 Use the localhost Workbench as an authorized superadmin:
 
@@ -50,10 +67,17 @@ Use the localhost Workbench as an authorized superadmin:
 3. select the recorded generation and confirm its manifest digest;
 4. prepare the restore through download, checksum validation, sanitization,
    compatibility checking, and migration rehearsal;
-5. separately confirm signed activation;
-6. require the exact generation and manifest in the active pointer and signed
+5. after restore preparation and compatibility checks pass, enable activation
+   as a distinct phase:
+
+   ```bash
+   bash scripts/ops/run_recovery_certification.sh fresh activate
+   ```
+
+6. separately confirm signed activation;
+7. require the exact generation and manifest in the active pointer and signed
    result;
-7. test English and Marathi search, document/source access, login, PDF/FAISS
+8. test English and Marathi search, document/source access, login, PDF/FAISS
    counts, `/livez`, `/readyz`, and `/health/data/`.
 
 Do not promote, retire, garbage-collect, or publish a generation during this
@@ -94,7 +118,8 @@ export CERT_ACTIVATION_INTENT_ID='<signed-activation-intent-uuid>'
 bash scripts/ops/run_recovery_certification.sh fresh evidence
 ```
 
-Use the same mode, run ID, port, image, and Vault network as `start`. The
+Use the same mode, run ID, port, image, Vault network, and ephemeral activation
+variables as `start`. The
 evidence is bounded to resource identities, service health, endpoint results,
 SQLite integrity/foreign-key status, and artifact inventory. Add the signed
 activation result, generation/manifest identities, bilingual search result,

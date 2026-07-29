@@ -16,6 +16,7 @@ on:
       - docker-compose.yml
       - docker-compose.dev.yml
       - docker-compose.integration.yml
+      - docker-compose.recovery-cert.yml
       - requirements.txt
       - requirements-web.txt
       - requirements-web.lock
@@ -43,6 +44,7 @@ on:
       - docker-compose.yml
       - docker-compose.dev.yml
       - docker-compose.integration.yml
+      - docker-compose.recovery-cert.yml
       - requirements.txt
       - requirements-web.txt
       - requirements-web.lock
@@ -145,7 +147,12 @@ jobs:
           CERT_RUN_ID: ci-contract
           CERT_WEB_PORT: "18000"
           CERT_VAULT_NETWORK: ci-vault-only
-        run: bash scripts/ops/run_recovery_certification.sh fresh validate
+          CERT_ACTIVATION_INTENT_SIGNING_KEY: ci-only-activation-signing-key-32
+          CERT_ACTIVATION_RECOVERY_SUPERADMIN_USERNAME: ci-recovery-operator
+          CERT_ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD: ci-only-recovery-password
+        run: |
+          python3 scripts/ci/test_recovery_certification_contract.py
+          bash scripts/ops/run_recovery_certification.sh fresh validate
 
       - name: Validate disposable CI Compose
         env:

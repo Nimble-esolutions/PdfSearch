@@ -10,6 +10,7 @@ usage() {
 Usage:
   run_recovery_certification.sh fresh start
   run_recovery_certification.sh accumulated start
+  run_recovery_certification.sh <fresh|accumulated> activate
   run_recovery_certification.sh fresh validate
   run_recovery_certification.sh <fresh|accumulated> evidence
   run_recovery_certification.sh <fresh|accumulated> cleanup
@@ -18,6 +19,11 @@ Required environment:
   PDFSEARCH_IMAGE         immutable repository@sha256 image
   CERT_VAULT_NETWORK      existing Docker network that reaches only the Vault
   CERT_WEB_PORT           unused localhost port
+  CERT_ACTIVATION_INTENT_SIGNING_KEY
+                          ephemeral, at least 32 characters
+  CERT_ACTIVATION_RECOVERY_SUPERADMIN_USERNAME
+  CERT_ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD
+                          ephemeral credentials for this disposable target
 
 For accumulated mode:
   CERT_SOURCE_DATA_VOLUME and CERT_SOURCE_CONTROL_VOLUME must identify a
@@ -36,7 +42,7 @@ EOF
 }
 
 case "$MODE:$ACTION" in
-  fresh:start|fresh:validate|fresh:evidence|fresh:cleanup|accumulated:start|accumulated:validate|accumulated:evidence|accumulated:cleanup) ;;
+  fresh:start|fresh:activate|fresh:validate|fresh:evidence|fresh:cleanup|accumulated:start|accumulated:activate|accumulated:validate|accumulated:evidence|accumulated:cleanup) ;;
   *) usage >&2; exit 2 ;;
 esac
 
@@ -56,6 +62,22 @@ esac
 case "${CERT_VAULT_NETWORK:-}" in
   ''|*[!A-Za-z0-9_.-]*) echo "CERT_VAULT_NETWORK is invalid" >&2; exit 2 ;;
 esac
+
+if [ "$ACTION" != "cleanup" ]; then
+  : "${CERT_ACTIVATION_INTENT_SIGNING_KEY:?CERT_ACTIVATION_INTENT_SIGNING_KEY is required}"
+  : "${CERT_ACTIVATION_RECOVERY_SUPERADMIN_USERNAME:?CERT_ACTIVATION_RECOVERY_SUPERADMIN_USERNAME is required}"
+  : "${CERT_ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD:?CERT_ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD is required}"
+  [ "${#CERT_ACTIVATION_INTENT_SIGNING_KEY}" -ge 32 ] || {
+    echo "CERT_ACTIVATION_INTENT_SIGNING_KEY must contain at least 32 characters" >&2
+    exit 2
+  }
+fi
+if [ "$ACTION" = "activate" ] || [ "$ACTION" = "evidence" ]; then
+  export CERT_ACTIVATION_ENABLED=1
+else
+  # Never inherit an accidentally enabled activation posture into preflight.
+  export CERT_ACTIVATION_ENABLED=0
+fi
 
 export CERT_DEPLOYMENT_ID="recovery-cert-$CERT_RUN_ID"
 export CERT_DATA_VOLUME="recovery-cert-$CERT_RUN_ID-data"
@@ -176,6 +198,14 @@ for service_name in ("web", "maintenance"):
     networks = set(service["networks"])
     if networks != {"cert_internal", "cert_vault"}:
         raise SystemExit(f"{service_name}: unexpected networks: {networks}")
+    environment = service["environment"]
+    if environment.get("CREATE_SUPERUSER") != "0":
+        raise SystemExit(f"{service_name}: startup superuser creation must be disabled")
+    expected_activation = os.environ["CERT_ACTIVATION_ENABLED"]
+    if environment.get("STAGING_RUNTIME_ACTIVATION_ENABLED") != expected_activation:
+        raise SystemExit(f"{service_name}: unexpected activation phase")
+    if environment.get("STAGING_INITIAL_ACTIVATION_ENABLED") != expected_activation:
+        raise SystemExit(f"{service_name}: unexpected initial-activation phase")
 ports = services["web"].get("ports", [])
 if len(ports) != 1 or ports[0].get("host_ip") != "127.0.0.1":
     raise SystemExit("web: certification ingress is not localhost-only")
@@ -293,6 +323,17 @@ if [ "$ACTION" = "validate" ]; then
   render_and_assert_model
   exit 0
 fi
+if [ "$ACTION" = "activate" ]; then
+  render_and_assert_model
+  "${COMPOSE[@]}" stop maintenance web
+  # Recreate one process role at a time. Both roles share SQLite and must never
+  # race their startup migration/restore entrypoints.
+  "${COMPOSE[@]}" up -d --wait --no-deps web
+  "${COMPOSE[@]}" up -d --wait --no-deps maintenance
+  echo "Runtime activation is enabled for the isolated certification target."
+  echo "Complete the signed activation journey, then run the evidence phase."
+  exit 0
+fi
 if [ "$ACTION" = "evidence" ]; then
   [ "${CERT_OPERATOR_ACCEPTED:-0}" = "1" ] || {
     echo "Set CERT_OPERATOR_ACCEPTED=1 only after the complete operator checklist passes" >&2
@@ -371,7 +412,12 @@ else
   assert_empty_volume "$CERT_CONTROL_VOLUME"
 fi
 render_and_assert_model
-"${COMPOSE[@]}" up -d --wait redis maintenance web
+# Redis must be ready before either application role starts. Start web and
+# maintenance serially because both share the disposable SQLite volumes and
+# execute startup migration/restore checks.
+"${COMPOSE[@]}" up -d --wait redis
+"${COMPOSE[@]}" up -d --wait --no-deps web
+"${COMPOSE[@]}" up -d --wait --no-deps maintenance
 write_evidence preflight
 cat <<EOF
 Certification target is isolated and running.
@@ -379,6 +425,11 @@ Project: $PROJECT
 Evidence: $EVIDENCE_DIR
 
 Complete the pinned-generation Workbench restore and signed activation checks.
+After restore preparation succeeds, enable activation in a separate phase:
+  CERT_RUN_ID=$CERT_RUN_ID CERT_WEB_PORT=$CERT_WEB_PORT \\
+  CERT_VAULT_NETWORK=$CERT_VAULT_NETWORK PDFSEARCH_IMAGE=$PDFSEARCH_IMAGE \\
+  $0 $MODE activate
+
 Then run:
   CERT_RUN_ID=$CERT_RUN_ID CERT_WEB_PORT=$CERT_WEB_PORT \\
   CERT_VAULT_NETWORK=$CERT_VAULT_NETWORK PDFSEARCH_IMAGE=$PDFSEARCH_IMAGE \\
