@@ -30,7 +30,8 @@ mkdir -p \
 chown appuser:appuser "$DATA_ROOT" "$DATA_CONTROL_ROOT" 2>/dev/null || true
 for mutable_path in \
     "$MEDIA_ROOT" "$PDF_CACHE_DIR" "$CHROMA_DIR" "$FAISS_INDEX_DIR" \
-    "$BACKUP_DIR" "$STATIC_ROOT"; do
+    "$BACKUP_DIR" "$STATIC_ROOT" "$VAULT_RESTORE_ROOT" \
+    "$RUNTIME_GENERATIONS_ROOT"; do
     chown -R appuser:appuser "$mutable_path" 2>/dev/null || true
 done
 chmod 770 "$DATA_ROOT" "$DATA_CONTROL_ROOT" 2>/dev/null || true

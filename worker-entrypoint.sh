@@ -15,6 +15,8 @@ mkdir -p "$DATA_ROOT" "$DATA_ROOT/media/pdfs" "$DATA_ROOT/faiss_indexes" \
   "$DATA_ROOT/backups/json_backups" "$DATA_CONTROL_ROOT" \
   "$VAULT_RESTORE_ROOT" "$RUNTIME_GENERATIONS_ROOT"
 chown appuser:appuser "$DATA_ROOT" "$DATA_CONTROL_ROOT" 2>/dev/null || true
+chown -R appuser:appuser \
+  "$VAULT_RESTORE_ROOT" "$RUNTIME_GENERATIONS_ROOT" 2>/dev/null || true
 
 gosu appuser:appuser bash -lc \
   'cd /app/flowdocs && python manage.py startup_restore_preflight'

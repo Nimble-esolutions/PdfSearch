@@ -48,6 +48,17 @@ run_probe() {
         echo "[$role] stable startup restore reason was not emitted" >&2
         return 1
     fi
+    for mutable_path in restore-quarantine runtime-generations; do
+        if ! docker run --rm \
+            --user 1000:1000 \
+            --entrypoint sh \
+            -v "$data_root:/app/data" \
+            "$image" \
+            -c "test -w /app/data/$mutable_path"; then
+            echo "[$role] $mutable_path was not handed to appuser" >&2
+            return 1
+        fi
+    done
 }
 
 run_probe web
