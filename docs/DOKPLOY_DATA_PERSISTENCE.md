@@ -59,9 +59,12 @@ that a newer image is serving traffic.
 | Volume and RustFS share one failed host | Both recovery layers may be unavailable | Recover from an independent off-host copy |
 
 The existing named volume remains authoritative during a normal redeploy.
-Neither `DATA_MODE=s3-restore` nor `RESTORE_POLICY=startup-latest` currently
-causes an entrypoint restore. Admin generation status also does not prove that
-the active database/media/index files changed.
+Neither `DATA_MODE=s3-restore` nor `RESTORE_POLICY=startup-latest` causes an
+entrypoint restore. A `startup-*` policy now prevents both entrypoints from
+creating or migrating an absent/zero-byte database and exits with
+`startup_restore_required_but_unavailable`; an existing non-empty database is
+preserved. Admin generation status also does not prove that the active
+database/media/index files changed.
 
 ## Current stage contract
 

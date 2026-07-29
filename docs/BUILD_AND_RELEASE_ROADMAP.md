@@ -148,5 +148,6 @@ Planned: separately published versioned data artifacts, automatic FAISS recovery
 and automatic cross-environment synchronization. The restore pipeline and
 activation journal provide the foundation for these; full automation of artifact
 publishing and cross-environment sync remains a future target. The current
-admin/worker restore path is not wired to the full pipeline, and startup restore
-policies are not consumed; see Plan 003 and the audited vault guide.
+admin/worker restore path is not wired to the full pipeline. Startup restore
+policies are consumed only as a fail-closed empty-database posture check, not
+as automatic restore orchestration; see Plan 003 and the audited vault guide.

@@ -831,7 +831,8 @@ maintenance controls do not form one end-to-end recovery path:
 - admin staging reads the legacy flat manifest namespace;
 - admin promote/rollback changes generation records but does not call
   byte-level activation;
-- startup restore policy is not invoked by either entrypoint.
+- both entrypoints enforce startup restore posture before database mutation,
+  but deliberately stop rather than performing an automatic restore.
 
 Do not use admin success messages or an `ArtifactGeneration.status=active` row
 as proof of a restored runtime. Use the full isolated restore pipeline and

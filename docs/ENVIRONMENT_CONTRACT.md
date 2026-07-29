@@ -180,9 +180,15 @@ The retired `core.maintenance.stage_generation()` path and the direct
 `core.restore_pipeline` integration seam are not the operator recovery
 contract.
 
-`RESTORE_POLICY` and `DATA_PINNED_GENERATION` remain parsed policy inputs with
-no startup consumer. Plan 003 tracks the remaining startup decision and
-deployment proof.
+Both entrypoints consume `RESTORE_POLICY` through a DB-free, fail-closed
+preflight before imports, seeds, backups, migrations, queues, remote Vault
+access, or activation. `disabled` and `manual` retain normal startup.
+`startup-latest` and `startup-pinned` preserve a non-empty existing database
+but stop an absent or zero-byte database with
+`startup_restore_required_but_unavailable`; they do not perform a restore.
+`startup-pinned` requires `DATA_PINNED_GENERATION` even when `DATA_MODE` is not
+`s3-pinned`. Plan 003 still tracks approved restore orchestration and deployment
+proof.
 
 `RESTORE_WORKSPACE_ROOT`, `RESTORE_STAGE_TIMEOUT_SECONDS`,
 `RESTORE_REHEARSAL_ENABLED`, `RESTORE_SANITIZE_ENABLED`, and

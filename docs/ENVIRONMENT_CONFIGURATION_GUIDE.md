@@ -135,10 +135,11 @@ Compose currently maps the complete vault set to `web` but not explicitly to
 worker unless the effective Compose environment proves it.
 
 Restore identity uses `RESTORE_SOURCE_DATASET_ID`, `RESTORE_POLICY`, and, for
-`s3-pinned`, `DATA_PINNED_GENERATION`. These values currently validate policy;
-they do not trigger either entrypoint to restore. The full restore pipeline is
-available to controlled tooling and tests, while the admin maintenance action
-uses an older staging path.
+`s3-pinned` or `startup-pinned`, `DATA_PINNED_GENERATION`. These values do not
+trigger either entrypoint to restore. Both entrypoints do consume `startup-*`
+as a fail-closed posture: an absent/zero-byte database stops before migration,
+while a non-empty database is preserved. The full restore pipeline is available
+through the active Vault Operations control plane and controlled tests.
 
 `ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`,
 `ARTIFACT_VAULT_BOOTSTRAP_GENERATION`, `ARTIFACT_VAULT_RETENTION_COUNT`,

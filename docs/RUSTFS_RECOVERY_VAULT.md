@@ -24,8 +24,9 @@ Verified against a disposable MinIO service on 2026-07-26:
 
 Not yet operationally connected:
 
-- `RESTORE_POLICY=startup-latest|startup-pinned` is parsed and validated, but
-  neither application entrypoint invokes the restore pipeline;
+- `RESTORE_POLICY=startup-latest|startup-pinned` is parsed and enforced by both
+  entrypoints as a fail-closed empty-database guard, but neither entrypoint
+  invokes the restore pipeline;
 - the admin/maintenance `restore_generation` job calls the older
   `stage_generation()` path, not `run_restore_pipeline()`;
 - publication writes
@@ -140,9 +141,11 @@ With a genuinely empty `/app/data` volume, `start.sh` either:
 - copies the declared image seed when one exists and strict rules permit it; or
 - fails in strict mode when no approved starting data exists.
 
-It does **not** pull from RustFS. Setting `DATA_MODE=s3-restore`,
-`RESTORE_POLICY=startup-latest`, or `DATA_MODE=s3-pinned` currently validates
-identity only; it does not perform startup restoration.
+It does **not** pull from RustFS. Setting `RESTORE_POLICY=startup-latest` or
+`startup-pinned` makes both entrypoints stop before database creation when the
+database is absent or zero bytes. A non-empty existing database is preserved.
+`DATA_MODE=s3-restore` and `DATA_MODE=s3-pinned` still do not perform startup
+restoration.
 
 The current safe recovery sequence is:
 
@@ -204,8 +207,10 @@ DATA_PINNED_GENERATION
 BACKUP_ROLE=reader|disabled
 ```
 
-`RESTORE_POLICY` and `DATA_PINNED_GENERATION` are currently validation and
-future-orchestration inputs; they do not trigger startup restore.
+`RESTORE_POLICY` is a consumed startup posture input, not an automatic restore
+switch. `startup-*` prevents implicit empty-database creation; it never contacts
+the Vault or activates bytes. `DATA_PINNED_GENERATION` is required for
+`startup-pinned` and remains an input to future approved restore orchestration.
 `ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`, and
 `ARTIFACT_VAULT_RETENTION_COUNT` are not consumed runtime controls.
 
