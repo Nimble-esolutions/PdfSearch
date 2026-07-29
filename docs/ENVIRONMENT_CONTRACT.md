@@ -268,9 +268,20 @@ fail-closed until their manifests pass staging validation.
 ```text
 MAINTENANCE_WORKER_POLL_SECONDS=3
 MAINTENANCE_SCHEDULER_ENABLED=0
+VAULT_MUTATION_TRACKING_ENABLED=0
 BACKUP_SYNC_MODE=manual
 RESTORE_POLICY=disabled
 ```
+
+`VAULT_MUTATION_TRACKING_ENABLED=1` is required for repair and reindex because
+those operations create mutable candidates. It does not gate read-only
+validation. The development Compose override enables it for its local
+candidate workspace; production must leave it disabled until the deployment
+can provide verified mutation evidence.
+
+The worker contains unexpected execution errors to the affected durable job,
+records a bounded failure reason and audit event, and continues polling. Raw
+exception text is not an operator-facing status contract.
 
 `ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`,
 `ARTIFACT_VAULT_BOOTSTRAP_GENERATION`, and
