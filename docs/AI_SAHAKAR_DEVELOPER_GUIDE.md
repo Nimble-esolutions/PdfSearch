@@ -155,6 +155,11 @@ worker or leave the job indefinitely in `running`. Keep exception text out of
 operator-visible summaries and use the collapsed technical evidence for the
 stable code.
 
+The development web container's Compose healthcheck uses `/livez`; `/readyz`
+also requires a fresh maintenance-worker heartbeat. This prevents a startup
+cycle in which the worker waits for web readiness while web readiness waits for
+the worker.
+
 ## Verification
 
 Run the smallest applicable checks first:
