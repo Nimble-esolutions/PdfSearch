@@ -164,7 +164,7 @@ def main():
         operations_mr = client.get("/dashboard/operations/")
         require(
             operations_mr.status_code == 200
-            and "तिजोरी संचालन कार्यपटल" in operations_mr.text,
+            and "तिजोरी आणि पुनर्प्राप्ती" in operations_mr.text,
             "reviewed Marathi workbench language missing",
         )
         token = csrf_token(operations_mr.text)
