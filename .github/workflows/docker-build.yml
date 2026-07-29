@@ -165,6 +165,8 @@ jobs:
           test "$revision" = "$GITHUB_SHA"
 
       - name: Prove startup restore policy fails closed
+        env:
+          PDFSEARCH_IMAGE: pdfsearch-ci:source
         run: bash scripts/ci/test_startup_restore_entrypoints.sh
 
       - name: Install browser gate dependencies
