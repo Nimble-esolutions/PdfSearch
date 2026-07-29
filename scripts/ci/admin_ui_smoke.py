@@ -100,7 +100,7 @@ def main():
         operations = client.get("/dashboard/operations/")
         require(
             operations.status_code == 200
-            and "Vault &amp; Recovery" in operations.text
+            and "Vault & Recovery" in operations.text
             and "Authority comparison" in operations.text
             and "vendor/bootstrap/5.3.0" in operations.text
             and "cdn.jsdelivr.net" not in operations.text,
