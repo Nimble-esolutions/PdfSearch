@@ -428,6 +428,19 @@ def resolve_runtime_from_env(
     if not deployment_id:
         raise RuntimeControlError("activation_deployment_id_required")
     paths = runtime_control_paths(control_root)
+    initial_enabled = str(
+        environment.get("STAGING_INITIAL_ACTIVATION_ENABLED", "0")
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if (
+        initial_enabled
+        and not paths["active"].exists()
+        and not paths["previous"].exists()
+    ):
+        # A fresh, explicitly opted-in staging target must remain able to
+        # serve its restored control database long enough to schedule the
+        # signed first activation. Any existing pointer, including an invalid
+        # one, continues through strict verification below.
+        return None
     return read_runtime_pointer(
         paths["active"],
         deployment_id=deployment_id,

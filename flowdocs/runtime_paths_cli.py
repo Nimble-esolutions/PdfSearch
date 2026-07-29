@@ -20,12 +20,16 @@ FIELDS = {
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("field", choices=sorted(FIELDS))
+    parser.add_argument("--allow-initial-bootstrap", action="store_true")
     options = parser.parse_args(argv)
     try:
         runtime = resolve_runtime_from_env()
     except RuntimeControlError as exc:
         parser.error(exc.reason_code)
     if runtime is None:
+        if options.allow_initial_bootstrap:
+            print("initial-bootstrap")
+            return 0
         parser.error("staging_activation_disabled")
     print(getattr(runtime, FIELDS[options.field]))
     return 0
