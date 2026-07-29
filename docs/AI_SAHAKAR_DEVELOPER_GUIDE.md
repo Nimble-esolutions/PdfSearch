@@ -92,6 +92,37 @@ Never remove an old template, route, asset, or CSS block based only on a
 visual assumption. Prove references and record cleanup separately; see
 [`DEV_CLEANUP_SCOPE.md`](DEV_CLEANUP_SCOPE.md).
 
+## Local Vault and maintenance bootstrap
+
+`docker-compose.dev.yml` starts an isolated MinIO service, creates the
+`pdfsearch-dev` bucket, and supplies a complete locked environment profile:
+
+```text
+VAULT_DEFAULT_PROFILE=local-development
+ARTIFACT_VAULT_ENABLED=1
+ARTIFACT_VAULT_ENDPOINT=http://minio:9000
+ARTIFACT_VAULT_BUCKET=pdfsearch-dev
+ARTIFACT_VAULT_REGION=us-east-1
+VAULT_ALLOWED_S3_ENDPOINTS=http://minio:9000
+VAULT_ALLOW_HTTP_S3_ENDPOINTS=1
+VAULT_BLOCK_PRIVATE_S3_ENDPOINTS=0
+```
+
+The development access and secret keys are disposable Compose defaults and
+must never be reused outside local development. Production secrets remain
+server-managed and must be inspected only as set/unset posture.
+
+Opening the Workbench materializes the locked environment profile only when
+`ARTIFACT_VAULT_ENABLED=1` and the complete `ARTIFACT_VAULT_*` contract
+validates. Migration-created legacy profiles stay visible as historical
+evidence but are not probeable. `environment_profile_defaults()` supplies
+secret-free form defaults; rejected submissions retain safe input for one
+redirect and identify exact fields with `aria-invalid`.
+
+Local development enables validation, stored-index repair, and sandboxed
+reindexing independently of remote Vault authority. Production Compose
+defaults remain disabled.
+
 ## Verification
 
 Run the smallest applicable checks first:

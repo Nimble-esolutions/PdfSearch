@@ -99,6 +99,13 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   consistent Marathi-script transliteration. Do not leave ordinary interface
   words in Latin-script English. Preserve exact codes, API fields, hashes,
   UUIDs, filenames, and paths as English/LTR technical evidence.
+- **Vault profile UX:** Never expose probe or authoritative-inventory controls
+  for migration-only legacy projections. Materialize a locked environment
+  profile only from a complete deployed `ARTIFACT_VAULT_*` contract; never
+  invent missing endpoint, bucket, identity, or credential values. Profile
+  forms must preserve secret-free input, identify the exact invalid fields,
+  and keep local Documents & Indexes capability independent from remote Vault
+  profile availability.
 
 ## Local Validation
 
