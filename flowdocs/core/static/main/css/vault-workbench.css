@@ -63,12 +63,45 @@
 
 .vault-section-nav {
   display: flex;
+  align-items: center;
   gap: .25rem;
   overflow-x: auto;
   margin: 0 0 1rem;
   padding-bottom: .25rem;
   border-bottom: 1px solid var(--vault-line);
 }
+
+.vault-section-nav__label {
+  flex: 0 0 auto;
+  margin-left: .45rem;
+  padding: 0 .35rem;
+  color: var(--vault-muted);
+  font-size: .68rem;
+  font-weight: 750;
+}
+
+.vault-section-nav a.vault-section-nav__primary {
+  color: #fff;
+  background: var(--vault-maroon);
+}
+
+.vault-section-nav a.vault-section-nav__primary[aria-current="page"] {
+  background: var(--vault-maroon-dark);
+  border-bottom-color: #d99a2b;
+}
+
+.vault-advanced-summary { margin: 1rem 0; }
+.vault-advanced-summary > summary {
+  min-height: 44px;
+  padding: .75rem .9rem;
+  color: var(--vault-maroon-dark);
+  background: var(--vault-canvas);
+  border: 1px solid var(--vault-line);
+  font-size: .78rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.vault-advanced-summary .vault-summary { margin: 0; }
 
 .vault-section-nav a {
   flex: 0 0 auto;
@@ -132,6 +165,7 @@
 .authority-flow p { color: var(--vault-muted); font-size: .8rem; }
 code { overflow-wrap: anywhere; color: var(--vault-maroon-dark); }
 .vault-note, .vault-field-help, .vault-empty { color: var(--vault-muted); font-size: .8rem; }
+.vault-lead { max-width: 72ch; color: var(--vault-ink); font-size: .88rem; }
 
 .vault-facts { display: grid; gap: 0; margin: 0; }
 .vault-facts--wide { grid-template-columns: repeat(3, minmax(0, 1fr)); }

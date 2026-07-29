@@ -40,7 +40,7 @@ async function switchLanguage(page: Page, language: 'en' | 'mr') {
   await expect(page.locator('html')).toHaveAttribute('lang', language);
 }
 
-test.describe('Vault Operations Workbench', () => {
+test.describe('Documents & Search and Vault & Recovery', () => {
   test('passes authority, a11y, locale, no-JS, and zoom gates', async ({ browser, page }) => {
     test.setTimeout(90_000);
     const externalRequests: string[] = [];
@@ -49,7 +49,7 @@ test.describe('Vault Operations Workbench', () => {
       if (url.hostname === 'cdn.jsdelivr.net') externalRequests.push(request.url());
     });
     await login(page);
-    await expect(page.getByRole('heading', { name: 'Vault Operations Workbench' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Vault & Recovery' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Authority comparison' })).toBeVisible();
     await expect(page.locator('[data-summary="runtime"]')).toBeVisible();
     await expect(page.locator('[data-summary="remote"]')).toBeVisible();
@@ -78,7 +78,7 @@ test.describe('Vault Operations Workbench', () => {
     }
 
     await switchLanguage(page, 'mr');
-    await expect(page.getByRole('heading', { name: 'तिजोरी संचालन कार्यपटल' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'तिजोरी आणि पुनर्प्राप्ती' })).toBeVisible();
     for (const section of workbenchSections) {
       await page.goto(`/dashboard/operations/?section=${section}`);
       await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
@@ -102,7 +102,10 @@ test.describe('Vault Operations Workbench', () => {
     await expect(page.getByRole('button', { name: 'Create GC dry-run' })).toBeVisible();
 
     await page.goto('/dashboard/operations/?section=maintenance');
-    await expect(page.getByRole('heading', { name: 'Documents & Indexes' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Documents & Search', exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Start with Validate Files')).toBeVisible();
+    await expect(page.getByText('Show advanced Vault and runtime evidence')).toBeVisible();
+    await expect(page.locator('.vault-advanced-summary')).not.toHaveAttribute('open', '');
     await expect(page.getByRole('heading', { name: 'Choose the outcome you need' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Validate Files' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Repair Stored Indexes' })).toBeVisible();
@@ -118,6 +121,7 @@ test.describe('Vault Operations Workbench', () => {
     ).toEqual([]);
 
     await page.goto('/dashboard/operations/?section=configuration');
+    await expect(page.getByRole('heading', { name: 'Vault & Recovery' })).toBeVisible();
     const legacyProfile = page
       .locator('.vault-record')
       .filter({ hasText: 'Legacy application database' })

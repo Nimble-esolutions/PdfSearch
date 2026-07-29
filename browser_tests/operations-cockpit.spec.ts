@@ -39,9 +39,9 @@ test.describe('Operations Cockpit', () => {
 
     await expect(page.locator('.cockpit-metric')).toHaveCount(4);
 
-    const maintenance = page.getByRole('link', { name: 'Maintain Documents & Indexes' }).first();
+    const maintenance = page.getByRole('link', { name: 'Maintain Documents & Search' }).first();
     await expect(maintenance).toHaveAttribute('href', /section=maintenance/);
-    const vault = page.getByRole('link', { name: 'Open Vault Operations' }).first();
+    const vault = page.getByRole('link', { name: 'Open advanced Vault & Recovery' }).first();
     await expect(vault).toHaveAttribute('href', /\/dashboard\/operations\/$/);
     await expect(page.getByText('sync data to S3')).toHaveCount(0);
     await expect(page.locator('#job-drawer-toggle')).toHaveCount(0);

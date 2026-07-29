@@ -146,7 +146,7 @@
           <div class="ops-card">
             <h3>{% trans "Bulk Operations" %}</h3>
             <p>{% trans "Validate files, repair stored indexes, or prepare a bounded local reindex candidate." %}</p>
-            <a href="{% url 'operations_panel' %}?section=maintenance" class="btn btn-primary">{% trans "Open Documents & Indexes" %}</a>
+            <a href="{% url 'operations_panel' %}?section=maintenance" class="btn btn-primary">{% trans "Open Documents & Search" %}</a>
           </div>
           <div class="ops-card mt-3">
             <h3>{% trans "Data Generations" %}</h3>
@@ -264,7 +264,7 @@
       <section class="admin-panel">
         <div class="admin-page-heading">
           <h2>{% trans "Active Work" %}</h2>
-          <p>{% trans "A concise projection of local maintenance. Full evidence and controls remain in Vault Operations." %}</p>
+          <p>{% trans "Recent document-maintenance progress. Open Documents & Search for controls and detailed guidance." %}</p>
         </div>
         <div class="ops-lane-list">
           {% for job in cockpit.maintenance_jobs %}
@@ -322,8 +322,8 @@
           </div>
         </div>
         <div class="d-grid gap-2">
-          <a href="{% url 'operations_panel' %}" class="btn btn-outline-primary btn-sm">{% trans "Open Vault Operations" %}</a>
-          <a href="{% url 'operations_panel' %}?section=maintenance" class="btn btn-outline-primary btn-sm">{% trans "Maintain Documents & Indexes" %}</a>
+          <a href="{% url 'operations_panel' %}?section=maintenance" class="btn btn-outline-primary btn-sm">{% trans "Maintain Documents & Search" %}</a>
+          <a href="{% url 'operations_panel' %}" class="btn btn-outline-primary btn-sm">{% trans "Open advanced Vault & Recovery" %}</a>
         </div>
       </section>
     {% endif %}

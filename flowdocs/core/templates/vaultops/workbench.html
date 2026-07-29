@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static i18n %}
 
-{% block title %}{% trans "Vault Operations Workbench — CC & RCS Maharashtra" %}{% endblock %}
+{% block title %}{% if section == "maintenance" %}{% trans "Documents & Search — CC & RCS Maharashtra" %}{% else %}{% trans "Vault & Recovery — CC & RCS Maharashtra" %}{% endif %}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'main/css/vault-workbench.css' %}">
@@ -11,9 +11,15 @@
 <div class="vault-workbench" data-state-url="{% url 'vaultops:state' %}{% if request.GET.profile %}?profile={{ request.GET.profile|urlencode }}{% endif %}">
   <header class="vault-heading">
     <div>
-      <p class="vault-kicker">{% trans "Operations / Vault Workbench" %}</p>
-      <h2>{% trans "Vault Operations Workbench" %}</h2>
-      <p>{% trans "Remote authority, restore preparation, runtime state, jobs, and configuration are shown as separate evidence." %}</p>
+      {% if section == "maintenance" %}
+      <p class="vault-kicker">{% trans "Operations / Daily document care" %}</p>
+      <h2>{% trans "Documents & Search" %}</h2>
+      <p>{% trans "Check local documents, repair stored search indexes, or prepare a bounded reindex. Remote Vault authority is not changed." %}</p>
+      {% else %}
+      <p class="vault-kicker">{% trans "Operations / Advanced recovery" %}</p>
+      <h2>{% trans "Vault & Recovery" %}</h2>
+      <p>{% trans "Specialist controls for remote authority, publication, restore preparation, retention, and runtime recovery." %}</p>
+      {% endif %}
     </div>
     <p class="vault-observed">
       {% trans "Observed" %}<br>
@@ -21,6 +27,10 @@
     </p>
   </header>
 
+  {% if section == "maintenance" %}
+  <details class="vault-advanced-summary">
+    <summary>{% trans "Show advanced Vault and runtime evidence" %}</summary>
+  {% endif %}
   <section class="vault-summary" aria-label="{% trans 'Persistent operations summary' %}" aria-live="polite">
     <dl>
       <div><dt>{% trans "Environment" %}</dt><dd>{{ state.environment.app_env|default:"unknown" }}</dd></div>
@@ -35,13 +45,15 @@
       <div><dt>{% trans "Critical job" %}</dt><dd>{% if state.authority.critical_job %}{{ state.authority.critical_job.status_label }}{% else %}{% trans "None" %}{% endif %}</dd></div>
     </dl>
   </section>
+  {% if section == "maintenance" %}</details>{% endif %}
 
   <nav class="vault-section-nav" aria-label="{% trans 'Workbench sections' %}">
+    <a class="vault-section-nav__primary" href="?section=maintenance"{% if section == "maintenance" %} aria-current="page"{% endif %}>{% trans "Documents & Search" %}</a>
+    <span class="vault-section-nav__label">{% trans "Advanced Vault & Recovery" %}</span>
     <a href="?section=overview"{% if section == "overview" %} aria-current="page"{% endif %}>{% trans "Overview" %}</a>
     <a href="?section=sync"{% if section == "sync" %} aria-current="page"{% endif %}>{% trans "Active Sync" %}</a>
     <a href="?section=generations"{% if section == "generations" %} aria-current="page"{% endif %}>{% trans "Generations" %}</a>
     <a href="?section=restore"{% if section == "restore" %} aria-current="page"{% endif %}>{% trans "Restore & Activation" %}</a>
-    <a href="?section=maintenance"{% if section == "maintenance" %} aria-current="page"{% endif %}>{% trans "Documents & Indexes" %}</a>
     <a href="?section=jobs"{% if section == "jobs" %} aria-current="page"{% endif %}>{% trans "Jobs & Audit" %}</a>
     <a href="?section=retention"{% if section == "retention" %} aria-current="page"{% endif %}>{% trans "Retention & GC" %}</a>
     <a href="?section=configuration"{% if section == "configuration" %} aria-current="page"{% endif %}>{% trans "Configuration" %}</a>
@@ -108,7 +120,8 @@
   {% if section == "maintenance" %}
   <div class="vault-grid">
       <section class="vault-panel" aria-labelledby="maintenance-heading">
-      <header><p>{% trans "Local content authority" %}</p><h3 id="maintenance-heading">{% trans "Documents & Indexes" %}</h3></header>
+      <header><p>{% trans "Daily document care" %}</p><h3 id="maintenance-heading">{% trans "Documents & Search" %}</h3></header>
+      <p class="vault-lead">{% trans "Start with Validate Files. Use repair when stored indexes are incomplete, and reindex only when searchable content must be regenerated." %}</p>
       <p class="vault-note">{% trans "These operations validate or derive local document and search artifacts. They do not publish, promote, restore, or move remote Vault authority." %}</p>
       <div class="maintenance-authority-strip" role="status">
         <div><span>{% trans "Local maintenance" %}</span><strong>{% trans "Planned and isolated" %}</strong></div>
@@ -610,6 +623,7 @@
   <div class="vault-grid">
     <section class="vault-panel" aria-labelledby="jobs-heading">
       <header><p>{% trans "Durable queue" %}</p><h3 id="jobs-heading">{% trans "Vault jobs" %}</h3></header>
+      <p class="vault-note">{% trans "Document-maintenance progress appears in Documents & Search. This advanced list records Vault publication, inventory, restore, and recovery work." %}</p>
       <div class="vault-records" role="list">
         {% for job in state.jobs %}
         <article class="vault-record vault-record--compact" role="listitem">
@@ -652,6 +666,12 @@
   <div class="vault-grid">
     <section class="vault-panel" aria-labelledby="profiles-heading">
       <header><p>{% trans "Server-approved sources" %}</p><h3 id="profiles-heading">{% trans "Vault profiles" %}</h3></header>
+      {% if state.profiles and not state.generations %}
+      <div class="vault-alert vault-alert--info" role="note">
+        <h4>{% trans "Vault storage is configured" %}</h4>
+        <p>{% trans "No published generation is recorded yet. A read-only probe checks storage access; authoritative inventory becomes meaningful after the first generation is published." %}</p>
+      </div>
+      {% endif %}
       <div class="vault-records" role="list">
         {% for profile in state.profiles %}
         <article class="vault-record vault-record--compact" role="listitem">

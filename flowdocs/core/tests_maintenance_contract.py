@@ -344,7 +344,7 @@ class MaintenancePlanningTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         for text in (
-            "Documents & Indexes",
+            "Documents & Search",
             "Preview Validate Files",
             "Preview Repair Stored Indexes",
             "Preview Reindex Needed",
