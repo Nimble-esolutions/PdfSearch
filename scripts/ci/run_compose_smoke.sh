@@ -65,7 +65,7 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${web_port}" \
 "${compose[@]}" exec --no-TTY --user appuser web python -m pip check
 
 test_log="$(mktemp)"
-if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.test_artifact_vault core.tests_recovery core.tests_maintenance_contract core.tests_candidate_cleanup vaultops --noinput --verbosity=2 >"$test_log" 2>&1; then
+if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.test_startup_restore core.test_artifact_vault core.tests_recovery core.tests_maintenance_contract core.tests_candidate_cleanup vaultops --noinput --verbosity=2 >"$test_log" 2>&1; then
     cat "$test_log"
     rm -f "$test_log"
     exit 1

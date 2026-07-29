@@ -118,9 +118,10 @@ All modules live under `flowdocs/core/`. Grouped by concern:
 
 **RestorePolicy:** `disabled`, `manual`, `startup-latest`, `startup-pinned`
 
-The `startup-*` values are parsed and validated but are not consumed by either
-entrypoint. They describe the intended future orchestration, not current
-automatic startup behavior.
+The `startup-*` values are consumed by both entrypoints as a DB-free,
+fail-closed posture check. They preserve an existing non-empty database and
+stop before creating or migrating an absent/zero-byte database. They do not
+perform automatic restore or activation.
 
 ### Startup Validation Flow
 

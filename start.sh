@@ -36,6 +36,7 @@ if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
     CHROMA_DIR="$(python /app/flowdocs/runtime_paths_cli.py chroma)"
 fi
 
+export SQLITE_DB_PATH="$DB_PATH"
 export DATA_ROOT DATA_CONTROL_ROOT CONTROL_DB_PATH DB_PATH MEDIA_DIR PDF_CACHE_DIR FAISS_DIR CHROMA_DIR STATIC_DIR BACKUP_DIR VAULT_RESTORE_ROOT RUNTIME_GENERATIONS_ROOT
 export DATA_BOOTSTRAP_MODE
 export SECRET_KEY="${SECRET_KEY:-}"
@@ -66,6 +67,11 @@ mkdir -p "$DATA_ROOT" "$DATA_CONTROL_ROOT" "$MEDIA_DIR/pdfs" "$PDF_CACHE_DIR" "$
     "$VAULT_RESTORE_ROOT" "$RUNTIME_GENERATIONS_ROOT"
 test -w "$DATA_ROOT" || { echo "[data] ERROR: $DATA_ROOT is not writable" >&2; exit 1; }
 test -w "$DATA_CONTROL_ROOT" || { echo "[control] ERROR: $DATA_CONTROL_ROOT is not writable" >&2; exit 1; }
+
+# Startup restore modes are declarations, not permission to create an empty
+# database. Both web and maintenance run this DB-free guard before any import,
+# seed, backup, migration, queue, remote Vault call, or activation.
+(cd /app/flowdocs && python manage.py startup_restore_preflight)
 
 # Import only mutable production data from the legacy volume. Application code
 # remains in the image and is never copied from the legacy volume.
