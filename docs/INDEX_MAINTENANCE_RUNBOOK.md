@@ -17,9 +17,12 @@ moves remote Vault authority.
 | Reindex Needed | Search artifacts are missing or invalid | Yes |
 | Reindex Selected | Deliberately regenerate selected documents | Yes; typed confirmation required |
 
-All controls remain visible. A disabled control shows a machine-readable reason:
-`runtime_read_only`, `bulk_reindex_disabled`, `external_embeddings_disabled`,
-`snapshot_in_progress`, or `recovery_point_required`.
+All controls remain visible. A disabled control shows authored operator
+guidance; authorized operators can expand Technical details to inspect the
+stable reason code. Codes include `runtime_read_only`,
+`bulk_reindex_disabled`, `external_embeddings_disabled`,
+`mutation_tracking_disabled`, `snapshot_in_progress`, and
+`recovery_point_required`.
 
 The Dashboard only summarizes local maintenance under **Active Work** and
 **Needs attention**. Use those links to enter this Workbench. The Dashboard
@@ -44,6 +47,14 @@ policy. The Workbench remains useful for inspecting redacted evidence and
 preparing a candidate, but no local screen silently changes remote or runtime
 authority. Disabled operation cards retain their typed reason so operators can
 distinguish policy from an outage.
+
+Read-only validation remains available without mutation tracking. Repair and
+reindex require `VAULT_MUTATION_TRACKING_ENABLED=1`, because they prepare a
+mutable candidate and must prove that source documents stayed consistent
+during the snapshot. The development Compose stack enables this evidence by
+default. Other environments must enable it only when the tracking mechanism is
+actually present; otherwise the Workbench safely disables candidate-producing
+operations.
 
 ## Preview and confirmation
 
@@ -78,6 +89,11 @@ one final temporary FAISS build for that folder.
 An item failure restores the document from `processing` to a valid prior
 lifecycle state. Failure codes and append-only audit events remain visible with
 job progress; superadmins can cancel active work or retry failed jobs.
+An unexpected error outside item processing is contained to that durable job:
+the worker records a bounded failure code and audit event, marks remaining
+items failed, and continues polling. If a job remains `running` after a worker
+restart, investigate heartbeat/recovery handling rather than repeatedly
+queueing the operation.
 The Workbench calculates allowed actions from the current job lifecycle and
 binds each action to a job state version. A stale browser submission is rejected
 instead of applying an action to a newer job state.

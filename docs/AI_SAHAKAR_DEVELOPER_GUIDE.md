@@ -142,8 +142,23 @@ secret-free form defaults; rejected submissions retain safe input for one
 redirect and identify exact fields with `aria-invalid`.
 
 Local development enables validation, stored-index repair, and sandboxed
-reindexing independently of remote Vault authority. Production Compose
-defaults remain disabled.
+reindexing independently of remote Vault authority. The development Compose
+stack also enables `VAULT_MUTATION_TRACKING_ENABLED=1`: repair and reindex
+create mutable candidates and must remain disabled when the worker cannot prove
+that source documents stayed consistent while preparing them. Read-only
+validation does not require mutation tracking. Production Compose defaults
+remain disabled until the deployment supplies and verifies that evidence.
+
+An unexpected candidate-preparation error fails the affected durable job with
+a bounded reason code and audit event; it must not terminate the maintenance
+worker or leave the job indefinitely in `running`. Keep exception text out of
+operator-visible summaries and use the collapsed technical evidence for the
+stable code.
+
+The development web container's Compose healthcheck uses `/livez`; `/readyz`
+also requires a fresh maintenance-worker heartbeat. This prevents a startup
+cycle in which the worker waits for web readiness while web readiness waits for
+the worker.
 
 ## Verification
 

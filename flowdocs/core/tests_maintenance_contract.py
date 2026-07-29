@@ -12,6 +12,7 @@ from django.utils import timezone
 from core.maintenance import queue_job, run_job
 from core.management.commands.run_maintenance_jobs import (
     _execute_local_job,
+    _fail_unhandled_local_job,
     _requires_source_mutation_scope,
 )
 from core.maintenance_plans import (
@@ -31,6 +32,7 @@ LOCAL_GATES = override_settings(
     LOCAL_INDEX_MAINTENANCE_ENABLED=True,
     FORCE_REINDEX_ENABLED=True,
     EXTERNAL_EMBEDDINGS_ENABLED=True,
+    VAULT_MUTATION_TRACKING_ENABLED=True,
     MAINTENANCE_WORKER_READINESS_REQUIRED=False,
     ACTIVE_RUNTIME=None,
     RUNTIME_GENERATION_ID="",
@@ -159,6 +161,20 @@ class MaintenancePlanningTests(TestCase):
         plan.refresh_from_db()
         self.assertEqual(plan.state, "previewed")
         self.assertIsNone(plan.job_id)
+
+    @override_settings(VAULT_MUTATION_TRACKING_ENABLED=False)
+    def test_candidate_operations_require_mutation_tracking(self):
+        reasons = capability_reasons()
+        self.assertEqual(reasons["validate"], "")
+        for operation in (
+            "repair_indexes",
+            "reindex_needed",
+            "reindex_selected",
+        ):
+            self.assertEqual(
+                reasons[operation],
+                "mutation_tracking_disabled",
+            )
 
     def test_normalize_selection_rejects_inverted_date_range(self):
         with self.assertRaisesRegex(MaintenancePlanError, "malformed_filters"):
@@ -544,6 +560,31 @@ class MaintenanceWorkerGroupingTests(TestCase):
         self.assertIs(_execute_local_job(job), job)
         execute.assert_called_once_with(job)
         self.assertFalse(_requires_source_mutation_scope(job))
+
+    def test_unhandled_job_error_is_persisted_without_raw_exception(self):
+        job = queue_job(
+            kind="validate",
+            requested_by=self.user,
+            pdfs=self.pdfs,
+        )
+        job.status = "running"
+        job.started_at = timezone.now()
+        job.save(update_fields=["status", "started_at"])
+
+        finished = _fail_unhandled_local_job(
+            job,
+            RuntimeError("sensitive provider output"),
+        )
+
+        self.assertEqual(finished.status, "failed")
+        self.assertEqual(finished.failed_items, finished.total_items)
+        self.assertEqual(finished.error_summary, "maintenance_job_failed")
+        self.assertNotIn("sensitive", finished.error_summary)
+        event = finished.audit_events.get(event_type="failed")
+        self.assertEqual(
+            event.payload["reason_code"],
+            "maintenance_job_failed",
+        )
 
     @override_settings(MAINTENANCE_CANDIDATE_EXECUTION=True)
     def test_candidate_child_execution_tracks_workspace_mutations(self):

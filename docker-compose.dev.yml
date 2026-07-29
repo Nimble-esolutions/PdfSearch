@@ -87,6 +87,7 @@ services:
       - VAULT_SYNC_ENABLED=${VAULT_SYNC_ENABLED:-0}
       - VAULT_SYNC_MODE=${VAULT_SYNC_MODE:-manual}
       - VAULT_SYNC_PROMOTION_MODE=${VAULT_SYNC_PROMOTION_MODE:-manual}
+      - VAULT_MUTATION_TRACKING_ENABLED=${VAULT_MUTATION_TRACKING_ENABLED:-1}
       - VAULT_SNAPSHOT_ROOT=/app/data-control/snapshots
       - VAULT_DEFAULT_PROFILE=${VAULT_DEFAULT_PROFILE:-local-development}
       - VAULT_RESTORE_ENABLED=${VAULT_RESTORE_ENABLED:-0}
@@ -149,6 +150,12 @@ services:
       minio-init:
         condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/livez"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - internal
 
