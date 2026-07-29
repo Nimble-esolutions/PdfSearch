@@ -11,9 +11,6 @@ from vaultops.services.mutations import (
 MUTATING_VIEW_NAMES = {
     "dashboard",
     "dashboard_folder",
-    "bulk_maintenance",
-    "maintenance_job_action",
-    "maintenance_candidate_prepare",
     "save_settings",
     "register",
     "edit_user",
@@ -23,7 +20,6 @@ MUTATING_VIEW_NAMES = {
     "rename_folder",
     "delete_folder",
     "update_folder_keywords",
-    "folder_operations",
     "add_subcategory",
     "rename_pdf",
     "assign_pdf_owner",

@@ -1318,6 +1318,7 @@ class DashboardTests(TestCase):
 
         with override_settings(
             LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            VAULT_MUTATION_TRACKING_ENABLED=True,
             MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             ACTIVE_RUNTIME=None,
         ):
@@ -1370,6 +1371,7 @@ class DashboardTests(TestCase):
 
         with override_settings(
             LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            VAULT_MUTATION_TRACKING_ENABLED=True,
             MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             EXTERNAL_EMBEDDINGS_ENABLED=True,
             ACTIVE_RUNTIME=None,
@@ -1416,6 +1418,7 @@ class DashboardTests(TestCase):
 
         with override_settings(
             LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            VAULT_MUTATION_TRACKING_ENABLED=True,
             MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             EXTERNAL_EMBEDDINGS_ENABLED=True,
             ACTIVE_RUNTIME=None,

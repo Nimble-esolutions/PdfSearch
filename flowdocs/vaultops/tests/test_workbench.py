@@ -536,6 +536,7 @@ class VaultWorkbenchTests(TestCase):
         self.assertContains(response, "Local development posture")
         self.assertContains(response, "Remote publication and production activation")
 
+    @override_settings(VAULT_MUTATION_TRACKING_ENABLED=True)
     def test_maintenance_deep_link_renders_selected_plan_and_job(self):
         folder = Folder.objects.create(name="Law", created_by=self.superadmin)
         PDFFile.objects.create(
