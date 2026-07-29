@@ -15,6 +15,42 @@ services:
     networks:
       - internal
 
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${DEV_VAULT_ACCESS_KEY:-pdfsearch-dev}
+      MINIO_ROOT_PASSWORD: ${DEV_VAULT_SECRET_KEY:-pdfsearch-dev-secret}
+    volumes:
+      - minio_data_dev:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks:
+      - internal
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set dev http://minio:9000
+        "$${DEV_VAULT_ACCESS_KEY}" "$${DEV_VAULT_SECRET_KEY}" &&
+        mc mb --ignore-existing dev/"$${DEV_VAULT_BUCKET}"
+    environment:
+      DEV_VAULT_ACCESS_KEY: ${DEV_VAULT_ACCESS_KEY:-pdfsearch-dev}
+      DEV_VAULT_SECRET_KEY: ${DEV_VAULT_SECRET_KEY:-pdfsearch-dev-secret}
+      DEV_VAULT_BUCKET: ${DEV_VAULT_BUCKET:-pdfsearch-dev}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - internal
+
   web:
     build:
       context: .
@@ -52,17 +88,19 @@ services:
       - VAULT_SYNC_MODE=${VAULT_SYNC_MODE:-manual}
       - VAULT_SYNC_PROMOTION_MODE=${VAULT_SYNC_PROMOTION_MODE:-manual}
       - VAULT_SNAPSHOT_ROOT=/app/data-control/snapshots
+      - VAULT_DEFAULT_PROFILE=${VAULT_DEFAULT_PROFILE:-local-development}
       - VAULT_RESTORE_ENABLED=${VAULT_RESTORE_ENABLED:-0}
       - VAULT_ADMIN_MUTATIONS_ENABLED=${VAULT_ADMIN_MUTATIONS_ENABLED:-0}
-      - LOCAL_INDEX_MAINTENANCE_ENABLED=${LOCAL_INDEX_MAINTENANCE_ENABLED:-0}
-      - FORCE_REINDEX_ENABLED=${FORCE_REINDEX_ENABLED:-0}
-      - EXTERNAL_EMBEDDINGS_ENABLED=${EXTERNAL_EMBEDDINGS_ENABLED:-0}
+      - LOCAL_INDEX_MAINTENANCE_ENABLED=${LOCAL_INDEX_MAINTENANCE_ENABLED:-1}
+      - FORCE_REINDEX_ENABLED=${FORCE_REINDEX_ENABLED:-1}
+      - EXTERNAL_EMBEDDINGS_ENABLED=${EXTERNAL_EMBEDDINGS_ENABLED:-1}
       - MAINTENANCE_WORKSPACE_ROOT=/app/data-control/maintenance-workspaces
       - MAINTENANCE_JOB_TIMEOUT_SECONDS=${MAINTENANCE_JOB_TIMEOUT_SECONDS:-7200}
-      - VAULT_ALLOWED_S3_ENDPOINTS=${VAULT_ALLOWED_S3_ENDPOINTS:-}
+      - VAULT_UI_PROFILE_CONFIGURATION_ENABLED=${VAULT_UI_PROFILE_CONFIGURATION_ENABLED:-1}
+      - VAULT_ALLOWED_S3_ENDPOINTS=${VAULT_ALLOWED_S3_ENDPOINTS:-http://minio:9000}
       - VAULT_CREDENTIAL_ALIASES=${VAULT_CREDENTIAL_ALIASES:-}
-      - VAULT_BLOCK_PRIVATE_S3_ENDPOINTS=${VAULT_BLOCK_PRIVATE_S3_ENDPOINTS:-1}
-      - VAULT_ALLOW_HTTP_S3_ENDPOINTS=${VAULT_ALLOW_HTTP_S3_ENDPOINTS:-0}
+      - VAULT_BLOCK_PRIVATE_S3_ENDPOINTS=${VAULT_BLOCK_PRIVATE_S3_ENDPOINTS:-0}
+      - VAULT_ALLOW_HTTP_S3_ENDPOINTS=${VAULT_ALLOW_HTTP_S3_ENDPOINTS:-1}
       - VAULT_RESTORE_REQUIRE_SANITIZATION=${VAULT_RESTORE_REQUIRE_SANITIZATION:-1}
       - STAGING_RUNTIME_ACTIVATION_ENABLED=${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}
       - MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=${MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:-0}
@@ -80,12 +118,12 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_EMBED_MODEL=${OPENAI_EMBED_MODEL:-text-embedding-3-small}
       - OPENAI_CHAT_MODEL=${OPENAI_CHAT_MODEL:-gpt-4o-mini}
-      - ARTIFACT_VAULT_ENABLED=${ARTIFACT_VAULT_ENABLED:-0}
-      - ARTIFACT_VAULT_ENDPOINT=${ARTIFACT_VAULT_ENDPOINT:-}
-      - ARTIFACT_VAULT_BUCKET=${ARTIFACT_VAULT_BUCKET:-}
-      - ARTIFACT_VAULT_REGION=${ARTIFACT_VAULT_REGION:-}
-      - ARTIFACT_VAULT_ACCESS_KEY=${ARTIFACT_VAULT_ACCESS_KEY:-}
-      - ARTIFACT_VAULT_SECRET_KEY=${ARTIFACT_VAULT_SECRET_KEY:-}
+      - ARTIFACT_VAULT_ENABLED=${ARTIFACT_VAULT_ENABLED:-1}
+      - ARTIFACT_VAULT_ENDPOINT=${ARTIFACT_VAULT_ENDPOINT:-http://minio:9000}
+      - ARTIFACT_VAULT_BUCKET=${ARTIFACT_VAULT_BUCKET:-pdfsearch-dev}
+      - ARTIFACT_VAULT_REGION=${ARTIFACT_VAULT_REGION:-us-east-1}
+      - ARTIFACT_VAULT_ACCESS_KEY=${ARTIFACT_VAULT_ACCESS_KEY:-pdfsearch-dev}
+      - ARTIFACT_VAULT_SECRET_KEY=${ARTIFACT_VAULT_SECRET_KEY:-pdfsearch-dev-secret}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       - REDIS_URL=redis://redis:6379/1
@@ -106,6 +144,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - internal
@@ -116,6 +156,8 @@ volumes:
   flowdocs_data_dev:
     driver: local
   flowdocs_control_dev:
+    driver: local
+  minio_data_dev:
     driver: local
 
 networks:
