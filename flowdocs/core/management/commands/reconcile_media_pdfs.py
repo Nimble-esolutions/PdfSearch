@@ -6,6 +6,7 @@ from django.db import transaction
 
 from core.models import CustomUser, Folder, PDFFile
 from core.utils import SearchDataIntegrityError, precompute_pdf_embeddings
+from vaultops.services.mutations import mutation_scope
 
 
 class Command(BaseCommand):
@@ -46,6 +47,7 @@ class Command(BaseCommand):
         restored_count = 0
         skipped_count = 0
         failures: list[str] = []
+        pending_files: list[tuple[Path, str]] = []
 
         for pdf_path in pdf_files:
             relative_path = pdf_path.relative_to(media_root).as_posix()
@@ -53,31 +55,48 @@ class Command(BaseCommand):
                 self.stdout.write(f"Skipping {relative_path} - already in database")
                 skipped_count += 1
                 continue
+            pending_files.append((pdf_path, relative_path))
 
-            try:
-                with transaction.atomic():
-                    with pdf_path.open("rb") as stream:
-                        pdf_file = PDFFile.objects.create(
-                            title=pdf_path.stem.replace("_", " ").title(),
-                            uploaded_by=user,
-                            folder=folder,
-                            file=relative_path,
-                        )
-                    # The source file is already in MEDIA_ROOT. File() is opened
-                    # above to verify it is readable without copying it elsewhere.
-                    if not pdf_file.file.storage.exists(pdf_file.file.name):
-                        raise SearchDataIntegrityError(
-                            f"Restored file is not readable through configured storage: {relative_path}"
-                        )
-                    precompute_pdf_embeddings(pdf_file)
+        if pending_files:
+            with mutation_scope(
+                category="pdf",
+                relative_path="pdfs/",
+                operation="reconcile_media_pdfs",
+                record_on_change=True,
+            ) as outcome:
+                for pdf_path, relative_path in pending_files:
+                    try:
+                        with transaction.atomic():
+                            with pdf_path.open("rb"):
+                                pdf_file = PDFFile.objects.create(
+                                    title=pdf_path.stem.replace("_", " ").title(),
+                                    uploaded_by=user,
+                                    folder=folder,
+                                    file=relative_path,
+                                )
+                            # The source file is already in MEDIA_ROOT. File() is
+                            # opened above to verify it without copying it.
+                            if not pdf_file.file.storage.exists(pdf_file.file.name):
+                                raise SearchDataIntegrityError(
+                                    "Restored file is not readable through configured "
+                                    f"storage: {relative_path}"
+                                )
+                            precompute_pdf_embeddings(pdf_file)
 
-                self.stdout.write(
-                    self.style.SUCCESS(f"Restored {relative_path} and built searchable artifacts")
-                )
-                restored_count += 1
-            except Exception as exc:
-                failures.append(f"{relative_path}: {exc}")
-                self.stdout.write(self.style.ERROR(f"Failed to restore {relative_path}: {exc}"))
+                        self.stdout.write(
+                            self.style.SUCCESS(
+                                f"Restored {relative_path} and built searchable artifacts"
+                            )
+                        )
+                        restored_count += 1
+                        outcome.mark_changed()
+                    except Exception as exc:
+                        failures.append(f"{relative_path}: {exc}")
+                        self.stdout.write(
+                            self.style.ERROR(
+                                f"Failed to restore {relative_path}: {exc}"
+                            )
+                        )
 
         if failures:
             raise CommandError(

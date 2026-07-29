@@ -928,6 +928,8 @@ class SearchIndexLifecycleTests(TestCase):
 
 
 class RestorePDFCommandTests(TestCase):
+    databases = {"default", "control"}
+
     def setUp(self):
         self.user = get_user_model().objects.create_user(
             username="restore-user",
