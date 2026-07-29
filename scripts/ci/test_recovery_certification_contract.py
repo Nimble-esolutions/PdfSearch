@@ -54,6 +54,12 @@ class RecoveryCertificationContractTests(unittest.TestCase):
         self.assertLess(RUNNER.rindex(web), RUNNER.rindex(maintenance))
         self.assertNotIn('up -d --wait redis maintenance web', RUNNER)
 
+    def test_startup_supports_the_explicit_initial_bootstrap_sentinel(self):
+        start = (ROOT / "start.sh").read_text(encoding="utf-8")
+        self.assertIn("--allow-initial-bootstrap", start)
+        self.assertIn('RUNTIME_START_MODE" = "initial-bootstrap"', start)
+        self.assertIn("STAGING_INITIAL_ACTIVATION_ENABLED", start)
+
 
 if __name__ == "__main__":
     unittest.main()

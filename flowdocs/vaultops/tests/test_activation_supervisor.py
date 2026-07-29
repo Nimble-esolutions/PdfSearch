@@ -23,6 +23,7 @@ from core.candidate_maintenance import (
     _verified_mutable_source_runtime_identity,
 )
 from core.recovery_auth import RecoveryAuthenticationError
+from runtime_paths_cli import main as runtime_paths_main
 from runtime_supervisor import RuntimeSupervisor, SupervisorError
 from vaultops.models import (
     ActivationIntent,
@@ -240,6 +241,59 @@ class RuntimeControlTests(SimpleTestCase):
             RuntimeControlError, "production_activation_disabled"
         ):
             resolve_runtime_from_env(environment)
+
+    def test_initial_bootstrap_requires_both_runtime_pointers_to_be_absent(self):
+        self.paths["active"].unlink()
+        environment = {
+            "STAGING_RUNTIME_ACTIVATION_ENABLED": "1",
+            "STAGING_INITIAL_ACTIVATION_ENABLED": "1",
+            "APP_ENV": "staging",
+            "DATA_CONTROL_ROOT": str(self.control),
+            "RUNTIME_GENERATIONS_ROOT": str(self.runtime_root),
+            "DEPLOYMENT_ID": DEPLOYMENT_ID,
+            "ACTIVATION_INTENT_SIGNING_KEY": SIGNING_KEY,
+        }
+
+        self.assertIsNone(resolve_runtime_from_env(environment))
+
+        atomic_write_json(
+            self.paths["previous"],
+            make_pointer(
+                self.current,
+                CURRENT_GENERATION,
+                CURRENT_DIGEST,
+                "bootstrap-intent",
+            ),
+        )
+        with self.assertRaisesMessage(
+            RuntimeControlError, "control_document_missing"
+        ):
+            resolve_runtime_from_env(environment)
+
+    def test_runtime_path_cli_marks_only_safe_initial_bootstrap(self):
+        self.paths["active"].unlink()
+        environment = {
+            "STAGING_RUNTIME_ACTIVATION_ENABLED": "1",
+            "STAGING_INITIAL_ACTIVATION_ENABLED": "1",
+            "APP_ENV": "staging",
+            "DATA_CONTROL_ROOT": str(self.control),
+            "RUNTIME_GENERATIONS_ROOT": str(self.runtime_root),
+            "DEPLOYMENT_ID": DEPLOYMENT_ID,
+            "ACTIVATION_INTENT_SIGNING_KEY": SIGNING_KEY,
+        }
+        output = io.StringIO()
+
+        with patch.dict(os.environ, environment, clear=True), patch(
+            "sys.stdout", output
+        ):
+            self.assertEqual(
+                runtime_paths_main(
+                    ["generation", "--allow-initial-bootstrap"]
+                ),
+                0,
+            )
+
+        self.assertEqual(output.getvalue().strip(), "initial-bootstrap")
 
 
 @override_settings(

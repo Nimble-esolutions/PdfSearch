@@ -29,11 +29,23 @@ if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
             exit 1
         fi
     done
-    DB_PATH="$(python /app/flowdocs/runtime_paths_cli.py database)"
-    MEDIA_DIR="$(python /app/flowdocs/runtime_paths_cli.py media)"
-    PDF_CACHE_DIR="$(python /app/flowdocs/runtime_paths_cli.py pdf_cache)"
-    FAISS_DIR="$(python /app/flowdocs/runtime_paths_cli.py faiss)"
-    CHROMA_DIR="$(python /app/flowdocs/runtime_paths_cli.py chroma)"
+    RUNTIME_START_MODE="$(
+        python /app/flowdocs/runtime_paths_cli.py generation \
+            --allow-initial-bootstrap
+    )"
+    if [ "$RUNTIME_START_MODE" = "initial-bootstrap" ]; then
+        if [ "${STAGING_INITIAL_ACTIVATION_ENABLED:-0}" != "1" ]; then
+            echo "[activation] ERROR: initial bootstrap requires explicit opt-in" >&2
+            exit 1
+        fi
+        echo "[activation] No runtime authority exists; serving the restored staging database until signed first activation"
+    else
+        DB_PATH="$(python /app/flowdocs/runtime_paths_cli.py database)"
+        MEDIA_DIR="$(python /app/flowdocs/runtime_paths_cli.py media)"
+        PDF_CACHE_DIR="$(python /app/flowdocs/runtime_paths_cli.py pdf_cache)"
+        FAISS_DIR="$(python /app/flowdocs/runtime_paths_cli.py faiss)"
+        CHROMA_DIR="$(python /app/flowdocs/runtime_paths_cli.py chroma)"
+    fi
 fi
 
 export SQLITE_DB_PATH="$DB_PATH"
