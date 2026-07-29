@@ -161,22 +161,28 @@ RESTORE_POLICY=disabled|manual|startup-latest|startup-pinned
 DATA_PINNED_GENERATION=<immutable-generation-id>
 ```
 
-The restore pipeline (`core/restore_pipeline.py`) runs:
-download → validate → sanitize → rehearse → activate
+The active Vault Operations lifecycle is deliberately split:
 
-Each stage is tracked by `core/restore_workspace.py` with a state machine.
-Activation uses atomic symlink swap (`core/activate.py`) with heartbeat-based
-crash recovery (`core/activation_journal.py`). Migration rehearsal
-(`core/rehearsal.py`) runs against an isolated copy before activation.
-Compatibility checks (`core/compatibility.py`) verify schema, embedding
-dimensions, and FAISS index format before promotion.
+```text
+publish candidate → promote authoritative pointer
+select generation → verify → download → validate → sanitize → rehearse
+                  → activation_ready
+confirmed activation → signed intent → runtime cutover → readiness evidence
+```
 
-The full pipeline is currently invoked directly by integration tests, not by
-the application entrypoints or the admin maintenance restore job. The admin
-job uses a legacy staging path and must not be treated as disaster-recovery
-activation. `RESTORE_POLICY` and `DATA_PINNED_GENERATION` are parsed policy
-inputs only in the historical Plan 003 design. The active Vault Operations
-contract supersedes that plan.
+`vaultops/services/restore.py` owns restore preparation and its durable
+workspace state. Compatibility and rehearsal reuse the bounded core services.
+`vaultops/services/activation.py` coordinates signed activation intents and the
+activation supervisor owns runtime cutover and crash recovery. A successful
+restore-preparation job does not claim that active bytes changed.
+
+The retired `core.maintenance.stage_generation()` path and the direct
+`core.restore_pipeline` integration seam are not the operator recovery
+contract.
+
+`RESTORE_POLICY` and `DATA_PINNED_GENERATION` remain parsed policy inputs with
+no startup consumer. Plan 003 tracks the remaining startup decision and
+deployment proof.
 
 `RESTORE_WORKSPACE_ROOT`, `RESTORE_STAGE_TIMEOUT_SECONDS`,
 `RESTORE_REHEARSAL_ENABLED`, `RESTORE_SANITIZE_ENABLED`, and

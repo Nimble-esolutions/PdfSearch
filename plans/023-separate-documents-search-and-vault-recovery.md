@@ -1,6 +1,6 @@
 # Plan 023: Separate Documents & Search from Vault & Recovery
 
-**Status:** RECONCILE
+**Status:** DONE
 **Priority:** P1
 **Depends on:** 013–022
 **Scope:** Dashboard and Vault Operations presentation only
@@ -35,3 +35,18 @@ like failed setup. This increased cognitive load without adding safety.
 - Empty configured Vault copy explains probe versus inventory semantics.
 - English and Marathi browser assertions, operator-language validation, locale
   compilation, Django checks, and responsive accessibility gates pass.
+
+## Completion evidence
+
+Completed by the Dashboard and Workbench reconciliation through commit
+`c545312`:
+
+- Dashboard maintenance links open the **Documents & Search** section.
+- Ordinary validation, repair, and reindex guidance is separate from advanced
+  publication, restore, activation, retention, profile, and recovery evidence.
+- The maintenance journey is validate-first and retains its backend safety
+  gates.
+- An empty configured Vault is presented as first-run setup rather than a
+  failed object-store probe.
+- Authored English and Marathi browser assertions, locale validation,
+  operator-language checks, responsive layouts, and accessibility checks pass.
