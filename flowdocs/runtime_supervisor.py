@@ -545,6 +545,7 @@ class RuntimeSupervisor:
             "intent_digest": intent["document_digest"],
             "status": status,
             "active_generation_id": active_pointer.generation_id,
+            "active_manifest_digest": active_pointer.manifest_digest,
             "previous_generation_id": previous_generation_id,
             "active_pointer_digest": active_pointer.pointer_digest,
             "readiness_evidence": readiness_evidence,

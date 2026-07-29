@@ -870,9 +870,14 @@ class ActivationCoordinatorTests(TestCase):
                 "intent_digest": intent.intent_digest,
                 "status": "committed",
                 "active_generation_id": TARGET_GENERATION,
+                "active_manifest_digest": TARGET_DIGEST,
                 "previous_generation_id": CURRENT_GENERATION,
                 "active_pointer_digest": active.pointer_digest,
-                "readiness_evidence": {"readyz": "ready"},
+                "readiness_evidence": {
+                    "readyz": "ready",
+                    "runtime_generation_id": TARGET_GENERATION,
+                    "runtime_manifest_digest": TARGET_DIGEST,
+                },
                 "process_identity": {"child_pid": 12},
                 "safe_error_code": "",
             },
@@ -900,6 +905,54 @@ class ActivationCoordinatorTests(TestCase):
         self.assertEqual(
             observation.active_generation_id, TARGET_GENERATION
         )
+
+    def test_signed_commit_result_rejects_wrong_manifest_identity(self):
+        intent = schedule_activation(self.workspace, confirmed=True)
+        atomic_write_json(
+            self.paths["active"],
+            make_pointer(
+                self.target_runtime,
+                TARGET_GENERATION,
+                TARGET_DIGEST,
+                intent.intent_digest,
+            ),
+        )
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        result = sign_document(
+            {
+                "schema_version": 1,
+                "kind": "activation_result",
+                "deployment_id": DEPLOYMENT_ID,
+                "intent_id": str(intent.public_id),
+                "intent_digest": intent.intent_digest,
+                "status": "committed",
+                "active_generation_id": TARGET_GENERATION,
+                "active_manifest_digest": "f" * 64,
+                "previous_generation_id": CURRENT_GENERATION,
+                "active_pointer_digest": active.pointer_digest,
+                "readiness_evidence": {
+                    "runtime_generation_id": TARGET_GENERATION,
+                    "runtime_manifest_digest": TARGET_DIGEST,
+                },
+                "process_identity": {"child_pid": 12},
+                "safe_error_code": "",
+            },
+            SIGNING_KEY,
+        )
+        atomic_write_json(
+            self.paths["results"] / f"{intent.public_id}.json",
+            result,
+        )
+        with self.assertRaisesMessage(
+            ActivationCoordinatorError,
+            "activation_result_runtime_mismatch",
+        ):
+            reconcile_activation_result(intent)
 
 
 class FakeChild:
