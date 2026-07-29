@@ -14,7 +14,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
@@ -1708,6 +1708,7 @@ class ActivationRuntimeVerificationTests(TestCase):
             ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD="recovery-password",
             ENV_IDENTITY=staging_identity(),
             RUNTIME_GENERATION_ID=TARGET_GENERATION,
+            RUNTIME_MANIFEST_DIGEST=TARGET_DIGEST,
         )
         self.settings_override.enable()
 
@@ -1734,3 +1735,13 @@ class ActivationRuntimeVerificationTests(TestCase):
             f"Activation runtime verified: {TARGET_GENERATION}",
             output.getvalue(),
         )
+
+    def test_management_command_rejects_wrong_runtime_manifest(self):
+        with self.settings(RUNTIME_MANIFEST_DIGEST="f" * 64):
+            with self.assertRaisesRegex(
+                CommandError, "activation_runtime_identity_mismatch"
+            ):
+                call_command(
+                    "verify_activation_runtime",
+                    intent_id=self.intent_id,
+                )

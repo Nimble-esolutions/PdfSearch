@@ -71,6 +71,7 @@ class Command(BaseCommand):
             or intent.get("target_manifest_digest")
             != active.manifest_digest
             or settings.RUNTIME_GENERATION_ID != active.generation_id
+            or settings.RUNTIME_MANIFEST_DIGEST != active.manifest_digest
         ):
             raise RuntimeControlError(
                 "activation_runtime_identity_mismatch"
