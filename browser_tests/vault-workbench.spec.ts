@@ -117,6 +117,27 @@ test.describe('Vault Operations Workbench', () => {
       ),
     ).toEqual([]);
 
+    await page.goto('/dashboard/operations/?section=configuration');
+    const legacyProfile = page
+      .locator('.vault-record')
+      .filter({ hasText: 'Legacy application database' })
+      .first();
+    await expect(legacyProfile.getByRole('button', { name: 'Run read-only probe' })).toBeDisabled();
+    await expect(
+      legacyProfile.getByRole('button', { name: 'Verify authoritative inventory' }),
+    ).toBeDisabled();
+    await expect(
+      legacyProfile.getByText('Historical profile has no remote Vault connection'),
+    ).toBeVisible();
+    const environmentProfile = page
+      .locator('.vault-record')
+      .filter({ hasText: 'Locked environment vault' });
+    if ((await environmentProfile.count()) > 0) {
+      await expect(
+        environmentProfile.getByRole('button', { name: 'Run read-only probe' }),
+      ).toBeEnabled();
+    }
+
     const storageState = await page.context().storageState();
     const origin = new URL(page.url()).origin;
     const noJsContext = await browser.newContext({

@@ -41,6 +41,11 @@ from vaultops.services.read_model import (
     workspace_state_digest,
 )
 from vaultops.services.activation import ActivationCoordinatorError
+from vaultops.services.profiles import (
+    environment_profile_defaults,
+    ensure_environment_profile,
+    profile_fingerprint,
+)
 
 
 @override_settings(
@@ -641,12 +646,145 @@ class VaultWorkbenchTests(TestCase):
         )
         self.assertEqual(upsert.call_count, 1)
 
+    def test_legacy_profile_does_not_offer_remote_actions(self):
+        VaultConnectionProfile.objects.create(
+            key="legacy-only",
+            display_name="Legacy application database",
+            source=VaultConnectionProfile.Source.LEGACY,
+            enabled=True,
+            read_only=True,
+            environment_locked=True,
+            dataset_id="legacy-data",
+        )
+
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "configuration"}
+        )
+
+        self.assertContains(
+            response, "Historical profile has no remote Vault connection"
+        )
+        self.assertContains(
+            response,
+            'action="/dashboard/operations/api/v1/profiles/legacy-only/probe/"',
+            html=False,
+        )
+        self.assertContains(response, "disabled", count=None)
+
+        blocked = self.client.post(
+            reverse(
+                "vaultops:profile_probe",
+                kwargs={"profile_key": "legacy-only"},
+            ),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": response.context["state"]["state_version"],
+            },
+            HTTP_ACCEPT="application/json",
+        )
+        self.assertEqual(blocked.status_code, 400)
+        self.assertEqual(
+            blocked.json()["reason_code"], "legacy_profile_not_remote"
+        )
+
+    @override_settings(VAULT_UI_PROFILE_CONFIGURATION_ENABLED=True)
+    def test_invalid_profile_submission_marks_missing_fields(self):
+        response = self.client.post(
+            reverse("vaultops:profile_configure"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "key": "",
+                "display_name": "",
+            },
+        )
+        self.assertEqual(response.status_code, 303)
+
+        rendered = self.client.get(
+            reverse("operations_panel"), {"section": "configuration"}
+        )
+        self.assertContains(rendered, 'name="key" value="" required aria-invalid="true"', html=False)
+        self.assertContains(rendered, "This field is required.")
+        self.assertContains(rendered, "Vault profile fields need attention")
+
+    @override_settings(
+        VAULT_DEFAULT_PROFILE="environment-ready",
+        ARTIFACT_VAULT_ENABLED=True,
+    )
+    @patch("vaultops.services.profiles.ArtifactVault")
+    def test_environment_profile_is_materialized_from_complete_env(
+        self, artifact_vault
+    ):
+        artifact_vault.return_value.enabled = True
+        artifact_vault.return_value.config = SimpleNamespace(
+            endpoint="https://vault.example",
+            bucket="artifacts",
+            region="test",
+            access_key="server-only",
+            secret_key="server-only",
+            validate=lambda: None,
+        )
+
+        profile = ensure_environment_profile()
+
+        self.assertEqual(profile.key, "environment-ready")
+        self.assertEqual(profile.endpoint_origin, "https://vault.example")
+        self.assertEqual(
+            profile.credential_alias, "environment:ARTIFACT_VAULT"
+        )
+        self.assertTrue(profile.environment_locked)
+        self.assertNotIn("server-only", json.dumps(profile.capability_evidence))
+
+    @patch("vaultops.services.profiles.ArtifactVault")
+    def test_environment_profile_defaults_are_secret_free(self, artifact_vault):
+        artifact_vault.return_value.config = SimpleNamespace(
+            endpoint="https://vault.example",
+            bucket="artifacts",
+            region="test",
+            access_key="must-not-render",
+            secret_key="must-not-render",
+        )
+
+        defaults = environment_profile_defaults()
+
+        self.assertEqual(defaults["endpoint_origin"], "https://vault.example")
+        self.assertNotIn("must-not-render", json.dumps(defaults))
+
+    @patch("vaultops.services.profiles.materialize_environment_profile")
+    @patch("vaultops.services.profiles.ArtifactVault")
+    def test_current_environment_profile_does_not_write_on_page_read(
+        self, artifact_vault, materialize
+    ):
+        artifact_vault.return_value.enabled = True
+        artifact_vault.return_value.config = SimpleNamespace(
+            endpoint=self.profile.endpoint_origin,
+            bucket=self.profile.bucket,
+            region=self.profile.region,
+            validate=lambda: None,
+        )
+        self.profile.read_only = not settings.ENV_IDENTITY.is_authoritative_writer
+        self.profile.fingerprint = profile_fingerprint(self.profile)
+        self.profile.save(update_fields=["read_only", "fingerprint"])
+
+        current = ensure_environment_profile()
+
+        self.assertEqual(current.pk, self.profile.pk)
+        materialize.assert_not_called()
+
     @patch("vaultops.views.project_verified_generation")
     @patch("vaultops.views.verify_generation")
     @patch("vaultops.views.vault_for_profile")
     def test_profile_inventory_verifies_and_projects(
         self, vault_for_profile, verify_generation, project_generation
     ):
+        updated_fields = []
+        if not self.profile.dataset_id:
+            self.profile.dataset_id = "test-dataset"
+            updated_fields.append("dataset_id")
+        if not self.profile.production_source_id:
+            self.profile.production_source_id = "test-production-source"
+            updated_fields.append("production_source_id")
+        if updated_fields:
+            self.profile.save(update_fields=updated_fields)
         verified = SimpleNamespace(
             generation_id="generation-authoritative",
             authoritative=True,
@@ -670,7 +808,7 @@ class VaultWorkbenchTests(TestCase):
             },
             HTTP_ACCEPT="application/json",
         )
-        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.status_code, 202, response.content)
         payload = response.json()
         self.assertEqual(payload["reason_code"], "profile_inventory_verified")
         self.assertEqual(payload["data"]["file_count"], 564)

@@ -3062,5 +3062,149 @@ msgstr "देखभाल उमेदवार तयार करा"
 msgid "Repair document text"
 msgstr "दस्तऐवजातील मजकूर दुरुस्त करा"
 
+msgid "Historical profile has no remote Vault connection"
+msgstr "ऐतिहासिक रूपरेषेला दूरस्थ तिजोरी जोडणी नाही"
+
+msgid "This record preserves earlier application evidence and is not an S3 connection profile."
+msgstr "ही नोंद अनुप्रयोगाचा जुना पुरावा जतन करते; ती S3 जोडणी रूपरेषा नाही."
+
+msgid "Remote probe and inventory controls do not apply to it."
+msgstr "दूरस्थ तपासणी आणि सूची नियंत्रणे या नोंदीला लागू होत नाहीत."
+
+msgid "Review the environment Vault profile"
+msgstr "पर्यावरण तिजोरी रूपरेषेचा आढावा घ्या"
+
+msgid "Vault profile configuration is incomplete"
+msgstr "तिजोरी रूपरेषेची संरचना अपूर्ण आहे"
+
+msgid "The profile is missing server-approved connection information."
+msgstr "रूपरेषेत सर्व्हरने मान्य केलेली जोडणी माहिती उपलब्ध नाही."
+
+msgid "Remote probe and inventory controls remain unavailable."
+msgstr "दूरस्थ तपासणी आणि सूची नियंत्रणे अनुपलब्ध राहतील."
+
+msgid "Complete profile configuration"
+msgstr "रूपरेषेची संरचना पूर्ण करा"
+
+msgid "Vault profile fields need attention"
+msgstr "तिजोरी रूपरेषेतील क्षेत्रांकडे लक्ष देणे आवश्यक आहे"
+
+msgid "One or more required profile values are missing or invalid."
+msgstr "रूपरेषेतील एक किंवा अधिक आवश्यक मूल्ये उपलब्ध नाहीत किंवा अवैध आहेत."
+
+msgid "No profile change was saved."
+msgstr "रूपरेषेतील कोणताही बदल जतन केला नाही."
+
+msgid "Correct the highlighted fields"
+msgstr "ठळक केलेली क्षेत्रे दुरुस्त करा"
+
+msgid "Browser profile configuration is disabled"
+msgstr "ब्राउझरमधील रूपरेषा संरचना बंद आहे"
+
+msgid "This environment accepts Vault profiles only from deployed configuration."
+msgstr "हे पर्यावरण तिजोरी रूपरेषा केवळ तैनात संरचनेतून स्वीकारते."
+
+msgid "No browser-submitted profile can be saved."
+msgstr "ब्राउझरमधून सादर केलेली कोणतीही रूपरेषा जतन करता येणार नाही."
+
+msgid "Review deployed Vault configuration"
+msgstr "तैनात तिजोरी संरचनेचा आढावा घ्या"
+
+msgid "Vault endpoint is not approved"
+msgstr "तिजोरी अंतिमबिंदू मान्य नाही"
+
+msgid "The endpoint does not exactly match a server-approved S3 origin."
+msgstr "अंतिमबिंदू सर्व्हरने मान्य केलेल्या S3 उगमाशी तंतोतंत जुळत नाही."
+
+msgid "The profile cannot connect to that endpoint."
+msgstr "रूपरेषा त्या अंतिमबिंदूशी जोडली जाऊ शकत नाही."
+
+msgid "Review the endpoint allowlist"
+msgstr "अंतिमबिंदू मान्य-सूचीचा आढावा घ्या"
+
+msgid "Vault endpoint needs correction"
+msgstr "तिजोरी अंतिमबिंदू दुरुस्त करणे आवश्यक आहे"
+
+msgid "Enter only an HTTP or HTTPS origin without credentials, a path, query, or fragment."
+msgstr "ओळखपत्रे, मार्ग, प्रश्न किंवा तुकडा नसलेला केवळ HTTP किंवा HTTPS उगम प्रविष्ट करा."
+
+msgid "The profile was not saved."
+msgstr "रूपरेषा जतन केली नाही."
+
+msgid "Correct the endpoint"
+msgstr "अंतिमबिंदू दुरुस्त करा"
+
+msgid "Credential alias is not approved"
+msgstr "ओळखपत्र पर्यायी नाव मान्य नाही"
+
+msgid "The alias is not mapped to a server-managed credential source."
+msgstr "हे पर्यायी नाव सर्व्हर-व्यवस्थापित ओळखपत्र स्रोताशी जोडलेले नाही."
+
+msgid "The browser cannot create or use the profile."
+msgstr "ब्राउझर ही रूपरेषा तयार करू किंवा वापरू शकत नाही."
+
+msgid "Review approved credential aliases"
+msgstr "मान्य ओळखपत्र पर्यायी नावांचा आढावा घ्या"
+
+msgid "Approved credentials are unavailable"
+msgstr "मान्य ओळखपत्रे उपलब्ध नाहीत"
+
+msgid "The server-approved alias is present, but its credential variables are incomplete."
+msgstr "सर्व्हरने मान्य केलेले पर्यायी नाव आहे; मात्र त्याची ओळखपत्र चल अपूर्ण आहेत."
+
+msgid "Remote Vault operations remain unavailable."
+msgstr "दूरस्थ तिजोरी कार्ये अनुपलब्ध राहतील."
+
+msgid "Review deployed credentials"
+msgstr "तैनात ओळखपत्रांचा आढावा घ्या"
+
+msgid "Vault profile evidence changed"
+msgstr "तिजोरी रूपरेषेचा पुरावा बदलला आहे"
+
+msgid "The stored profile no longer matches its verified connection fingerprint."
+msgstr "जतन केलेली रूपरेषा तिच्या पडताळलेल्या जोडणी ठशाशी आता जुळत नाही."
+
+msgid "Remote operations remain blocked until the profile is reviewed."
+msgstr "रूपरेषेचा आढावा होईपर्यंत दूरस्थ कार्ये रोखलेली राहतील."
+
+msgid "No published Vault inventory is available yet"
+msgstr "अद्याप कोणतीही प्रकाशित तिजोरी सूची उपलब्ध नाही"
+
+msgid "The bucket is reachable, but it does not contain a readable dataset registration."
+msgstr "बकेटशी जोडणी होते; मात्र त्यात वाचता येणारी डेटासेट नोंदणी नाही."
+
+msgid "There is no authoritative remote generation to verify."
+msgstr "पडताळण्यासाठी कोणताही अधिकृत दूरस्थ निर्मिती संच नाही."
+
+msgid "Publish the first verified generation"
+msgstr "पहिला पडताळलेला निर्मिती संच प्रकाशित करा"
+
+msgid "Vault endpoint could not be approved"
+msgstr "तिजोरी अंतिमबिंदू मान्य करता आला नाही"
+
+msgid "The endpoint did not satisfy the deployed transport, DNS, or network safety policy."
+msgstr "अंतिमबिंदूने तैनात वाहतूक, DNS किंवा जाळे सुरक्षा धोरण पूर्ण केले नाही."
+
+msgid "The profile was not saved and no connection was attempted."
+msgstr "रूपरेषा जतन केली नाही आणि कोणताही जोडणी प्रयत्न केला नाही."
+
+msgid "Review the endpoint and allowlist"
+msgstr "अंतिमबिंदू आणि मान्य-सूचीचा आढावा घ्या"
+
+msgid "Vault profile cannot be changed"
+msgstr "तिजोरी रूपरेषा बदलता येत नाही"
+
+msgid "The requested profile or credential source is controlled by deployed configuration."
+msgstr "विनंती केलेली रूपरेषा किंवा ओळखपत्र स्रोत तैनात संरचनेद्वारे नियंत्रित केला जातो."
+
+msgid "No profile change was made."
+msgstr "रूपरेषेत कोणताही बदल केला नाही."
+
+msgid "Add another read-only profile"
+msgstr "आणखी एक केवळ-वाचन रूपरेषा जोडा"
+
+msgid "Additional profiles are managed by deployed configuration in this environment."
+msgstr "या पर्यावरणातील अतिरिक्त रूपरेषा तैनात संरचनेद्वारे व्यवस्थापित केल्या जातात."
+
 msgid "Candidate preparation in progress"
 msgstr "उमेदवाराची तयारी सुरू आहे"

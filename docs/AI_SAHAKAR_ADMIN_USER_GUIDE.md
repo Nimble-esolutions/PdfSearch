@@ -107,6 +107,24 @@ typed confirmation. The active runtime and remote Vault remain unchanged while
 maintenance runs. A successful reindex creates a derived candidate and makes
 the prior published generation stale.
 
+Documents & Indexes is local maintenance and does not require a remote Vault
+profile. If a control is disabled, read its adjacent guidance: local
+maintenance policy, runtime read-only posture, external embedding policy, and
+force-reindex approval are independent gates.
+
+Under **Configuration → Vault profiles**, an **Environment Vault** profile is
+created automatically when the server has a complete `ARTIFACT_VAULT_*`
+configuration. A **Legacy application database** record is historical
+projection evidence, not an S3 connection; its probe and inventory controls
+are disabled. A read-only probe confirms endpoint and bucket reachability.
+Authoritative inventory verification additionally requires a published dataset
+registration, pointer, manifest, and objects. An empty reachable bucket is
+reported as “No published Vault inventory is available yet.”
+
+The profile form never accepts secret values. Correct highlighted fields using
+the server-approved endpoint, dataset identity, and credential alias supplied
+by the deployment operator.
+
 ## Destructive actions and support
 
 Renaming or deleting a category can affect every PDF inside it. Confirm the

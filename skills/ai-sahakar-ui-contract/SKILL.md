@@ -17,6 +17,10 @@ documentation.
 3. Inventory every reason code, safe error, state, operation, job kind, audit
    action, and result that the changed surface can expose. Resolve each through
    `core.operator_presentation`; do not infer copy from the token.
+   For Vault profile work, also inventory profile source (`environment`,
+   `stored`, or migration-only `legacy`), completeness, credential posture,
+   and the eligibility of every probe/inventory control. Do not let an empty
+   historical projection masquerade as a configurable remote profile.
 4. State the affected component, responsive breakpoints, states, locale copy,
    accessibility behavior, and performance impact in the PR or design note.
 5. Implement the smallest contextual enhancement using existing tokens and
@@ -30,6 +34,10 @@ documentation.
    Latin-script English. Scan visible text and accessibility output for machine
    tokens, then expand Technical details and verify the exact bounded code is
    copyable, LTR, and redacted.
+   Review existing affected translations as well as new strings. Translate
+   ordinary words literally where Marathi remains precise; retain identifiers
+   such as S3, HTTP, HTTPS, DNS, codes, aliases, and environment keys as
+   technical evidence rather than inventing misleading translations.
 7. Verify the affected English, Marathi, mobile, desktop, keyboard, reduced
    motion, source, loading, error, and admin states.
 8. Update the developer/user guide or contract when behavior or rules change.

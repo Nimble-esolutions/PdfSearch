@@ -77,6 +77,86 @@ REASONS = {
         "configuration",
         "danger",
     ),
+    "legacy_profile_not_remote": (
+        "Historical profile has no remote Vault connection",
+        "This record preserves earlier application evidence and is not an S3 connection profile.",
+        "Remote probe and inventory controls do not apply to it.",
+        "Review the environment Vault profile",
+        "configuration",
+        "info",
+    ),
+    "vault_profile_incomplete": (
+        "Vault profile configuration is incomplete",
+        "The profile is missing server-approved connection information.",
+        "Remote probe and inventory controls remain unavailable.",
+        "Complete profile configuration",
+        "configuration",
+        "warning",
+    ),
+    "vault_profile_invalid": (
+        "Vault profile fields need attention",
+        "One or more required profile values are missing or invalid.",
+        "No profile change was saved.",
+        "Correct the highlighted fields",
+        "configuration",
+        "warning",
+    ),
+    "vault_profile_configuration_disabled": (
+        "Browser profile configuration is disabled",
+        "This environment accepts Vault profiles only from deployed configuration.",
+        "No browser-submitted profile can be saved.",
+        "Review deployed Vault configuration",
+        "configuration",
+        "warning",
+    ),
+    "vault_endpoint_not_allowlisted": (
+        "Vault endpoint is not approved",
+        "The endpoint does not exactly match a server-approved S3 origin.",
+        "The profile cannot connect to that endpoint.",
+        "Review the endpoint allowlist",
+        "configuration",
+        "warning",
+    ),
+    "vault_endpoint_invalid": (
+        "Vault endpoint needs correction",
+        "Enter only an HTTP or HTTPS origin without credentials, a path, query, or fragment.",
+        "The profile was not saved.",
+        "Correct the endpoint",
+        "configuration",
+        "warning",
+    ),
+    "credential_alias_not_approved": (
+        "Credential alias is not approved",
+        "The alias is not mapped to a server-managed credential source.",
+        "The browser cannot create or use the profile.",
+        "Review approved credential aliases",
+        "configuration",
+        "warning",
+    ),
+    "credential_alias_unavailable": (
+        "Approved credentials are unavailable",
+        "The server-approved alias is present, but its credential variables are incomplete.",
+        "Remote Vault operations remain unavailable.",
+        "Review deployed credentials",
+        "configuration",
+        "danger",
+    ),
+    "profile_fingerprint_changed": (
+        "Vault profile evidence changed",
+        "The stored profile no longer matches its verified connection fingerprint.",
+        "Remote operations remain blocked until the profile is reviewed.",
+        "Review profile configuration",
+        "configuration",
+        "danger",
+    ),
+    "registration_read_failed": (
+        "No published Vault inventory is available yet",
+        "The bucket is reachable, but it does not contain a readable dataset registration.",
+        "There is no authoritative remote generation to verify.",
+        "Publish the first verified generation",
+        "sync",
+        "info",
+    ),
     "inventory_unavailable": (
         "Remote inventory is unavailable",
         "No verified remote inventory observation is available.",
@@ -393,6 +473,46 @@ def _authored(title, detail, consequence, action_label, section, severity):
         gettext_noop(action_label),
         section,
         severity,
+    )
+
+
+for _code in {
+    "vault_endpoint_scheme_rejected",
+    "vault_endpoint_https_required",
+    "vault_endpoint_port_invalid",
+    "vault_endpoint_dns_failed",
+    "vault_endpoint_dns_empty",
+    "vault_endpoint_dns_invalid",
+    "vault_endpoint_private_address",
+}:
+    REASONS.setdefault(
+        _code,
+        _authored(
+            "Vault endpoint could not be approved",
+            "The endpoint did not satisfy the deployed transport, DNS, or network safety policy.",
+            "The profile was not saved and no connection was attempted.",
+            "Review the endpoint and allowlist",
+            "configuration",
+            "warning",
+        ),
+    )
+
+for _code in {
+    "credential_alias_configuration_invalid",
+    "environment_credential_alias_reserved",
+    "environment_profile_locked",
+    "vault_profile_disabled",
+}:
+    REASONS.setdefault(
+        _code,
+        _authored(
+            "Vault profile cannot be changed",
+            "The requested profile or credential source is controlled by deployed configuration.",
+            "No profile change was made.",
+            "Review deployed Vault configuration",
+            "configuration",
+            "warning",
+        ),
     )
 
 

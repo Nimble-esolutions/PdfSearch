@@ -196,6 +196,96 @@ def materialize_environment_profile(vault=None):
     return profile
 
 
+def environment_profile_defaults(vault=None):
+    """Return secret-free form defaults projected from deployed configuration."""
+    vault = vault or ArtifactVault()
+    identity = settings.ENV_IDENTITY
+    endpoint = vault.config.endpoint or ""
+    parsed = urlsplit(endpoint)
+    endpoint_origin = (
+        f"{parsed.scheme}://{parsed.netloc}"
+        if parsed.scheme and parsed.netloc
+        else ""
+    )
+    return {
+        "key": "",
+        "display_name": "",
+        "endpoint_origin": endpoint_origin,
+        "bucket": vault.config.bucket,
+        "region": vault.config.region,
+        "dataset_id": identity.dataset_id,
+        "production_source_id": identity.production_source_id,
+        "credential_alias": next(iter(_credential_aliases()), ""),
+    }
+
+
+def ensure_environment_profile(vault=None):
+    """Materialize a usable environment profile, never an empty placeholder."""
+    vault = vault or ArtifactVault()
+    if not vault.enabled:
+        return None
+    vault.config.validate()
+    identity = settings.ENV_IDENTITY
+    parsed = urlsplit(vault.config.endpoint)
+    endpoint_origin = f"{parsed.scheme}://{parsed.netloc}"
+    current = VaultConnectionProfile.objects.filter(
+        key=settings.VAULT_DEFAULT_PROFILE
+    ).first()
+    expected = {
+        "source": VaultConnectionProfile.Source.ENVIRONMENT,
+        "enabled": True,
+        "read_only": not identity.is_authoritative_writer,
+        "environment_locked": True,
+        "endpoint_origin": endpoint_origin,
+        "bucket": vault.config.bucket,
+        "region": vault.config.region,
+        "dataset_id": identity.dataset_id,
+        "production_source_id": identity.production_source_id,
+        "credential_alias": "environment:ARTIFACT_VAULT",
+    }
+    if current and all(
+        getattr(current, field) == value for field, value in expected.items()
+    ):
+        expected_fingerprint = profile_fingerprint(current)
+        if current.fingerprint == expected_fingerprint:
+            return current
+    return materialize_environment_profile(vault)
+
+
+def profile_action_posture(profile):
+    """Describe whether bounded remote actions are meaningful for a profile."""
+    if profile.source == VaultConnectionProfile.Source.LEGACY:
+        return {
+            "probe_enabled": False,
+            "inventory_enabled": False,
+            "reason_code": "legacy_profile_not_remote",
+        }
+    missing = [
+        field
+        for field in (
+            "endpoint_origin",
+            "bucket",
+            "region",
+            "dataset_id",
+            "production_source_id",
+            "credential_alias",
+            "fingerprint",
+        )
+        if not getattr(profile, field)
+    ]
+    if missing:
+        return {
+            "probe_enabled": False,
+            "inventory_enabled": False,
+            "reason_code": "vault_profile_incomplete",
+        }
+    return {
+        "probe_enabled": True,
+        "inventory_enabled": True,
+        "reason_code": "",
+    }
+
+
 def vault_for_profile(profile, *, expected_fingerprint="", resolver=None):
     """Build a server-side vault client after revalidating profile identity."""
     if not profile.enabled:
