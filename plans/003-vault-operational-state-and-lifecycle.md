@@ -13,7 +13,8 @@
 - **Depends on**: Plan 006 gate
 - **Category**: operations / data lifecycle
 - **Planned at**: commit `f742b59`, 2026-07-26
-- **Reconciled at**: commits `c545312`, `6df613c`, 2026-07-29
+- **Reconciled at**: commits `c545312`, `6df613c`, `43e1cca`,
+  2026-07-29
 - **Roadmap status**: RECONCILE
 
 ## Drift check
@@ -60,6 +61,12 @@ path is now retired from the operator interface. The current baseline is:
   immutable dependency images, cleans up automatically, and exercises
   publication, promotion, activation-ready restore, fencing, and process-death
   recovery.
+- The disposable maintenance lifecycle carries one exact
+  `(generation_id, manifest_digest)` through publication, authoritative
+  promotion, object verification, restore with migration rehearsal, signed
+  dual-supervisor activation, fresh Gunicorn readiness, English/Marathi
+  searches, and final Vault/control evidence reconciliation. CI runs this path
+  on every pull request and `dev` release.
 - The Workbench separates ordinary **Documents & Search** maintenance from
   advanced **Vault & Recovery**, uses human English/Marathi guidance, and keeps
   machine evidence collapsed and role-bounded.
@@ -77,15 +84,10 @@ contract and must not be used to assess current lifecycle completeness.
 
 ## Residual gaps
 
-1. The checked-in integration gate proves a published generation can become an
-   activation-ready workspace and separately proves runtime cutover recovery.
-   It does not yet prove one selected generation through the entire
-   publication → restore → activation → readiness journey in one disposable
-   deployment.
-2. Two deployment drills remain unrecorded: preservation of an accumulated
+1. Two deployment drills remain unrecorded: preservation of an accumulated
    named volume across redeploy, and restore of a selected generation into a
    genuinely fresh disposable volume with no host-only state.
-3. Production RustFS readiness remains unproved until an operator-approved,
+2. Production RustFS readiness remains unproved until an operator-approved,
    non-destructive clean-volume drill records generation identity, manifest
    digest, runtime pointer, readiness results, and rollback evidence.
 
@@ -97,9 +99,10 @@ contract and must not be used to assess current lifecycle completeness.
 2. **Complete:** both entrypoints now enforce the chosen fail-closed
    `startup-*` contract before database mutation. Automatic restore remains
    deliberately outside startup.
-3. Extend the disposable gate so the same published generation is selected,
-   restored, activated through the supervisor, and verified by runtime
-   readiness checks.
+3. **Complete:** the disposable maintenance lifecycle now selects the same
+   published generation, restores it, activates it through the real
+   supervisors, and verifies generation-plus-manifest runtime readiness and
+   bilingual search.
 4. Exercise disabled, missing configuration, unreachable, forbidden, missing
    bucket, stale manifest, healthy, duplicate request, cancellation, and stale
    ownership states through the active `vaultops` path.
@@ -107,7 +110,7 @@ contract and must not be used to assess current lifecycle completeness.
 6. Run and record the fresh-volume restore drill locally, then repeat it
    against production RustFS only with explicit operator authorization.
 7. Reconcile all lifecycle documentation and mark this plan `DONE` only after
-   the startup decision and both deployment drills are complete.
+   both deployment drills are complete.
 
 ## Verification
 
