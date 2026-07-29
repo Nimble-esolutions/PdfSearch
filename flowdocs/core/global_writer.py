@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from .artifact_vault import ArtifactVault, ArtifactVaultError
+from .artifact_vault import ArtifactVault, ArtifactVaultError, object_metadata_value
 from .namespace import KeyBuilder
 
 WRITER_CONTROL_SCHEMA = 1
@@ -306,7 +306,7 @@ def _read_writer_record(
     if not isinstance(record, dict):
         raise GlobalWriterError("global_writer_record_malformed")
     digest = hashlib.sha256(data).hexdigest()
-    stored_digest = (resp.get("Metadata") or {}).get("sha256", "")
+    stored_digest = object_metadata_value(resp.get("Metadata"), "sha256", "")
     if stored_digest and stored_digest != digest:
         raise GlobalWriterError("global_writer_digest_mismatch")
     record["_etag"] = resp.get("ETag", "")
