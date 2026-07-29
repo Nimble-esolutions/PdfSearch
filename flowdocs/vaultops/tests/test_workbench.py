@@ -11,7 +11,7 @@ from django.db import connections
 from django.test import RequestFactory, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
-from django.utils import timezone
+from django.utils import timezone, translation
 
 from core.lease import acquire_lease, release_lease
 from core.models import ArtifactGeneration as LegacyGeneration
@@ -821,6 +821,8 @@ class VaultWorkbenchTests(TestCase):
         project_generation.assert_called_once_with(self.profile, verified)
 
     def test_marathi_workbench_uses_reviewed_operations_language(self):
+        original_language = translation.get_language()
+        self.addCleanup(translation.activate, original_language)
         self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
         response = self.client.get(reverse("operations_panel"))
         self.assertEqual(response.status_code, 200)
