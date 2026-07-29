@@ -14,7 +14,12 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultIntegrityError
+from .artifact_vault import (
+    ArtifactVault,
+    ArtifactVaultError,
+    ArtifactVaultIntegrityError,
+    object_metadata_value,
+)
 from .namespace import KeyBuilder
 
 
@@ -331,7 +336,7 @@ def get_authoritative_pointer(
     if not isinstance(result, dict):
         raise RegistrationError("authoritative_pointer_malformed")
     digest = hashlib.sha256(data).hexdigest()
-    stored_digest = (resp.get("Metadata") or {}).get("sha256", "")
+    stored_digest = object_metadata_value(resp.get("Metadata"), "sha256", "")
     if stored_digest and stored_digest != digest:
         raise RegistrationError("authoritative_pointer_digest_mismatch")
     result["_etag"] = resp.get("ETag", "")

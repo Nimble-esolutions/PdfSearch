@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from core.artifact_vault import object_metadata_value
 from core.namespace import KeyBuilder
 from vaultops.models import (
     ArtifactGeneration,
@@ -91,7 +92,7 @@ def _read_json(vault, key, *, kind, missing_allowed=False):
     if len(data) > settings.VAULT_MAX_MANIFEST_BYTES:
         raise InventoryError(f"{kind}_too_large")
     digest = hashlib.sha256(data).hexdigest()
-    stored_digest = (response.get("Metadata") or {}).get("sha256", "")
+    stored_digest = object_metadata_value(response.get("Metadata"), "sha256", "")
     if not stored_digest or stored_digest != digest:
         raise InventoryError(f"{kind}_digest_mismatch")
     try:
@@ -245,9 +246,9 @@ def _verify_objects(vault, files):
             if code in {"403", "AccessDenied"}:
                 raise InventoryError("generation_object_access_denied") from exc
             raise InventoryError("generation_object_head_failed") from exc
-        metadata = response.get("Metadata") or {}
         if (
-            metadata.get("sha256") != entry["sha256"]
+            object_metadata_value(response.get("Metadata"), "sha256")
+            != entry["sha256"]
             or int(response.get("ContentLength", -1)) != entry["bytes"]
         ):
             raise InventoryError("generation_object_digest_mismatch")

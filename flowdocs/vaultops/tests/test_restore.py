@@ -404,6 +404,20 @@ class InventoryAndRestoreTests(TestCase):
         self.assertEqual(verified.file_count, 1)
         self.assertGreater(verified.byte_count, 0)
 
+    def test_inventory_accepts_rustfs_title_case_custom_metadata(self):
+        for item in self.client.objects.values():
+            item["metadata"] = {
+                "Sha256": item["metadata"]["sha256"],
+                "Immutable": "true",
+            }
+
+        verified = verify_generation(
+            self.vault, self.profile, verify_objects=True
+        )
+
+        self.assertTrue(verified.authoritative)
+        self.assertEqual(verified.file_count, 1)
+
     def test_inventory_rejects_traversal_before_download(self):
         self._publish_fixture(path="../db.sqlite3")
         with self.assertRaisesMessage(

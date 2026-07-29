@@ -616,11 +616,24 @@ def _validate_expected_checksum(expected: str | None, actual: str) -> None:
 
 
 def _metadata_checksum(metadata: Mapping[str, Any]) -> str:
-    value = metadata.get("sha256")
+    value = object_metadata_value(metadata, "sha256")
     if not isinstance(value, str):
         raise ArtifactVaultIntegrityError("Vault object is missing its SHA-256 metadata")
     _validate_sha256(value)
     return value
+
+
+def object_metadata_value(
+    metadata: Mapping[str, Any] | None,
+    key: str,
+    default: Any = None,
+) -> Any:
+    """Return custom object metadata without assuming provider key casing."""
+    expected = key.casefold()
+    for candidate, value in (metadata or {}).items():
+        if isinstance(candidate, str) and candidate.casefold() == expected:
+            return value
+    return default
 
 
 def _manifest_bytes(manifest: Mapping[str, Any] | bytes | bytearray) -> tuple[bytes, dict[str, Any]]:

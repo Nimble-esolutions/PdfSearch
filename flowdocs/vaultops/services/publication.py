@@ -10,7 +10,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from core.artifact_vault import ArtifactVault
+from core.artifact_vault import ArtifactVault, object_metadata_value
 from core.global_writer import (
     acquire_global_writer,
     release_global_writer,
@@ -75,7 +75,7 @@ def _read_json_object(vault, key, *, missing_allowed=False):
     if not isinstance(payload, dict):
         raise PublicationError("vault_control_malformed")
     digest = hashlib.sha256(data).hexdigest()
-    stored_digest = (response.get("Metadata") or {}).get("sha256", "")
+    stored_digest = object_metadata_value(response.get("Metadata"), "sha256", "")
     if stored_digest and stored_digest != digest:
         raise PublicationError("vault_control_digest_mismatch")
     payload["_etag"] = response.get("ETag", "")
@@ -134,9 +134,8 @@ def _head(vault, key):
 def _verify_head(response, *, digest, size):
     if response is None:
         raise PublicationError("published_object_missing")
-    metadata = response.get("Metadata") or {}
     if (
-        metadata.get("sha256") != digest
+        object_metadata_value(response.get("Metadata"), "sha256") != digest
         or int(response.get("ContentLength", -1)) != size
     ):
         raise PublicationError("published_object_digest_mismatch")

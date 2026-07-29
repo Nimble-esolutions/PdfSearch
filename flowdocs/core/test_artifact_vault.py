@@ -116,6 +116,21 @@ class ArtifactVaultTests(SimpleTestCase):
         self.assertEqual(self.vault.get(metadata.key, expected_sha256=expected), payload)
         self.assertEqual(self.vault.head(metadata.key).sha256, expected)
 
+    def test_rustfs_title_case_custom_metadata_round_trips(self):
+        payload = b"%PDF-1.7 rustfs metadata casing"
+        metadata = self.vault.put_pdf(BytesIO(payload))
+        stored = self.client.objects[metadata.key]
+        stored["metadata"] = {
+            "Sha256": stored["metadata"]["sha256"],
+            "Immutable": stored["metadata"]["immutable"],
+        }
+
+        self.assertEqual(
+            self.vault.get(metadata.key, expected_sha256=metadata.sha256),
+            payload,
+        )
+        self.assertEqual(self.vault.head(metadata.key).sha256, metadata.sha256)
+
     def test_put_rejects_wrong_checksum_before_upload(self):
         with self.assertRaises(ArtifactVaultIntegrityError):
             self.vault.put_pdf(b"payload", expected_sha256="0" * 64)
