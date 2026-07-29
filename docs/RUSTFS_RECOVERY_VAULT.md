@@ -158,9 +158,11 @@ The current safe recovery sequence is:
 8. verify `/livez`, `/readyz`, `/health/data/`, login, document listing, search,
    and source access before routing traffic.
 
-Do not use the current admin “Pull to Staging”, “Promote”, or “Rollback” labels
-as proof that active bytes changed. Those controls remain blocked for disaster
-recovery until Plan 003 connects them to the full pipeline.
+Vault promotion changes the authoritative object-store pointer, not runtime
+bytes. Restore preparation produces an `activation_ready` workspace. Only the
+separately confirmed activation action, followed by runtime pointer and
+readiness verification, is evidence that active bytes changed. Production
+disaster recovery remains unproved until the Plan 003 deployment drills pass.
 
 ## Required service environment
 
@@ -218,9 +220,10 @@ The 2026-07-26 local audit ran:
 7 real publish/restore/sanitize/rehearse/activate/rollback tests: passed
 ```
 
-The disposable integration stack required manual entrypoint and network
-workarounds. Therefore these results validate the underlying primitives, not
-the checked-in Compose gate or deployed Dokploy wiring.
+The checked-in disposable integration stack now supplies its own entrypoint,
+bucket initialization, shared MinIO/Redis network, immutable dependency-image
+requirements, process-death proof, and automatic cleanup. It validates the
+local lifecycle mechanism, not deployed Dokploy wiring or production RustFS.
 
 A production readiness claim additionally requires a non-destructive,
 clean-volume restore drill against the configured RustFS service. This audit
@@ -242,10 +245,12 @@ did not access or mutate production RustFS data.
 
 ## Future completion gate
 
-Plan 003 must connect one namespace and one orchestrator from publication
-through restore and activation, pass the complete environment to the worker,
-wire mutation dirty-state or another reliable change detector, repair the
-integration Compose gate, and prove both:
+The active `vaultops` path now provides dataset-scoped publication,
+activation-ready restore preparation, separately confirmed runtime activation,
+durable mutation epochs, snapshot barriers, and a disposable integration gate.
+Plan 003 must still enforce the complete lifecycle environment on the worker,
+decide the fail-closed startup-restore contract, join publication through
+runtime readiness in one disposable proof, and prove both:
 
 1. an intact accumulated volume is preserved across redeploy; and
 2. a fresh disposable volume can restore the selected generation with no

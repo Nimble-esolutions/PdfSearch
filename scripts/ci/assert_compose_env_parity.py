@@ -11,38 +11,83 @@ import sys
 
 CRITICAL_KEYS = {
     "APP_ENV",
+    "APP_IMAGE_DIGEST",
+    "APP_RELEASE_VERSION",
+    "ARTIFACT_VAULT_ACCESS_KEY",
+    "ARTIFACT_VAULT_BUCKET",
+    "ARTIFACT_VAULT_ENABLED",
+    "ARTIFACT_VAULT_ENDPOINT",
+    "ARTIFACT_VAULT_REGION",
+    "ARTIFACT_VAULT_SECRET_KEY",
+    "BACKUP_ROLE",
+    "BACKUP_SYNC_MODE",
     "DEPLOYMENT_ID",
     "DATASET_ID",
     "AUTHORITATIVE_DATASET_ID",
     "PRODUCTION_SOURCE_ID",
     "DATA_MODE",
+    "DATA_PINNED_GENERATION",
     "RESTORE_SOURCE_DATASET_ID",
     "RESTORE_POLICY",
-    "BACKUP_ROLE",
-    "VAULT_SYNC_ENABLED",
-    "VAULT_DEFAULT_PROFILE",
+    "MAINTENANCE_CANDIDATE_PREPARATION_ENABLED",
+    "MAINTENANCE_CANDIDATE_WRITER_MODE",
+    "MAINTENANCE_JOB_TIMEOUT_SECONDS",
+    "MAINTENANCE_SCHEDULER_ENABLED",
+    "MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS",
+    "MAINTENANCE_WORKER_HEARTBEAT_PATH",
+    "MAINTENANCE_WORKER_READINESS_REQUIRED",
+    "MAINTENANCE_WORKSPACE_ROOT",
+    "NONPROD_DATA_POLICY",
+    "VAULT_ADMIN_MUTATIONS_ENABLED",
     "VAULT_ALLOWED_S3_ENDPOINTS",
     "VAULT_CREDENTIAL_ALIASES",
+    "VAULT_DEFAULT_PROFILE",
+    "VAULT_JOB_HEARTBEAT_SECONDS",
+    "VAULT_JOB_STALE_SECONDS",
+    "VAULT_MUTATION_TRACKING_ENABLED",
+    "VAULT_RESTORE_ENABLED",
+    "VAULT_RESTORE_MIN_FREE_BYTES",
+    "VAULT_RESTORE_MIN_FREE_INODES",
     "VAULT_RESTORE_REQUIRE_SANITIZATION",
+    "VAULT_SNAPSHOT_BARRIER_TIMEOUT_SECONDS",
+    "VAULT_SNAPSHOT_ROOT",
+    "VAULT_SYNC_ENABLED",
+    "VAULT_SYNC_INTERVAL_SECONDS",
+    "VAULT_SYNC_MAX_LAG_SECONDS",
+    "VAULT_SYNC_MAX_PARALLEL_HASHERS",
+    "VAULT_SYNC_MAX_PARALLEL_UPLOADS",
+    "VAULT_SYNC_MODE",
+    "VAULT_SYNC_PROMOTION_MODE",
+    "VAULT_SYNC_QUIET_PERIOD_SECONDS",
     "VAULT_UI_PROFILE_CONFIGURATION_ENABLED",
     "VAULT_UI_SECRET_ENTRY_ENABLED",
+    "VAULT_VALIDATION_MAX_AGE_SECONDS",
     "LOCAL_INDEX_MAINTENANCE_ENABLED",
     "FORCE_REINDEX_ENABLED",
     "EXTERNAL_EMBEDDINGS_ENABLED",
-    "MAINTENANCE_WORKSPACE_ROOT",
-    "MAINTENANCE_JOB_TIMEOUT_SECONDS",
     "STAGING_RUNTIME_ACTIVATION_ENABLED",
-    "MAINTENANCE_CANDIDATE_PREPARATION_ENABLED",
     "STAGING_ACTIVATION_APPLY_MODE",
     "ACTIVATION_INTENT_SIGNING_KEY",
     "ACTIVATION_SMOKE_QUERIES_FILE",
     "ACTIVATION_RECOVERY_SUPERADMIN_USERNAME",
     "ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD",
     "EXTERNAL_SIDE_EFFECTS_MODE",
-    "APP_IMAGE_DIGEST",
-    "APP_RELEASE_VERSION",
-    "NONPROD_DATA_POLICY",
 }
+
+
+def find_parity_errors(services):
+    """Return key names only so validation never discloses configured values."""
+    web = services["web"].get("environment", {})
+    maintenance = services["maintenance"].get("environment", {})
+    missing = sorted(
+        key for key in CRITICAL_KEYS if key not in web or key not in maintenance
+    )
+    divergent = sorted(
+        key
+        for key in CRITICAL_KEYS
+        if key in web and key in maintenance and web[key] != maintenance[key]
+    )
+    return missing, divergent
 
 
 def main() -> int:
@@ -64,16 +109,7 @@ def main() -> int:
         text=True,
     )
     services = json.loads(result.stdout)["services"]
-    web = services["web"].get("environment", {})
-    maintenance = services["maintenance"].get("environment", {})
-    missing = sorted(
-        key for key in CRITICAL_KEYS if key not in web or key not in maintenance
-    )
-    divergent = sorted(
-        key
-        for key in CRITICAL_KEYS
-        if key in web and key in maintenance and web[key] != maintenance[key]
-    )
+    missing, divergent = find_parity_errors(services)
     if missing or divergent:
         if missing:
             print("missing security-critical keys: " + ", ".join(missing))
