@@ -151,6 +151,12 @@ jobs:
           MINIO_IMAGE: minio/minio@sha256:0000000000000000000000000000000000000000000000000000000000000000
         run: docker compose -f docker-compose.integration.yml config --quiet
 
+      - name: Validate disposable maintenance lifecycle Compose
+        env:
+          PDFSEARCH_IMAGE: pdfsearch-ci:source
+          MINIO_IMAGE: minio/minio@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        run: docker compose -f docker-compose.maintenance-e2e.yml config --quiet
+
       - name: Build CI image with tested OCI revision
         env:
           LOCAL_IMAGE: pdfsearch-ci:source
@@ -206,6 +212,15 @@ jobs:
           WEB_PORT: 18080
           COMPOSE_PROJECT_NAME: pdfsearch-ci-source
         run: bash scripts/ci/run_compose_smoke.sh
+
+      - name: Prove one authoritative generation through runtime activation
+        env:
+          PDFSEARCH_IMAGE: pdfsearch-ci:source
+          MINIO_IMAGE: ${{ steps.ci_minio.outputs.image }}
+          SKIP_MAINTENANCE_E2E_BUILD: "1"
+          CI_RUN_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
+          WEB_PORT: 18081
+        run: bash scripts/ci/run_maintenance_lifecycle_e2e.sh
 
       - name: Run vault lifecycle and process-death gates
         env:
