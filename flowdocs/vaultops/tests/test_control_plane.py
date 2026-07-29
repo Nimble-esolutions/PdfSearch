@@ -443,6 +443,40 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
         self.assertEqual(state["runtime"]["state"], "unknown")
         self.assertIn("inventory_unavailable", state["blocking_reasons"])
 
+    def test_reachable_profile_without_inventory_is_setup_required(self):
+        self.profile.capability_evidence = {
+            "configured": True,
+            "reachable": True,
+            "bucket_exists": True,
+            "read_only_probe": True,
+            "error_code": "",
+        }
+        self.profile.last_probed_at = timezone.now()
+        self.profile.save(
+            update_fields=[
+                "capability_evidence",
+                "last_probed_at",
+                "updated_at",
+            ]
+        )
+
+        state = build_authority_state(
+            profile_key=self.profile.key,
+            dataset_id="ai-sahakar-test",
+            deployment_id="staging-01",
+        )
+
+        self.assertEqual(state["status"], "setup_required")
+        self.assertEqual(state["remote"]["state"], "setup_required")
+        self.assertEqual(
+            state["reason_code"], "vault_inventory_setup_required"
+        )
+        self.assertIn(
+            "vault_inventory_setup_required", state["blocking_reasons"]
+        )
+        self.assertNotIn("inventory_unavailable", state["blocking_reasons"])
+        self.assertNotIn("plan_restore", state["allowed_actions"])
+
     @override_settings(VAULT_VALIDATION_MAX_AGE_SECONDS=300)
     def test_stale_observations_degrade_authority_with_stable_reasons(self):
         stale = timezone.now() - timedelta(seconds=301)

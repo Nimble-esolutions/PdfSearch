@@ -29,7 +29,8 @@ from .management.commands.inventory_artifacts import build_manifest, compare_man
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
 from .maintenance_plans import queue_plan
-from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat, HEARTBEAT_FILE
+from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat
+from .worker_readiness import heartbeat_path
 from .views import _parse_bulk_filters
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
@@ -1316,7 +1317,9 @@ class DashboardTests(TestCase):
         self.client.force_login(superadmin)
 
         with override_settings(
-            LOCAL_INDEX_MAINTENANCE_ENABLED=True, ACTIVE_RUNTIME=None
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            MAINTENANCE_WORKER_READINESS_REQUIRED=False,
+            ACTIVE_RUNTIME=None,
         ):
             response = self.client.post(
                 reverse("folder_operations", args=[folder.pk]),
@@ -1367,6 +1370,7 @@ class DashboardTests(TestCase):
 
         with override_settings(
             LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             EXTERNAL_EMBEDDINGS_ENABLED=True,
             ACTIVE_RUNTIME=None,
         ):
@@ -1412,6 +1416,7 @@ class DashboardTests(TestCase):
 
         with override_settings(
             LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             EXTERNAL_EMBEDDINGS_ENABLED=True,
             ACTIVE_RUNTIME=None,
         ):
@@ -2499,20 +2504,24 @@ class WorkerRecoveryTests(TestCase):
         event = MaintenanceAuditEvent.objects.get(job=job, event_type="worker_died")
         self.assertEqual(event.event_type, "worker_died")
 
-    def test_heartbeat_file_includes_pid_and_timestamp(self):
-        _write_heartbeat()
-        self.assertTrue(os.path.exists(HEARTBEAT_FILE))
-        with open(HEARTBEAT_FILE) as f:
-            lines = f.read().strip().split("\n")
-        self.assertEqual(len(lines), 2)
-        self.assertTrue(lines[0].isdigit())
-        self.assertTrue(lines[1].isdigit())
+    def test_heartbeat_file_contains_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(
+            MAINTENANCE_WORKER_HEARTBEAT_PATH=Path(tmpdir) / "worker.heartbeat"
+        ):
+            _write_heartbeat()
+            lines = heartbeat_path().read_text(encoding="ascii").strip().splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertGreater(float(lines[0]), 0)
 
     def test_heartbeat_timestamp_is_recent(self):
-        _write_heartbeat()
-        with open(HEARTBEAT_FILE) as f:
-            lines = f.read().strip().split("\n")
-        age = time.time() - int(lines[1])
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(
+            MAINTENANCE_WORKER_HEARTBEAT_PATH=Path(tmpdir) / "worker.heartbeat"
+        ):
+            _write_heartbeat()
+            timestamp = float(
+                heartbeat_path().read_text(encoding="ascii").strip()
+            )
+        age = time.time() - timestamp
         self.assertLess(age, 5)
 
 

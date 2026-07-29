@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import signal
+import threading
 import time
 from datetime import timedelta
 
@@ -11,8 +12,8 @@ from django.utils import timezone
 
 from core.maintenance import claim_next_job, run_job
 from core.models import MaintenanceJob, MaintenanceAuditEvent
+from core.worker_readiness import write_worker_heartbeat
 
-HEARTBEAT_FILE = "/tmp/worker_heartbeat"
 ORPHAN_TIMEOUT_MINUTES = 5
 SCHEDULER_INTERVAL_SECONDS = 60
 LAST_SCHEDULER_TICK = "/tmp/worker_last_scheduler_tick"
@@ -27,10 +28,18 @@ def _handle_shutdown(signum, frame):
 
 def _write_heartbeat():
     try:
-        with open(HEARTBEAT_FILE, "w") as f:
-            f.write(f"{os.getpid()}\n{int(time.time())}")
+        write_worker_heartbeat()
     except OSError:
         pass
+
+
+def _heartbeat_loop():
+    """Keep liveness fresh while the main worker is processing a long job."""
+    max_age = settings.MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS
+    interval = max(1.0, min(10.0, max_age / 3))
+    while not _shutdown_flag:
+        _write_heartbeat()
+        time.sleep(interval)
 
 
 def _write_scheduler_tick():
@@ -156,6 +165,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         signal.signal(signal.SIGTERM, _handle_shutdown)
         signal.signal(signal.SIGINT, _handle_shutdown)
+        _write_heartbeat()
+        threading.Thread(
+            target=_heartbeat_loop,
+            name="maintenance-worker-heartbeat",
+            daemon=True,
+        ).start()
 
         recovered = _recover_orphaned_jobs()
         if (

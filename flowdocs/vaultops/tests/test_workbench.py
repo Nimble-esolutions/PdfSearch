@@ -52,6 +52,9 @@ from vaultops.services.profiles import (
     VAULT_ADMIN_MUTATIONS_ENABLED=True,
     VAULT_SYNC_ENABLED=True,
     VAULT_RESTORE_ENABLED=True,
+    LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+    EXTERNAL_EMBEDDINGS_ENABLED=True,
+    MAINTENANCE_WORKER_READINESS_REQUIRED=False,
 )
 class VaultWorkbenchTests(TestCase):
     databases = {"default", "control"}

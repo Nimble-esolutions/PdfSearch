@@ -67,6 +67,20 @@ class OperatorPresentationTests(SimpleTestCase):
             presentation["technical_code"], "external_embeddings_disabled"
         )
 
+    def test_worker_and_first_generation_reasons_have_authored_copy(self):
+        worker = present_reason("maintenance_worker_unavailable")
+        first_generation = present_reason("vault_inventory_setup_required")
+
+        self.assertEqual(
+            worker["title"], "Document maintenance is temporarily unavailable"
+        )
+        self.assertEqual(worker["severity"], "warning")
+        self.assertEqual(
+            first_generation["title"],
+            "Vault storage is ready for its first generation",
+        )
+        self.assertEqual(first_generation["severity"], "info")
+
     def test_unknown_reason_never_infers_copy_from_token(self):
         presentation = present_reason("future_unknown_machine_token")
         self.assertFalse(presentation["known"])

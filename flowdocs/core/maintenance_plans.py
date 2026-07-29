@@ -28,6 +28,7 @@ from .models import (
     MaintenancePlan,
     PDFFile,
 )
+from .worker_readiness import maintenance_worker_capability
 
 LOCAL_OPERATIONS = {
     "validate",
@@ -119,6 +120,11 @@ def capability_reasons() -> dict[str, str]:
         common = "runtime_read_only"
     elif not getattr(settings, "LOCAL_INDEX_MAINTENANCE_ENABLED", False):
         common = "bulk_reindex_disabled"
+    elif (
+        getattr(settings, "MAINTENANCE_WORKER_READINESS_REQUIRED", True)
+        and not maintenance_worker_capability()["available"]
+    ):
+        common = "maintenance_worker_unavailable"
     else:
         try:
             from vaultops.models import VaultJob
@@ -641,6 +647,7 @@ def workbench_maintenance_state(
     *, selected_plan_id="", selected_job_id=""
 ) -> dict:
     reasons = capability_reasons()
+    worker = maintenance_worker_capability()
     recovery_sets = list_sets()
     cleanup = plan_prune()
     try:
@@ -776,6 +783,7 @@ def workbench_maintenance_state(
             operation: {"enabled": not reason, "reason_code": reason}
             for operation, reason in reasons.items()
         },
+        "worker": worker,
         "folders": list(
             Folder.objects.annotate(pdf_count=Count("files")).values(
                 "id", "name", "pdf_count"
