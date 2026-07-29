@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import sqlite3
 import tempfile
@@ -9,12 +10,18 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from core.artifact_cleanup import (
     CleanupError,
+    apply_legacy_backup_cleanup,
     apply_cleanup,
+    capacity_report,
     cleanup_plan,
+    inventory_legacy_backups,
+    legacy_backup_cleanup_plan,
 )
 from core.candidate_maintenance import (
     CandidateMaintenanceError,
@@ -833,3 +840,157 @@ class ArtifactCleanupPlannerTests(TestCase):
         ):
             apply_cleanup("untrusted-plan")
         self.assertTrue(workspace.exists())
+
+
+class LegacyBackupCleanupTests(SimpleTestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.backups = self.root / "backups"
+        self.backups.mkdir()
+        self.settings = override_settings(
+            BACKUP_DIR=self.backups,
+            DATA_CONTROL_ROOT=self.root,
+        )
+        self.settings.enable()
+
+    def tearDown(self):
+        self.settings.disable()
+        self.temporary.cleanup()
+
+    def _backup(self, timestamp, *, valid=True):
+        path = self.backups / f"db_backup_{timestamp}.sqlite3"
+        if not valid:
+            path.write_bytes(b"not sqlite")
+            return path
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute("CREATE TABLE evidence (value TEXT)")
+            connection.execute("INSERT INTO evidence VALUES (?)", (timestamp,))
+            connection.commit()
+        finally:
+            connection.close()
+        return path
+
+    def _six_backups(self):
+        return [
+            self._backup(f"2020-01-0{day}_000000")
+            for day in range(1, 7)
+        ]
+
+    def test_plan_is_read_only_and_keeps_three_verified_newest(self):
+        paths = self._six_backups()
+
+        plan = legacy_backup_cleanup_plan()
+
+        self.assertEqual(plan["inventory_count"], 6)
+        self.assertEqual(len(plan["retained"]), 3)
+        self.assertEqual(len(plan["candidates"]), 3)
+        self.assertTrue(
+            all(item["integrity"] == "ok" for item in plan["retained"])
+        )
+        self.assertTrue(
+            all(len(item["sha256"]) == 64 for item in plan["retained"])
+        )
+        self.assertEqual(
+            {Path(item["path"]).name for item in plan["retained"]},
+            {path.name for path in paths[-3:]},
+        )
+        self.assertTrue(all(path.exists() for path in paths))
+
+    def test_apply_requires_fresh_plan_and_removes_only_candidates(self):
+        paths = self._six_backups()
+        plan = legacy_backup_cleanup_plan()
+        with self.assertRaisesRegex(
+            CleanupError, "stale_legacy_backup_cleanup_plan"
+        ):
+            apply_legacy_backup_cleanup("wrong")
+
+        result = apply_legacy_backup_cleanup(plan["plan_id"])
+
+        self.assertEqual(len(result["removed"]), 3)
+        self.assertEqual(
+            {item["name"] for item in inventory_legacy_backups()},
+            {path.name for path in paths[-3:]},
+        )
+
+    def test_candidate_drift_rejects_apply_without_deleting_it(self):
+        paths = self._six_backups()
+        plan = legacy_backup_cleanup_plan()
+        candidate = Path(plan["candidates"][0]["path"])
+        with candidate.open("ab") as stream:
+            stream.write(b"changed")
+
+        with self.assertRaisesRegex(
+            CleanupError, "stale_legacy_backup_cleanup_plan"
+        ):
+            apply_legacy_backup_cleanup(plan["plan_id"])
+
+        self.assertTrue(candidate.exists())
+        self.assertTrue(all(path.exists() for path in paths))
+
+    def test_corrupt_retained_backup_blocks_plan(self):
+        self._six_backups()
+        newest = self.backups / "db_backup_2020-01-07_000000.sqlite3"
+        newest.write_bytes(b"not sqlite")
+
+        with self.assertRaisesRegex(
+            CleanupError, "legacy_backup_retained_set_unverified"
+        ):
+            legacy_backup_cleanup_plan()
+
+    def test_matching_symlink_blocks_inventory(self):
+        target = self.root / "outside.sqlite3"
+        target.write_bytes(b"outside")
+        link = self.backups / "db_backup_2020-01-01_000000.sqlite3"
+        link.symlink_to(target)
+
+        with self.assertRaisesRegex(
+            CleanupError, "unsafe_legacy_backup_path"
+        ):
+            inventory_legacy_backups()
+
+    def test_symlinked_backup_root_blocks_inventory(self):
+        real_root = self.root / "real-backups"
+        real_root.mkdir()
+        self.settings.disable()
+        self.backups.rmdir()
+        self.backups.symlink_to(real_root)
+        self.settings.enable()
+
+        with self.assertRaisesRegex(
+            CleanupError, "unsafe_legacy_backup_root"
+        ):
+            inventory_legacy_backups()
+
+    def test_capacity_report_surfaces_unmanaged_legacy_debt(self):
+        paths = self._six_backups()
+
+        report = capacity_report(
+            source_bytes=1,
+            operation="maintenance",
+            target_root=self.root,
+        )
+
+        debt = report["legacy_flat_backups"]
+        self.assertEqual(debt["count"], 6)
+        self.assertEqual(
+            debt["bytes"], sum(path.stat().st_size for path in paths)
+        )
+        self.assertFalse(debt["managed_automatically"])
+
+    def test_management_command_requires_exact_confirmation(self):
+        self._six_backups()
+        output = io.StringIO()
+        call_command("legacy_backup_cleanup", "plan", stdout=output)
+        plan = json.loads(output.getvalue())
+        with self.assertRaisesRegex(CommandError, "--confirm"):
+            call_command("legacy_backup_cleanup", "apply")
+
+        call_command(
+            "legacy_backup_cleanup",
+            "apply",
+            confirm=plan["plan_id"],
+            stdout=io.StringIO(),
+        )
+        self.assertEqual(len(inventory_legacy_backups()), 3)
