@@ -277,11 +277,16 @@ At least monthly, restore into a disposable Dokploy application or volume:
 5. Load FAISS/Chroma indexes.
 6. Run a representative search.
 7. Verify `/readyz` and the public HTTPS route.
-8. Record the result, image digests, Git SHA, volume identity, custody
-   snapshot/checksum references, and current release record. There is no
-   generated artifact manifest in the current workflow.
+8. Record the result, image digests, Git SHA, paired data/control volume
+   identities, generation and manifest digests, custody snapshot/checksum
+   references, and current release record.
 
 A backup is not considered valid until this drill succeeds.
+
+Use [`docs/RECOVERY_CERTIFICATION.md`](docs/RECOVERY_CERTIFICATION.md) and the
+checked-in recovery-certification Compose override for a fresh-volume or
+accumulated-volume preflight. The wrapper never mounts the live or legacy
+volumes, exposes only a localhost port, and retains failed targets.
 
 ## Pre-Deployment Checklist
 

@@ -100,7 +100,7 @@ jobs:
         run: git diff --check
 
       - name: Validate shell scripts
-        run: bash -n start.sh docker-entrypoint.sh
+        run: bash -n start.sh docker-entrypoint.sh scripts/ops/run_recovery_certification.sh
 
       - name: Compile Python source
         run: python3 -m compileall -q flowdocs
@@ -136,6 +136,16 @@ jobs:
           OPENAI_API_KEY: ci-only-key
           PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:0000000000000000000000000000000000000000000000000000000000000000
         run: python3 scripts/ci/assert_compose_env_parity.py
+
+      - name: Validate isolated recovery certification contract
+        env:
+          SECRET_KEY: ci-only-secret
+          OPENAI_API_KEY: ci-only-key
+          PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          CERT_RUN_ID: ci-contract
+          CERT_WEB_PORT: "18000"
+          CERT_VAULT_NETWORK: ci-vault-only
+        run: bash scripts/ops/run_recovery_certification.sh fresh validate
 
       - name: Validate disposable CI Compose
         env:

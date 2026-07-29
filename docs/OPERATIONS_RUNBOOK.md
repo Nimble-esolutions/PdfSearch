@@ -824,20 +824,16 @@ now supports namespace-scoped S3 keys, conditional operations, immutable
 generation manifests, CAS-based writer fencing, staged restore with rehearsal,
 and atomic symlink-based activation with crash recovery.
 
-These capabilities are verified as library-level components. The current admin
-maintenance controls do not form one end-to-end recovery path:
+The active Workbench path now publishes a dataset-scoped generation, verifies
+authoritative inventory, prepares an isolated restore workspace, and schedules
+runtime activation only through a separately confirmed signed intent. Both
+entrypoints still fail closed before database mutation instead of performing an
+automatic startup restore.
 
-- sync publishes a dataset-scoped generation manifest;
-- admin staging reads the legacy flat manifest namespace;
-- admin promote/rollback changes generation records but does not call
-  byte-level activation;
-- both entrypoints enforce startup restore posture before database mutation,
-  but deliberately stop rather than performing an automatic restore.
-
-Do not use admin success messages or an `ArtifactGeneration.status=active` row
-as proof of a restored runtime. Use the full isolated restore pipeline and
-verify the active database/media/index bytes until Plan 003 reconciles the
-operator path.
+Do not use an admin success message, Vault promotion, or a generation database
+row as proof of restored runtime bytes. Require the signed activation result,
+matching runtime pointer, fresh-process readiness evidence, database/media/index
+checks, and representative English and Marathi searches.
 
 ### Required gates
 
@@ -850,12 +846,10 @@ failed isolated targets and all evidence until the incident is closed.
 Backups are governed by `core/backup_policy.py` with dirty-state tracking,
 fingerprinting, and debouncing.
 
-Current limitation: scheduled/hybrid mode is not a production backup
-guarantee. `mark_data_dirty()` has no application mutation callers, so the
-scheduler normally sees no dirty state. The production maintenance service
-also needs explicit scheduler, sync-mode, vault, restore, and release-identity
-environment wiring. Keep publication manual and verify its immutable
-generation until these gaps are closed.
+Scheduled publication uses durable mutation epochs and coalescing, but it is
+not a disaster-recovery guarantee. Confirm that the production maintenance
+service receives the complete scheduler, sync, Vault, restore, and immutable
+release-identity environment, and verify every published generation.
 
 ### Check backup state
 
@@ -919,19 +913,17 @@ renewal failures — they indicate Redis connectivity issues.
 The restore pipeline (`core/restore_pipeline.py`) runs a strict sequence:
 download → validate → sanitize → rehearse → activate.
 
-### Current operator limitation
+### Current operator boundary
 
-Do not initiate disaster recovery from the current dashboard. The maintenance
-`restore_generation` job calls a legacy staging function, not the full restore
-pipeline, and it reads a different manifest namespace from current
-publication. The dashboard promote/rollback actions update database records
-without switching active bytes.
+The Workbench restore job now verifies the dataset-scoped generation, downloads
+and validates it, applies required sanitization, rehearses migrations, and
+prepares an activation-ready runtime. Vault promotion still changes only remote
+authority. Runtime bytes change only after a separate signed activation and
+fresh-process readiness proof.
 
-Until Plan 003 is implemented, a restore requires approved direct tooling that
-calls `run_restore_pipeline()` against a disposable application/volume. This
-is intentionally not presented as a copy-paste production command because the
-generation, target, sanitization, rehearsal, activation, image compatibility,
-and rollback choices must be recorded for the incident.
+For production certification, never exercise this path inside the live data
+volume. Use [`RECOVERY_CERTIFICATION.md`](RECOVERY_CERTIFICATION.md) and the
+paired disposable data/control volumes created by the checked-in wrapper.
 
 Full-pipeline workspaces are created under:
 
