@@ -18,16 +18,25 @@ x-lifecycle-environment: &lifecycle-environment
   DEBUG: "True"
   APP_ENV: staging
   DEPLOYMENT_ID: maintenance-e2e
+  DATASET_ID: maintenance-e2e
   AUTHORITATIVE_DATASET_ID: maintenance-e2e
+  RESTORE_SOURCE_DATASET_ID: maintenance-e2e
   PRODUCTION_SOURCE_ID: maintenance-e2e-writer
   APP_RELEASE_VERSION: maintenance-e2e
   APP_IMAGE_DIGEST: sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
   DATA_BOOTSTRAP_MODE: empty
   DATA_MODE: local
   BACKUP_ROLE: disabled
+  # The fixture invokes bounded manual publication directly. The background
+  # sync scheduler remains production-authoritative-writer only.
   VAULT_SYNC_ENABLED: "0"
+  VAULT_SYNC_MODE: manual
+  VAULT_SYNC_PROMOTION_MODE: manual
   VAULT_MUTATION_TRACKING_ENABLED: "1"
-  VAULT_RESTORE_ENABLED: "0"
+  VAULT_RESTORE_ENABLED: "1"
+  VAULT_RESTORE_REQUIRE_SANITIZATION: "1"
+  VAULT_RESTORE_MIN_FREE_BYTES: "0"
+  VAULT_RESTORE_MIN_FREE_INODES: "0"
   VAULT_ADMIN_MUTATIONS_ENABLED: "1"
   LOCAL_INDEX_MAINTENANCE_ENABLED: "1"
   FORCE_REINDEX_ENABLED: "1"
@@ -41,7 +50,16 @@ x-lifecycle-environment: &lifecycle-environment
   ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD: ci-only-password-not-for-production
   ACTIVATION_SMOKE_QUERIES_FILE: /app/scripts/ci/maintenance-smoke-queries.json
   EXTERNAL_SIDE_EFFECTS_MODE: sandbox
-  ARTIFACT_VAULT_ENABLED: "0"
+  ARTIFACT_VAULT_ENABLED: "1"
+  ARTIFACT_VAULT_ENDPOINT: http://minio:9000
+  ARTIFACT_VAULT_BUCKET: maintenance-e2e
+  ARTIFACT_VAULT_REGION: us-east-1
+  ARTIFACT_VAULT_ACCESS_KEY: maintenance-e2e
+  ARTIFACT_VAULT_SECRET_KEY: maintenance-e2e-secret
+  VAULT_ALLOWED_S3_ENDPOINTS: http://minio:9000
+  VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
+  VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
+  VAULT_DEFAULT_PROFILE: maintenance-e2e
   OPENAI_API_KEY: ""
   GOOGLE_API_KEY: ""
   PDFSEARCH_TEST_EMBEDDINGS: "1"
@@ -55,6 +73,22 @@ x-lifecycle-environment: &lifecycle-environment
   GUNICORN_WORKERS: "1"
 
 services:
+  minio:
+    image: ${MINIO_IMAGE:?MINIO_IMAGE must be an immutable digest reference}
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: maintenance-e2e
+      MINIO_ROOT_PASSWORD: maintenance-e2e-secret
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test:
+        ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+    networks: [lifecycle]
+
   redis:
     image: redis:7.4.2-alpine
     command: redis-server --save "" --appendonly no
@@ -77,6 +111,8 @@ services:
       - ./scripts/ci/empty-init:/app/init:ro
     environment: *lifecycle-environment
     depends_on:
+      minio:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -112,6 +148,8 @@ services:
       - ./scripts/ci/empty-init:/app/init:ro
     environment: *lifecycle-environment
     depends_on:
+      minio:
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks: [lifecycle]
@@ -129,11 +167,17 @@ services:
       - ./scripts/ci/empty-init:/app/init:ro
       - ./scripts/ci/maintenance_lifecycle_fixture.py:/app/scripts/ci/maintenance_lifecycle_fixture.py:ro
     environment: *lifecycle-environment
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks: [lifecycle]
     healthcheck:
       disable: true
 
 volumes:
+  minio_data:
   lifecycle_data:
   lifecycle_control:
 

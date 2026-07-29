@@ -314,6 +314,10 @@ def seed_and_freeze() -> None:
 def publish_and_restore() -> None:
     """Publish current live custody and prepare that exact generation."""
     vault = ArtifactVault()
+    try:
+        vault.client.head_bucket(Bucket=vault.config.bucket)
+    except Exception:
+        vault.client.create_bucket(Bucket=vault.config.bucket)
     endpoint = urlsplit(vault.config.endpoint)
     endpoint_origin = f"{endpoint.scheme}://{endpoint.netloc}"
     profile, _ = VaultConnectionProfile.objects.update_or_create(
