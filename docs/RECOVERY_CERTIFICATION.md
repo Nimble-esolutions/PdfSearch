@@ -109,6 +109,32 @@ bash scripts/ops/run_recovery_certification.sh fresh cleanup
 Cleanup refuses unowned or mounted resources. Preserve any target referenced by
 an incident, failed restore, activation journal, or unresolved discrepancy.
 
+## Retired startup backups
+
+Older deployments created a full
+`BACKUP_DIR/db_backup_YYYY-MM-DD_HHMMSS.sqlite3` copy on every web and
+maintenance startup. These flat files are not Vault generations and are not
+covered by recovery-set retention. Current entrypoints no longer create them.
+
+Inventory and plan one bounded cleanup batch:
+
+```bash
+python manage.py legacy_backup_cleanup plan
+```
+
+The plan is read-only. It validates and retains the three newest SQLite copies,
+reports deferred debt, and limits one apply operation to 20 GiB. Only after the
+Vault generation and isolated restore have passed acceptance may an operator
+apply the exact unchanged plan:
+
+```bash
+python manage.py legacy_backup_cleanup apply --confirm '<plan-id>'
+```
+
+Applying a stale plan, encountering a symlink, changing a candidate, or failing
+SQLite integrity stops the operation. Cleanup is never invoked by startup or a
+scheduler.
+
 ## Stop conditions
 
 Stop when any source is still mounted, a target name matches an active volume,

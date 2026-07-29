@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,12 +16,215 @@ from django.db.models import Q
 from django.utils import timezone as django_timezone
 
 MAX_APPLY_BYTES = 20 * 1024**3
+LEGACY_BACKUP_KEEP = 3
+LEGACY_BACKUP_MAX_AGE_DAYS = 7
+LEGACY_BACKUP_MAX_BYTES = 5 * 1024**3
+LEGACY_BACKUP_RE = re.compile(
+    r"^db_backup_(\d{4}-\d{2}-\d{2}_\d{6})\.sqlite3$"
+)
 
 
 class CleanupError(RuntimeError):
     def __init__(self, reason_code: str, detail: str = ""):
         self.reason_code = reason_code
         super().__init__(detail or reason_code)
+
+
+def _legacy_backup_root() -> Path:
+    configured = Path(settings.BACKUP_DIR).expanduser()
+    if configured.is_symlink():
+        raise CleanupError("unsafe_legacy_backup_root")
+    return configured.resolve()
+
+
+def _legacy_backup_record(path: Path, root: Path) -> dict:
+    if path.is_symlink() or path.parent.resolve() != root:
+        raise CleanupError("unsafe_legacy_backup_path")
+    try:
+        stat = path.stat()
+    except OSError as exc:
+        raise CleanupError("legacy_backup_inventory_unavailable") from exc
+    if not path.is_file():
+        raise CleanupError("unsafe_legacy_backup_path")
+    match = LEGACY_BACKUP_RE.fullmatch(path.name)
+    if match is None:
+        raise CleanupError("unsafe_legacy_backup_path")
+    try:
+        created = datetime.strptime(
+            match.group(1), "%Y-%m-%d_%H%M%S"
+        ).replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise CleanupError("legacy_backup_inventory_unavailable") from exc
+    return {
+        "path": str(path.resolve()),
+        "name": path.name,
+        "bytes": stat.st_size,
+        "created_at": created.isoformat(),
+        "mtime_ns": stat.st_mtime_ns,
+        "inode": stat.st_ino,
+    }
+
+
+def inventory_legacy_backups() -> list[dict]:
+    """Inventory only the retired, timestamped startup-backup shape."""
+    root = _legacy_backup_root()
+    try:
+        if not root.exists():
+            return []
+        if root.is_symlink() or not root.is_dir():
+            raise CleanupError("unsafe_legacy_backup_root")
+        records = [
+            _legacy_backup_record(path, root)
+            for path in root.iterdir()
+            if LEGACY_BACKUP_RE.fullmatch(path.name)
+        ]
+    except CleanupError:
+        raise
+    except OSError as exc:
+        raise CleanupError("legacy_backup_inventory_unavailable") from exc
+    return sorted(records, key=lambda item: item["created_at"], reverse=True)
+
+
+def _verify_retained_legacy_backup(record: dict) -> dict:
+    path = Path(record["path"])
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            integrity = [row[0] for row in connection.execute(
+                "PRAGMA integrity_check"
+            )]
+        finally:
+            connection.close()
+        if integrity != ["ok"]:
+            raise CleanupError("legacy_backup_retained_set_unverified")
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for block in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(block)
+    except CleanupError:
+        raise
+    except (OSError, sqlite3.Error) as exc:
+        raise CleanupError("legacy_backup_retained_set_unverified") from exc
+    return {**record, "sha256": digest.hexdigest(), "integrity": "ok"}
+
+
+def legacy_backup_cleanup_plan(now: datetime | None = None) -> dict:
+    """Build a bounded batch plan; never delete or alter a backup."""
+    now = now or datetime.now(timezone.utc)
+    records = inventory_legacy_backups()
+    if records and len(records) < LEGACY_BACKUP_KEEP:
+        raise CleanupError("legacy_backup_retained_set_insufficient")
+    retained = [
+        _verify_retained_legacy_backup(record)
+        for record in records[:LEGACY_BACKUP_KEEP]
+    ]
+    remaining_bytes = sum(item["bytes"] for item in records)
+    eligible = []
+    for record in records[LEGACY_BACKUP_KEEP:]:
+        expired = (
+            datetime.fromisoformat(record["created_at"])
+            < now - timedelta(days=LEGACY_BACKUP_MAX_AGE_DAYS)
+        )
+        if expired or remaining_bytes > LEGACY_BACKUP_MAX_BYTES:
+            eligible.append(record)
+            remaining_bytes -= record["bytes"]
+
+    # Oldest files are removed first, in an operator-reviewable batch that
+    # remains inside the existing 20 GiB approval boundary.
+    candidates = []
+    candidate_bytes = 0
+    for record in reversed(eligible):
+        if candidate_bytes + record["bytes"] > MAX_APPLY_BYTES:
+            continue
+        candidates.append(
+            {**record, "reason_code": "legacy_startup_backup_retention"}
+        )
+        candidate_bytes += record["bytes"]
+    candidate_paths = {item["path"] for item in candidates}
+    deferred = [
+        item for item in eligible if item["path"] not in candidate_paths
+    ]
+    basis = {
+        "candidates": [
+            (
+                item["path"],
+                item["bytes"],
+                item["mtime_ns"],
+                item["inode"],
+                item["reason_code"],
+            )
+            for item in candidates
+        ],
+        "retained": [
+            (
+                item["path"],
+                item["bytes"],
+                item["mtime_ns"],
+                item["inode"],
+                item["sha256"],
+            )
+            for item in retained
+        ],
+    }
+    return {
+        "plan_id": hashlib.sha256(
+            json.dumps(basis, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:24],
+        "created_at": now.isoformat(),
+        "candidates": candidates,
+        "candidate_bytes": candidate_bytes,
+        "deferred_candidates": deferred,
+        "deferred_candidate_bytes": sum(
+            item["bytes"] for item in deferred
+        ),
+        "retained": retained,
+        "retained_bytes": sum(item["bytes"] for item in retained),
+        "inventory_count": len(records),
+        "inventory_bytes": sum(item["bytes"] for item in records),
+        "apply_limit_bytes": MAX_APPLY_BYTES,
+        "apply_allowed": bool(candidates),
+    }
+
+
+def apply_legacy_backup_cleanup(plan_id: str) -> dict:
+    """Apply one fresh, bounded flat-backup plan after exact confirmation."""
+    plan = legacy_backup_cleanup_plan()
+    if plan["plan_id"] != plan_id:
+        raise CleanupError("stale_legacy_backup_cleanup_plan")
+    if not plan["apply_allowed"]:
+        raise CleanupError("legacy_backup_cleanup_has_no_candidates")
+    root = _legacy_backup_root()
+    removed = []
+    for item in plan["candidates"]:
+        fresh = legacy_backup_cleanup_plan()
+        fresh_item = next(
+            (
+                candidate
+                for candidate in fresh["candidates"]
+                if candidate["path"] == item["path"]
+            ),
+            None,
+        )
+        fields = ("path", "bytes", "mtime_ns", "inode", "reason_code")
+        if fresh_item is None or any(
+            fresh_item[field] != item[field] for field in fields
+        ):
+            raise CleanupError("stale_legacy_backup_cleanup_plan")
+        path = Path(item["path"])
+        if (
+            path.is_symlink()
+            or path.parent.resolve() != root
+            or not LEGACY_BACKUP_RE.fullmatch(path.name)
+        ):
+            raise CleanupError("unsafe_legacy_backup_path")
+        try:
+            path.unlink()
+        except OSError as exc:
+            raise CleanupError("legacy_backup_cleanup_failed") from exc
+        removed.append(
+            {"path": item["path"], "bytes": item["bytes"]}
+        )
+    return {**plan, "removed": removed}
 
 
 def _tree_bytes(path: Path) -> int:
@@ -430,6 +635,8 @@ def capacity_report(
     minimum_free_bytes: int = 0,
     minimum_free_inodes: int = 0,
 ) -> dict:
+    legacy_backups = inventory_legacy_backups()
+    legacy_backup_bytes = sum(item["bytes"] for item in legacy_backups)
     factors = {
         "source_copy": source_bytes,
         "quarantine": source_bytes if operation == "restore" else 0,
@@ -482,4 +689,10 @@ def capacity_report(
                 and int(minimum_free_inodes) == 0
             )
         ),
+        "legacy_flat_backups": {
+            "count": len(legacy_backups),
+            "bytes": legacy_backup_bytes,
+            "managed_automatically": False,
+            "remediation": "Run the explicit legacy backup cleanup planner.",
+        },
     }
