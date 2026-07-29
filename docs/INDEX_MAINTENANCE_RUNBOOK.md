@@ -94,6 +94,11 @@ the worker records a bounded failure code and audit event, marks remaining
 items failed, and continues polling. If a job remains `running` after a worker
 restart, investigate heartbeat/recovery handling rather than repeatedly
 queueing the operation.
+
+The historical `extract_keywords` and `extract_keywords_fast` management
+commands are retired: they referenced an extraction backend that was never
+part of the supported runtime. Manage document keywords through the supported
+document workflow; do not restore an ad hoc command-only extractor.
 The Workbench calculates allowed actions from the current job lifecycle and
 binds each action to a job state version. A stale browser submission is rejected
 instead of applying an action to a newer job state.
