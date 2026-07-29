@@ -675,6 +675,39 @@ def reconcile_activation_result(intent):
         raise ActivationCoordinatorError(
             "activation_result_runtime_mismatch"
         )
+    try:
+        active = read_runtime_pointer(
+            runtime_control_paths(settings.DATA_CONTROL_ROOT)["active"],
+            deployment_id=intent.deployment_id,
+            signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+            runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+        )
+    except RuntimeControlError as exc:
+        raise ActivationCoordinatorError(
+            "activation_result_runtime_mismatch"
+        ) from exc
+    readiness = document.get("readiness_evidence", {})
+    if (
+        active_generation_id != active.generation_id
+        or document.get("active_manifest_digest", "")
+        != active.manifest_digest
+        or document.get("active_pointer_digest", "")
+        != active.pointer_digest
+        or document.get("previous_generation_id", "")
+        != intent.previous_generation_id
+        or (
+            status in {"committed", "rolled_back"}
+            and (
+                readiness.get("runtime_generation_id")
+                != active.generation_id
+                or readiness.get("runtime_manifest_digest")
+                != active.manifest_digest
+            )
+        )
+    ):
+        raise ActivationCoordinatorError(
+            "activation_result_runtime_mismatch"
+        )
     now = timezone.now()
     with transaction.atomic(using="control"):
         intent = (
