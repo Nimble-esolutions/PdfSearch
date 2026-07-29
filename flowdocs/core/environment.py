@@ -194,11 +194,15 @@ class EnvironmentIdentity:
         replica_id = env.get("REPLICA_ID", "") or _default_replica_id()
 
         data_mode = _parse_data_mode(env.get("DATA_MODE", ""), app_env)
+        restore_policy = _parse_restore_policy(
+            env.get("RESTORE_POLICY", ""), data_mode
+        )
         data_pinned_generation = ""
-        if data_mode == DataMode.S3_PINNED:
+        if (
+            data_mode == DataMode.S3_PINNED
+            or restore_policy == RestorePolicy.STARTUP_PINNED
+        ):
             data_pinned_generation = env.get("DATA_PINNED_GENERATION", "").strip()
-
-        restore_policy = _parse_restore_policy(env.get("RESTORE_POLICY", ""), data_mode)
 
         backup_role = _parse_backup_role(env.get("BACKUP_ROLE", ""), app_env)
         backup_sync_mode = _parse_backup_sync_mode(env.get("BACKUP_SYNC_MODE", ""))
@@ -303,6 +307,14 @@ class EnvironmentIdentity:
 
         if self.data_mode == DataMode.S3_PINNED and not self.data_pinned_generation:
             errors.append("DATA_PINNED_GENERATION is required when DATA_MODE=s3-pinned")
+        if (
+            self.restore_policy == RestorePolicy.STARTUP_PINNED
+            and not self.data_pinned_generation
+        ):
+            errors.append(
+                "DATA_PINNED_GENERATION is required when "
+                "RESTORE_POLICY=startup-pinned"
+            )
 
         if self.is_backup_writer:
             vault_enabled = _env_bool("ARTIFACT_VAULT_ENABLED")

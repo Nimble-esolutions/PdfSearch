@@ -164,6 +164,9 @@ jobs:
           revision="$(docker image inspect "$LOCAL_IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
           test "$revision" = "$GITHUB_SHA"
 
+      - name: Prove startup restore policy fails closed
+        run: bash scripts/ci/test_startup_restore_entrypoints.sh
+
       - name: Install browser gate dependencies
         run: |
           npm ci --legacy-peer-deps

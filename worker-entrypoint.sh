@@ -16,6 +16,9 @@ mkdir -p "$DATA_ROOT" "$DATA_ROOT/media/pdfs" "$DATA_ROOT/faiss_indexes" \
   "$VAULT_RESTORE_ROOT" "$RUNTIME_GENERATIONS_ROOT"
 chown appuser:appuser "$DATA_ROOT" "$DATA_CONTROL_ROOT" 2>/dev/null || true
 
+gosu appuser:appuser bash -lc \
+  'cd /app/flowdocs && python manage.py startup_restore_preflight'
+
 if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
   gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py shell -c "
 import sys
