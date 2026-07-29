@@ -177,7 +177,29 @@ test.describe('disposable maintenance lifecycle', () => {
       await page.locator('input[name="confirmation_phrase"]').fill(
         (await page.getByLabel('Required confirmation phrase').textContent())?.trim() || '',
       );
-      await page.getByRole('button', { name: /confirm/i }).click();
+      await page.route('**/activations/*/schedule/', async (route) => {
+        await route.continue({
+          headers: {
+            ...route.request().headers(),
+            accept: 'application/json',
+          },
+        });
+      });
+      const [scheduleResponse] = await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST'
+            && response.url().includes('/activations/')
+            && response.url().endsWith('/schedule/'),
+        ),
+        page.getByRole('button', { name: /confirm/i }).click(),
+      ]);
+      const scheduleEnvelope = await scheduleResponse.json();
+      expect(
+        scheduleResponse.status(),
+        `Vault activation response: ${JSON.stringify(scheduleEnvelope)}`,
+      ).toBe(202);
+      await page.unroute('**/activations/*/schedule/');
 
       await waitForRuntimeIdentity(page, generationId, manifestDigest);
       await login(page, '/dashboard/operations/?section=restore');
