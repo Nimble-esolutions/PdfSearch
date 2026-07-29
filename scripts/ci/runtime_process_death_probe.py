@@ -65,11 +65,12 @@ class ProbeSupervisor(RuntimeSupervisor):
             while True:
                 time.sleep(60)
 
-    def _wait_ready(self, generation_id):
+    def _wait_ready(self, generation_id, manifest_digest):
         return {
             "livez": "ok",
             "readyz": "ready",
             "runtime_generation_id": generation_id,
+            "runtime_manifest_digest": manifest_digest,
             "probe": "container-restart",
         }
 
