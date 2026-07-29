@@ -436,6 +436,7 @@ def schedule_activation(
         )
     smoke_queries_digest = _read_smoke_queries()
     paths = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+    initial_activation = False
     try:
         current_pointer = read_runtime_pointer(
             paths["active"],
@@ -444,24 +445,48 @@ def schedule_activation(
             runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
         )
     except RuntimeControlError as exc:
-        raise ActivationCoordinatorError(
-            "activation_previous_runtime_invalid"
-        ) from exc
-    if current_pointer.generation_id == workspace.generation.generation_id:
-        raise ActivationCoordinatorError("generation_already_active")
-    try:
-        previous_generation = ArtifactGeneration.objects.get(
+        active_pointer_absent = (
+            not paths["active"].exists()
+            and not paths["previous"].exists()
+        )
+        active_generation_exists = ArtifactGeneration.objects.filter(
             deployment_id=settings.ENV_IDENTITY.deployment_id,
-            generation_id=current_pointer.generation_id,
-        )
-    except ArtifactGeneration.DoesNotExist as exc:
-        raise ActivationCoordinatorError(
-            "activation_previous_generation_unprojected"
-        ) from exc
-    if previous_generation.runtime_state != ArtifactGeneration.RuntimeState.ACTIVE:
-        raise ActivationCoordinatorError(
-            "activation_previous_runtime_unverified"
-        )
+            runtime_state=ArtifactGeneration.RuntimeState.ACTIVE,
+        ).exists()
+        if (
+            rollback
+            or not settings.STAGING_INITIAL_ACTIVATION_ENABLED
+            or not active_pointer_absent
+            or active_generation_exists
+        ):
+            raise ActivationCoordinatorError(
+                "activation_previous_runtime_invalid"
+            ) from exc
+        initial_activation = True
+        current_pointer = None
+    if (
+        current_pointer is not None
+        and current_pointer.generation_id
+        == workspace.generation.generation_id
+    ):
+        raise ActivationCoordinatorError("generation_already_active")
+    if current_pointer is not None:
+        try:
+            previous_generation = ArtifactGeneration.objects.get(
+                deployment_id=settings.ENV_IDENTITY.deployment_id,
+                generation_id=current_pointer.generation_id,
+            )
+        except ArtifactGeneration.DoesNotExist as exc:
+            raise ActivationCoordinatorError(
+                "activation_previous_generation_unprojected"
+            ) from exc
+        if (
+            previous_generation.runtime_state
+            != ArtifactGeneration.RuntimeState.ACTIVE
+        ):
+            raise ActivationCoordinatorError(
+                "activation_previous_runtime_unverified"
+            )
     target_generation = workspace.generation
     rollback_previous_pointer = None
     if rollback:
@@ -482,6 +507,7 @@ def schedule_activation(
         target_generation.origin
         == ArtifactGeneration.Origin.LOCAL_MAINTENANCE
         and not rollback
+        and not initial_activation
     ):
         if (
             target_generation.vault_state
@@ -509,9 +535,19 @@ def schedule_activation(
         "target_generation_id": workspace.generation.generation_id,
         "target_manifest_digest": workspace.manifest_digest,
         "target_runtime_path": str(runtime),
-        "previous_generation_id": current_pointer.generation_id,
-        "previous_pointer_digest": current_pointer.pointer_digest,
-        "activation_mode": "rollback" if rollback else "activate",
+        "previous_generation_id": (
+            current_pointer.generation_id if current_pointer else ""
+        ),
+        "previous_pointer_digest": (
+            current_pointer.pointer_digest if current_pointer else ""
+        ),
+        "activation_mode": (
+            "rollback"
+            if rollback
+            else "initial"
+            if initial_activation
+            else "activate"
+        ),
         "smoke_queries_digest": smoke_queries_digest,
         "actor_id": actor_id,
         "actor_name": actor_name,
@@ -553,13 +589,20 @@ def schedule_activation(
                 workspace=workspace,
                 deployment_id=settings.ENV_IDENTITY.deployment_id,
                 target_generation_id=workspace.generation.generation_id,
-                previous_generation_id=current_pointer.generation_id,
+                previous_generation_id=(
+                    current_pointer.generation_id if current_pointer else ""
+                ),
                 manifest_digest=workspace.manifest_digest,
                 intent_digest=signed_intent["document_digest"],
                 idempotency_key=idempotency_key,
                 request_state_digest=request_state_digest,
                 checkpoint={
-                    "previous_pointer_digest": current_pointer.pointer_digest,
+                    "previous_pointer_digest": (
+                        current_pointer.pointer_digest
+                        if current_pointer
+                        else ""
+                    ),
+                    "initial_activation": initial_activation,
                     "rollback_previous_generation_id": (
                         rollback_previous_pointer.generation_id
                         if rollback_previous_pointer is not None
@@ -665,16 +708,23 @@ def reconcile_activation_result(intent):
     active_generation_id = document.get("active_generation_id", "")
     if status not in {"committed", "rolled_back", "failed", "rollback_failed"}:
         raise ActivationCoordinatorError("activation_result_invalid")
+    initial_activation = bool(intent.checkpoint.get("initial_activation"))
     if (
         status == "committed"
         and active_generation_id != intent.target_generation_id
     ) or (
         status in {"rolled_back", "failed"}
         and active_generation_id != intent.previous_generation_id
+        and not (
+            initial_activation
+            and status == "failed"
+            and not active_generation_id
+        )
     ):
         raise ActivationCoordinatorError(
             "activation_result_runtime_mismatch"
         )
+    active = None
     try:
         active = read_runtime_pointer(
             runtime_control_paths(settings.DATA_CONTROL_ROOT)["active"],
@@ -683,17 +733,27 @@ def reconcile_activation_result(intent):
             runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
         )
     except RuntimeControlError as exc:
-        raise ActivationCoordinatorError(
-            "activation_result_runtime_mismatch"
-        ) from exc
-    readiness = document.get("readiness_evidence", {})
-    if (
+        if not (
+            initial_activation
+            and status == "failed"
+            and not active_generation_id
+        ):
+            raise ActivationCoordinatorError(
+                "activation_result_runtime_mismatch"
+            ) from exc
+    if active is not None and (
         active_generation_id != active.generation_id
         or document.get("active_manifest_digest", "")
         != active.manifest_digest
         or document.get("active_pointer_digest", "")
         != active.pointer_digest
-        or document.get("previous_generation_id", "")
+    ):
+        raise ActivationCoordinatorError(
+            "activation_result_runtime_mismatch"
+        )
+    readiness = document.get("readiness_evidence", {})
+    if (
+        document.get("previous_generation_id", "")
         != intent.previous_generation_id
         or (
             status in {"committed", "rolled_back"}
@@ -731,13 +791,18 @@ def reconcile_activation_result(intent):
             deployment_id=intent.deployment_id,
             generation_id=intent.target_generation_id,
         )
-        previous = ArtifactGeneration.objects.using("control").select_for_update().get(
-            deployment_id=intent.deployment_id,
-            generation_id=intent.previous_generation_id,
-        )
+        previous = None
+        if not initial_activation:
+            previous = ArtifactGeneration.objects.using(
+                "control"
+            ).select_for_update().get(
+                deployment_id=intent.deployment_id,
+                generation_id=intent.previous_generation_id,
+            )
         if status == "committed":
-            previous.runtime_state = ArtifactGeneration.RuntimeState.PREVIOUS
-            previous.save(update_fields=["runtime_state", "updated_at"])
+            if previous is not None:
+                previous.runtime_state = ArtifactGeneration.RuntimeState.PREVIOUS
+                previous.save(update_fields=["runtime_state", "updated_at"])
             target.runtime_state = ArtifactGeneration.RuntimeState.ACTIVE
             target.save(update_fields=["runtime_state", "updated_at"])
             intent.state = ActivationIntent.State.COMMITTED
@@ -755,8 +820,9 @@ def reconcile_activation_result(intent):
                 "safe_error_code", "activation_verification_failed"
             )
         elif status == "failed":
-            previous.runtime_state = ArtifactGeneration.RuntimeState.ACTIVE
-            previous.save(update_fields=["runtime_state", "updated_at"])
+            if previous is not None:
+                previous.runtime_state = ArtifactGeneration.RuntimeState.ACTIVE
+                previous.save(update_fields=["runtime_state", "updated_at"])
             target.runtime_state = (
                 ArtifactGeneration.RuntimeState.ACTIVATION_FAILED
             )

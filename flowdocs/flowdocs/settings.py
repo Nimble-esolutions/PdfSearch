@@ -542,6 +542,9 @@ VAULT_RESTORE_MIN_FREE_INODES = _env_nonnegative_int(
 STAGING_RUNTIME_ACTIVATION_ENABLED = _env_bool(
     'STAGING_RUNTIME_ACTIVATION_ENABLED', False
 )
+STAGING_INITIAL_ACTIVATION_ENABLED = _env_bool(
+    'STAGING_INITIAL_ACTIVATION_ENABLED', False
+)
 MAINTENANCE_CANDIDATE_PREPARATION_ENABLED = _env_bool(
     'MAINTENANCE_CANDIDATE_PREPARATION_ENABLED', False
 )
@@ -599,6 +602,16 @@ ENV_IDENTITY = _env_identity
 
 if ENV_IDENTITY.is_production and STAGING_RUNTIME_ACTIVATION_ENABLED:
     raise ImproperlyConfigured('production_activation_disabled')
+if ENV_IDENTITY.is_production and STAGING_INITIAL_ACTIVATION_ENABLED:
+    raise ImproperlyConfigured('production_initial_activation_disabled')
+if (
+    STAGING_INITIAL_ACTIVATION_ENABLED
+    and not STAGING_RUNTIME_ACTIVATION_ENABLED
+):
+    raise ImproperlyConfigured(
+        'STAGING_INITIAL_ACTIVATION_ENABLED requires '
+        'STAGING_RUNTIME_ACTIVATION_ENABLED'
+    )
 if (
     MAINTENANCE_CANDIDATE_PREPARATION_ENABLED
     and not (

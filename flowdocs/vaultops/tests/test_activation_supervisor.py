@@ -373,6 +373,37 @@ class ActivationCoordinatorTests(TestCase):
             intent_document["target_generation_id"], TARGET_GENERATION
         )
 
+    def test_initial_schedule_requires_opt_in_and_no_active_authority(self):
+        self.paths["active"].unlink()
+        self.current_generation.runtime_state = (
+            ArtifactGeneration.RuntimeState.UNKNOWN
+        )
+        self.current_generation.save(update_fields=["runtime_state"])
+
+        with override_settings(STAGING_INITIAL_ACTIVATION_ENABLED=True):
+            intent = schedule_activation(self.workspace, confirmed=True)
+
+        document = read_signed_document(
+            self.paths["intents"] / f"{intent.public_id}.json",
+            signing_key=SIGNING_KEY,
+            expected_kind="activation_intent",
+            deployment_id=DEPLOYMENT_ID,
+        )
+        self.assertEqual(document["activation_mode"], "initial")
+        self.assertEqual(document["previous_generation_id"], "")
+        self.assertEqual(document["previous_pointer_digest"], "")
+        self.assertTrue(intent.checkpoint["initial_activation"])
+
+    def test_initial_schedule_rejects_unprojected_active_generation(self):
+        self.paths["active"].unlink()
+
+        with override_settings(STAGING_INITIAL_ACTIVATION_ENABLED=True):
+            with self.assertRaisesMessage(
+                ActivationCoordinatorError,
+                "activation_previous_runtime_invalid",
+            ):
+                schedule_activation(self.workspace, confirmed=True)
+
     def _observe_current_source_pointer(self):
         pointer = read_runtime_pointer(
             self.paths["active"],
@@ -1093,6 +1124,36 @@ class SupervisorProtocolTests(SimpleTestCase):
         self.intent = document
         return active_document
 
+    def _replace_with_initial_intent(self):
+        self.paths["intents"].joinpath(
+            f"{self.intent['intent_id']}.json"
+        ).unlink()
+        self.paths["active"].unlink()
+        self.environment["STAGING_INITIAL_ACTIVATION_ENABLED"] = "1"
+        intent_id = str(uuid.uuid4())
+        document = sign_document(
+            {
+                "schema_version": 1,
+                "kind": "activation_intent",
+                "intent_id": intent_id,
+                "deployment_id": DEPLOYMENT_ID,
+                "target_generation_id": TARGET_GENERATION,
+                "target_manifest_digest": TARGET_DIGEST,
+                "target_runtime_path": str(self.target_runtime),
+                "previous_generation_id": "",
+                "previous_pointer_digest": "",
+                "activation_mode": "initial",
+                "smoke_queries_digest": "c" * 64,
+                "expires_at_unix": int(time.time()) + 300,
+                "state_version": 1,
+            },
+            SIGNING_KEY,
+        )
+        atomic_write_json(
+            self.paths["intents"] / f"{intent_id}.json", document
+        )
+        self.intent = document
+
     def _urlopen(self, request, timeout=5):
         active = read_runtime_pointer(
             self.paths["active"],
@@ -1182,6 +1243,39 @@ class SupervisorProtocolTests(SimpleTestCase):
             deployment_id=DEPLOYMENT_ID,
         )
         self.assertEqual(checkpoint["state"], "reconciled")
+
+    def test_initial_cutover_commits_without_creating_previous_pointer(self):
+        self._replace_with_initial_intent()
+        maintenance = self._quiesce()
+        web = self._supervisor("web", maintenance=maintenance)
+
+        web.web_tick()
+
+        active = read_runtime_pointer(
+            self.paths["active"],
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertEqual(active.generation_id, TARGET_GENERATION)
+        self.assertFalse(self.paths["previous"].exists())
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertEqual(self._result()["previous_generation_id"], "")
+
+    def test_initial_intent_is_ignored_without_explicit_supervisor_opt_in(self):
+        self._replace_with_initial_intent()
+        self.environment["STAGING_INITIAL_ACTIVATION_ENABLED"] = "0"
+        self._quiesce()
+        web = self._supervisor("web")
+
+        web.web_tick()
+
+        self.assertFalse(self.paths["active"].exists())
+        self.assertFalse(
+            self.paths["results"]
+            .joinpath(f"{self.intent['intent_id']}.json")
+            .exists()
+        )
 
     def test_readiness_rejects_matching_generation_with_wrong_manifest(self):
         def urlopen(request, timeout=5):

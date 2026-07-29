@@ -78,6 +78,10 @@ class RuntimeSupervisor:
             self.environment,
             "STAGING_RUNTIME_ACTIVATION_ENABLED",
         )
+        self.initial_activation_enabled = _bool_env(
+            self.environment,
+            "STAGING_INITIAL_ACTIVATION_ENABLED",
+        )
         self.apply_mode = self.environment.get(
             "STAGING_ACTIVATION_APPLY_MODE", "auto"
         ).strip().lower()
@@ -576,6 +580,149 @@ class RuntimeSupervisor:
             safe_error_code=reason_code,
         )
 
+    def _write_initial_failure(self, intent, reason_code):
+        payload = {
+            "schema_version": 1,
+            "kind": "activation_result",
+            "deployment_id": self.deployment_id,
+            "intent_id": intent["intent_id"],
+            "intent_digest": intent["document_digest"],
+            "status": "failed",
+            "active_generation_id": "",
+            "active_manifest_digest": "",
+            "previous_generation_id": "",
+            "active_pointer_digest": "",
+            "readiness_evidence": {},
+            "process_identity": {
+                "supervisor_pid": os.getpid(),
+                "child_pid": getattr(self.child, "pid", 0),
+                "role": self.role,
+            },
+            "safe_error_code": reason_code,
+            "observed_at_unix": int(time.time()),
+        }
+        atomic_write_json(
+            self._result_path(intent["intent_id"]),
+            sign_document(payload, self.signing_key),
+        )
+
+    def _apply_initial_intent(self, intent):
+        if not self.initial_activation_enabled:
+            return
+        if intent.get("previous_generation_id") or intent.get(
+            "previous_pointer_digest"
+        ):
+            return
+        if self.paths["previous"].exists():
+            return
+        try:
+            current = self._current_pointer()
+        except RuntimeControlError:
+            current = None
+        if current is not None and (
+            current.generation_id != intent["target_generation_id"]
+            or current.manifest_digest != intent["target_manifest_digest"]
+            or current.intent_digest != intent["document_digest"]
+        ):
+            return
+        if not self._maintenance_acknowledged(intent):
+            return
+        validate_runtime_workspace(
+            intent["target_runtime_path"],
+            runtime_root=self.runtime_root,
+            generation_id=intent["target_generation_id"],
+            manifest_digest=intent["target_manifest_digest"],
+        )
+        web_ack = self._read_ack(intent, "web")
+        if web_ack and web_ack.get("state") != "applying":
+            return
+        if web_ack is None:
+            self._write_ack(intent, "applying")
+        try:
+            resumed = self._acquire_or_resume_pre_cutover_lock(intent)
+        except SupervisorError:
+            return
+        try:
+            if current is None:
+                # Recheck the absence of both rollback authorities under the
+                # same-intent lock immediately before the first pointer write.
+                if self.paths["active"].exists() or self.paths["previous"].exists():
+                    raise SupervisorError(
+                        "activation_previous_pointer_changed"
+                    )
+                target_document = build_runtime_pointer(
+                    deployment_id=self.deployment_id,
+                    generation_id=intent["target_generation_id"],
+                    manifest_digest=intent["target_manifest_digest"],
+                    runtime_path=intent["target_runtime_path"],
+                    intent_digest=intent["document_digest"],
+                    state_version=int(intent.get("state_version", 1)),
+                    signing_key=self.signing_key,
+                )
+                atomic_write_json(self.paths["active"], target_document)
+            set_runtime_workspace_writable(
+                intent["target_runtime_path"],
+                runtime_root=self.runtime_root,
+                generation_id=intent["target_generation_id"],
+                manifest_digest=intent["target_manifest_digest"],
+                writable=True,
+            )
+            self._run_manage(
+                ["verify_activation_runtime", "--intent-id", intent["intent_id"]],
+                timeout=self.readiness_timeout,
+            )
+            self.start_child()
+            self._write_ack(intent, "pointer_switched")
+            self._wait_maintenance_state(intent, "target_started")
+            self._write_ack(intent, "verifying")
+            readiness = self._wait_ready(
+                intent["target_generation_id"],
+                intent["target_manifest_digest"],
+            )
+            self._run_manage(
+                ["verify_activation_runtime", "--intent-id", intent["intent_id"]],
+                timeout=self.readiness_timeout,
+            )
+            active = self._current_pointer()
+            self._write_result(
+                intent,
+                status="committed",
+                active_pointer=active,
+                previous_generation_id="",
+                readiness_evidence={
+                    **readiness,
+                    "runtime_smoke": "passed",
+                    "initial_activation": True,
+                },
+            )
+            self._write_ack(intent, "committed")
+            if self._reconcile_result_best_effort(intent):
+                self._write_ack(intent, "reconciled")
+        except Exception as exc:
+            reason_code = getattr(
+                exc, "reason_code", "activation_verification_failed"
+            )
+            try:
+                self.stop_child()
+                active = self._current_pointer()
+                if (
+                    active.generation_id == intent["target_generation_id"]
+                    and active.intent_digest == intent["document_digest"]
+                ):
+                    set_runtime_workspace_writable(
+                        intent["target_runtime_path"],
+                        runtime_root=self.runtime_root,
+                        generation_id=intent["target_generation_id"],
+                        manifest_digest=intent["target_manifest_digest"],
+                        writable=False,
+                    )
+                    self.paths["active"].unlink(missing_ok=True)
+                self._write_initial_failure(intent, reason_code)
+            except Exception:
+                pass
+        finally:
+            self._release_lock(intent)
+
     def _recover_incomplete_cutover(self, intent, current):
         if current.generation_id != intent.get("target_generation_id"):
             return False
@@ -649,6 +796,9 @@ class RuntimeSupervisor:
             self._write_failed_without_cutover(
                 intent, "staging_activation_disabled"
             )
+            return
+        if intent.get("activation_mode") == "initial":
+            self._apply_initial_intent(intent)
             return
         current = self._current_pointer()
         if (
