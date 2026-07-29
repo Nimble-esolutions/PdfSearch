@@ -5,8 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
+
+
+IMMUTABLE_IMAGE_PATTERN = re.compile(
+    r"^(?P<repository>[^@\s]+)@sha256:[0-9a-f]{64}$"
+)
 
 
 CRITICAL_KEYS = {
@@ -75,6 +81,40 @@ CRITICAL_KEYS = {
 }
 
 
+def _is_canonical_immutable_image(reference):
+    if not isinstance(reference, str):
+        return False
+    match = IMMUTABLE_IMAGE_PATTERN.fullmatch(reference)
+    if match is None:
+        return False
+    # A colon in the final repository component denotes a mutable tag.
+    # Colons in an earlier registry component remain valid host ports.
+    repository_leaf = match.group("repository").rsplit("/", 1)[-1]
+    return bool(repository_leaf) and ":" not in repository_leaf
+
+
+def find_image_contract_errors(services):
+    """Return bounded reason codes without disclosing image references."""
+    errors = []
+    references = {}
+    for service_name in ("web", "maintenance"):
+        service = services.get(service_name)
+        if not isinstance(service, dict) or not service.get("image"):
+            errors.append(f"{service_name}_image_missing")
+            continue
+        reference = service["image"]
+        references[service_name] = reference
+        if not _is_canonical_immutable_image(reference):
+            errors.append(f"{service_name}_image_not_immutable")
+    if (
+        "web" in references
+        and "maintenance" in references
+        and references["web"] != references["maintenance"]
+    ):
+        errors.append("service_images_divergent")
+    return sorted(errors)
+
+
 def find_parity_errors(services):
     """Return key names only so validation never discloses configured values."""
     web = services["web"].get("environment", {})
@@ -110,13 +150,19 @@ def main() -> int:
     )
     services = json.loads(result.stdout)["services"]
     missing, divergent = find_parity_errors(services)
-    if missing or divergent:
+    image_errors = find_image_contract_errors(services)
+    if missing or divergent or image_errors:
         if missing:
             print("missing security-critical keys: " + ", ".join(missing))
         if divergent:
             print("divergent security-critical keys: " + ", ".join(divergent))
+        if image_errors:
+            print("invalid production image contract: " + ", ".join(image_errors))
         return 1
-    print(f"web/maintenance environment parity verified ({len(CRITICAL_KEYS)} keys)")
+    print(
+        "web/maintenance environment and immutable image parity verified "
+        f"({len(CRITICAL_KEYS)} keys)"
+    )
     return 0
 
 

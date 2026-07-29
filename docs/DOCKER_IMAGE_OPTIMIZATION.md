@@ -46,6 +46,7 @@ an optimization.
 
 ```bash
 docker build --check -f Dockerfile .
+export PDFSEARCH_IMAGE='ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<immutable-digest>'
 docker compose -f docker-compose.yml config
 ```
 
