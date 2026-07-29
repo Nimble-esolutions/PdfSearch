@@ -2984,6 +2984,52 @@ msgstr "विद्यमान शोध कलाकृती बदलणा
 msgid "Review maintenance controls"
 msgstr "देखभाल नियंत्रणांचा आढावा घ्या"
 
+msgid "Active search source is not verified"
+msgstr "सक्रिय शोध स्रोताची पडताळणी झालेली नाही"
+
+msgid ""
+"No signed active search generation is available as the source for document "
+"maintenance."
+msgstr ""
+"दस्तऐवज देखभालीचा स्रोत म्हणून कोणताही स्वाक्षरीत सक्रिय शोध आवृत्ती संच उपलब्ध नाही."
+
+msgid ""
+"Validation, repair, and reindex work cannot prepare a safe candidate yet."
+msgstr ""
+"पडताळणी, दुरुस्ती आणि पुनःअनुक्रमण कामातून अद्याप सुरक्षित प्रस्तावित आवृत्ती तयार करता "
+"येणार नाही."
+
+msgid "Restore or activate a verified generation"
+msgstr "पडताळलेला आवृत्ती संच पुनर्स्थापित किंवा सक्रिय करा"
+
+msgid "Active search generation is missing from control evidence"
+msgstr "नियंत्रण पुराव्यात सक्रिय शोध आवृत्ती संच उपलब्ध नाही"
+
+msgid ""
+"The signed active generation is not recorded as active in the control "
+"database."
+msgstr ""
+"स्वाक्षरीत सक्रिय आवृत्ती संचाची नियंत्रण माहितीकोशात सक्रिय म्हणून नोंद झालेली नाही."
+
+msgid "Document maintenance cannot prove which generation it would extend."
+msgstr "दस्तऐवज देखभाल कोणत्या आवृत्ती संचाचा विस्तार करेल हे सिद्ध करता येत नाही."
+
+msgid "Active search observation needs refresh"
+msgstr "सक्रिय शोध निरीक्षण अद्ययावत करणे आवश्यक आहे"
+
+msgid ""
+"The latest runtime observation does not match the signed active generation."
+msgstr "कार्यरत प्रणालीचे नवीनतम निरीक्षण स्वाक्षरीत सक्रिय आवृत्ती संचाशी जुळत नाही."
+
+msgid ""
+"Document maintenance remains blocked until current runtime evidence is "
+"observed."
+msgstr ""
+"कार्यरत प्रणालीचा सद्य पुरावा नोंदवला जाईपर्यंत दस्तऐवज देखभाल बंद राहील."
+
+msgid "Refresh runtime evidence"
+msgstr "कार्यरत प्रणालीचा पुरावा अद्ययावत करा"
+
 msgid "Candidate preparation is unavailable"
 msgstr "उमेदवाराची तयारी उपलब्ध नाही"
 

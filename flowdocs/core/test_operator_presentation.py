@@ -22,6 +22,7 @@ class OperatorPresentationTests(SimpleTestCase):
         producer_paths = (
             flowdocs_root / "core" / "services" / "dashboard_read_model.py",
             flowdocs_root / "core" / "maintenance_plans.py",
+            flowdocs_root / "core" / "candidate_maintenance.py",
             flowdocs_root / "vaultops" / "services" / "read_model.py",
             flowdocs_root / "vaultops" / "views.py",
         )
@@ -81,6 +82,25 @@ class OperatorPresentationTests(SimpleTestCase):
             "Vault storage is ready for its first generation",
         )
         self.assertEqual(first_generation["severity"], "info")
+
+    def test_cold_start_maintenance_reasons_have_bootstrap_guidance(self):
+        pointer = present_reason("maintenance_source_pointer_unverified")
+        generation = present_reason("maintenance_source_generation_unprojected")
+        observation = present_reason("maintenance_source_observation_stale")
+
+        self.assertEqual(pointer["title"], "Active search source is not verified")
+        self.assertEqual(
+            pointer["action_label"],
+            "Restore or activate a verified generation",
+        )
+        self.assertEqual(
+            generation["action_url"],
+            "/dashboard/operations/?section=restore",
+        )
+        self.assertEqual(
+            observation["action_url"],
+            "/dashboard/operations/?section=jobs",
+        )
 
     def test_unknown_reason_never_infers_copy_from_token(self):
         presentation = present_reason("future_unknown_machine_token")
