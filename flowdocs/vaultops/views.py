@@ -48,6 +48,8 @@ from vaultops.services.jobs import request_cancellation, requeue_job
 from vaultops.services.inventory import project_verified_generation, verify_generation
 from vaultops.services.maintenance_import import import_maintenance_candidate
 from vaultops.services.profiles import (
+    environment_profile_defaults,
+    profile_action_posture,
     probe_restore_profile,
     upsert_restore_profile,
     vault_for_profile,
@@ -156,6 +158,16 @@ def _request_idempotency_key(request, *, require_admin_gate=True):
 @superadmin_required
 @require_POST
 def profile_configure(request):
+    safe_fields = (
+        "key",
+        "display_name",
+        "endpoint_origin",
+        "bucket",
+        "region",
+        "dataset_id",
+        "production_source_id",
+        "credential_alias",
+    )
     try:
         _request_idempotency_key(request, require_admin_gate=False)
         supplied_secret_fields = {
@@ -192,6 +204,37 @@ def profile_configure(request):
             data={"profile_key": profile.key},
         )
     except Exception as exc:
+        reason_code = getattr(exc, "reason_code", "operation_failed")
+        field_by_reason = {
+            "vault_endpoint_invalid": "endpoint_origin",
+            "vault_endpoint_scheme_rejected": "endpoint_origin",
+            "vault_endpoint_https_required": "endpoint_origin",
+            "vault_endpoint_port_invalid": "endpoint_origin",
+            "vault_endpoint_not_allowlisted": "endpoint_origin",
+            "vault_endpoint_dns_failed": "endpoint_origin",
+            "vault_endpoint_dns_empty": "endpoint_origin",
+            "vault_endpoint_dns_invalid": "endpoint_origin",
+            "vault_endpoint_private_address": "endpoint_origin",
+            "credential_alias_not_approved": "credential_alias",
+            "credential_alias_unavailable": "credential_alias",
+        }
+        values = {
+            field: _request_value(request, field, "").strip()
+            for field in safe_fields
+        }
+        missing = [field for field, value in values.items() if not value]
+        errors = {
+            field: "This field is required."
+            for field in missing
+        }
+        if reason_code == "vault_profile_invalid" and not missing:
+            errors["key"] = "Use letters, numbers, dots, underscores, or hyphens."
+        elif field_by_reason.get(reason_code):
+            errors[field_by_reason[reason_code]] = present_reason(reason_code)["detail"]
+        request.session["vault_profile_form"] = {
+            "values": values,
+            "errors": errors,
+        }
         return _mutation_error(request, exc, section="configuration")
 
 
@@ -309,6 +352,10 @@ def workbench(request):
     )
     enrich_workbench_readiness(state)
     decorate_operator_state(state)
+    form_state = request.session.pop("vault_profile_form", None) or {
+        "values": environment_profile_defaults(),
+        "errors": {},
+    }
     state["vault_state_version"] = state["state_version"]
     state["maintenance_state_version"] = state["maintenance"]["state_version"]
     state["combined_state_version"] = hashlib.sha256(
@@ -326,6 +373,7 @@ def workbench(request):
             "section": section,
             "state": state,
             "idempotency_key": str(uuid.uuid4()),
+            "profile_form": form_state,
             "breadcrumb_items": [
                 {"label": "Dashboard", "url": reverse("dashboard")},
                 {"label": "Operations", "url": None},
@@ -798,6 +846,9 @@ def profile_probe(request, profile_key):
         profile = get_object_or_404(
             VaultConnectionProfile, key=profile_key, enabled=True
         )
+        posture = profile_action_posture(profile)
+        if not posture["probe_enabled"]:
+            raise WorkbenchRequestError(posture["reason_code"])
         evidence = probe_restore_profile(profile)
         return _mutation_success(
             request,
@@ -821,6 +872,9 @@ def profile_inventory(request, profile_key):
         profile = get_object_or_404(
             VaultConnectionProfile, key=profile_key, enabled=True
         )
+        posture = profile_action_posture(profile)
+        if not posture["inventory_enabled"]:
+            raise WorkbenchRequestError(posture["reason_code"])
         verified = verify_generation(
             vault_for_profile(profile),
             profile,

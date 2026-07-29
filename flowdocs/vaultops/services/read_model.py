@@ -519,6 +519,8 @@ def _environment_summary(identity):
 
 
 def _profile_records():
+    from vaultops.services.profiles import profile_action_posture
+
     return [
         {
             "key": profile.key,
@@ -539,6 +541,7 @@ def _profile_records():
                 profile.capability_evidence
             ),
             "last_probed_at": profile.last_probed_at,
+            "action_posture": profile_action_posture(profile),
         }
         for profile in VaultConnectionProfile.objects.order_by("key")
     ]
@@ -860,7 +863,10 @@ def _rollback_capability(*, pending_activation=None):
 
 
 def build_workbench_state(*, profile_key=None):
+    from vaultops.services.profiles import ensure_environment_profile
+
     identity = settings.ENV_IDENTITY
+    ensure_environment_profile()
     profile_key = profile_key or settings.VAULT_DEFAULT_PROFILE
     observed_at = timezone.now()
     try:

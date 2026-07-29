@@ -179,6 +179,8 @@ code { overflow-wrap: anywhere; color: var(--vault-maroon-dark); }
 .vault-form { display: grid; gap: .65rem; }
 .vault-form label { color: var(--vault-maroon-dark); font-size: .78rem; font-weight: 750; }
 .vault-form input, .vault-form select { width: 100%; min-height: 44px; padding: .6rem .7rem; color: var(--vault-ink); background: #fff; border: 1px solid #958a7d; border-radius: 0; font: inherit; }
+.vault-form input[aria-invalid="true"] { border-color: #9f1d20; box-shadow: 0 0 0 2px rgb(159 29 32 / 18%); }
+.vault-field-error { display: block; margin-top: .25rem; color: #7e1518; font-size: .78rem; font-weight: 650; }
 .vault-form .vault-button { justify-self: start; }
 .vault-cancel-link { color: var(--vault-maroon); font-weight: 700; }
 
