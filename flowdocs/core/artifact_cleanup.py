@@ -25,8 +25,15 @@ LEGACY_BACKUP_RE = re.compile(
 
 
 class CleanupError(RuntimeError):
-    def __init__(self, reason_code: str, detail: str = ""):
+    def __init__(
+        self,
+        reason_code: str,
+        detail: str = "",
+        *,
+        progress: dict | None = None,
+    ):
         self.reason_code = reason_code
+        self.progress = progress or {}
         super().__init__(detail or reason_code)
 
 
@@ -194,22 +201,11 @@ def apply_legacy_backup_cleanup(plan_id: str) -> dict:
     if not plan["apply_allowed"]:
         raise CleanupError("legacy_backup_cleanup_has_no_candidates")
     root = _legacy_backup_root()
-    removed = []
+
+    # Validate the complete batch before the first irreversible operation.
+    # This prevents drift in a later candidate from producing a partial batch.
+    fields = ("path", "bytes", "mtime_ns", "inode")
     for item in plan["candidates"]:
-        fresh = legacy_backup_cleanup_plan()
-        fresh_item = next(
-            (
-                candidate
-                for candidate in fresh["candidates"]
-                if candidate["path"] == item["path"]
-            ),
-            None,
-        )
-        fields = ("path", "bytes", "mtime_ns", "inode", "reason_code")
-        if fresh_item is None or any(
-            fresh_item[field] != item[field] for field in fields
-        ):
-            raise CleanupError("stale_legacy_backup_cleanup_plan")
         path = Path(item["path"])
         if (
             path.is_symlink()
@@ -218,9 +214,44 @@ def apply_legacy_backup_cleanup(plan_id: str) -> dict:
         ):
             raise CleanupError("unsafe_legacy_backup_path")
         try:
+            fresh_item = _legacy_backup_record(path, root)
+        except FileNotFoundError as exc:
+            raise CleanupError(
+                "stale_legacy_backup_cleanup_plan"
+            ) from exc
+        except CleanupError as exc:
+            if exc.reason_code == "legacy_backup_inventory_unavailable":
+                raise CleanupError(
+                    "stale_legacy_backup_cleanup_plan"
+                ) from exc
+            raise
+        if any(fresh_item[field] != item[field] for field in fields):
+            raise CleanupError("stale_legacy_backup_cleanup_plan")
+
+    removed = []
+    for index, item in enumerate(plan["candidates"]):
+        path = Path(item["path"])
+        try:
             path.unlink()
         except OSError as exc:
-            raise CleanupError("legacy_backup_cleanup_failed") from exc
+            removed_bytes = sum(entry["bytes"] for entry in removed)
+            raise CleanupError(
+                "legacy_backup_cleanup_failed",
+                (
+                    f"removed_count={len(removed)} "
+                    f"removed_bytes={removed_bytes}"
+                ),
+                progress={
+                    "plan_id": plan["plan_id"],
+                    "removed": removed,
+                    "removed_bytes": removed_bytes,
+                    "failed_candidate": {
+                        "path": item["path"],
+                        "bytes": item["bytes"],
+                    },
+                    "remaining_candidates": len(plan["candidates"]) - index,
+                },
+            ) from exc
         removed.append(
             {"path": item["path"], "bytes": item["bytes"]}
         )

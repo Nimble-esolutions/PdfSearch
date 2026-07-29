@@ -929,6 +929,104 @@ class LegacyBackupCleanupTests(SimpleTestCase):
         self.assertTrue(candidate.exists())
         self.assertTrue(all(path.exists() for path in paths))
 
+    def test_later_candidate_drift_is_prevalidated_before_any_deletion(self):
+        paths = self._six_backups()
+        plan = legacy_backup_cleanup_plan()
+        later_candidate = Path(plan["candidates"][-1]["path"])
+        real_record = __import__(
+            "core.artifact_cleanup", fromlist=["_legacy_backup_record"]
+        )._legacy_backup_record
+        calls = 0
+
+        def drift_before_later_validation(path, root):
+            nonlocal calls
+            calls += 1
+            if calls == len(plan["candidates"]):
+                with later_candidate.open("ab") as stream:
+                    stream.write(b"changed")
+            return real_record(path, root)
+
+        with patch(
+            "core.artifact_cleanup._legacy_backup_record",
+            side_effect=drift_before_later_validation,
+        ):
+            with self.assertRaisesRegex(
+                CleanupError, "stale_legacy_backup_cleanup_plan"
+            ):
+                apply_legacy_backup_cleanup(plan["plan_id"])
+
+        self.assertTrue(all(path.exists() for path in paths))
+
+    def test_disappearing_candidate_is_stale_before_any_other_deletion(self):
+        self._six_backups()
+        plan = legacy_backup_cleanup_plan()
+        later_candidate = Path(plan["candidates"][-1]["path"])
+        real_record = __import__(
+            "core.artifact_cleanup", fromlist=["_legacy_backup_record"]
+        )._legacy_backup_record
+        calls = 0
+
+        def disappear_before_later_validation(path, root):
+            nonlocal calls
+            calls += 1
+            if calls == len(plan["candidates"]):
+                later_candidate.unlink()
+                raise FileNotFoundError(str(later_candidate))
+            return real_record(path, root)
+
+        with patch(
+            "core.artifact_cleanup.legacy_backup_cleanup_plan",
+            return_value=plan,
+        ), patch(
+            "core.artifact_cleanup._legacy_backup_record",
+            side_effect=disappear_before_later_validation,
+        ):
+            with self.assertRaisesRegex(
+                CleanupError, "stale_legacy_backup_cleanup_plan"
+            ):
+                apply_legacy_backup_cleanup(plan["plan_id"])
+
+        self.assertFalse(later_candidate.exists())
+        self.assertTrue(
+            all(
+                Path(item["path"]).exists()
+                for item in plan["candidates"]
+                if Path(item["path"]) != later_candidate
+            )
+        )
+
+    def test_unlink_failure_reports_truthful_partial_progress(self):
+        self._six_backups()
+        plan = legacy_backup_cleanup_plan()
+        first = Path(plan["candidates"][0]["path"])
+        second = Path(plan["candidates"][1]["path"])
+        real_unlink = Path.unlink
+
+        def fail_second(path, *args, **kwargs):
+            if path == second:
+                raise OSError("simulated unlink failure")
+            return real_unlink(path, *args, **kwargs)
+
+        with patch.object(
+            Path, "unlink", autospec=True, side_effect=fail_second
+        ):
+            with self.assertRaises(CleanupError) as raised:
+                apply_legacy_backup_cleanup(plan["plan_id"])
+
+        self.assertFalse(first.exists())
+        self.assertTrue(second.exists())
+        self.assertEqual(
+            raised.exception.reason_code,
+            "legacy_backup_cleanup_failed",
+        )
+        self.assertEqual(
+            raised.exception.progress["removed"],
+            [{"path": str(first), "bytes": plan["candidates"][0]["bytes"]}],
+        )
+        self.assertEqual(
+            raised.exception.progress["remaining_candidates"], 2
+        )
+
     def test_corrupt_retained_backup_blocks_plan(self):
         self._six_backups()
         newest = self.backups / "db_backup_2020-01-07_000000.sqlite3"
