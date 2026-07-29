@@ -44,6 +44,7 @@ from vaultops.services.mutations import (
     release_barrier,
     request_barrier,
 )
+from vaultops.services.jobs import claim_job
 from vaultops.services.publication import (
     PromotionError,
     PublicationError,
@@ -55,6 +56,7 @@ from vaultops.services import snapshot as snapshot_service
 from vaultops.services.sync import (
     SyncPolicyError,
     evaluate_sync_scheduler,
+    execute_claimed_job,
     materialize_sync_policy,
     queue_sync_job,
 )
@@ -653,6 +655,97 @@ class CandidatePublicationTests(ActiveSyncTestCase):
     def tearDown(self):
         self.temporary.cleanup()
         super().tearDown()
+
+    @override_settings(
+        VAULT_SYNC_MODE="continuous_coalesced",
+        VAULT_SYNC_PROMOTION_MODE="manual",
+        VAULT_SYNC_QUIET_PERIOD_SECONDS=0,
+    )
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.validate_writer_for_publication",
+        side_effect=lambda *args, writer_record=None, **kwargs: writer_record,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    @patch("vaultops.services.sync.materialize_environment_profile")
+    def test_real_route_epoch_coalesces_to_one_completed_publication(
+        self,
+        profile_factory,
+        *_publication_mocks,
+    ):
+        profile_factory.return_value = self.profile
+        actor = get_user_model().objects.create_user(
+            username="scheduler-route-actor",
+            password="test-only-password",
+        )
+
+        def create_folder(_request):
+            Folder.objects.create(name="Scheduler source change", created_by=actor)
+            return HttpResponse(status=200)
+
+        middleware = SourceMutationBarrierMiddleware(create_folder)
+        # TestCase wraps each test in an outer transaction, while production
+        # autocommit runs this callback before the middleware scope exits.
+        with patch(
+            "vaultops.middleware.transaction.on_commit",
+            side_effect=lambda callback, using=None: callback(),
+        ):
+            response = middleware(RequestFactory().post("/dashboard/"))
+
+        self.assertEqual(response.status_code, 200)
+        state = SourceMutationState.objects.get(deployment_id="deployment-1")
+        self.assertEqual(state.current_epoch, 1)
+
+        first = evaluate_sync_scheduler()
+        second = evaluate_sync_scheduler()
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(
+            VaultJob.objects.filter(operation="sync_publish")
+            .exclude(pk=self.job.pk)
+            .count(),
+            1,
+        )
+
+        scheduled_snapshot = SourceSnapshot.objects.create(
+            job=first,
+            deployment_id="deployment-1",
+            state=SourceSnapshot.State.FINALIZED,
+            initial_epoch=0,
+            included_epoch=state.current_epoch,
+            snapshot_digest="b" * 64,
+            workspace_path=str(self.workspace),
+            file_count=1,
+            byte_count=(self.workspace / "db.sqlite3").stat().st_size,
+            finalized_at=timezone.now(),
+        )
+        evidence_path = self.workspace / "snapshot-evidence.json"
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence["snapshot_id"] = str(scheduled_snapshot.public_id)
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+        claimed, token = claim_job(first.public_id, worker_id="test-worker")
+        completed = execute_claimed_job(claimed, token, vault=self.vault)
+
+        self.assertEqual(
+            completed.status,
+            VaultJob.Status.SUCCEEDED,
+            (completed.safe_error_code, completed.progress),
+        )
+        self.assertEqual(
+            sum(key.endswith("/manifest.json") for key in self.client.objects),
+            1,
+        )
+        policy = SyncPolicy.objects.get(profile=self.profile)
+        self.assertEqual(policy.last_completed_epoch, state.current_epoch)
 
     @patch(
         "vaultops.services.publication.release_global_writer",
