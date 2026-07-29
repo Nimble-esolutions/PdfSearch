@@ -23,7 +23,7 @@ from core.candidate_maintenance import (
     _verified_mutable_source_runtime_identity,
 )
 from core.recovery_auth import RecoveryAuthenticationError
-from runtime_supervisor import RuntimeSupervisor
+from runtime_supervisor import RuntimeSupervisor, SupervisorError
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -1053,6 +1053,7 @@ class SupervisorProtocolTests(SimpleTestCase):
             {
                 "status": "ready",
                 "runtime_generation_id": active.generation_id,
+                "runtime_manifest_digest": active.manifest_digest,
             }
         )
 
@@ -1128,6 +1129,28 @@ class SupervisorProtocolTests(SimpleTestCase):
             deployment_id=DEPLOYMENT_ID,
         )
         self.assertEqual(checkpoint["state"], "reconciled")
+
+    def test_readiness_rejects_matching_generation_with_wrong_manifest(self):
+        def urlopen(request, timeout=5):
+            if request.full_url.endswith("/livez"):
+                return FakeResponse({"status": "ok"})
+            return FakeResponse(
+                {
+                    "status": "ready",
+                    "runtime_generation_id": TARGET_GENERATION,
+                    "runtime_manifest_digest": "f" * 64,
+                }
+            )
+
+        web = self._supervisor("web")
+        web.urlopen = urlopen
+        web.readiness_timeout = 1
+        web.monotonic = iter((0, 0, 2)).__next__
+
+        with self.assertRaisesRegex(
+            SupervisorError, "activation_readiness_mismatch"
+        ):
+            web._wait_ready(TARGET_GENERATION, TARGET_DIGEST)
 
     def test_transient_projection_failure_is_retried_idempotently(self):
         maintenance = self._quiesce()

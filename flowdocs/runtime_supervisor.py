@@ -492,7 +492,7 @@ class RuntimeSupervisor:
             raise SupervisorError("activation_readiness_invalid")
         return value
 
-    def _wait_ready(self, generation_id):
+    def _wait_ready(self, generation_id, manifest_digest):
         deadline = self.monotonic() + self.readiness_timeout
         last_code = "activation_readiness_timeout"
         while self.monotonic() < deadline:
@@ -506,11 +506,14 @@ class RuntimeSupervisor:
                     and ready.get("status") == "ready"
                     and ready.get("runtime_generation_id")
                     == generation_id
+                    and ready.get("runtime_manifest_digest")
+                    == manifest_digest
                 ):
                     return {
                         "livez": "ok",
                         "readyz": "ready",
                         "runtime_generation_id": generation_id,
+                        "runtime_manifest_digest": manifest_digest,
                     }
                 last_code = "activation_readiness_mismatch"
             except (
@@ -611,7 +614,8 @@ class RuntimeSupervisor:
             self._write_ack(intent, "rollback_pointer_switched")
             self._wait_maintenance_state(intent, "rollback_started")
             readiness = self._wait_ready(
-                intent["previous_generation_id"]
+                intent["previous_generation_id"],
+                previous_document["manifest_digest"],
             )
             restored = self._current_pointer()
             self._write_result(
@@ -755,7 +759,10 @@ class RuntimeSupervisor:
             self._write_ack(intent, "pointer_switched")
             self._wait_maintenance_state(intent, "target_started")
             self._write_ack(intent, "verifying")
-            readiness = self._wait_ready(intent["target_generation_id"])
+            readiness = self._wait_ready(
+                intent["target_generation_id"],
+                intent["target_manifest_digest"],
+            )
             self._run_manage(
                 [
                     "verify_activation_runtime",
@@ -809,7 +816,8 @@ class RuntimeSupervisor:
                     intent, "rollback_started"
                 )
                 rollback_readiness = self._wait_ready(
-                    current.generation_id
+                    current.generation_id,
+                    current.manifest_digest,
                 )
                 restored = self._current_pointer()
                 self._write_result(
