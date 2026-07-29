@@ -2,6 +2,7 @@ import contextvars
 import time
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
 
 from django.conf import settings
 from django.db import transaction
@@ -12,6 +13,32 @@ from vaultops.models import MutationJournalEntry, SourceMutationState
 
 CONTROL_DB = "control"
 _scope_depth = contextvars.ContextVar("vaultops_mutation_scope_depth", default=0)
+_scope_outcome = contextvars.ContextVar(
+    "vaultops_mutation_scope_outcome", default=None
+)
+
+
+@dataclass
+class MutationOutcome:
+    """Track whether one fenced scope produced a durable source change."""
+
+    changed: bool = False
+    discarded: bool = False
+
+    def mark_changed(self):
+        if not self.discarded:
+            self.changed = True
+
+    def discard(self):
+        if not self.changed:
+            self.discarded = True
+
+
+def mark_current_scope_changed():
+    """Mark the active scope changed after a tracked write commits."""
+    outcome = _scope_outcome.get()
+    if outcome is not None:
+        outcome.mark_changed()
 
 
 class SnapshotBarrierActive(RuntimeError):
@@ -71,17 +98,28 @@ def mutation_scope(
     operation="write",
     correlation_id=None,
     source_deployment=None,
+    record_on_change=False,
 ):
-    """Fence one source mutation and record a durable coalescing epoch."""
+    """Fence one source mutation and record a durable coalescing epoch.
+
+    Explicit worker and index callers retain the conservative eager default.
+    Request middleware can set ``record_on_change`` and mark the returned
+    outcome only after a tracked application-model write commits.
+    """
     if not tracking_enabled():
-        yield
+        yield MutationOutcome(changed=False)
         return
 
     depth = _scope_depth.get()
     if depth:
+        outcome = _scope_outcome.get()
+        if outcome is None:
+            outcome = MutationOutcome()
+        if not record_on_change:
+            outcome.mark_changed()
         token = _scope_depth.set(depth + 1)
         try:
-            yield
+            yield outcome
         finally:
             _scope_depth.reset(token)
         return
@@ -97,36 +135,38 @@ def mutation_scope(
         state.active_mutations += 1
         state.save(update_fields=["active_mutations", "updated_at"])
 
-    token = _scope_depth.set(1)
+    outcome = MutationOutcome(changed=not record_on_change)
+    depth_token = _scope_depth.set(1)
+    outcome_token = _scope_outcome.set(outcome)
     try:
-        yield
+        yield outcome
     finally:
-        _scope_depth.reset(token)
+        _scope_outcome.reset(outcome_token)
+        _scope_depth.reset(depth_token)
         now = timezone.now()
         with transaction.atomic(using=CONTROL_DB):
             state = SourceMutationState.objects.select_for_update().get(
                 deployment_id=source_deployment
             )
             state.active_mutations = max(0, state.active_mutations - 1)
-            state.current_epoch += 1
-            state.last_mutation_at = now
+            update_fields = ["active_mutations", "updated_at"]
+            if outcome.changed and not outcome.discarded:
+                state.current_epoch += 1
+                state.last_mutation_at = now
+                update_fields.extend(["current_epoch", "last_mutation_at"])
             state.save(
-                update_fields=[
-                    "active_mutations",
-                    "current_epoch",
-                    "last_mutation_at",
-                    "updated_at",
-                ]
+                update_fields=update_fields
             )
-            MutationJournalEntry.objects.create(
-                deployment_id=source_deployment,
-                epoch=state.current_epoch,
-                category=category,
-                relative_path=relative_path,
-                operation=operation,
-                correlation_id=correlation_id,
-                observed_at=now,
-            )
+            if outcome.changed and not outcome.discarded:
+                MutationJournalEntry.objects.create(
+                    deployment_id=source_deployment,
+                    epoch=state.current_epoch,
+                    category=category,
+                    relative_path=relative_path,
+                    operation=operation,
+                    correlation_id=correlation_id,
+                    observed_at=now,
+                )
 
 
 def request_barrier(

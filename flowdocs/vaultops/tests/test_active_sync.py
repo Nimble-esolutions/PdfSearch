@@ -10,14 +10,24 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.conf import settings
-from django.test import TestCase, override_settings
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.http import HttpResponse
+from django.test import (
+    RequestFactory,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+)
 from django.utils import timezone
 
 from core import utils as core_utils
 from core import candidate_maintenance
 from core.artifact_vault import ArtifactVault, VaultConfig
+from core.models import Folder
 from core.global_writer import GlobalWriterConflict, release_global_writer
 from core.registration import RegistrationError, get_authoritative_pointer
+from vaultops.middleware import MUTATING_VIEW_NAMES, SourceMutationBarrierMiddleware
 from vaultops.models import (
     ArtifactGeneration,
     MutationJournalEntry,
@@ -186,9 +196,10 @@ class MutationBarrierTests(ActiveSyncTestCase):
             category="media",
             relative_path="pdfs/example.pdf",
             operation="upload",
-        ):
+        ) as outcome:
             pass
 
+        self.assertTrue(outcome.changed)
         state = SourceMutationState.objects.get(deployment_id="deployment-1")
         self.assertEqual(state.current_epoch, 1)
         self.assertEqual(state.active_mutations, 0)
@@ -343,6 +354,111 @@ class MutationBarrierTests(ActiveSyncTestCase):
                 state.barrier_state,
                 SourceMutationState.BarrierState.OPEN,
             )
+
+
+@override_settings(
+    VAULT_SYNC_ENABLED=True,
+    VAULT_MUTATION_TRACKING_ENABLED=True,
+    ENV_IDENTITY=fake_identity(),
+)
+class ChangeAwareWebMutationTests(TransactionTestCase):
+    databases = {"default", "control"}
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="mutation-test-operator",
+            password="test-only-password",
+        )
+
+    def _request(self, response_callable):
+        middleware = SourceMutationBarrierMiddleware(response_callable)
+        return middleware(self.factory.post("/dashboard/"))
+
+    def _assert_epoch(self, expected):
+        state = SourceMutationState.objects.get(deployment_id="deployment-1")
+        self.assertEqual(state.current_epoch, expected)
+        self.assertEqual(state.active_mutations, 0)
+        self.assertEqual(MutationJournalEntry.objects.count(), expected)
+
+    def test_source_mutating_route_inventory_is_explicit(self):
+        self.assertEqual(
+            MUTATING_VIEW_NAMES,
+            {
+                "dashboard",
+                "dashboard_folder",
+                "save_settings",
+                "register",
+                "edit_user",
+                "toggle_user_status",
+                "delete_user",
+                "create_folder",
+                "rename_folder",
+                "delete_folder",
+                "update_folder_keywords",
+                "add_subcategory",
+                "rename_pdf",
+                "assign_pdf_owner",
+                "delete_pdf",
+                "deprecate_pdf",
+                "archive_pdf",
+                "restore_pdf",
+            },
+        )
+
+    def test_committed_core_model_save_increments_epoch(self):
+        def save_folder(_request):
+            Folder.objects.create(name="committed", created_by=self.user)
+            return HttpResponse(status=200)
+
+        response = self._request(save_folder)
+
+        self.assertEqual(response.status_code, 200)
+        self._assert_epoch(1)
+
+    def test_successful_no_op_request_does_not_increment_epoch(self):
+        response = self._request(lambda _request: HttpResponse(status=200))
+
+        self.assertEqual(response.status_code, 200)
+        self._assert_epoch(0)
+
+    def test_error_response_retains_committed_change_epoch(self):
+        def save_then_reject(_request):
+            Folder.objects.create(name="discarded", created_by=self.user)
+            return HttpResponse(status=400)
+
+        response = self._request(save_then_reject)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Folder.objects.filter(name="discarded").exists())
+        self._assert_epoch(1)
+
+    def test_exception_retains_committed_change_epoch(self):
+        def save_then_raise(_request):
+            Folder.objects.create(name="errored", created_by=self.user)
+            raise RuntimeError("test-only request failure")
+
+        with self.assertRaisesRegex(RuntimeError, "test-only request failure"):
+            self._request(save_then_raise)
+
+        self.assertTrue(Folder.objects.filter(name="errored").exists())
+        self._assert_epoch(1)
+
+    def test_rolled_back_core_model_save_does_not_increment_epoch(self):
+        def rollback_save(_request):
+            try:
+                with transaction.atomic():
+                    Folder.objects.create(name="rolled-back", created_by=self.user)
+                    raise RuntimeError("force rollback")
+            except RuntimeError:
+                pass
+            return HttpResponse(status=200)
+
+        response = self._request(rollback_save)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Folder.objects.filter(name="rolled-back").exists())
+        self._assert_epoch(0)
 
 
 @override_settings(
