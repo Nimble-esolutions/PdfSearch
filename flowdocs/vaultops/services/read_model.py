@@ -7,6 +7,7 @@ from django.db import DatabaseError
 from django.utils import timezone
 from django.utils.translation import gettext
 
+from core.artifact_vault import ArtifactVaultConfigurationError
 from core.recovery_auth import (
     RecoveryAuthenticationError,
     verify_recovery_superadmin_database,
@@ -472,8 +473,14 @@ def build_authority_state(*, profile_key, dataset_id, deployment_id):
 
 def build_dashboard_authority_summary():
     """Return bounded, redacted Vault authority evidence for the Dashboard."""
+    from vaultops.services.profiles import (
+        VaultProfileError,
+        ensure_environment_profile,
+    )
+
     observed_at = timezone.now()
     try:
+        ensure_environment_profile()
         profile = VaultConnectionProfile.objects.get(
             key=settings.VAULT_DEFAULT_PROFILE,
             enabled=True,
@@ -483,7 +490,11 @@ def build_dashboard_authority_summary():
             profile.dataset_id,
             settings.ENV_IDENTITY.deployment_id,
         )
-    except VaultConnectionProfile.DoesNotExist:
+    except (
+        ArtifactVaultConfigurationError,
+        VaultConnectionProfile.DoesNotExist,
+        VaultProfileError,
+    ):
         authority = {
             "status": "unknown",
             "reason_code": "profile_unavailable",
@@ -546,6 +557,14 @@ def build_dashboard_authority_summary():
         ),
         "blocking_reasons": list(authority.get("blocking_reasons") or []),
     }
+    summary["search_available"] = bool(
+        summary["status"] == "healthy"
+        and summary["remote"]["state"] == "verified"
+        and summary["runtime"]["state"] == "ready"
+        and summary["remote"]["authoritative_generation_id"]
+        and summary["runtime"]["active_generation_id"]
+        == summary["remote"]["authoritative_generation_id"]
+    )
     summary["state_version"] = _state_digest(summary)
     return summary
 

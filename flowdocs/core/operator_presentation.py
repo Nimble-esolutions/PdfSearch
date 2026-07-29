@@ -29,6 +29,14 @@ REASONS = {
         "overview",
         "success",
     ),
+    "search_authority_unavailable": (
+        "Search readiness is unavailable",
+        "No verified active runtime generation is available.",
+        "Document counts do not prove what the live search service can return.",
+        "Review search authority",
+        "configuration",
+        "warning",
+    ),
     "maintenance_job_failed": (
         "Maintenance work needs review",
         "A local maintenance job did not complete.",

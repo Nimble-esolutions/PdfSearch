@@ -195,6 +195,10 @@ def build_dashboard_state(*, user, data):
 
     is_superadmin = getattr(user, "role", None) == "superadmin"
     if is_superadmin:
+        from vaultops.services.read_model import build_dashboard_authority_summary
+
+        authority_summary = build_dashboard_authority_summary()
+        search_available = authority_summary["search_available"]
         jobs = list(
             MaintenanceJob.objects.select_related("requested_by")
             .filter(
@@ -207,16 +211,14 @@ def build_dashboard_state(*, user, data):
             kind__in=LOCAL_MAINTENANCE_JOB_KINDS,
             status="failed",
         ).count()
-        from vaultops.services.read_model import (
-            build_dashboard_authority_summary,
-        )
-
-        vault_posture = build_dashboard_authority_summary()
+        vault_posture = authority_summary
     else:
+        search_available = False
         jobs = []
         failed_job_count = 0
         vault_posture = None
-    needs_index = max(total_pdfs - indexed_pdfs, 0)
+    local_index_debt = max(total_pdfs - indexed_pdfs, 0)
+    needs_index = local_index_debt if search_available else 0
     attention = _attention_items(
         needs_index=needs_index,
         unknown_uploaders=unknown_uploaders,
@@ -224,7 +226,22 @@ def build_dashboard_state(*, user, data):
         jobs=jobs,
         failed_job_count=failed_job_count,
     )
-    if attention:
+    if not search_available:
+        recommended_action = (
+            {
+                "action_label": gettext("Review search authority"),
+                "action_url": f"{reverse('operations_panel')}?section=configuration",
+            }
+            if is_superadmin
+            else None
+        )
+        posture = {
+            "severity": "warning",
+            "reason_code": "search_authority_unavailable",
+            "message": gettext("Search readiness is unavailable"),
+            "recommended_action": recommended_action,
+        }
+    elif attention:
         posture = {
             "severity": attention[0]["severity"],
             "reason_code": attention[0]["reason_code"],
@@ -248,6 +265,7 @@ def build_dashboard_state(*, user, data):
         "total_pdfs": total_pdfs,
         "indexed_pdfs": indexed_pdfs,
         "needs_index_pdfs": needs_index,
+        "search_available": search_available,
         "unknown_uploaders": unknown_uploaders,
         "recent_pdfs": list(pdfs.order_by("-uploaded_at", "-pk")[:RECENT_INTAKE_LIMIT]),
         "maintenance_jobs": jobs,

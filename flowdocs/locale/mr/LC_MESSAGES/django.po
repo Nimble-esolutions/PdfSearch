@@ -2550,6 +2550,24 @@ msgstr "नियमित देखभाल"
 msgid "Unavailable"
 msgstr "उपलब्ध नाही"
 
+msgid "Search readiness is unavailable"
+msgstr "शोध तयारीची स्थिती उपलब्ध नाही"
+
+msgid "No verified active runtime generation is available."
+msgstr "पडताळलेली सक्रिय कार्यरत आवृत्ती उपलब्ध नाही."
+
+msgid "Document counts do not prove what the live search service can return."
+msgstr "केवळ दस्तऐवजांची संख्या प्रत्यक्ष शोध सेवेत काय मिळेल हे सिद्ध करत नाही."
+
+msgid "Review search authority"
+msgstr "शोधाच्या अधिकृत स्थितीचा आढावा घ्या"
+
+msgid "Verified runtime authority is required"
+msgstr "पडताळलेली अधिकृत कार्यरत स्थिती आवश्यक आहे"
+
+msgid "Index debt cannot be assessed safely"
+msgstr "अनुक्रमणातील प्रलंबित कामाचे सुरक्षित मूल्यमापन करता येत नाही"
+
 msgid "Reason for hold"
 msgstr "जतन स्थगितीचे कारण"
 

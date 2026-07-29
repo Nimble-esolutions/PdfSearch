@@ -38,13 +38,23 @@
     </div>
     <div class="cockpit-metric">
       <span class="cockpit-metric__label">{% trans "Search readiness" %}</span>
-      <strong>{{ cockpit.indexed_pdfs }}/{{ cockpit.total_pdfs }}</strong>
-      <span>{% trans "documents searchable" %}</span>
+      {% if cockpit.search_available %}
+        <strong>{{ cockpit.indexed_pdfs }}/{{ cockpit.total_pdfs }}</strong>
+        <span>{% trans "documents searchable" %}</span>
+      {% else %}
+        <strong>{% trans "Unavailable" %}</strong>
+        <span>{% trans "Verified runtime authority is required" %}</span>
+      {% endif %}
     </div>
-    <div class="cockpit-metric {% if cockpit.needs_index_pdfs %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
+    <div class="cockpit-metric {% if cockpit.search_available and cockpit.needs_index_pdfs %}cockpit-metric--warn{% elif cockpit.search_available %}cockpit-metric--ok{% endif %}">
       <span class="cockpit-metric__label">{% trans "Index review" %}</span>
-      <strong>{{ cockpit.needs_index_pdfs }}</strong>
-      <span>{% trans "documents need attention" %}</span>
+      {% if cockpit.search_available %}
+        <strong>{{ cockpit.needs_index_pdfs }}</strong>
+        <span>{% trans "documents need attention" %}</span>
+      {% else %}
+        <strong>{% trans "Unavailable" %}</strong>
+        <span>{% trans "Index debt cannot be assessed safely" %}</span>
+      {% endif %}
     </div>
     <div class="cockpit-metric {% if cockpit.unknown_uploaders %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
       <span class="cockpit-metric__label">{% trans "Provenance review" %}</span>

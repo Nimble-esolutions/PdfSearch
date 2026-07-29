@@ -2,6 +2,7 @@ import importlib
 import uuid
 from datetime import timedelta
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.apps import apps
 from django.conf import settings
@@ -10,6 +11,7 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from core.artifact_vault import ArtifactVaultConfigurationError
 from core.models import (
     ArtifactGeneration as LegacyArtifactGeneration,
     ArtifactValidation as LegacyArtifactValidation,
@@ -354,6 +356,25 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
         self.assertEqual(summary["runtime"]["state"], "unknown")
         self.assertNotIn("fingerprint", summary)
 
+    @override_settings(
+        ARTIFACT_VAULT_ENABLED=True,
+        VAULT_DEFAULT_PROFILE="incomplete-environment",
+    )
+    @patch("vaultops.services.profiles.ArtifactVault")
+    def test_dashboard_authority_summary_is_safe_for_incomplete_environment(
+        self, artifact_vault
+    ):
+        artifact_vault.return_value.enabled = True
+        artifact_vault.return_value.config.validate.side_effect = (
+            ArtifactVaultConfigurationError("incomplete")
+        )
+
+        summary = build_dashboard_authority_summary()
+
+        self.assertEqual(summary["status"], "unknown")
+        self.assertEqual(summary["reason_code"], "profile_unavailable")
+        self.assertFalse(summary["search_available"])
+
     @override_settings(VAULT_DEFAULT_PROFILE="test-profile")
     def test_dashboard_authority_summary_uses_observed_authority(self):
         now = timezone.now()
@@ -382,6 +403,7 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
             summary["runtime"]["active_generation_id"],
             "runtime-generation",
         )
+        self.assertFalse(summary["search_available"])
         self.assertTrue(summary["state_version"])
 
     def test_remote_authority_and_runtime_activity_remain_independent(self):
