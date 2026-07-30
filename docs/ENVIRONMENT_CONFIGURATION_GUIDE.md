@@ -54,6 +54,7 @@ must not become an authoritative writer.
 | Variable | Default | Runtime effect | Change risk |
 | --- | ---: | --- | --- |
 | `MAX_FILE_SIZE_MB` | `10` | Maximum accepted PDF size; also sets Django request/upload memory limits | Low-to-medium; affects upload acceptance and memory pressure |
+| `ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES` | `67108864` | Maximum canonical existing-media size accepted by read-only custody verification | Medium; raising it increases verification I/O, but never upload acceptance |
 | `OPENAI_EMBED_MODEL` | `text-embedding-3-small` | Model used to embed indexed chunks and queries | High; vector dimensions/model compatibility and cost |
 | `OPENAI_CHAT_MODEL` | `gpt-4o-mini` | Model used to prepare the grounded answer | Medium-high; answer quality, latency, and cost |
 | `PDF_CHUNK_SIZE` | `1200` | Approximate text chunk size for indexing | High; changes retrieval boundaries and requires reindex review |
@@ -76,6 +77,12 @@ historical 10 MB limit remains exact. Fractional values such as `10.5` are
 accepted. `MAX_FILE_SIZE` is a deprecated byte-based compatibility alias for
 one migration cycle. If both variables are present, they must represent the
 same limit or startup fails. Remove the old key after migrating.
+
+Keep `ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES` independent from the upload
+limit. The default is 64 MiB and applies only when inventory, candidate,
+activation, or recovery code verifies canonical media already in custody.
+Changing it does not alter Django request-body limits or permit a new upload
+larger than `MAX_FILE_SIZE_MB`.
 
 The form reports the human-facing MB value; internal Django upload guards still
 receive bytes because Django requires byte limits.

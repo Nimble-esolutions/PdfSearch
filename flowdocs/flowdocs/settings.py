@@ -343,6 +343,15 @@ else:
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_FILE_SIZE
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_FILE_SIZE
 
+# Read-only inventory, activation, recovery, and candidate verification must
+# accommodate canonical legacy media without weakening the new-upload policy.
+# Keep this byte limit independently bounded so operators cannot accidentally
+# turn a larger custody corpus into a larger request-body allowance.
+ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES = _env_positive_int(
+    'ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES',
+    64 * _BYTES_PER_MB,
+)
+
 # Retrieval and cache tuning. Keep these conservative unless a release record
 # captures the model, vector index, and quality-impact checks together.
 PDF_CHUNK_SIZE = _env_positive_int('PDF_CHUNK_SIZE', 1200)

@@ -271,7 +271,7 @@ def _verified_local_media_evidence(pdf, *, expected_size=None):
             raise SearchDataIntegrityError(
                 "Document media must be one stable regular file"
             )
-        maximum = int(settings.MAX_FILE_SIZE_MB) * 1024 * 1024
+        maximum = settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES
         if opened.st_size > maximum:
             raise SearchDataIntegrityError("Document media exceeds the approved size")
         if expected_size is not None and opened.st_size != expected_size:
