@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import secrets
+import shutil
 import sqlite3
 import stat
 import time
@@ -15,7 +16,7 @@ from core.media_quarantine import (
     build_unavailable_attestation,
     storage_key_evidence,
 )
-from vaultops.models import SourceSnapshot, VaultJobStep
+from vaultops.models import SourceMutationState, SourceSnapshot, VaultJobStep
 from vaultops.services.mutations import (
     ConsistentSnapshotUnproven,
     assert_barrier_owner,
@@ -37,6 +38,87 @@ class SnapshotError(RuntimeError):
 
 class SnapshotCancelled(SnapshotError):
     reason_code = "snapshot_cancelled"
+
+
+def cleanup_snapshot_workspace(snapshot, *, reason, snapshot_root=None):
+    """Remove one non-final snapshot workspace and retain bounded evidence."""
+    if snapshot.state == SourceSnapshot.State.FINALIZED:
+        raise SnapshotError("snapshot_cleanup_finalized_forbidden")
+    root = Path(snapshot_root or settings.VAULT_SNAPSHOT_ROOT).resolve()
+    raw_path = Path(snapshot.workspace_path) if snapshot.workspace_path else None
+    outcome = "already_absent"
+    if raw_path is not None:
+        path = raw_path.absolute()
+        expected_name = f".{snapshot.public_id}.incomplete"
+        if path.parent.resolve() != root or path.name != expected_name:
+            raise SnapshotError("snapshot_cleanup_path_invalid")
+        if path.is_symlink():
+            path.unlink()
+            outcome = "symlink_removed"
+        elif path.exists():
+            tombstone = root / (
+                f".{snapshot.public_id}.cleanup-{secrets.token_hex(6)}"
+            )
+            os.replace(path, tombstone)
+            try:
+                shutil.rmtree(tombstone)
+            except Exception:
+                # The tombstone is outside every publishable workspace name and
+                # can be reclaimed by the next retry sweep.
+                raise SnapshotError("snapshot_workspace_cleanup_failed")
+            outcome = "removed"
+    snapshot.evidence = {
+        **(snapshot.evidence if isinstance(snapshot.evidence, dict) else {}),
+        "workspace_cleanup": {
+            "status": outcome,
+            "reason": reason,
+        },
+    }
+    snapshot.workspace_path = ""
+    snapshot.save(update_fields=["evidence", "workspace_path", "updated_at"])
+    return outcome
+
+
+def cleanup_retry_snapshots(job):
+    """Reclaim failed or hard-kill snapshot workspaces before a fresh retry."""
+    snapshots = list(
+        SourceSnapshot.objects.select_for_update()
+        .filter(job=job)
+        .exclude(state=SourceSnapshot.State.FINALIZED)
+        .order_by("created_at")
+    )
+    for snapshot in snapshots:
+        cleanup_snapshot_workspace(snapshot, reason="retry_preparation")
+    state = (
+        SourceMutationState.objects.select_for_update()
+        .filter(
+            deployment_id=deployment_id(),
+            barrier_owner_job=job.public_id,
+        )
+        .first()
+    )
+    if state is not None:
+        state.barrier_state = SourceMutationState.BarrierState.OPEN
+        state.barrier_owner_job = None
+        state.barrier_requested_at = None
+        state.barrier_activated_at = None
+        state.save(
+            update_fields=[
+                "barrier_state",
+                "barrier_owner_job",
+                "barrier_requested_at",
+                "barrier_activated_at",
+                "updated_at",
+            ]
+        )
+    root = Path(settings.VAULT_SNAPSHOT_ROOT).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    for candidate in root.glob(".*.cleanup-*"):
+        if candidate.is_symlink():
+            candidate.unlink()
+        elif candidate.is_dir():
+            shutil.rmtree(candidate)
+    return len(snapshots)
 
 
 def _sha256_file(path):
@@ -556,8 +638,25 @@ def create_consistent_snapshot(
         snapshot.safe_error_code = getattr(
             exc, "reason_code", "consistent_snapshot_unproven"
         )
+        snapshot.evidence = {
+            **(snapshot.evidence if isinstance(snapshot.evidence, dict) else {}),
+            "workspace_cleanup": {
+                "status": "pending",
+                "reason": "snapshot_failed",
+            },
+        }
         snapshot.save(
-            update_fields=["state", "safe_error_code", "updated_at"]
+            update_fields=[
+                "state",
+                "safe_error_code",
+                "evidence",
+                "updated_at",
+            ]
+        )
+        cleanup_snapshot_workspace(
+            snapshot,
+            reason="snapshot_failed",
+            snapshot_root=root,
         )
         step.status = VaultJobStep.Status.FAILED
         step.checkpoint = {"safe_error_code": snapshot.safe_error_code}

@@ -371,6 +371,36 @@ class VaultJobStep(TimeStampedModel):
         ordering = ["created_at"]
 
 
+class VaultJobRetryRequest(TimeStampedModel):
+    """Durable idempotency receipt for one operator retry request."""
+
+    class Mode(models.TextChoices):
+        FRESH_SNAPSHOT = "fresh_snapshot", "Fresh snapshot"
+        CHECKPOINT_RESUME = "checkpoint_resume", "Checkpoint resume"
+
+    job = models.ForeignKey(
+        VaultJob,
+        on_delete=models.PROTECT,
+        related_name="retry_requests",
+    )
+    idempotency_key = models.CharField(max_length=160)
+    requested_state_version = models.PositiveBigIntegerField()
+    resulting_state_version = models.PositiveBigIntegerField()
+    resulting_retry_count = models.PositiveIntegerField()
+    mode = models.CharField(max_length=24, choices=Mode.choices)
+    actor_id = models.PositiveBigIntegerField(null=True, blank=True)
+    actor_name = models.CharField(max_length=150, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "idempotency_key"],
+                name="vaultops_unique_job_retry_request",
+            ),
+        ]
+        ordering = ["created_at"]
+
+
 class SourceMutationState(TimeStampedModel):
     class BarrierState(models.TextChoices):
         OPEN = "open", "Open"
