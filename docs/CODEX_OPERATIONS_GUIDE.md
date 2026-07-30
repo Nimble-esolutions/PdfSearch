@@ -195,6 +195,12 @@ For PdfSearch, record SQLite size, PDF count, FAISS count, Chroma presence,
 image digest, Compose hash, RustFS snapshot/checksum references, writer lease
 status, activation journal entries, and backup policy compliance.
 
+For missing PDF references, use the redacted `audit_missing_pdf_custody`
+procedure in
+[`DATA_CUSTODY_AND_PROMOTION.md`](DATA_CUSTODY_AND_PROMOTION.md). Do not print
+database filenames, list archive members to the terminal, or treat a path-only
+candidate as recovered content.
+
 Rollback is two-dimensional:
 
 1. Application rollback: redeploy the previous immutable image digest through
