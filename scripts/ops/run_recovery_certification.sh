@@ -101,6 +101,26 @@ COMPOSE=(
 )
 LABEL="net.ai-sahakar.recovery-cert=$CERT_RUN_ID"
 
+app_exec() {
+  local service="$1"
+  shift
+  "${COMPOSE[@]}" exec -T --user appuser "$service" "$@"
+}
+
+assert_appuser_runtime() {
+  app_exec web sh -c '
+    set -eu
+    test "$(id -u)" = "1000"
+    test -r /app/data
+    test -w /app/data
+    test -r /app/data-control
+    test -w /app/data-control
+  ' || {
+    echo "Certification management commands cannot run as appuser" >&2
+    exit 1
+  }
+}
+
 resource_is_owned() {
   kind="$1"
   name="$2"
@@ -267,7 +287,7 @@ PY
       "http://127.0.0.1:$CERT_WEB_PORT/readyz" \
       >"$EVIDENCE_DIR/readyz-status.txt"
   fi
-  "${COMPOSE[@]}" exec -T web python manage.py shell -c '
+  app_exec web python manage.py shell -c '
 import json
 from django.conf import settings
 from core.management.commands.inventory_artifacts import build_manifest
@@ -287,7 +307,7 @@ print(json.dumps({
     }),
 }, sort_keys=True))
 ' >"$EVIDENCE_DIR/inventory.json"
-  "${COMPOSE[@]}" exec -T web python - <<'PY' >"$EVIDENCE_DIR/database.txt"
+  app_exec web python - <<'PY' >"$EVIDENCE_DIR/database.txt"
 from django.db import connection
 with connection.cursor() as cursor:
     cursor.execute("PRAGMA integrity_check")
@@ -300,10 +320,42 @@ PY
 
 cleanup() {
   mkdir -p "$EVIDENCE_DIR"
-  if [ ! -f "$EVIDENCE_DIR/certification-passed" ]; then
+  marker="$EVIDENCE_DIR/certification-passed.json"
+  if [ ! -f "$marker" ]; then
     echo "Certification has not passed; retaining project and volumes for review." >&2
     exit 1
   fi
+  python3 - "$marker" "$EVIDENCE_DIR" "$PROJECT" "$MODE" "$PDFSEARCH_IMAGE" <<'PY'
+import hashlib, json, pathlib, sys
+marker_path = pathlib.Path(sys.argv[1])
+evidence_dir = pathlib.Path(sys.argv[2]).resolve()
+if marker_path.is_symlink():
+    raise SystemExit("Certification marker path is unsafe")
+document = json.loads(marker_path.read_text(encoding="utf-8"))
+if (
+    document.get("schema_version") != 1
+    or document.get("status") != "passed"
+    or document.get("project") != sys.argv[3]
+    or document.get("mode") != sys.argv[4]
+    or document.get("image") != sys.argv[5]
+):
+    raise SystemExit("Certification marker identity is invalid")
+files = document.get("evidence_sha256")
+if not isinstance(files, dict) or not files:
+    raise SystemExit("Certification marker has no bounded evidence")
+for name, expected in files.items():
+    path = (evidence_dir / name).resolve()
+    try:
+        path.relative_to(evidence_dir)
+    except ValueError as exc:
+        raise SystemExit("Certification marker path is unsafe") from exc
+    if (
+        path.is_symlink()
+        or not path.is_file()
+        or hashlib.sha256(path.read_bytes()).hexdigest() != expected
+    ):
+        raise SystemExit(f"Certification evidence changed: {name}")
+PY
   if [ "${CERT_RETAIN_SUCCESS:-0}" = "1" ]; then
     echo "CERT_RETAIN_SUCCESS=1; retaining successful resources."
     exit 0
@@ -363,10 +415,16 @@ except ValueError:
 if not valid_intent:
     raise SystemExit("CERT_ACTIVATION_INTENT_ID is invalid")
 PY
+  mkdir -p "$EVIDENCE_DIR"
+  rm -f \
+    "$EVIDENCE_DIR/certification-passed" \
+    "$EVIDENCE_DIR/certification-passed.json"
   render_and_assert_model
+  assert_appuser_runtime
   write_evidence
   python3 - "$EVIDENCE_DIR/livez.txt" "$EVIDENCE_DIR/readyz.txt" \
-    "$CERT_GENERATION_ID" "$CERT_MANIFEST_DIGEST" <<'PY'
+    "$CERT_GENERATION_ID" "$CERT_MANIFEST_DIGEST" \
+    >"$EVIDENCE_DIR/endpoint-identity.json" <<'PY'
 import json, pathlib, sys
 live = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 ready = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
@@ -378,84 +436,82 @@ if (
     or ready.get("runtime_manifest_digest") != sys.argv[4]
 ):
     raise SystemExit("readyz runtime identity does not match acceptance")
-PY
-  "${COMPOSE[@]}" exec -T web python manage.py verify_activation_runtime \
-    --intent-id "$CERT_ACTIVATION_INTENT_ID" \
-    >"$EVIDENCE_DIR/activation-runtime.txt"
-  "${COMPOSE[@]}" exec -T \
-    -e CERT_EXPECTED_GENERATION_ID="$CERT_GENERATION_ID" \
-    -e CERT_EXPECTED_MANIFEST_DIGEST="$CERT_MANIFEST_DIGEST" \
-    -e CERT_EXPECTED_INTENT_ID="$CERT_ACTIVATION_INTENT_ID" \
-    -e CERT_EXPECTED_MODE="$MODE" \
-    web python manage.py shell -c '
-import json, os
-from django.conf import settings
-from vaultops.models import (
-    ActivationIntent,
-    ArtifactGeneration,
-    RuntimePointerObservation,
-)
-from vaultops.runtime_control import (
-    read_runtime_pointer,
-    read_signed_document,
-    runtime_control_paths,
-)
-p = runtime_control_paths(settings.DATA_CONTROL_ROOT)
-active = read_runtime_pointer(
-    p["active"],
-    deployment_id=settings.ENV_IDENTITY.deployment_id,
-    signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
-    runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
-)
-assert active.generation_id == os.environ["CERT_EXPECTED_GENERATION_ID"]
-assert active.manifest_digest == os.environ["CERT_EXPECTED_MANIFEST_DIGEST"]
-intent = ActivationIntent.objects.get(
-    public_id=os.environ["CERT_EXPECTED_INTENT_ID"]
-)
-assert intent.state == ActivationIntent.State.COMMITTED
-assert intent.target_generation_id == active.generation_id
-assert intent.manifest_digest == active.manifest_digest
-assert intent.checkpoint.get("protocol_state") == "committed"
-result = read_signed_document(
-    p["results"] / f"{intent.public_id}.json",
-    signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
-    expected_kind="activation_result",
-    deployment_id=settings.ENV_IDENTITY.deployment_id,
-)
-assert result.get("status") == "committed"
-assert result.get("intent_digest") == intent.intent_digest
-assert result.get("active_generation_id") == active.generation_id
-assert result.get("active_manifest_digest") == active.manifest_digest
-assert result.get("active_pointer_digest") == active.pointer_digest
-generation = ArtifactGeneration.objects.get(
-    deployment_id=settings.ENV_IDENTITY.deployment_id,
-    generation_id=active.generation_id,
-)
-assert generation.runtime_state == ArtifactGeneration.RuntimeState.ACTIVE
-observation = RuntimePointerObservation.objects.filter(
-    deployment_id=settings.ENV_IDENTITY.deployment_id,
-    active_generation_id=active.generation_id,
-).latest("observed_at")
-assert observation.status == "committed"
-assert observation.pointer_digest == active.pointer_digest
-if os.environ["CERT_EXPECTED_MODE"] == "fresh":
-    assert result.get("previous_generation_id", "") == ""
-    assert not p["previous"].exists()
 print(json.dumps({
-    "generation_id": active.generation_id,
-    "manifest_digest": active.manifest_digest,
-    "pointer_digest": active.pointer_digest,
-    "intent_state": intent.state,
-    "result_status": result["status"],
-    "runtime_state": generation.runtime_state,
-    "observation_status": observation.status,
+    "livez": live["status"],
+    "readyz": ready["status"],
+    "runtime_generation_id": ready["runtime_generation_id"],
+    "runtime_manifest_digest": ready["runtime_manifest_digest"],
 }, sort_keys=True))
-' >"$EVIDENCE_DIR/active-pointer.json"
+PY
+  initial_args=()
+  if [ "$MODE" = "fresh" ]; then
+    initial_args=(--require-initial)
+  fi
+  app_exec web python manage.py verify_recovery_certification \
+    --intent-id "$CERT_ACTIVATION_INTENT_ID" \
+    --generation-id "$CERT_GENERATION_ID" \
+    --manifest-digest "$CERT_MANIFEST_DIGEST" \
+    "${initial_args[@]}" \
+    >"$EVIDENCE_DIR/certification.json"
   printf 'generation_id=%s\nmanifest_digest=%s\nactivation_intent_id=%s\noperator_accepted=yes\n' \
     "$CERT_GENERATION_ID" "$CERT_MANIFEST_DIGEST" \
     "$CERT_ACTIVATION_INTENT_ID" \
     >"$EVIDENCE_DIR/operator-acceptance.txt"
-  touch "$EVIDENCE_DIR/certification-passed"
+  python3 - "$EVIDENCE_DIR" "$PROJECT" "$MODE" "$PDFSEARCH_IMAGE" \
+    "$CERT_GENERATION_ID" "$CERT_MANIFEST_DIGEST" \
+    "$CERT_ACTIVATION_INTENT_ID" <<'PY'
+import hashlib, json, os, pathlib, sys, tempfile
+evidence_dir = pathlib.Path(sys.argv[1])
+names = [
+    "runtime.json",
+    "livez.txt",
+    "readyz.txt",
+    "readyz-status.txt",
+    "endpoint-identity.json",
+    "inventory.json",
+    "database.txt",
+    "certification.json",
+    "operator-acceptance.txt",
+]
+if sys.argv[3] == "fresh":
+    names.append("initial-runtime-authority.json")
+digests = {}
+for name in names:
+    path = evidence_dir / name
+    if not path.is_file():
+        raise SystemExit(f"Required certification evidence is absent: {name}")
+    digests[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+document = {
+    "schema_version": 1,
+    "status": "passed",
+    "project": sys.argv[2],
+    "mode": sys.argv[3],
+    "image": sys.argv[4],
+    "generation_id": sys.argv[5],
+    "manifest_digest": sys.argv[6],
+    "activation_intent_id": sys.argv[7],
+    "evidence_sha256": digests,
+}
+descriptor, temporary = tempfile.mkstemp(
+    prefix=".certification-passed.",
+    suffix=".partial",
+    dir=evidence_dir,
+)
+try:
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        json.dump(document, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, evidence_dir / "certification-passed.json")
+    directory = os.open(evidence_dir, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+finally:
+    pathlib.Path(temporary).unlink(missing_ok=True)
+PY
   exit 0
 fi
 
@@ -486,6 +542,29 @@ render_and_assert_model
 "${COMPOSE[@]}" up -d --wait redis
 "${COMPOSE[@]}" up -d --wait --no-deps web
 "${COMPOSE[@]}" up -d --wait --no-deps maintenance
+assert_appuser_runtime
+if [ "$MODE" = "fresh" ]; then
+  mkdir -p "$EVIDENCE_DIR"
+  umask 077
+  app_exec web python manage.py shell -c '
+import json
+from django.conf import settings
+from vaultops.models import ArtifactGeneration
+from vaultops.runtime_control import runtime_control_paths
+p = runtime_control_paths(settings.DATA_CONTROL_ROOT)
+assert not p["active"].exists()
+assert not p["previous"].exists()
+assert not ArtifactGeneration.objects.using("control").filter(
+    deployment_id=settings.ENV_IDENTITY.deployment_id,
+    runtime_state=ArtifactGeneration.RuntimeState.ACTIVE,
+).exists()
+print(json.dumps({
+    "active_pointer": "absent",
+    "previous_pointer": "absent",
+    "active_generation_projection": "absent",
+}, sort_keys=True))
+' >"$EVIDENCE_DIR/initial-runtime-authority.json"
+fi
 write_evidence preflight
 cat <<EOF
 Certification target is isolated and running.

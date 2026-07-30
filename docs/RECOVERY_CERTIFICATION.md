@@ -38,6 +38,14 @@ restored database does not contain an authorized operator, create one explicitly
 inside the disposable target with the normal Django administration command;
 never enable the startup bootstrap switch.
 
+Run every Django management command through the wrapper or explicitly as the
+container's `appuser`. A plain `docker compose exec` runs as root because the
+entrypoint's privilege drop applies only to the main container process. A
+root-run activation command can create mode-`0700` control directories that the
+runtime supervisor cannot traverse. The wrapper refuses to certify when
+`appuser` cannot read and write the disposable data and control roots; it never
+repairs ownership implicitly.
+
 The activation phase enables both ordinary staging activation and the narrower
 initial-activation gate. The latter is still rejected unless the disposable
 target has no active or previous runtime pointer and no generation projected as
@@ -67,6 +75,8 @@ Compose model and stops if the mounts, networks, image identity, or localhost
 binding differ from the certification contract. Redis, web, and maintenance
 start sequentially so the two application roles cannot race SQLite migrations.
 Runtime activation remains disabled throughout this pre-restore phase.
+For a fresh drill it also records the absence of active and previous signed
+runtime pointers and of any active control-database generation projection.
 
 Before `fresh activate`, install the operator-approved queries through the
 running web container while retaining the same exported certification
@@ -185,8 +195,16 @@ activation result, generation/manifest identities, bilingual search result,
 and operator decision to the approved incident or release record.
 The evidence phase also verifies the signed committed result, committed intent,
 active generation projection, runtime observation, and exact `/readyz`
-generation and manifest. Fresh drills additionally require that no fabricated
-previous-runtime pointer exists.
+generation and manifest. The runtime smoke evidence is content-free: it records
+only locale, query digest, answer presence, and reference count, and requires
+successful English and Marathi probes. Fresh drills additionally require the
+signed initial-activation posture and continued absence of a previous-runtime
+pointer.
+
+Success is an atomic, structured `certification-passed.json` marker bound to the
+run, mode, immutable image, generation, manifest, intent, and SHA-256 digest of
+every bounded evidence file. Cleanup rehashes these files and refuses changed,
+missing, path-escaping, stale, or legacy empty markers.
 
 Failed targets are retained automatically. After successful evidence review:
 

@@ -47,6 +47,18 @@ ACTIVATION_RECOVERY_SUPERADMIN_USERNAME=<staging-recovery-user>
 ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD=<staging-only-secret>
 ```
 
+Run activation management commands as the application account:
+
+```bash
+docker compose exec -T --user appuser web \
+  python manage.py <activation-command>
+```
+
+Do not use an unqualified `docker compose exec` for activation. Docker starts
+such an exec as root in this image; signed intent directories created by root
+are intentionally private and therefore inaccessible to the appuser runtime
+supervisor.
+
 The signing key and recovery password are secrets. Deploy them through the
 platform secret store. Do not put their values in Git, logs, audit evidence, or
 support bundles.
