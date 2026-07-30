@@ -834,20 +834,37 @@ def job_cancel(request, job_id):
 @require_POST
 def job_retry(request, job_id):
     try:
-        _request_idempotency_key(request)
-        job = get_object_or_404(VaultJob, public_id=job_id)
-        if str(job.state_version) != _request_value(
-            request, "job_state_version"
-        ):
-            raise WorkbenchRequestError("stale_state", status_code=409)
-        job = requeue_job(job.public_id)
+        idempotency_key = _request_idempotency_key(request)
+        try:
+            expected_state_version = int(
+                _request_value(request, "job_state_version")
+            )
+        except (TypeError, ValueError) as exc:
+            raise WorkbenchRequestError("stale_state", status_code=409) from exc
+        job, receipt, created = requeue_job(
+            job_id,
+            expected_state_version=expected_state_version,
+            idempotency_key=idempotency_key,
+            actor_id=request.user.pk,
+            actor_name=request.user.get_username(),
+        )
+        reason_code = (
+            "job_retry_fresh_snapshot_queued"
+            if receipt.mode == receipt.Mode.FRESH_SNAPSHOT
+            else "job_retry_checkpoint_resume_queued"
+        )
         return _mutation_success(
             request,
             section="jobs",
-            reason_code="job_retry_queued",
-            message=f"Job {job.public_id} queued for retry.",
-            data={"job_id": str(job.public_id)},
-            state_version=str(job.state_version),
+            reason_code=reason_code,
+            message=present_reason(reason_code)["title"],
+            data={
+                "job_id": str(job.public_id),
+                "retry_mode": receipt.mode,
+                "idempotent_replay": not created,
+                "retry_count": receipt.resulting_retry_count,
+            },
+            state_version=str(receipt.resulting_state_version),
             correlation_id=job.correlation_id,
         )
     except Exception as exc:

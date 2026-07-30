@@ -2155,6 +2155,48 @@ msgstr "पुनर्संचयन कार्यक्षेत्रे"
 msgid "Retry from checkpoint"
 msgstr "तपासणी बिंदूपासून पुन्हा प्रयत्न करा"
 
+msgid "Resume verified upload checkpoint"
+msgstr "पडताळलेला अपलोड तपासणी बिंदू पुढे सुरू करा"
+
+msgid "Create a fresh snapshot and retry"
+msgstr "नवीन स्नॅपशॉट तयार करून पुन्हा प्रयत्न करा"
+
+msgid "Verified uploaded objects will be checked and reused."
+msgstr "पडताळलेल्या अपलोड वस्तू तपासून पुन्हा वापरल्या जातील."
+
+msgid "The failed snapshot workspace will be removed before a new snapshot is created."
+msgstr "नवीन स्नॅपशॉट तयार करण्यापूर्वी अयशस्वी स्नॅपशॉट कार्यक्षेत्र काढले जाईल."
+
+msgid "Verified upload resume is queued"
+msgstr "पडताळलेला अपलोड पुढे सुरू करण्यासाठी रांगेत ठेवला आहे"
+
+msgid "The worker will verify and reuse completed upload objects from the finalized snapshot."
+msgstr "कामगार अंतिम केलेल्या स्नॅपशॉटमधील पूर्ण अपलोड वस्तू पडताळून पुन्हा वापरेल."
+
+msgid "No new snapshot is created and authority remains unchanged until verification succeeds."
+msgstr "नवीन स्नॅपशॉट तयार केला जाणार नाही आणि पडताळणी यशस्वी होईपर्यंत प्राधिकृत स्थिती बदलणार नाही."
+
+msgid "Fresh snapshot retry is queued"
+msgstr "नवीन स्नॅपशॉटसह पुन्हा प्रयत्न रांगेत ठेवला आहे"
+
+msgid "The failed snapshot workspace was removed and the worker will create a new isolated snapshot."
+msgstr "अयशस्वी स्नॅपशॉट कार्यक्षेत्र काढले आहे आणि कामगार नवीन विलग स्नॅपशॉट तयार करेल."
+
+msgid "No failed snapshot checkpoint is reused and authority remains unchanged."
+msgstr "अयशस्वी स्नॅपशॉटचा कोणताही तपासणी बिंदू पुन्हा वापरला जाणार नाही आणि प्राधिकृत स्थिती बदलणार नाही."
+
+msgid "Unavailable-document evidence needs review"
+msgstr "अनुपलब्ध दस्तऐवजांचा पुरावा तपासणे आवश्यक आहे"
+
+msgid "The activation candidate's unavailable-document evidence changed during verification."
+msgstr "सक्रियकरण उमेदवाराचा अनुपलब्ध दस्तऐवज पुरावा पडताळणीदरम्यान बदलला."
+
+msgid "Runtime activation remains blocked."
+msgstr "कार्यरत आवृत्तीचे सक्रियकरण अवरोधित राहील."
+
+msgid "The activation candidate's unavailable-document evidence is invalid."
+msgstr "सक्रियकरण उमेदवाराचा अनुपलब्ध दस्तऐवज पुरावा अवैध आहे."
+
 #: core/templates/vaultops/confirmation.html:14
 msgid ""
 "Review the action and observed-state binding. This challenge can be used "

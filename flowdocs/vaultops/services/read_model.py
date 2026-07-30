@@ -695,8 +695,17 @@ def _workspace_records(profile, dataset_id, limit=25):
 
 
 def _job_records(profile, dataset_id, limit=50):
-    return [
-        {
+    records = []
+    for job in VaultJob.objects.filter(
+        profile=profile, dataset_id=dataset_id
+    ).order_by("-created_at")[:limit]:
+        checkpoint_resume = (
+            job.operation != "sync_publish"
+            or job.source_snapshots.filter(
+                state="finalized"
+            ).exists()
+        )
+        records.append({
             "public_id": str(job.public_id),
             "operation": job.operation,
             "phase": job.phase,
@@ -712,11 +721,27 @@ def _job_records(profile, dataset_id, limit=50):
             in (
                 {VaultJob.Status.QUEUED} | ACTIVE_JOB_STATES
             ),
-        }
-        for job in VaultJob.objects.filter(
-            profile=profile, dataset_id=dataset_id
-        ).order_by("-created_at")[:limit]
-    ]
+            "retry_mode": (
+                "checkpoint_resume"
+                if checkpoint_resume
+                else "fresh_snapshot"
+            ),
+            "retry_action_label": (
+                gettext("Resume verified upload checkpoint")
+                if checkpoint_resume
+                else gettext("Create a fresh snapshot and retry")
+            ),
+            "retry_guidance": (
+                gettext(
+                    "Verified uploaded objects will be checked and reused."
+                )
+                if checkpoint_resume
+                else gettext(
+                    "The failed snapshot workspace will be removed before a new snapshot is created."
+                )
+            ),
+        })
+    return records
 
 
 def _audit_records(limit=50):
