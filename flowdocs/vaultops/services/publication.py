@@ -385,7 +385,11 @@ def _validate_snapshot_media_evidence(evidence):
         raise PublicationError("snapshot_media_missing")
 
 
-def _validate_faiss_reconciliation_evidence(evidence):
+def _validate_faiss_reconciliation_evidence(
+    evidence,
+    *,
+    trusted_reconciliation=None,
+):
     reconciliation = evidence.get("faiss_reconciliation")
     if reconciliation in (None, {}):
         return {}
@@ -393,12 +397,28 @@ def _validate_faiss_reconciliation_evidence(evidence):
     files = inventory.get("faiss", {}).get("files", [])
     folders = reconciliation.get("folders")
     source_folders = reconciliation.get("source_folders")
+    source_folders_digest = reconciliation.get("source_folders_digest")
     if (
         reconciliation.get("schema") != 1
         or reconciliation.get("source") != "stored_embeddings"
         or not isinstance(folders, dict)
         or not isinstance(source_folders, list)
+        or not isinstance(source_folders_digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", source_folders_digest)
         or not isinstance(files, list)
+    ):
+        raise PublicationError("snapshot_faiss_reconciliation_invalid")
+    computed_source_digest = hashlib.sha256(
+        _canonical_bytes(source_folders)
+    ).hexdigest()
+    trusted_source_digest = (
+        trusted_reconciliation.get("source_folders_digest")
+        if isinstance(trusted_reconciliation, dict)
+        else None
+    )
+    if (
+        computed_source_digest != source_folders_digest
+        or trusted_source_digest != source_folders_digest
     ):
         raise PublicationError("snapshot_faiss_reconciliation_invalid")
     validated_source_folders = set()
@@ -574,7 +594,14 @@ def publish_snapshot_candidate(
 
     evidence, files = _load_snapshot_files(snapshot)
     _validate_snapshot_media_evidence(evidence)
-    faiss_reconciliation = _validate_faiss_reconciliation_evidence(evidence)
+    faiss_reconciliation = _validate_faiss_reconciliation_evidence(
+        evidence,
+        trusted_reconciliation=(
+            snapshot.evidence.get("faiss_reconciliation")
+            if isinstance(snapshot.evidence, dict)
+            else None
+        ),
+    )
     capabilities = probe_capabilities(
         vault, deployment_id=identity.deployment_id
     )

@@ -1,3 +1,4 @@
+import gc
 import hashlib
 import json
 import os
@@ -373,7 +374,14 @@ def _preflight_searchable_embeddings(connection, lifecycle_clause):
     }
 
 
-def _normalized_pdf_batch(chunks_raw, embeddings_raw, *, cancellation_check):
+def _normalized_pdf_batch(
+    chunks_raw,
+    embeddings_raw,
+    *,
+    cancellation_check,
+    remaining_vectors=None,
+    remaining_bytes=None,
+):
     try:
         chunks = json.loads(chunks_raw)
         embeddings = json.loads(embeddings_raw)
@@ -387,6 +395,8 @@ def _normalized_pdf_batch(chunks_raw, embeddings_raw, *, cancellation_check):
         or len(chunks) > settings.VAULT_SNAPSHOT_FAISS_MAX_CHUNKS_PER_PDF
     ):
         raise SnapshotError("snapshot_searchable_embeddings_invalid")
+    if remaining_vectors is not None and len(embeddings) > remaining_vectors:
+        raise SnapshotError("snapshot_faiss_rebuild_vector_limit_exceeded")
     normalized = []
     dimension = None
     for chunk, embedding in zip(chunks, embeddings):
@@ -425,6 +435,12 @@ def _normalized_pdf_batch(chunks_raw, embeddings_raw, *, cancellation_check):
         if dimension is not None and dimension != int(candidate.shape[0]):
             raise SnapshotError("snapshot_embedding_dimensions_inconsistent")
         dimension = int(candidate.shape[0])
+        projected_bytes = (len(normalized) + 1) * dimension * 4
+        if (
+            remaining_bytes is not None
+            and projected_bytes > remaining_bytes
+        ):
+            raise SnapshotError("snapshot_faiss_rebuild_byte_limit_exceeded")
         normalized.append(candidate)
     if cancellation_check():
         raise SnapshotCancelled("snapshot_cancelled")
@@ -529,6 +545,14 @@ def _reconcile_candidate_faiss(
                     chunks_raw,
                     embeddings_raw,
                     cancellation_check=cancellation_check,
+                    remaining_vectors=(
+                        settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+                        - vector_total
+                    ),
+                    remaining_bytes=(
+                        settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
+                        - vector_bytes
+                    ),
                 )
                 pdf_count += 1
                 projected_count = folder_count + int(batch.shape[0])
@@ -601,6 +625,11 @@ def _reconcile_candidate_faiss(
                     chunks_raw,
                     embeddings_raw,
                     cancellation_check=cancellation_check,
+                    remaining_vectors=folder_count - rebuilt_count,
+                    remaining_bytes=(
+                        settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
+                        - rebuilt_count * dimension * 4
+                    ),
                 )
                 projected_rebuilt_count = rebuilt_count + int(batch.shape[0])
                 if (
@@ -630,6 +659,8 @@ def _reconcile_candidate_faiss(
                     os.fsync(stream.fileno())
                 if cancellation_check():
                     raise SnapshotCancelled("snapshot_cancelled")
+                rebuilt = None
+                gc.collect()
                 written = faiss.read_index(str(temporary))
                 if (
                     type(written).__name__ != "IndexFlatIP"
@@ -666,10 +697,18 @@ def _reconcile_candidate_faiss(
         raise SnapshotError("snapshot_faiss_metadata_unavailable") from exc
     finally:
         connection.close()
+    source_digest = hashlib.sha256(
+        json.dumps(
+            source_folders,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
     return {
         "schema": 1,
         "source": "stored_embeddings",
         "source_folders": source_folders,
+        "source_folders_digest": source_digest,
         **totals,
         "folders": folders,
     }

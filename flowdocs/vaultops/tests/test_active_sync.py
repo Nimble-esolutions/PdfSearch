@@ -5,6 +5,7 @@ import os
 import sqlite3
 import tempfile
 import uuid
+import weakref
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -1159,7 +1160,8 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         )
         self.assertEqual(
             publication_service._validate_faiss_reconciliation_evidence(
-                evidence
+                evidence,
+                trusted_reconciliation=evidence["faiss_reconciliation"],
             ),
             evidence["faiss_reconciliation"],
         )
@@ -1180,6 +1182,27 @@ class SnapshotServiceTests(ActiveSyncTestCase):
             "snapshot_faiss_rebuild_vector_limit_exceeded",
         ):
             self._snapshot()
+
+    def test_pdf_batch_budget_rejects_before_numpy_materialization(self):
+        with patch.object(
+            snapshot_service.np,
+            "asarray",
+            side_effect=AssertionError("vectors must not be materialized"),
+        ), patch.object(
+            snapshot_service.np,
+            "vstack",
+            side_effect=AssertionError("batch must not be allocated"),
+        ), self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_faiss_rebuild_vector_limit_exceeded",
+        ):
+            snapshot_service._normalized_pdf_batch(
+                json.dumps(["one", "two"]),
+                json.dumps([[1.0, 0.0], [0.0, 1.0]]),
+                cancellation_check=lambda: False,
+                remaining_vectors=1,
+                remaining_bytes=1024,
+            )
 
     @override_settings(VAULT_SNAPSHOT_FAISS_MAX_BYTES=1)
     def test_candidate_index_file_bound_precedes_faiss_read(self):
@@ -1333,6 +1356,45 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         self.assertEqual(failed.state, SourceSnapshot.State.FAILED)
         incomplete = Path(failed.workspace_path)
         self.assertEqual(list(incomplete.rglob("*.partial")), [])
+
+    def test_rebuilt_index_is_released_before_readback_verification(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[1.0, 0.0]],
+        )
+        candidate_root = self.control / "resident-faiss"
+        candidate_root.mkdir(parents=True)
+        original_write = core_utils.faiss.write_index
+        original_read = core_utils.faiss.read_index
+        captured = {}
+
+        def recording_write(index, path):
+            captured["rebuilt"] = weakref.ref(index)
+            return original_write(index, path)
+
+        def bounded_read(path):
+            if str(path).endswith(".partial"):
+                self.assertIsNone(captured["rebuilt"]())
+            return original_read(path)
+
+        with patch.object(
+            core_utils.faiss,
+            "write_index",
+            new=recording_write,
+        ), patch.object(
+            core_utils.faiss,
+            "read_index",
+            new=bounded_read,
+        ):
+            snapshot_service._reconcile_candidate_faiss(
+                self.database,
+                candidate_root,
+                cancellation_check=lambda: False,
+            )
 
     def test_snapshot_is_reconciled_frozen_and_evidenced(self):
         job = self.make_job()
@@ -1658,6 +1720,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
                 "schema": 1,
                 "source": "stored_embeddings",
                 "source_folders": [],
+                "source_folders_digest": hashlib.sha256(b"[]").hexdigest(),
                 "pdf_count": 1,
                 "vector_count": 2,
                 "vector_bytes": 16,
@@ -1675,7 +1738,8 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         }
         self.assertEqual(
             publication_service._validate_faiss_reconciliation_evidence(
-                valid
+                valid,
+                trusted_reconciliation=valid["faiss_reconciliation"],
             ),
             valid["faiss_reconciliation"],
         )
@@ -1705,6 +1769,30 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             {"folder_id": "999", "sha256": "b" * 64},
             {"folder_id": "999", "sha256": "b" * 64},
         ]
+        forged_source_and_removal = deepcopy(valid)
+        forged_source_and_removal["faiss_reconciliation"][
+            "source_folders"
+        ] = [{"folder_id": "999", "sha256": "b" * 64}]
+        forged_source_and_removal["faiss_reconciliation"][
+            "source_folders_digest"
+        ] = hashlib.sha256(
+            json.dumps(
+                forged_source_and_removal["faiss_reconciliation"][
+                    "source_folders"
+                ],
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        forged_source_and_removal["faiss_reconciliation"]["folders"]["999"] = {
+            "disposition": "removed",
+            "pdf_count": 0,
+            "vector_count": 0,
+        }
+        altered_source_digest = deepcopy(valid)
+        altered_source_digest["faiss_reconciliation"][
+            "source_folders_digest"
+        ] = "b" * 64
         wrong_totals = deepcopy(valid)
         wrong_totals["faiss_reconciliation"]["vector_bytes"] = 8
         for label, evidence in (
@@ -1713,6 +1801,8 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             ("arbitrary_removal", arbitrary_removal),
             ("forged_canonical_removal", forged_canonical_removal),
             ("duplicate_source", duplicate_source),
+            ("forged_source_and_removal", forged_source_and_removal),
+            ("altered_source_digest", altered_source_digest),
             ("wrong_totals", wrong_totals),
         ):
             with self.subTest(label=label), self.assertRaisesRegex(
@@ -1720,7 +1810,8 @@ class CandidatePublicationTests(ActiveSyncTestCase):
                 "snapshot_faiss_reconciliation_invalid",
             ):
                 publication_service._validate_faiss_reconciliation_evidence(
-                    evidence
+                    evidence,
+                    trusted_reconciliation=valid["faiss_reconciliation"],
                 )
         with override_settings(VAULT_SNAPSHOT_FAISS_MAX_VECTORS=1):
             with self.assertRaisesRegex(
@@ -1728,7 +1819,8 @@ class CandidatePublicationTests(ActiveSyncTestCase):
                 "snapshot_faiss_reconciliation_invalid",
             ):
                 publication_service._validate_faiss_reconciliation_evidence(
-                    valid
+                    valid,
+                    trusted_reconciliation=valid["faiss_reconciliation"],
                 )
 
     @override_settings(
@@ -1879,6 +1971,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             "schema": 1,
             "source": "stored_embeddings",
             "source_folders": [],
+            "source_folders_digest": hashlib.sha256(b"[]").hexdigest(),
             "pdf_count": 1,
             "vector_count": 2,
             "vector_bytes": 16,
@@ -1894,6 +1987,11 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             },
         }
         evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+        self.snapshot.evidence = {
+            **self.snapshot.evidence,
+            "faiss_reconciliation": evidence["faiss_reconciliation"],
+        }
+        self.snapshot.save(update_fields=["evidence", "updated_at"])
         candidate = publish_snapshot_candidate(
             snapshot=self.snapshot,
             profile=self.profile,
