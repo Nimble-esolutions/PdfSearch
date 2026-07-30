@@ -13,7 +13,10 @@ from .management.commands.inventory_artifacts import (
     build_manifest,
     inspect_faiss_file,
 )
-from .media_quarantine import validate_unavailable_attestation
+from .media_quarantine import (
+    build_unavailable_attestation,
+    validate_unavailable_attestation,
+)
 
 
 REQUIRED_COUNTS = (
@@ -316,7 +319,10 @@ def validate_release(
     actual_counts = actual.get("counts", {})
     try:
         expected_unavailable = validate_unavailable_attestation(
-            manifest.get("unavailable_documents")
+            manifest.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
         )
         actual_unavailable = validate_unavailable_attestation(
             actual.get("unavailable_documents")
@@ -339,10 +345,17 @@ def validate_release(
         and item.get("metadata", {}).get("lifecycle") != "unavailable"
     ]
     if unauthorized_missing_rows:
+        unauthorized_evidence = actual.get(
+            "unauthorized_missing_documents",
+            {},
+        )
         issues.append(
             _issue(
                 "unauthorized-missing-pdf",
                 count=len(unauthorized_missing_rows),
+                ids=unauthorized_evidence.get("ids", []),
+                truncated=unauthorized_evidence.get("truncated", False),
+                set_sha256=unauthorized_evidence.get("set_sha256", ""),
             )
         )
     expected_count_fields = {

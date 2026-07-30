@@ -24,7 +24,11 @@ from django.utils import timezone
 from core import utils as core_utils
 from core import candidate_maintenance
 from core.artifact_vault import ArtifactVault, VaultConfig
-from core.media_quarantine import build_unavailable_attestation
+from core.media_quarantine import (
+    build_unauthorized_missing_attestation,
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
 from core.models import Folder
 from core.global_writer import GlobalWriterConflict, release_global_writer
 from core.registration import RegistrationError, get_authoritative_pointer
@@ -696,6 +700,121 @@ class CandidatePublicationTests(ActiveSyncTestCase):
     def tearDown(self):
         self.temporary.cleanup()
         super().tearDown()
+
+    def _write_media_inventory(
+        self,
+        *,
+        lifecycle,
+        key,
+        file_status,
+        exists=False,
+        unavailable_documents=None,
+    ):
+        evidence_path = self.workspace / "snapshot-evidence.json"
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        storage = storage_key_evidence(key)
+        pdf = {
+            "db_id": 1,
+            "exists": exists,
+            "file_status": file_status,
+            "metadata": {
+                "lifecycle": lifecycle,
+                "storage_key_status": storage["status"],
+                "storage_key_token_sha256": storage["token_sha256"],
+                "media_expected_sha256": "",
+                "media_expected_size": None,
+                "media_prior_lifecycle": (
+                    "uploaded" if lifecycle == "unavailable" else ""
+                ),
+            },
+        }
+        evidence["inventory"]["pdfs"] = [pdf]
+        evidence["inventory"]["counts"]["pdf_rows"] = 1
+        evidence["inventory"]["unavailable_documents"] = (
+            unavailable_documents or build_unavailable_attestation(())
+        )
+        evidence["inventory"]["unauthorized_missing_documents"] = (
+            build_unauthorized_missing_attestation(
+                (
+                    {
+                        "id": 1,
+                        "lifecycle": lifecycle,
+                        "file_status": file_status,
+                        "storage_key_token_sha256": storage["token_sha256"],
+                    },
+                )
+            )
+            if lifecycle != "unavailable" and not exists
+            else build_unauthorized_missing_attestation(())
+        )
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    def test_publication_rejects_every_non_unavailable_missing_posture_pre_upload(self):
+        for label, lifecycle, key, file_status in (
+            ("archived", "archived", "pdfs/missing.pdf", "missing"),
+            ("deprecated", "deprecated", "pdfs/missing.pdf", "missing"),
+            ("blank", "ready", "", "missing-path"),
+            ("null", "ready", None, "missing-path"),
+            ("unsafe", "ready", "../outside.pdf", "unsafe-path"),
+        ):
+            with self.subTest(label=label):
+                self._write_media_inventory(
+                    lifecycle=lifecycle,
+                    key=key,
+                    file_status=file_status,
+                )
+                before = self.client.put_count
+
+                with self.assertRaisesMessage(
+                    PublicationError,
+                    "snapshot_media_missing",
+                ):
+                    publish_snapshot_candidate(
+                        snapshot=self.snapshot,
+                        profile=self.profile,
+                        job=self.job,
+                        vault=self.vault,
+                    )
+
+                self.assertEqual(self.client.put_count, before)
+                self.assertFalse(ArtifactValidation.objects.exists())
+
+    def test_publication_rejects_inventory_faiss_attestation_drift_pre_upload(self):
+        storage = storage_key_evidence("pdfs/missing.pdf")
+        unavailable = build_unavailable_attestation(
+            (
+                {
+                    "id": 1,
+                    "lifecycle": "unavailable",
+                    "storage_key_status": storage["status"],
+                    "storage_key_token_sha256": storage["token_sha256"],
+                    "expected_sha256": "",
+                    "expected_size": None,
+                    "prior_lifecycle": "uploaded",
+                },
+            )
+        )
+        self._write_media_inventory(
+            lifecycle="unavailable",
+            key="pdfs/missing.pdf",
+            file_status="missing",
+            unavailable_documents=unavailable,
+        )
+        before = self.client.put_count
+
+        with self.assertRaisesMessage(
+            PublicationError,
+            "snapshot_unavailable_attestation_mismatch",
+        ):
+            publish_snapshot_candidate(
+                snapshot=self.snapshot,
+                profile=self.profile,
+                job=self.job,
+                vault=self.vault,
+            )
+
+        self.assertEqual(self.client.put_count, before)
+        self.assertFalse(ArtifactValidation.objects.exists())
 
     @override_settings(
         VAULT_SYNC_MODE="continuous_coalesced",

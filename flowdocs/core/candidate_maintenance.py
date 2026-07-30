@@ -23,9 +23,12 @@ from django.utils.dateparse import parse_datetime
 
 from .artifact_cleanup import capacity_report
 from .media_quarantine import (
+    MediaFileAbsentError,
+    MediaFileUnsafeError,
     build_unavailable_attestation,
     storage_key_evidence,
     validate_unavailable_attestation,
+    verify_local_media_file,
 )
 from .models import MaintenanceAuditEvent, MaintenanceJob, PDFFile
 
@@ -531,10 +534,9 @@ def validate_candidate(workspace: Path) -> dict:
     try:
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         foreign_keys = list(connection.execute("PRAGMA foreign_key_check"))
-        media_rows = list(
+        lifecycle_rows = list(
             connection.execute(
-                "SELECT id, file FROM core_pdffile "
-                "WHERE lifecycle != 'unavailable'"
+                "SELECT id, file, lifecycle FROM core_pdffile ORDER BY id"
             )
         )
     finally:
@@ -543,6 +545,21 @@ def validate_candidate(workspace: Path) -> dict:
         raise CandidateMaintenanceError("candidate_sqlite_integrity_failed")
     if foreign_keys:
         raise CandidateMaintenanceError("candidate_foreign_keys_failed")
+    valid_lifecycles = {
+        "uploaded",
+        "processing",
+        "ready",
+        "deprecated",
+        "archived",
+        "unavailable",
+    }
+    if any(row[2] not in valid_lifecycles for row in lifecycle_rows):
+        raise CandidateMaintenanceError("candidate_lifecycle_invalid")
+    media_rows = [
+        (pdf_id, value)
+        for pdf_id, value, lifecycle in lifecycle_rows
+        if lifecycle != "unavailable"
+    ]
     unavailable_attestation = _database_unavailable_attestation(database)
     try:
         expected_unavailable = validate_unavailable_attestation(
@@ -559,19 +576,17 @@ def validate_candidate(workspace: Path) -> dict:
         raise CandidateMaintenanceError(
             "candidate_unavailable_attestation_changed"
         )
-    media_root = (workspace / "media").resolve()
+    media_root = workspace / "media"
     missing_media = []
     for pdf_id, value in media_rows:
         try:
-            if not isinstance(value, str) or not value.strip():
-                raise ValueError("blank media reference")
-            media_path = workspace / "media" / value
-            resolved_media = media_path.resolve(strict=True)
-            resolved_media.relative_to(media_root)
-        except (OSError, RuntimeError, TypeError, ValueError):
-            missing_media.append(pdf_id)
-            continue
-        if media_path.is_symlink() or not resolved_media.is_file():
+            verify_local_media_file(
+                media_root,
+                value,
+                maximum_bytes=int(settings.MAX_FILE_SIZE_MB) * 1024 * 1024,
+                hash_content=False,
+            )
+        except (MediaFileAbsentError, MediaFileUnsafeError):
             missing_media.append(pdf_id)
     if missing_media:
         raise CandidateMaintenanceError(

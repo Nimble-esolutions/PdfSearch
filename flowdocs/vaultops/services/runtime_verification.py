@@ -10,10 +10,12 @@ from django.db.migrations.executor import MigrationExecutor
 
 from core.models import Folder, PDFFile
 from core.media_quarantine import (
+    MediaFileAbsentError,
+    MediaFileUnsafeError,
     build_unavailable_attestation,
     storage_key_evidence,
-    storage_key_status,
     validate_unavailable_attestation,
+    verify_local_media_file,
 )
 from core.utils import SearchDataIntegrityError, search_pdfs_fast
 from vaultops.runtime_control import (
@@ -131,15 +133,17 @@ def verify_activation_runtime(intent_id):
             "activation_unavailable_attestation_changed"
         )
     for pdf in PDFFile.objects.exclude(lifecycle="unavailable").iterator():
-        if storage_key_status(pdf.file.name) != "present":
-            raise RuntimeControlError("activation_pdf_path_invalid")
         try:
-            path = Path(pdf.file.path).resolve()
-            path.relative_to(Path(settings.MEDIA_ROOT).resolve())
-        except (OSError, ValueError) as exc:
+            verify_local_media_file(
+                settings.MEDIA_ROOT,
+                pdf.file.name,
+                maximum_bytes=int(settings.MAX_FILE_SIZE_MB) * 1024 * 1024,
+                hash_content=False,
+            )
+        except MediaFileAbsentError as exc:
+            raise RuntimeControlError("activation_pdf_missing") from exc
+        except MediaFileUnsafeError as exc:
             raise RuntimeControlError("activation_pdf_path_invalid") from exc
-        if not path.is_file():
-            raise RuntimeControlError("activation_pdf_missing")
     _validate_faiss_coherence(
         Path(settings.DATABASES["default"]["NAME"]),
         Path(settings.FAISS_INDEX_DIR),
