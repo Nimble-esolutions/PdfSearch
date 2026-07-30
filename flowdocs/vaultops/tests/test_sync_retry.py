@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import threading
@@ -81,8 +82,10 @@ class SyncRetryHardeningTests(TransactionTestCase):
         *,
         trusted_fingerprint=None,
         file_fingerprint=None,
+        primary_fingerprint=None,
         checkpoint_overrides=None,
         configuration_bytes=None,
+        primary_bytes=None,
     ):
         fingerprint = snapshot_configuration_fingerprint()
         trusted_fingerprint = (
@@ -92,6 +95,11 @@ class SyncRetryHardeningTests(TransactionTestCase):
         )
         file_fingerprint = (
             fingerprint if file_fingerprint is None else file_fingerprint
+        )
+        primary_fingerprint = (
+            fingerprint
+            if primary_fingerprint is None
+            else primary_fingerprint
         )
         snapshot = SourceSnapshot.objects.create(
             job=job,
@@ -113,12 +121,13 @@ class SyncRetryHardeningTests(TransactionTestCase):
             / f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
         )
         workspace.mkdir()
-        (workspace / "snapshot-evidence.json").write_text(
+        primary_path = workspace / "snapshot-evidence.json"
+        primary_path.write_text(
             json.dumps(
                 {
                     "snapshot_id": str(snapshot.public_id),
                     "snapshot_digest": snapshot.snapshot_digest,
-                    "configuration_fingerprint": file_fingerprint,
+                    "configuration_fingerprint": fingerprint,
                 }
             ),
             encoding="utf-8",
@@ -129,7 +138,28 @@ class SyncRetryHardeningTests(TransactionTestCase):
             else json.dumps(file_fingerprint, sort_keys=True).encode("utf-8")
         )
         snapshot.workspace_path = str(workspace)
-        snapshot.save(update_fields=["workspace_path", "updated_at"])
+        snapshot.evidence = {
+            **snapshot.evidence,
+            "evidence_sha256": hashlib.sha256(
+                primary_path.read_bytes()
+            ).hexdigest(),
+        }
+        snapshot.save(
+            update_fields=["workspace_path", "evidence", "updated_at"]
+        )
+        if primary_bytes is not None:
+            primary_path.write_bytes(primary_bytes)
+        elif primary_fingerprint != fingerprint:
+            primary_path.write_text(
+                json.dumps(
+                    {
+                        "snapshot_id": str(snapshot.public_id),
+                        "snapshot_digest": snapshot.snapshot_digest,
+                        "configuration_fingerprint": primary_fingerprint,
+                    }
+                ),
+                encoding="utf-8",
+            )
         checkpoint = {
             "snapshot_id": str(snapshot.public_id),
             "snapshot_digest": snapshot.snapshot_digest,
@@ -239,6 +269,14 @@ class SyncRetryHardeningTests(TransactionTestCase):
                 }
             },
             "malformed_file": {"configuration_bytes": b"{not-json"},
+            "missing_primary": {"primary_fingerprint": {}},
+            "forged_primary": {
+                "primary_fingerprint": {
+                    **snapshot_configuration_fingerprint(),
+                    "sha256": "e" * 64,
+                }
+            },
+            "malformed_primary": {"primary_bytes": b"{not-json"},
         }
         for name, fixture_options in cases.items():
             with self.subTest(name=name):

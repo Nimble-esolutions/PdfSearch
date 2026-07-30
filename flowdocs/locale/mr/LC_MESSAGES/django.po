@@ -3006,7 +3006,7 @@ msgid "The job heartbeat expired before the work reached a durable outcome."
 msgstr "कामाचा टिकाऊ निकाल लागण्यापूर्वी कार्याचा संपर्क संकेत कालबाह्य झाला."
 
 msgid "Review the checkpoint before retrying."
-msgstr "पुन्हा प्रयत्न करण्यापूर्वी चेकपॉइंटचा आढावा घ्या."
+msgstr "पुन्हा प्रयत्न करण्यापूर्वी तपासबिंदूचा आढावा घ्या."
 
 msgid "Restore preparation did not complete"
 msgstr "पुनर्स्थापनेची तयारी पूर्ण झाली नाही"
@@ -3783,7 +3783,7 @@ msgid "Snapshot work was cancelled"
 msgstr "स्नॅपशॉट काम रद्द करण्यात आले"
 
 msgid "The worker stopped at a safe cancellation checkpoint."
-msgstr "कार्यकर्ता सुरक्षित रद्दीकरण चेकपॉइंटवर थांबला."
+msgstr "कार्यकर्ता सुरक्षित रद्दीकरण तपासबिंदूवर थांबला."
 
 msgid "No candidate was published and the live source remains unchanged."
 msgstr "कोणताही उमेदवार प्रकाशित झाला नाही आणि कार्यरत स्रोत बदललेला नाही."

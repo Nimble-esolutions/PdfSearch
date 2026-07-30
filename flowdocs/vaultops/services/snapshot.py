@@ -108,6 +108,43 @@ def _configuration_fingerprint_valid(value):
     )
 
 
+def _stable_file_sha256(path):
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            return None
+        digest = hashlib.sha256()
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+        after = os.fstat(descriptor)
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        ):
+            return None
+        return digest.hexdigest()
+    except OSError:
+        return None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 def _snapshot_file_configuration(snapshot):
     workspace = Path(snapshot.workspace_path)
     expected_workspace = (
@@ -124,6 +161,15 @@ def _snapshot_file_configuration(snapshot):
     descriptor = -1
     try:
         root = workspace.resolve(strict=True)
+        primary_path = (root / "snapshot-evidence.json").resolve(strict=True)
+        primary_path.relative_to(root)
+        expected_primary_digest = snapshot.evidence.get("evidence_sha256")
+        if (
+            not isinstance(expected_primary_digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", expected_primary_digest)
+            or _stable_file_sha256(primary_path) != expected_primary_digest
+        ):
+            return None
         evidence_path = root / "snapshot-configuration.json"
         if evidence_path.is_symlink():
             return None
@@ -1544,6 +1590,7 @@ def create_consistent_snapshot(
             "faiss_reconciliation": faiss_reconciliation,
             "files": canonical_files,
             "inventory": inventory,
+            "configuration_fingerprint": configuration_fingerprint,
             "duration_seconds": round(time.monotonic() - started, 3),
         }
         evidence_path = incomplete / "snapshot-evidence.json"
@@ -1551,6 +1598,7 @@ def create_consistent_snapshot(
             json.dumps(evidence, sort_keys=True, indent=2, default=str),
             encoding="utf-8",
         )
+        evidence_sha256 = _sha256_file(evidence_path)
         (incomplete / "snapshot-configuration.json").write_text(
             json.dumps(
                 configuration_fingerprint,
@@ -1571,6 +1619,7 @@ def create_consistent_snapshot(
         snapshot.evidence = {
             "snapshot_schema": SNAPSHOT_SCHEMA,
             "evidence_path": "snapshot-evidence.json",
+            "evidence_sha256": evidence_sha256,
             "configuration_path": "snapshot-configuration.json",
             "database_sha256": database_record["sha256"],
             "journal_change_count": len(changes),

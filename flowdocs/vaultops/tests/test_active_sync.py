@@ -908,6 +908,10 @@ class SnapshotServiceTests(ActiveSyncTestCase):
             snapshot_service.snapshot_configuration_fingerprint()
         )
         self.assertEqual(
+            evidence["configuration_fingerprint"],
+            expected_fingerprint,
+        )
+        self.assertEqual(
             json.loads(
                 (workspace / "snapshot-configuration.json").read_text()
             ),
@@ -2176,7 +2180,8 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             (self.workspace / "db.sqlite3").read_bytes()
         )
         evidence["configuration_fingerprint"] = fingerprint
-        (canonical_workspace / "snapshot-evidence.json").write_text(
+        canonical_evidence_path = canonical_workspace / "snapshot-evidence.json"
+        canonical_evidence_path.write_text(
             json.dumps(evidence),
             encoding="utf-8",
         )
@@ -2188,6 +2193,9 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         scheduled_snapshot.evidence = {
             "snapshot_schema": 1,
             "evidence_path": "snapshot-evidence.json",
+            "evidence_sha256": hashlib.sha256(
+                canonical_evidence_path.read_bytes()
+            ).hexdigest(),
             "configuration_path": "snapshot-configuration.json",
             "configuration_fingerprint": fingerprint,
         }
