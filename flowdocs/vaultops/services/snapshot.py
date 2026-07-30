@@ -436,6 +436,7 @@ def _reconcile_candidate_faiss(
     faiss_root,
     *,
     cancellation_check,
+    source_faiss_records=None,
 ):
     """Keep coherent indexes and derive stale ones only in the snapshot."""
     try:
@@ -445,6 +446,17 @@ def _reconcile_candidate_faiss(
 
     faiss_root.mkdir(parents=True, exist_ok=True)
     folders = {}
+    source_folders = []
+    for path, record in (source_faiss_records or {}).items():
+        matched = re.fullmatch(r"faiss_indexes/folder_([0-9]+)\.index", path)
+        if matched and str(int(matched.group(1))) == matched.group(1):
+            source_folders.append(
+                {
+                    "folder_id": matched.group(1),
+                    "sha256": record["sha256"],
+                }
+            )
+    source_folders.sort(key=lambda item: int(item["folder_id"]))
     connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
     try:
         lifecycle_clause = _searchable_sql_contract(connection)
@@ -474,6 +486,10 @@ def _reconcile_candidate_faiss(
             existing = None
             content_matches = True
             if path.is_file() and not path.is_symlink():
+                if path.stat().st_size > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES:
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_byte_limit_exceeded"
+                    )
                 previous["sha256"] = _sha256_file(path)
                 try:
                     existing = faiss.read_index(str(path))
@@ -497,7 +513,6 @@ def _reconcile_candidate_faiss(
             else:
                 content_matches = False
 
-            rebuilt = None
             pdf_count = 0
             folder_count = 0
             dimension = None
@@ -516,16 +531,27 @@ def _reconcile_candidate_faiss(
                     cancellation_check=cancellation_check,
                 )
                 pdf_count += 1
+                projected_count = folder_count + int(batch.shape[0])
+                projected_total = vector_total + int(batch.shape[0])
+                projected_bytes = vector_bytes + int(batch.nbytes)
+                if (
+                    projected_count
+                    > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+                    or projected_total
+                    > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+                ):
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_vector_limit_exceeded"
+                    )
+                if projected_bytes > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES:
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_byte_limit_exceeded"
+                    )
                 if dimension is not None and dimension != int(batch.shape[1]):
                     raise SnapshotError(
                         "snapshot_embedding_dimensions_inconsistent"
                     )
                 dimension = int(batch.shape[1])
-                if rebuilt is None:
-                    rebuilt = faiss.IndexFlatIP(dimension)
-                if cancellation_check():
-                    raise SnapshotCancelled("snapshot_cancelled")
-                rebuilt.add(batch)
                 if existing is not None and content_matches:
                     try:
                         observed = existing.reconstruct_n(
@@ -534,26 +560,15 @@ def _reconcile_candidate_faiss(
                     except Exception:
                         content_matches = False
                     else:
+                        observed = np.asarray(observed, dtype=np.float32)
                         content_matches = bool(
-                            np.allclose(
-                                observed,
-                                batch,
-                                rtol=1e-6,
-                                atol=1e-7,
-                                equal_nan=False,
-                            )
+                            observed.shape == batch.shape
+                            and observed.tobytes(order="C")
+                            == batch.tobytes(order="C")
                         )
-                folder_count += int(batch.shape[0])
-                vector_total += int(batch.shape[0])
-                vector_bytes += int(batch.nbytes)
-                if vector_total > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS:
-                    raise SnapshotError(
-                        "snapshot_faiss_rebuild_vector_limit_exceeded"
-                    )
-                if vector_bytes > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES:
-                    raise SnapshotError(
-                        "snapshot_faiss_rebuild_byte_limit_exceeded"
-                    )
+                folder_count = projected_count
+                vector_total = projected_total
+                vector_bytes = projected_bytes
             coherent = bool(
                 existing is not None
                 and content_matches
@@ -569,8 +584,41 @@ def _reconcile_candidate_faiss(
                     "sha256": previous["sha256"],
                 }
                 continue
-            if rebuilt is None:
+            if not folder_count or dimension is None:
                 raise SnapshotError("snapshot_searchable_embeddings_invalid")
+            # Do not retain the copied index while building its replacement.
+            existing = None
+            rebuilt = faiss.IndexFlatIP(dimension)
+            rebuilt_count = 0
+            rows = connection.execute(
+                "SELECT id, page_chunks, chunk_embeddings "
+                "FROM core_pdffile WHERE folder_id = ? "
+                f"{lifecycle_clause}ORDER BY id",
+                (folder_id,),
+            )
+            for _pdf_id, chunks_raw, embeddings_raw in rows:
+                batch = _normalized_pdf_batch(
+                    chunks_raw,
+                    embeddings_raw,
+                    cancellation_check=cancellation_check,
+                )
+                projected_rebuilt_count = rebuilt_count + int(batch.shape[0])
+                if (
+                    projected_rebuilt_count > folder_count
+                    or projected_rebuilt_count
+                    > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+                    or projected_rebuilt_count * dimension * 4
+                    > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
+                ):
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_vector_limit_exceeded"
+                    )
+                if cancellation_check():
+                    raise SnapshotCancelled("snapshot_cancelled")
+                rebuilt.add(batch)
+                rebuilt_count = projected_rebuilt_count
+            if rebuilt_count != folder_count:
+                raise SnapshotError("snapshot_faiss_rebuild_verification_failed")
             temporary = path.with_name(
                 f".{path.name}.{secrets.token_hex(6)}.partial"
             )
@@ -621,6 +669,7 @@ def _reconcile_candidate_faiss(
     return {
         "schema": 1,
         "source": "stored_embeddings",
+        "source_folders": source_folders,
         **totals,
         "folders": folders,
     }
@@ -785,6 +834,11 @@ def create_consistent_snapshot(
             incomplete / "db.sqlite3",
             incomplete / "faiss_indexes",
             cancellation_check=cancellation_check,
+            source_faiss_records={
+                key: value
+                for key, value in source_records.items()
+                if value["category"] == "faiss_indexes"
+            },
         )
         _assert_source_trees_stable(roots, source_records)
         records = {

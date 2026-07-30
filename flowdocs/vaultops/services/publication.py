@@ -392,13 +392,37 @@ def _validate_faiss_reconciliation_evidence(evidence):
     inventory = evidence.get("inventory", {})
     files = inventory.get("faiss", {}).get("files", [])
     folders = reconciliation.get("folders")
+    source_folders = reconciliation.get("source_folders")
     if (
         reconciliation.get("schema") != 1
         or reconciliation.get("source") != "stored_embeddings"
         or not isinstance(folders, dict)
+        or not isinstance(source_folders, list)
         or not isinstance(files, list)
     ):
         raise PublicationError("snapshot_faiss_reconciliation_invalid")
+    validated_source_folders = set()
+    for source_record in source_folders:
+        folder_id = (
+            source_record.get("folder_id")
+            if isinstance(source_record, dict)
+            else None
+        )
+        digest = (
+            source_record.get("sha256")
+            if isinstance(source_record, dict)
+            else None
+        )
+        if (
+            not isinstance(folder_id, str)
+            or not folder_id.isdigit()
+            or str(int(folder_id)) != folder_id
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            or folder_id in validated_source_folders
+        ):
+            raise PublicationError("snapshot_faiss_reconciliation_invalid")
+        validated_source_folders.add(folder_id)
     indexed = {}
     inventory_folder_ids = set()
     for item in files:
@@ -475,9 +499,14 @@ def _validate_faiss_reconciliation_evidence(evidence):
     if (
         nonremoved_folder_ids != inventory_folder_ids
         or nonremoved_folder_ids & removed_folder_ids
+        or removed_folder_ids
+        != validated_source_folders - inventory_folder_ids
         or vector_total != reconciliation.get("vector_count")
         or vector_bytes != reconciliation.get("vector_bytes")
         or pdf_total != reconciliation.get("pdf_count")
+        or pdf_total > settings.VAULT_SNAPSHOT_FAISS_MAX_PDFS
+        or vector_total > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+        or vector_bytes > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
         or not isinstance(reconciliation.get("source_json_bytes"), int)
         or isinstance(reconciliation.get("source_json_bytes"), bool)
         or reconciliation["source_json_bytes"] < 0

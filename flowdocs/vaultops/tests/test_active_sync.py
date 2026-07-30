@@ -936,6 +936,42 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         )
         self.assertEqual(source_path.read_bytes(), source_bytes)
 
+    def test_near_tolerance_faiss_values_are_rebuilt_exactly(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[1.0, 1.0]],
+        )
+        expected = core_utils.np.asarray(
+            [[2**-0.5, 2**-0.5]], dtype="float32"
+        )
+        near = expected.copy()
+        near[0, 0] = core_utils.np.nextafter(
+            near[0, 0],
+            core_utils.np.float32(1.0),
+        )
+        self.assertTrue(core_utils.np.allclose(near, expected))
+        self.assertNotEqual(near.tobytes(), expected.tobytes())
+        source_path = self.data / "faiss_indexes/folder_7.index"
+        index = core_utils.faiss.IndexFlatIP(2)
+        index.add(near)
+        core_utils.faiss.write_index(index, str(source_path))
+
+        snapshot = self._snapshot()
+
+        evidence = json.loads(
+            (
+                Path(snapshot.workspace_path) / "snapshot-evidence.json"
+            ).read_text()
+        )
+        self.assertEqual(
+            evidence["faiss_reconciliation"]["folders"]["7"]["disposition"],
+            "rebuilt",
+        )
+
     def test_same_shape_reordered_faiss_values_are_rebuilt(self):
         self._add_lifecycle_columns()
         self._insert_pdf(
@@ -1144,6 +1180,61 @@ class SnapshotServiceTests(ActiveSyncTestCase):
             "snapshot_faiss_rebuild_vector_limit_exceeded",
         ):
             self._snapshot()
+
+    @override_settings(VAULT_SNAPSHOT_FAISS_MAX_BYTES=1)
+    def test_candidate_index_file_bound_precedes_faiss_read(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[1.0, 0.0]],
+        )
+        candidate_root = self.control / "bounded-candidate-faiss"
+        candidate_root.mkdir(parents=True)
+        (candidate_root / "folder_7.index").write_bytes(b"oversized")
+
+        with patch.object(
+            core_utils.faiss,
+            "read_index",
+            side_effect=AssertionError("index must not be loaded"),
+        ), self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_faiss_rebuild_byte_limit_exceeded",
+        ):
+            snapshot_service._reconcile_candidate_faiss(
+                self.database,
+                candidate_root,
+                cancellation_check=lambda: False,
+            )
+
+    @override_settings(VAULT_SNAPSHOT_FAISS_MAX_VECTORS=1)
+    def test_candidate_vector_bound_precedes_faiss_add(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one", "two"],
+            embeddings=[[1.0, 0.0], [0.0, 1.0]],
+        )
+        candidate_root = self.control / "bounded-add-faiss"
+        candidate_root.mkdir(parents=True)
+
+        with patch.object(
+            core_utils.faiss,
+            "IndexFlatIP",
+            side_effect=AssertionError("index must not be allocated"),
+        ), self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_faiss_rebuild_vector_limit_exceeded",
+        ):
+            snapshot_service._reconcile_candidate_faiss(
+                self.database,
+                candidate_root,
+                cancellation_check=lambda: False,
+            )
 
     @override_settings(VAULT_SNAPSHOT_FAISS_MAX_PDFS=0)
     def test_candidate_rebuild_row_bound_precedes_json_parse(self):
@@ -1566,6 +1657,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             "faiss_reconciliation": {
                 "schema": 1,
                 "source": "stored_embeddings",
+                "source_folders": [],
                 "pdf_count": 1,
                 "vector_count": 2,
                 "vector_bytes": 16,
@@ -1602,13 +1694,25 @@ class CandidatePublicationTests(ActiveSyncTestCase):
                 "vector_count": 0,
             }
         }
+        forged_canonical_removal = deepcopy(valid)
+        forged_canonical_removal["faiss_reconciliation"]["folders"]["999"] = {
+            "disposition": "removed",
+            "pdf_count": 0,
+            "vector_count": 0,
+        }
+        duplicate_source = deepcopy(valid)
+        duplicate_source["faiss_reconciliation"]["source_folders"] = [
+            {"folder_id": "999", "sha256": "b" * 64},
+            {"folder_id": "999", "sha256": "b" * 64},
+        ]
         wrong_totals = deepcopy(valid)
         wrong_totals["faiss_reconciliation"]["vector_bytes"] = 8
-
         for label, evidence in (
             ("duplicate", duplicate),
             ("missing", missing),
             ("arbitrary_removal", arbitrary_removal),
+            ("forged_canonical_removal", forged_canonical_removal),
+            ("duplicate_source", duplicate_source),
             ("wrong_totals", wrong_totals),
         ):
             with self.subTest(label=label), self.assertRaisesRegex(
@@ -1617,6 +1721,14 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             ):
                 publication_service._validate_faiss_reconciliation_evidence(
                     evidence
+                )
+        with override_settings(VAULT_SNAPSHOT_FAISS_MAX_VECTORS=1):
+            with self.assertRaisesRegex(
+                PublicationError,
+                "snapshot_faiss_reconciliation_invalid",
+            ):
+                publication_service._validate_faiss_reconciliation_evidence(
+                    valid
                 )
 
     @override_settings(
@@ -1766,6 +1878,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         evidence["faiss_reconciliation"] = {
             "schema": 1,
             "source": "stored_embeddings",
+            "source_folders": [],
             "pdf_count": 1,
             "vector_count": 2,
             "vector_bytes": 16,
