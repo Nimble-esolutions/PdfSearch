@@ -162,8 +162,8 @@ fresh-volume and accumulated-volume behavior.
 - **Large new uploads:** raise `MAX_FILE_SIZE_MB` only with proxy/memory/timeouts
   reviewed together. For canonical legacy media already in custody, adjust
   `ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES` independently and retain a bounded
-  verification limit.
-  reviewed; do not use a byte literal in Dokploy.
+  verification limit; do not substitute a byte literal for
+  `MAX_FILE_SIZE_MB` in Dokploy.
 - **New embedding model:** record model, dimensions, index compatibility, cost,
   and reindex plan before changing `OPENAI_EMBED_MODEL`.
 - **No OpenAI in local/CI:** use disposable test embeddings only in CI/test

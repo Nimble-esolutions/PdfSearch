@@ -1834,13 +1834,27 @@ class CandidatePublicationTests(ActiveSyncTestCase):
     def test_publication_accepts_verified_legacy_media_within_custody_cap(
         self, *_mocks
     ):
+        media = self.workspace / "media" / "pdfs" / "legacy.pdf"
+        media.parent.mkdir(parents=True)
+        media.write_bytes(b"%PDF-1.7\ncanonical legacy fixture")
+        media_digest = hashlib.sha256(media.read_bytes()).hexdigest()
         self._write_media_inventory(
             lifecycle="ready",
             key="pdfs/legacy.pdf",
             file_status="verified",
             exists=True,
-            size_bytes=23_617_612,
+            size_bytes=media.stat().st_size,
         )
+        evidence_path = self.workspace / "snapshot-evidence.json"
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence["files"].append(
+            {
+                "path": "media/pdfs/legacy.pdf",
+                "size_bytes": media.stat().st_size,
+                "sha256": media_digest,
+            }
+        )
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
 
         candidate = publish_snapshot_candidate(
             snapshot=self.snapshot,
@@ -1859,6 +1873,13 @@ class CandidatePublicationTests(ActiveSyncTestCase):
                 validation_type="publication",
             ).exists()
         )
+        published_pdf = [
+            item
+            for item in self.client.objects.values()
+            if item["content_type"] == "application/pdf"
+        ]
+        self.assertEqual(len(published_pdf), 1)
+        self.assertEqual(published_pdf[0]["body"], media.read_bytes())
 
     def test_publication_rejects_every_non_unavailable_missing_posture_pre_upload(self):
         for label, lifecycle, key, file_status in (
