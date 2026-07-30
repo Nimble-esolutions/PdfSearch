@@ -18,6 +18,7 @@ from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
+from core.models import Folder
 from core.candidate_maintenance import (
     CandidateMaintenanceError,
     _verified_mutable_source_runtime_identity,
@@ -2113,8 +2114,8 @@ class ActivationRuntimeVerificationTests(TestCase):
     def test_management_command_proves_runtime_and_recovery_login(self):
         output = io.StringIO()
         with patch(
-            "vaultops.management.commands."
-            "verify_activation_runtime._validate_faiss_coherence"
+            "vaultops.services.runtime_verification."
+            "_validate_faiss_coherence"
         ):
             call_command(
                 "verify_activation_runtime",
@@ -2124,6 +2125,42 @@ class ActivationRuntimeVerificationTests(TestCase):
         self.assertIn(
             f"Activation runtime verified: {TARGET_GENERATION}",
             output.getvalue(),
+        )
+
+    def test_management_command_emits_bounded_bilingual_json(self):
+        operator = get_user_model().objects.get(username="recovery")
+        Folder.objects.create(name="Certification", created_by=operator)
+        output = io.StringIO()
+        with (
+            patch(
+                "vaultops.services.runtime_verification."
+                "_validate_faiss_coherence"
+            ),
+            patch(
+                "vaultops.services.runtime_verification.search_pdfs_fast",
+                return_value=("bounded answer", [{"source": "bounded"}]),
+            ),
+        ):
+            call_command(
+                "verify_activation_runtime",
+                intent_id=self.intent_id,
+                json=True,
+                stdout=output,
+            )
+        evidence = json.loads(output.getvalue())
+        self.assertEqual(evidence["executed_locales"], ["en", "mr"])
+        self.assertEqual(
+            [item["locale"] for item in evidence["queries"]],
+            ["en", "mr"],
+        )
+        self.assertTrue(
+            all(
+                len(item["query_sha256"]) == 64
+                and item["answer_present"]
+                and item["reference_count"] == 1
+                and "query" not in item
+                for item in evidence["queries"]
+            )
         )
 
     def test_management_command_rejects_wrong_runtime_manifest(self):
