@@ -83,7 +83,14 @@ near-tolerance numeric match is not accepted. A missing, unreadable,
 unsupported, reordered, or
 stale folder index is atomically derived only under the incomplete snapshot
 workspace. Indexes for folders with no searchable rows are omitted from the
-candidate. SQL row and source-cell sizes are bounded before JSON parsing;
+candidate. A row contributes to candidate FAISS evidence only when its
+lifecycle is searchable and its persisted `indexed` flag is true. Uploaded
+documents that still need indexing remain in the frozen database, inventory,
+and index-debt counts but do not supply vectors. An indexed row with empty,
+malformed, non-finite, or dimensionally inconsistent stored evidence still
+fails closed. Legacy schemas without an `indexed` column retain the lifecycle
+filter and strict stored-evidence validation. SQL row and source-cell sizes
+are bounded before JSON parsing;
 copied index file size is bounded before FAISS loads it, and projected
 per-document chunks, dimensions, total vectors, and resident vector bytes are
 checked before allocation or index addition. Verification and rebuilding use
@@ -95,8 +102,8 @@ Cancellation is checked around parsing,
 materialization, index addition, and writing. Cancellation or derivation
 failure leaves no published candidate and cannot modify source artifacts.
 
-The default per-document JSON-cell ceiling is 128 MiB. This admits the
-observed 85,794,946-byte retained-embedding cell for production PDF 301 while
+The default per-document JSON-cell ceiling is 128 MiB. This admits an
+observed 85,794,946-byte retained-embedding cell while
 remaining below the independent 512 MiB normalized-vector and 1 GiB aggregate
 source ceilings. The cell ceiling is not a worker-memory estimate: during one
 PDF batch the source JSON strings, decoded Python values, float64
