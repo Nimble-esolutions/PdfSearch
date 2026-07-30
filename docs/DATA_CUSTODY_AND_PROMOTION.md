@@ -76,7 +76,7 @@ archive, or change an authoritative pointer.
 The command emits only numeric row IDs, HMAC-SHA-256 path/source tokens,
 content hashes, byte counts, bounded postures, and these evidence classes:
 
-- `manifest_object_metadata_exact`: a historical manifest path matched
+- `metadata_consistent`: a historical manifest path matched
   internally and the content-addressed object HEAD metadata matched the
   manifest SHA-256 and size. This proves metadata consistency, not a fresh
   byte-for-byte object read;
@@ -120,19 +120,27 @@ python manage.py audit_missing_pdf_custody \
 ```
 
 Archive members are streamed without persistent extraction. The command caps
-archive count, physical bytes, member count, declared logical bytes, total read
-work, compression ratio, candidate bytes, generations, evidence cardinality,
-and elapsed time. Its sequential tar reader accepts ordinary POSIX/USTAR and
-gzip streams, rejects PAX/GNU extended-name and sparse records, and reports
-whether a bounded candidate begins with the PDF signature. Other compression
-formats are rejected.
+archive count and identity, physical bytes, member count, declared logical
+bytes, total read work, compression ratio, candidate bytes, database rows,
+media probes, manifest entries, generations, and evidence cardinality. Its
+cooperative deadline starts before the database snapshot and is checked between
+local work units. It is not a hard network timeout for an already-running
+provider call. Its sequential tar reader requires a canonical two-zero-block
+end followed by EOF, accepts ordinary POSIX/USTAR and exactly one CRC-valid gzip
+member, rejects trailing/concatenated data plus PAX/GNU extended-name and sparse
+records, and reports whether a bounded candidate begins with the PDF signature.
+Other compression formats are rejected.
 
 Every database, media, HMAC-key, and archive path component is opened through
 no-follow directory descriptors. The HMAC key must be owned by the current
 process user, have one link, have no group/other permissions, and retain the
 same file identity and metadata through its bounded read. Database and archive
-identity are checked again after scanning. Stored and manifest paths match
-exact POSIX case; case-colliding evidence fails closed.
+identity are checked again after scanning. SQLite is copied from the opened
+descriptor into an immutable temporary snapshot; `-wal` or `-shm` siblings are
+rejected, so operators must checkpoint the database before auditing. Stored,
+manifest, and TAR paths must already be canonical relative POSIX paths. Exact
+directory-entry spelling is verified at every component; noncanonical paths,
+case mismatches, and case-colliding evidence fail closed.
 
 Review `complete`, `vault_posture`, `archive_posture`,
 `vault_generation_counts`, per-source `archive_progress`, and `truncation`
@@ -148,9 +156,9 @@ and `verified` distinguish attempted manifests from manifests that passed the
 existing validation contract.
 
 `exact_manifest_archive` authorizes only isolated reconciliation review because
-the streamed bytes matched manifest hash and size. Metadata-exact HEAD evidence
-alone is not enough to claim the bytes were freshly verified. Neither result
-authorizes copying bytes into active custody, changing database rows, or
+the streamed bytes matched manifest hash and size. Metadata-consistent HEAD
+evidence alone is not enough to claim the bytes were freshly verified. Neither
+result authorizes copying bytes into active custody, changing database rows, or
 promoting a generation.
 
 ## Gates

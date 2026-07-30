@@ -73,8 +73,16 @@ class Command(BaseCommand):
             default=48 * 1024 * 1024 * 1024,
         )
         parser.add_argument("--max-compression-ratio", type=int, default=100)
-        parser.add_argument("--max-seconds", type=int, default=900)
+        parser.add_argument(
+            "--max-seconds",
+            type=int,
+            default=900,
+            help="Cooperative local-work deadline; not an in-flight provider timeout",
+        )
         parser.add_argument("--max-generations", type=int, default=10_000)
+        parser.add_argument("--max-database-rows", type=int, default=1_000_000)
+        parser.add_argument("--max-manifest-entries", type=int, default=1_000_000)
+        parser.add_argument("--max-media-probes", type=int, default=1_000_000)
         parser.add_argument(
             "--max-evidence-per-reference",
             type=int,
@@ -135,6 +143,9 @@ class Command(BaseCommand):
                     "max_evidence_per_reference"
                 ],
                 max_total_evidence=options["max_total_evidence"],
+                max_database_rows=options["max_database_rows"],
+                max_manifest_entries=options["max_manifest_entries"],
+                max_media_probes=options["max_media_probes"],
             )
         except CustodyAuditError as exc:
             raise CommandError(str(exc)) from exc

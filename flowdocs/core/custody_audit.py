@@ -5,11 +5,12 @@ from __future__ import annotations
 import errno
 import hashlib
 import hmac
-import gzip
 import os
 import sqlite3
 import stat
+import tempfile
 import time
+import zlib
 from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
@@ -18,7 +19,7 @@ from urllib.parse import quote
 
 AUDIT_SCHEMA = "pdfsearch-missing-pdf-custody/v1"
 EVIDENCE_CLASSES = {
-    "manifest_object_metadata_exact",
+    "metadata_consistent",
     "manifest_reference_only",
     "exact_manifest_archive",
     "path_only_candidate",
@@ -38,6 +39,10 @@ MAX_MISSING_REFERENCES = 10_000
 MAX_GENERATIONS = 10_000
 MAX_EVIDENCE_PER_REFERENCE = 100
 MAX_TOTAL_EVIDENCE = 100_000
+MAX_DATABASE_ROWS = 1_000_000
+MAX_MANIFEST_ENTRIES = 1_000_000
+MAX_MEDIA_PROBES = 1_000_000
+MAX_DATABASE_BYTES = 4 * 1024 * 1024 * 1024
 READ_CHUNK_BYTES = 1024 * 1024
 TAR_BLOCK_BYTES = 512
 
@@ -63,11 +68,36 @@ def _path_parts(path: Path) -> tuple[str, ...]:
     value = os.fspath(path)
     if not value:
         raise CustodyAuditError("path_unavailable")
+    raw_parts = value.split("/")
+    checked_parts = raw_parts[1:] if value.startswith("/") else raw_parts
+    if (
+        "\0" in value
+        or "//" in value
+        or value.endswith("/")
+        or any(part in {"", ".", ".."} for part in checked_parts)
+    ):
+        raise CustodyAuditError("path_unsafe")
     absolute = os.path.abspath(value)
     parts = PurePosixPath(absolute).parts
     if not parts or parts[0] != "/" or any(part in {"", ".", ".."} for part in parts[1:]):
         raise CustodyAuditError("path_unsafe")
     return tuple(parts[1:])
+
+
+def _require_exact_entry(directory_fd: int, component: str, *, missing_ok: bool = False) -> bool:
+    """Require the requested directory-entry spelling, even on case-insensitive filesystems."""
+    try:
+        entries = os.listdir(directory_fd)
+    except OSError as exc:
+        raise CustodyAuditError("path_unavailable") from exc
+    component_bytes = os.fsencode(component)
+    if any(os.fsencode(entry) == component_bytes for entry in entries):
+        return True
+    if any(entry.casefold() == component.casefold() for entry in entries):
+        raise CustodyAuditError("path_case_mismatch")
+    if missing_ok:
+        return False
+    raise CustodyAuditError("path_missing")
 
 
 def _open_parent_no_follow(path: Path) -> tuple[int, str]:
@@ -82,9 +112,13 @@ def _open_parent_no_follow(path: Path) -> tuple[int, str]:
     directory_fd = os.open("/", directory_flags)
     try:
         for component in parts[:-1]:
+            _require_exact_entry(directory_fd, component)
             next_fd = os.open(component, directory_flags, dir_fd=directory_fd)
             os.close(directory_fd)
             directory_fd = next_fd
+    except CustodyAuditError:
+        os.close(directory_fd)
+        raise
     except OSError as exc:
         os.close(directory_fd)
         raise CustodyAuditError("path_unavailable") from exc
@@ -102,6 +136,7 @@ def _open_path_no_follow(
     if hasattr(os, "O_NOFOLLOW"):
         final_flags |= os.O_NOFOLLOW
     try:
+        _require_exact_entry(directory_fd, name)
         descriptor = os.open(name, final_flags, dir_fd=directory_fd)
     except OSError as exc:
         reason = "path_missing" if exc.errno == errno.ENOENT else "path_unsafe"
@@ -131,12 +166,14 @@ def _open_relative_no_follow(root_fd: int, value: str) -> tuple[int, os.stat_res
     current_fd = os.dup(root_fd)
     try:
         for component in parts[:-1]:
+            _require_exact_entry(current_fd, component)
             next_fd = os.open(component, directory_flags, dir_fd=current_fd)
             os.close(current_fd)
             current_fd = next_fd
         final_flags = os.O_RDONLY
         if hasattr(os, "O_NOFOLLOW"):
             final_flags |= os.O_NOFOLLOW
+        _require_exact_entry(current_fd, parts[-1])
         descriptor = os.open(parts[-1], final_flags, dir_fd=current_fd)
     except OSError as exc:
         reason = "path_missing" if exc.errno == errno.ENOENT else "path_unsafe"
@@ -191,23 +228,25 @@ def read_hmac_key_file(path: Path) -> bytes:
     return key
 
 
-def _sqlite_uri(parent_fd: int, name: str, fallback_path: Path) -> str:
-    descriptor_directory = f"/proc/self/fd/{parent_fd}"
-    database_path = (
-        f"{descriptor_directory}/{name}"
-        if os.path.isdir(descriptor_directory)
-        else os.path.abspath(fallback_path)
-    )
-    return f"file:{quote(database_path, safe='/')}?mode=ro"
+def _sqlite_uri(path: Path) -> str:
+    return f"file:{quote(os.fspath(path), safe='/')}?mode=ro&immutable=1"
 
 
 def _safe_relative_path(value: Any) -> str | None:
     if not isinstance(value, str) or not value or "\\" in value:
         return None
+    if (
+        "\0" in value
+        or "//" in value
+        or value.endswith("/")
+        or any(part in {"", ".", ".."} for part in value.split("/"))
+    ):
+        return None
     parsed = PurePosixPath(value)
     if parsed.is_absolute() or any(part in {"", ".", ".."} for part in parsed.parts):
         return None
-    return parsed.as_posix()
+    normalized = parsed.as_posix()
+    return normalized if normalized == value else None
 
 
 def _stored_path(row: sqlite3.Row, columns: set[str]) -> str | None:
@@ -227,44 +266,68 @@ def _relative_regular_exists(root_fd: int, stored_path: str) -> bool:
     return True
 
 
-def missing_pdf_references(database: Path, media_root: Path, key: bytes) -> list[dict[str, Any]]:
-    """Return only IDs, HMAC path tokens, and internal paths for missing rows."""
-    database_parent_fd = None
-    database_fd = None
+def _sibling_exists(parent_fd: int, name: str) -> bool:
+    if not _require_exact_entry(parent_fd, name, missing_ok=True):
+        return False
+    try:
+        os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise CustodyAuditError("application_database_wal_policy_failed") from exc
+    return True
+
+
+def missing_pdf_references(
+    database: Path,
+    media_root: Path,
+    key: bytes,
+    *,
+    deadline: float,
+    max_database_rows: int = MAX_DATABASE_ROWS,
+    max_media_probes: int = MAX_MEDIA_PROBES,
+) -> list[dict[str, Any]]:
+    """Inspect a descriptor-bound, WAL-free snapshot of document references."""
+    database_parent_fd = database_fd = media_fd = None
+    snapshot = None
+    connection = None
     try:
         database_parent_fd, database_name = _open_parent_no_follow(database)
-        database_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        _require_exact_entry(database_parent_fd, database_name)
         database_fd = os.open(
             database_name,
-            database_flags,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
             dir_fd=database_parent_fd,
         )
         database_before = os.fstat(database_fd)
         if not stat.S_ISREG(database_before.st_mode):
             raise CustodyAuditError("path_unsafe")
+        if database_before.st_size > MAX_DATABASE_BYTES:
+            raise CustodyAuditError("application_database_byte_limit_exceeded")
+        if _sibling_exists(database_parent_fd, f"{database_name}-wal") or _sibling_exists(
+            database_parent_fd, f"{database_name}-shm"
+        ):
+            raise CustodyAuditError("application_database_wal_unsupported")
         media_fd, _media_metadata = _open_path_no_follow(
             media_root,
             final_flags=os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
             final_regular=False,
         )
-    except (CustodyAuditError, OSError) as exc:
-        if database_fd is not None:
-            os.close(database_fd)
-        if database_parent_fd is not None:
-            os.close(database_parent_fd)
-        raise CustodyAuditError("application_custody_path_unavailable") from exc
-    try:
-        connection = sqlite3.connect(
-            _sqlite_uri(database_parent_fd, database_name, database),
-            uri=True,
+        snapshot = tempfile.NamedTemporaryFile(
+            prefix="custody-db-", suffix=".sqlite3"
         )
+        os.lseek(database_fd, 0, os.SEEK_SET)
+        remaining = database_before.st_size
+        while remaining:
+            if time.monotonic() > deadline:
+                raise CustodyAuditError("audit_time_limit_exceeded")
+            chunk = os.read(database_fd, min(READ_CHUNK_BYTES, remaining))
+            if not chunk:
+                raise CustodyAuditError("application_database_changed")
+            snapshot.write(chunk)
+            remaining -= len(chunk)
+        snapshot.flush()
+        connection = sqlite3.connect(_sqlite_uri(Path(snapshot.name)), uri=True)
         connection.row_factory = sqlite3.Row
-    except sqlite3.Error as exc:
-        os.close(database_fd)
-        os.close(database_parent_fd)
-        os.close(media_fd)
-        raise CustodyAuditError("application_database_unavailable") from exc
-    try:
+
         table = connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='core_pdffile'"
         ).fetchone()
@@ -281,14 +344,23 @@ def missing_pdf_references(database: Path, media_root: Path, key: bytes) -> list
         query = f'SELECT {", ".join(selected)} FROM "core_pdffile" ORDER BY id'
         missing = []
         case_paths: dict[str, str] = {}
+        rows_scanned = media_probes = 0
         for row in connection.execute(query):
+            rows_scanned += 1
+            if rows_scanned > max_database_rows:
+                raise CustodyAuditError("application_database_row_limit_exceeded")
+            if time.monotonic() > deadline:
+                raise CustodyAuditError("audit_time_limit_exceeded")
             stored_path = _stored_path(row, columns)
             if not stored_path:
-                continue
+                raise CustodyAuditError("document_path_invalid")
             case_key = stored_path.casefold()
             previous = case_paths.setdefault(case_key, stored_path)
             if previous != stored_path:
                 raise CustodyAuditError("document_path_case_collision")
+            media_probes += 1
+            if media_probes > max_media_probes:
+                raise CustodyAuditError("media_probe_limit_exceeded")
             if _relative_regular_exists(media_fd, stored_path):
                 continue
             missing.append(
@@ -300,28 +372,34 @@ def missing_pdf_references(database: Path, media_root: Path, key: bytes) -> list
             )
             if len(missing) > MAX_MISSING_REFERENCES:
                 raise CustodyAuditError("missing_reference_limit_exceeded")
-        try:
-            database_after = os.fstat(database_fd)
-            path_after = os.stat(
-                database_name,
-                dir_fd=database_parent_fd,
-                follow_symlinks=False,
-            )
-        except OSError as exc:
-            raise CustodyAuditError("application_database_changed") from exc
+        database_after = os.fstat(database_fd)
+        path_after = os.stat(
+            database_name, dir_fd=database_parent_fd, follow_symlinks=False
+        )
         if (
             _stat_identity(database_before) != _stat_identity(database_after)
             or _stat_identity(database_before) != _stat_identity(path_after)
+            or _sibling_exists(database_parent_fd, f"{database_name}-wal")
+            or _sibling_exists(database_parent_fd, f"{database_name}-shm")
         ):
             raise CustodyAuditError("application_database_changed")
         return missing
+    except CustodyAuditError as exc:
+        if str(exc) in {"path_unavailable", "path_unsafe", "path_missing", "path_case_mismatch"}:
+            raise CustodyAuditError("application_custody_path_unavailable") from exc
+        raise
     except sqlite3.Error as exc:
         raise CustodyAuditError("application_database_read_failed") from exc
+    except OSError as exc:
+        raise CustodyAuditError("application_custody_path_unavailable") from exc
     finally:
-        connection.close()
-        os.close(database_fd)
-        os.close(database_parent_fd)
-        os.close(media_fd)
+        if connection is not None:
+            connection.close()
+        if snapshot is not None:
+            snapshot.close()
+        for descriptor in (database_fd, database_parent_fd, media_fd):
+            if descriptor is not None:
+                os.close(descriptor)
 
 
 def _manifest_path(value: Any) -> str | None:
@@ -334,17 +412,21 @@ def _manifest_path(value: Any) -> str | None:
 def _manifest_matches(
     manifest: dict[str, Any],
     missing_by_path: dict[str, dict[str, Any]],
+    *,
+    max_entries: int,
 ) -> Iterable[tuple[dict[str, Any], dict[str, Any]]]:
     files = manifest.get("files")
     if not isinstance(files, list):
         return
     seen_case_paths: dict[str, str] = {}
-    for entry in files:
+    for index, entry in enumerate(files, start=1):
+        if index > max_entries:
+            raise CustodyAuditError("manifest_entry_limit_exceeded")
         if not isinstance(entry, dict):
-            continue
+            raise CustodyAuditError("manifest_entry_invalid")
         path = _manifest_path(entry.get("path"))
         if path is None:
-            continue
+            raise CustodyAuditError("manifest_path_invalid")
         case_key = path.casefold()
         previous = seen_case_paths.setdefault(case_key, path)
         if previous != path:
@@ -384,6 +466,7 @@ def _scan_vault(
     max_generations: int,
     max_evidence_per_reference: int,
     max_total_evidence: int,
+    max_manifest_entries: int,
     deadline: float,
 ) -> tuple[
     dict[int, list[dict[str, Any]]],
@@ -426,6 +509,7 @@ def _scan_vault(
     scanned_count = 0
     total_evidence = 0
     evidence_limit = False
+    manifest_entries_scanned = 0
     for generation_id in selected_generation_ids:
         if time.monotonic() > deadline:
             return (
@@ -456,7 +540,17 @@ def _scan_vault(
             continue
         verified_count += 1
         generation_token = _token(key, "generation", generation_id)
-        for reference, entry in _manifest_matches(verified.manifest, missing_by_path):
+        files = verified.manifest.get("files")
+        if not isinstance(files, list):
+            raise CustodyAuditError("manifest_files_invalid")
+        if len(files) > max_manifest_entries - manifest_entries_scanned:
+            raise CustodyAuditError("manifest_entry_limit_exceeded")
+        manifest_entries_scanned += len(files)
+        for reference, entry in _manifest_matches(
+            verified.manifest,
+            missing_by_path,
+            max_entries=len(files),
+        ):
             if (
                 len(evidence[reference["row_id"]]) >= max_evidence_per_reference
                 or total_evidence >= max_total_evidence
@@ -479,7 +573,7 @@ def _scan_vault(
             evidence[reference["row_id"]].append(
                 {
                     "evidence_class": (
-                        "manifest_object_metadata_exact"
+                        "metadata_consistent"
                         if exact
                         else "manifest_reference_only"
                     ),
@@ -521,9 +615,7 @@ def _scan_vault(
 def _archive_member_path(value: str) -> str | None:
     if not isinstance(value, str):
         return None
-    normalized = value.removeprefix("./")
-    path = _safe_relative_path(normalized)
-    return path
+    return _safe_relative_path(value)
 
 
 def _member_lookup_path(member_path: str) -> str:
@@ -588,6 +680,39 @@ class _BoundedArchiveReader:
             if not chunk:
                 raise CustodyAuditError("archive_member_truncated")
             remaining -= len(chunk)
+
+
+class _SingleGzipReader:
+    """Streaming gzip reader that accepts exactly one CRC-valid member."""
+
+    def __init__(self, stream: Any):
+        self.stream = stream
+        self.decompressor = zlib.decompressobj(zlib.MAX_WBITS | 16)
+        self.buffer = bytearray()
+        self.pending = b""
+        self.finished = False
+
+    def read(self, size: int) -> bytes:
+        while len(self.buffer) < size and not self.finished:
+            compressed = self.pending or self.stream.read(READ_CHUNK_BYTES)
+            try:
+                produced = self.decompressor.decompress(
+                    compressed,
+                    max(size - len(self.buffer), 1),
+                )
+            except zlib.error as exc:
+                raise CustodyAuditError("archive_gzip_invalid") from exc
+            self.buffer.extend(produced)
+            self.pending = self.decompressor.unconsumed_tail
+            if self.decompressor.eof:
+                if self.decompressor.unused_data or self.stream.read(1):
+                    raise CustodyAuditError("archive_trailing_data_rejected")
+                self.finished = True
+            elif not compressed and not self.pending:
+                raise CustodyAuditError("archive_gzip_truncated")
+        result = bytes(self.buffer[:size])
+        del self.buffer[:size]
+        return result
 
 
 def _tar_octal(field: bytes, reason: str) -> int:
@@ -673,6 +798,7 @@ def _scan_archives(
     total_evidence = initial_total_evidence
     total_physical_bytes = 0
     total_read_bytes = 0
+    seen_archive_identities: set[tuple[int, int]] = set()
     for archive in archives:
         try:
             descriptor, metadata_before = _open_path_no_follow(archive)
@@ -699,6 +825,10 @@ def _scan_archives(
         source_evidence_count = 0
         reader = None
         try:
+            stable_identity = (metadata_before.st_dev, metadata_before.st_ino)
+            if stable_identity in seen_archive_identities:
+                raise CustodyAuditError("archive_duplicate_identity")
+            seen_archive_identities.add(stable_identity)
             total_physical_bytes += metadata_before.st_size
             if total_physical_bytes > max_total_archive_physical_bytes:
                 raise CustodyAuditError(
@@ -713,7 +843,7 @@ def _scan_archives(
                 if magic.startswith((b"BZh", b"\xfd7zXZ")):
                     raise CustodyAuditError("archive_compression_unsupported")
                 payload_stream = (
-                    gzip.GzipFile(fileobj=archive_stream, mode="rb")
+                    _SingleGzipReader(archive_stream)
                     if compressed
                     else archive_stream
                 )
@@ -744,6 +874,15 @@ def _scan_archives(
                     header = reader.read_exact(TAR_BLOCK_BYTES)
                     parsed = _tar_header(header)
                     if parsed is None:
+                        second_end = reader.read_exact(TAR_BLOCK_BYTES)
+                        if second_end != b"\0" * TAR_BLOCK_BYTES:
+                            raise CustodyAuditError(
+                                "archive_end_marker_invalid"
+                            )
+                        if reader.read(1):
+                            raise CustodyAuditError(
+                                "archive_trailing_data_rejected"
+                            )
                         break
                     member_name, member_size, typeflag = parsed
                     source_progress["members_scanned"] += 1
@@ -755,6 +894,8 @@ def _scan_archives(
                             "archive_logical_byte_limit_exceeded"
                         )
                     member_path = _archive_member_path(member_name)
+                    if member_path is None:
+                        raise CustodyAuditError("archive_member_path_invalid")
                     lookup_path = (
                         _member_lookup_path(member_path)
                         if member_path is not None
@@ -832,15 +973,13 @@ def _scan_archives(
                     if padding:
                         reader.discard(padding)
                 source_progress["read_bytes"] = reader.read_bytes
-                if compressed:
-                    payload_stream.close()
             metadata_after = os.fstat(descriptor)
             if _stat_identity(metadata_before) != _stat_identity(metadata_after):
                 raise CustodyAuditError("archive_changed_during_audit")
             for row_id, records in source_evidence.items():
                 evidence[row_id].extend(records)
             total_evidence += source_evidence_count
-        except (CustodyAuditError, OSError, EOFError, gzip.BadGzipFile) as exc:
+        except (CustodyAuditError, OSError, EOFError) as exc:
             source_progress["posture"] = (
                 str(exc)
                 if isinstance(exc, CustodyAuditError)
@@ -884,6 +1023,9 @@ def audit_missing_pdf_custody(
     max_generations: int = MAX_GENERATIONS,
     max_evidence_per_reference: int = MAX_EVIDENCE_PER_REFERENCE,
     max_total_evidence: int = MAX_TOTAL_EVIDENCE,
+    max_database_rows: int = MAX_DATABASE_ROWS,
+    max_manifest_entries: int = MAX_MANIFEST_ENTRIES,
+    max_media_probes: int = MAX_MEDIA_PROBES,
 ) -> dict[str, Any]:
     """Audit missing PDF custody without exposing human document metadata."""
     if len(hmac_key) < 32:
@@ -935,9 +1077,22 @@ def audit_missing_pdf_custody(
         raise CustodyAuditError("evidence_per_reference_limit_invalid")
     if max_total_evidence < 1 or max_total_evidence > MAX_TOTAL_EVIDENCE:
         raise CustodyAuditError("total_evidence_limit_invalid")
+    if max_database_rows < 1 or max_database_rows > MAX_DATABASE_ROWS:
+        raise CustodyAuditError("database_row_limit_invalid")
+    if max_manifest_entries < 1 or max_manifest_entries > MAX_MANIFEST_ENTRIES:
+        raise CustodyAuditError("manifest_entry_limit_invalid")
+    if max_media_probes < 1 or max_media_probes > MAX_MEDIA_PROBES:
+        raise CustodyAuditError("media_probe_limit_invalid")
 
     deadline = time.monotonic() + max_seconds
-    references = missing_pdf_references(database, media_root, hmac_key)
+    references = missing_pdf_references(
+        database,
+        media_root,
+        hmac_key,
+        deadline=deadline,
+        max_database_rows=max_database_rows,
+        max_media_probes=max_media_probes,
+    )
     initial_time_limit = time.monotonic() > deadline
     evidence: dict[int, list[dict[str, Any]]] = defaultdict(list)
     expected: dict[str, set[tuple[str, int]]] = defaultdict(set)
@@ -973,6 +1128,7 @@ def audit_missing_pdf_custody(
             max_generations=max_generations,
             max_evidence_per_reference=max_evidence_per_reference,
             max_total_evidence=max_total_evidence,
+            max_manifest_entries=max_manifest_entries,
             deadline=deadline,
         )
         for name, value in vault_truncation.items():

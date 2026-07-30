@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import io
 import json
@@ -114,7 +115,19 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
             info = tarfile.TarInfo("volume/media/pdfs/private-name.pdf")
             info.size = len(self.payload)
             bundle.addfile(info, io.BytesIO(self.payload))
+        self._canonicalize_archive(archive, compressed=True)
         return archive
+
+    def _canonicalize_archive(self, archive, *, compressed=False):
+        raw = gzip.decompress(archive.read_bytes()) if compressed else archive.read_bytes()
+        offset = 0
+        while raw[offset : offset + 512] != b"\0" * 512:
+            header = raw[offset : offset + 512]
+            size_field = header[124:136].rstrip(b"\0 ").lstrip(b" ")
+            size = int(size_field or b"0", 8)
+            offset += 512 + size + ((-size) % 512)
+        canonical = raw[: offset + 1024]
+        archive.write_bytes(gzip.compress(canonical) if compressed else canonical)
 
     def _extended_archive(self, *, sparse=False):
         archive = self.root / ("sparse.tar" if sparse else "pax.tar")
@@ -127,6 +140,7 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
             else:
                 info.pax_headers = {"comment": "extended metadata"}
             bundle.addfile(info, io.BytesIO())
+        self._canonicalize_archive(archive)
         return archive
 
     def test_exact_vault_and_archive_evidence_is_redacted(self):
@@ -159,10 +173,10 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
         }
         self.assertEqual(
             classes,
-            {"manifest_object_metadata_exact", "exact_manifest_archive"},
+            {"metadata_consistent", "exact_manifest_archive"},
         )
         self.assertEqual(
-            result["evidence_counts"]["manifest_object_metadata_exact"],
+            result["evidence_counts"]["metadata_consistent"],
             1,
         )
         rendered = json.dumps(result)
@@ -297,6 +311,7 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
             info = tarfile.TarInfo("volume/media/pdfs/private-name.pdf")
             info.size = len(payload)
             bundle.addfile(info, io.BytesIO(payload))
+        self._canonicalize_archive(archive, compressed=True)
         result = audit_missing_pdf_custody(
             database=self.database,
             media_root=self.media,
@@ -315,6 +330,7 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
             info = tarfile.TarInfo("volume/media/pdfs/private-name.pdf")
             info.size = len(self.payload)
             bundle.addfile(info, io.BytesIO(self.payload))
+        self._canonicalize_archive(archive)
         physical = audit_missing_pdf_custody(
             database=self.database,
             media_root=self.media,
@@ -585,8 +601,8 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
 
     def test_archive_deadline_is_bounded_and_reported(self):
         with patch(
-            "core.custody_audit.time.monotonic",
-            side_effect=[0.0, 0.0, 2.0],
+            "core.custody_audit._BoundedArchiveReader.read",
+            side_effect=CustodyAuditError("archive_time_limit_exceeded"),
         ):
             result = audit_missing_pdf_custody(
                 database=self.database,
@@ -611,6 +627,7 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
                 info = tarfile.TarInfo(name)
                 info.size = len(self.payload)
                 bundle.addfile(info, io.BytesIO(self.payload))
+        self._canonicalize_archive(archive)
         result = audit_missing_pdf_custody(
             database=self.database,
             media_root=self.media,
@@ -673,6 +690,227 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
                 media_root=str(self.media),
                 skip_vault=True,
             )
+
+    def test_database_scan_is_bound_to_opened_inode_during_swap_and_restore(self):
+        replacement = self.root / "replacement.sqlite3"
+        connection = sqlite3.connect(replacement)
+        connection.execute(
+            "CREATE TABLE core_pdffile (id INTEGER PRIMARY KEY, file TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO core_pdffile(id, file) VALUES (99, 'pdfs/replacement.pdf')"
+        )
+        connection.commit()
+        connection.close()
+        held = self.root / "held.sqlite3"
+        real_read = os.read
+        swapped = False
+
+        def swap_then_read(descriptor, size):
+            nonlocal swapped
+            if not swapped:
+                swapped = True
+                self.database.rename(held)
+                replacement.rename(self.database)
+                self.database.rename(replacement)
+                held.rename(self.database)
+            return real_read(descriptor, size)
+
+        with patch("core.custody_audit.os.read", side_effect=swap_then_read):
+            with self.assertRaisesMessage(
+                CustodyAuditError, "application_database_changed"
+            ):
+                audit_missing_pdf_custody(
+                    database=self.database,
+                    media_root=self.media,
+                    hmac_key=self.key,
+                )
+
+    def test_database_wal_is_deliberately_rejected(self):
+        Path(f"{self.database}-wal").write_bytes(b"")
+        with self.assertRaisesMessage(
+            CustodyAuditError, "application_database_wal_unsupported"
+        ):
+            audit_missing_pdf_custody(
+                database=self.database,
+                media_root=self.media,
+                hmac_key=self.key,
+            )
+
+    def test_noncanonical_database_paths_fail_closed(self):
+        for value in ("", None, "pdfs/./bad.pdf", "pdfs//bad.pdf", "pdfs/bad.pdf/"):
+            connection = sqlite3.connect(self.database)
+            connection.execute(
+                "UPDATE core_pdffile SET file=?, file_path=NULL WHERE id=1",
+                (value,),
+            )
+            connection.commit()
+            connection.close()
+            with self.assertRaisesMessage(CustodyAuditError, "document_path_invalid"):
+                audit_missing_pdf_custody(
+                    database=self.database,
+                    media_root=self.media,
+                    hmac_key=self.key,
+                )
+
+    def test_noncanonical_manifest_and_tar_paths_are_rejected(self):
+        for path in (
+            "media/./pdfs/private-name.pdf",
+            "media//pdfs/private-name.pdf",
+            "media/pdfs/private-name.pdf/",
+        ):
+            verified = self._verified()
+            verified.manifest["files"][0]["path"] = path
+            with self.assertRaisesMessage(CustodyAuditError, "manifest_path_invalid"):
+                audit_missing_pdf_custody(
+                    database=self.database,
+                    media_root=self.media,
+                    hmac_key=self.key,
+                    vault=FakeVault(),
+                    profile=self.profile,
+                    list_generation_ids=lambda *args, **kwargs: (["one"], True),
+                    verify_generation=lambda *args, **kwargs: verified,
+                )
+        for index, path in enumerate(
+            (
+                "./volume/media/pdfs/private-name.pdf",
+                "volume//media/pdfs/private-name.pdf",
+                "volume/media/pdfs/private-name.pdf/",
+            )
+        ):
+            archive = self.root / f"noncanonical-{index}.tar"
+            with tarfile.open(archive, "w") as bundle:
+                info = tarfile.TarInfo(path)
+                info.size = len(self.payload)
+                bundle.addfile(info, io.BytesIO(self.payload))
+            self._canonicalize_archive(archive)
+            result = audit_missing_pdf_custody(
+                database=self.database,
+                media_root=self.media,
+                hmac_key=self.key,
+                archives=[archive],
+            )
+            self.assertEqual(
+                result["archive_progress"][0]["posture"],
+                "archive_member_path_invalid",
+            )
+
+    def test_tar_requires_two_zero_blocks_and_eof(self):
+        valid = self._archive()
+        raw = gzip.decompress(valid.read_bytes())
+        variants = {
+            "one-zero.tar": raw[:-512],
+            "bad-second-zero.tar": raw[:-1] + b"x",
+            "trailing.tar": raw + b"x",
+        }
+        for name, content in variants.items():
+            archive = self.root / name
+            archive.write_bytes(content)
+            result = audit_missing_pdf_custody(
+                database=self.database,
+                media_root=self.media,
+                hmac_key=self.key,
+                archives=[archive],
+            )
+            self.assertIn(
+                result["archive_progress"][0]["posture"],
+                {
+                    "archive_member_truncated",
+                    "archive_end_marker_invalid",
+                    "archive_trailing_data_rejected",
+                },
+            )
+
+    def test_gzip_crc_truncation_and_trailing_members_are_rejected(self):
+        valid = bytearray(self._archive().read_bytes())
+        corrupt = self.root / "corrupt.tar.gz"
+        valid[-8] ^= 0x01
+        corrupt.write_bytes(valid)
+        truncated = self.root / "truncated.tar.gz"
+        truncated.write_bytes(self._archive().read_bytes()[:-4])
+        trailing = self.root / "concatenated.tar.gz"
+        trailing.write_bytes(self._archive().read_bytes() + gzip.compress(b""))
+        expected = {
+            corrupt: "archive_gzip_invalid",
+            truncated: "archive_gzip_truncated",
+            trailing: "archive_trailing_data_rejected",
+        }
+        for archive, posture in expected.items():
+            result = audit_missing_pdf_custody(
+                database=self.database,
+                media_root=self.media,
+                hmac_key=self.key,
+                archives=[archive],
+            )
+            self.assertEqual(result["archive_progress"][0]["posture"], posture)
+
+    def test_database_manifest_and_media_work_limits_fail_closed(self):
+        with self.assertRaisesMessage(
+            CustodyAuditError, "application_database_row_limit_exceeded"
+        ):
+            audit_missing_pdf_custody(
+                database=self.database,
+                media_root=self.media,
+                hmac_key=self.key,
+                max_database_rows=1,
+            )
+        with self.assertRaisesMessage(CustodyAuditError, "media_probe_limit_exceeded"):
+            audit_missing_pdf_custody(
+                database=self.database,
+                media_root=self.media,
+                hmac_key=self.key,
+                max_media_probes=1,
+            )
+        verified = self._verified()
+        verified.manifest["files"].append(
+            {**verified.manifest["files"][0], "path": "media/pdfs/other.pdf"}
+        )
+        with self.assertRaisesMessage(CustodyAuditError, "manifest_entry_limit_exceeded"):
+            audit_missing_pdf_custody(
+                database=self.database,
+                media_root=self.media,
+                hmac_key=self.key,
+                vault=FakeVault(),
+                profile=self.profile,
+                list_generation_ids=lambda *args, **kwargs: (["one"], True),
+                verify_generation=lambda *args, **kwargs: verified,
+                max_manifest_entries=1,
+            )
+
+    def test_deadline_begins_before_database_snapshot(self):
+        with patch("core.custody_audit.time.monotonic", side_effect=[0.0, 2.0]):
+            with self.assertRaisesMessage(CustodyAuditError, "audit_time_limit_exceeded"):
+                audit_missing_pdf_custody(
+                    database=self.database,
+                    media_root=self.media,
+                    hmac_key=self.key,
+                    max_seconds=1,
+                )
+
+    def test_case_mismatched_directory_entry_is_rejected(self):
+        descriptor = os.open(self.root, os.O_RDONLY)
+        try:
+            with patch("core.custody_audit.os.listdir", return_value=["DB.SQLITE3"]):
+                with self.assertRaisesMessage(CustodyAuditError, "path_case_mismatch"):
+                    from core.custody_audit import _require_exact_entry
+
+                    _require_exact_entry(descriptor, "db.sqlite3")
+        finally:
+            os.close(descriptor)
+
+    def test_duplicate_archive_identity_is_rejected(self):
+        archive = self._archive()
+        alias = self.root / "same-archive.tar.gz"
+        os.link(archive, alias)
+        result = audit_missing_pdf_custody(
+            database=self.database,
+            media_root=self.media,
+            hmac_key=self.key,
+            archives=[archive, alias],
+        )
+        self.assertEqual(
+            result["archive_progress"][1]["posture"], "archive_duplicate_identity"
+        )
 
     @patch("vaultops.services.inventory.verify_generation")
     @patch("vaultops.services.inventory.list_generation_ids")
