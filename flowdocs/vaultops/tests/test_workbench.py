@@ -786,6 +786,35 @@ class VaultWorkbenchTests(TestCase):
         self.assertTrue(profile.environment_locked)
         self.assertNotIn("server-only", json.dumps(profile.capability_evidence))
 
+    @override_settings(
+        VAULT_DEFAULT_PROFILE="environment-restore-source",
+        ARTIFACT_VAULT_ENABLED=True,
+        ENV_IDENTITY=SimpleNamespace(
+            dataset_id="ai-sahakar-stage",
+            restore_source_dataset_id="ai-sahakar-prod",
+            production_source_id="ai-sahakar-prod",
+            is_authoritative_writer=False,
+        ),
+    )
+    @patch("vaultops.services.profiles.ArtifactVault")
+    def test_environment_profile_uses_restore_source_dataset_for_reader(
+        self, artifact_vault
+    ):
+        artifact_vault.return_value.enabled = True
+        artifact_vault.return_value.config = SimpleNamespace(
+            endpoint="https://vault.example",
+            bucket="artifacts",
+            region="test",
+            access_key="server-only",
+            secret_key="server-only",
+            validate=lambda: None,
+        )
+
+        profile = ensure_environment_profile()
+
+        self.assertEqual(profile.dataset_id, "ai-sahakar-prod")
+        self.assertTrue(profile.read_only)
+
     @patch("vaultops.services.profiles.ArtifactVault")
     def test_environment_profile_defaults_are_secret_free(self, artifact_vault):
         artifact_vault.return_value.config = SimpleNamespace(
@@ -800,6 +829,30 @@ class VaultWorkbenchTests(TestCase):
 
         self.assertEqual(defaults["endpoint_origin"], "https://vault.example")
         self.assertNotIn("must-not-render", json.dumps(defaults))
+
+    @override_settings(
+        ENV_IDENTITY=SimpleNamespace(
+            dataset_id="ai-sahakar-stage",
+            restore_source_dataset_id="ai-sahakar-prod",
+            production_source_id="ai-sahakar-prod",
+            is_authoritative_writer=False,
+        )
+    )
+    @patch("vaultops.services.profiles.ArtifactVault")
+    def test_environment_profile_defaults_use_restore_source_dataset(
+        self, artifact_vault
+    ):
+        artifact_vault.return_value.config = SimpleNamespace(
+            endpoint="https://vault.example",
+            bucket="artifacts",
+            region="test",
+            access_key="must-not-render",
+            secret_key="must-not-render",
+        )
+
+        defaults = environment_profile_defaults()
+
+        self.assertEqual(defaults["dataset_id"], "ai-sahakar-prod")
 
     @patch("vaultops.services.profiles.materialize_environment_profile")
     @patch("vaultops.services.profiles.ArtifactVault")

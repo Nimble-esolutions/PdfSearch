@@ -153,10 +153,18 @@ def profile_fingerprint(profile):
     ).hexdigest()
 
 
+def _environment_profile_dataset_id(identity):
+    """Select the remote dataset without conflating it with local identity."""
+    if not identity.is_authoritative_writer and identity.restore_source_dataset_id:
+        return identity.restore_source_dataset_id
+    return identity.dataset_id
+
+
 def materialize_environment_profile(vault=None):
     """Project the locked environment vault config without storing secrets."""
     vault = vault or ArtifactVault()
     identity = settings.ENV_IDENTITY
+    profile_dataset_id = _environment_profile_dataset_id(identity)
     endpoint = vault.config.endpoint or ""
     parsed = urlsplit(endpoint)
     endpoint_origin = (
@@ -168,7 +176,7 @@ def materialize_environment_profile(vault=None):
         "endpoint_origin": endpoint_origin,
         "bucket": vault.config.bucket,
         "region": vault.config.region,
-        "dataset_id": identity.dataset_id,
+        "dataset_id": profile_dataset_id,
         "production_source_id": identity.production_source_id,
         "credential_alias": "environment:ARTIFACT_VAULT",
         "read_only": not identity.is_authoritative_writer,
@@ -187,7 +195,7 @@ def materialize_environment_profile(vault=None):
             "endpoint_origin": endpoint_origin,
             "bucket": vault.config.bucket,
             "region": vault.config.region,
-            "dataset_id": identity.dataset_id,
+            "dataset_id": profile_dataset_id,
             "production_source_id": identity.production_source_id,
             "credential_alias": "environment:ARTIFACT_VAULT",
             "fingerprint": fingerprint,
@@ -200,6 +208,7 @@ def environment_profile_defaults(vault=None):
     """Return secret-free form defaults projected from deployed configuration."""
     vault = vault or ArtifactVault()
     identity = settings.ENV_IDENTITY
+    profile_dataset_id = _environment_profile_dataset_id(identity)
     endpoint = vault.config.endpoint or ""
     parsed = urlsplit(endpoint)
     endpoint_origin = (
@@ -213,7 +222,7 @@ def environment_profile_defaults(vault=None):
         "endpoint_origin": endpoint_origin,
         "bucket": vault.config.bucket,
         "region": vault.config.region,
-        "dataset_id": identity.dataset_id,
+        "dataset_id": profile_dataset_id,
         "production_source_id": identity.production_source_id,
         "credential_alias": next(iter(_credential_aliases()), ""),
     }
@@ -226,6 +235,7 @@ def ensure_environment_profile(vault=None):
         return None
     vault.config.validate()
     identity = settings.ENV_IDENTITY
+    profile_dataset_id = _environment_profile_dataset_id(identity)
     parsed = urlsplit(vault.config.endpoint)
     endpoint_origin = f"{parsed.scheme}://{parsed.netloc}"
     current = VaultConnectionProfile.objects.filter(
@@ -239,7 +249,7 @@ def ensure_environment_profile(vault=None):
         "endpoint_origin": endpoint_origin,
         "bucket": vault.config.bucket,
         "region": vault.config.region,
-        "dataset_id": identity.dataset_id,
+        "dataset_id": profile_dataset_id,
         "production_source_id": identity.production_source_id,
         "credential_alias": "environment:ARTIFACT_VAULT",
     }
