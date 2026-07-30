@@ -837,13 +837,15 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         chunks,
         embeddings,
         file_name="pdfs/example.pdf",
+        indexed=True,
     ):
         connection = sqlite3.connect(self.database)
         connection.execute(
             "INSERT INTO core_pdffile "
             "(id, folder_id, file, lifecycle, page_chunks, chunk_embeddings, "
-            "media_expected_sha256, media_expected_size, media_prior_lifecycle) "
-            "VALUES (?, ?, ?, ?, ?, ?, '', NULL, ?)",
+            "indexed, media_expected_sha256, media_expected_size, "
+            "media_prior_lifecycle) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, '', NULL, ?)",
             (
                 pdf_id,
                 folder_id,
@@ -851,6 +853,7 @@ class SnapshotServiceTests(ActiveSyncTestCase):
                 lifecycle,
                 json.dumps(chunks),
                 json.dumps(embeddings),
+                indexed,
                 "uploaded" if lifecycle == "unavailable" else "",
             ),
         )
@@ -903,6 +906,116 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         folder = evidence["faiss_reconciliation"]["folders"]["7"]
         self.assertEqual(folder["disposition"], "copied")
         self.assertEqual(folder["vector_count"], 2)
+
+    def test_unindexed_empty_document_remains_debt_not_faiss_input(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["searchable"],
+            embeddings=[[1.0, 0.0]],
+        )
+        (self.data / "media/pdfs/debt.pdf").write_bytes(b"%PDF-debt")
+        self._insert_pdf(
+            pdf_id=2,
+            folder_id=7,
+            lifecycle="uploaded",
+            chunks=[],
+            embeddings=[],
+            file_name="pdfs/debt.pdf",
+            indexed=False,
+        )
+        source_path = self.data / "faiss_indexes/folder_7.index"
+        index = core_utils.faiss.IndexFlatIP(2)
+        index.add(
+            core_utils.np.asarray([[1.0, 0.0]], dtype="float32")
+        )
+        core_utils.faiss.write_index(index, str(source_path))
+        source_index_bytes = source_path.read_bytes()
+        source_database_bytes = self.database.read_bytes()
+
+        snapshot = self._snapshot()
+
+        workspace = Path(snapshot.workspace_path)
+        with sqlite3.connect(workspace / "db.sqlite3") as connection:
+            rows = connection.execute(
+                "SELECT id, indexed, page_chunks, chunk_embeddings "
+                "FROM core_pdffile ORDER BY id"
+            ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1], (2, 0, "[]", "[]"))
+        self.assertEqual(source_path.read_bytes(), source_index_bytes)
+        self.assertEqual(self.database.read_bytes(), source_database_bytes)
+        evidence = json.loads(
+            (workspace / "snapshot-evidence.json").read_text()
+        )
+        reconciliation = evidence["faiss_reconciliation"]
+        self.assertEqual(reconciliation["pdf_count"], 1)
+        self.assertEqual(reconciliation["vector_count"], 1)
+        self.assertEqual(
+            reconciliation["folders"]["7"]["pdf_count"],
+            1,
+        )
+        self.assertEqual(
+            reconciliation["folders"]["7"]["vector_count"],
+            1,
+        )
+        self.assertEqual(evidence["inventory"]["counts"]["pdf_rows"], 2)
+        self.assertEqual(
+            publication_service._validate_faiss_reconciliation_evidence(
+                evidence,
+                trusted_reconciliation=reconciliation,
+            ),
+            reconciliation,
+        )
+
+    def test_indexed_empty_document_still_fails_closed(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="uploaded",
+            chunks=[],
+            embeddings=[],
+            indexed=True,
+        )
+        source_database_bytes = self.database.read_bytes()
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_searchable_embeddings_invalid",
+        ):
+            self._snapshot()
+
+        self.assertEqual(self.database.read_bytes(), source_database_bytes)
+
+    def test_legacy_schema_without_indexed_column_uses_lifecycle(self):
+        connection = sqlite3.connect(":memory:")
+        try:
+            connection.execute(
+                "CREATE TABLE core_pdffile ("
+                "id INTEGER PRIMARY KEY, folder_id INTEGER, lifecycle TEXT, "
+                "page_chunks TEXT, chunk_embeddings TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO core_pdffile VALUES "
+                "(1, 7, 'ready', '[\"one\"]', '[[1.0, 0.0]]')"
+            )
+            clause = snapshot_service._searchable_sql_contract(connection)
+            folder_ids, totals = (
+                snapshot_service._preflight_searchable_embeddings(
+                    connection,
+                    clause,
+                )
+            )
+        finally:
+            connection.close()
+
+        self.assertIn("lifecycle IN", clause)
+        self.assertNotIn("indexed", clause)
+        self.assertEqual(folder_ids, [7])
+        self.assertEqual(totals["pdf_count"], 1)
 
     def test_same_shape_wrong_faiss_values_are_rebuilt(self):
         self._add_lifecycle_columns()
@@ -1317,7 +1430,7 @@ class SnapshotServiceTests(ActiveSyncTestCase):
             def execute(self, sql):
                 self.calls.append(sql)
                 if "COUNT(*)" in sql:
-                    # Production PDF 301: 85,794,946-byte embedding cell.
+                    # Observed legitimate 85,794,946-byte embedding cell.
                     return Cursor([(1, 85_800_000, 85_794_946)])
                 return Cursor([(7,)])
 
