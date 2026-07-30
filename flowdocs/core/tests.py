@@ -1331,6 +1331,8 @@ class DashboardTests(TestCase):
             VAULT_MUTATION_TRACKING_ENABLED=True,
             MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             ACTIVE_RUNTIME=None,
+            RUNTIME_GENERATION_ID="generation-repair-test",
+            RUNTIME_MANIFEST_DIGEST="a" * 64,
         ):
             response = self.client.post(
                 reverse("folder_operations", args=[folder.pk]),
@@ -1385,6 +1387,8 @@ class DashboardTests(TestCase):
             MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             EXTERNAL_EMBEDDINGS_ENABLED=True,
             ACTIVE_RUNTIME=None,
+            RUNTIME_GENERATION_ID="generation-reprocess-test",
+            RUNTIME_MANIFEST_DIGEST="b" * 64,
         ):
             response = self.client.post(
                 reverse("folder_operations", args=[folder.pk]),
@@ -1432,6 +1436,8 @@ class DashboardTests(TestCase):
             MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             EXTERNAL_EMBEDDINGS_ENABLED=True,
             ACTIVE_RUNTIME=None,
+            RUNTIME_GENERATION_ID="generation-ocr-repair-test",
+            RUNTIME_MANIFEST_DIGEST="c" * 64,
         ):
             response = self.client.post(
                 reverse("folder_operations", args=[folder.pk]),
