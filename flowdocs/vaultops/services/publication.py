@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import re
 import secrets
 import time
 from datetime import datetime, timezone as datetime_timezone
@@ -384,6 +385,158 @@ def _validate_snapshot_media_evidence(evidence):
         raise PublicationError("snapshot_media_missing")
 
 
+def _validate_faiss_reconciliation_evidence(
+    evidence,
+    *,
+    trusted_reconciliation=None,
+):
+    reconciliation = evidence.get("faiss_reconciliation")
+    if reconciliation in (None, {}):
+        return {}
+    inventory = evidence.get("inventory", {})
+    files = inventory.get("faiss", {}).get("files", [])
+    folders = reconciliation.get("folders")
+    source_folders = reconciliation.get("source_folders")
+    source_folders_digest = reconciliation.get("source_folders_digest")
+    if (
+        reconciliation.get("schema") != 1
+        or reconciliation.get("source") != "stored_embeddings"
+        or not isinstance(folders, dict)
+        or not isinstance(source_folders, list)
+        or not isinstance(source_folders_digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", source_folders_digest)
+        or not isinstance(files, list)
+    ):
+        raise PublicationError("snapshot_faiss_reconciliation_invalid")
+    computed_source_digest = hashlib.sha256(
+        _canonical_bytes(source_folders)
+    ).hexdigest()
+    trusted_source_digest = (
+        trusted_reconciliation.get("source_folders_digest")
+        if isinstance(trusted_reconciliation, dict)
+        else None
+    )
+    if (
+        computed_source_digest != source_folders_digest
+        or trusted_source_digest != source_folders_digest
+    ):
+        raise PublicationError("snapshot_faiss_reconciliation_invalid")
+    validated_source_folders = set()
+    for source_record in source_folders:
+        folder_id = (
+            source_record.get("folder_id")
+            if isinstance(source_record, dict)
+            else None
+        )
+        digest = (
+            source_record.get("sha256")
+            if isinstance(source_record, dict)
+            else None
+        )
+        if (
+            not isinstance(folder_id, str)
+            or not folder_id.isdigit()
+            or str(int(folder_id)) != folder_id
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            or folder_id in validated_source_folders
+        ):
+            raise PublicationError("snapshot_faiss_reconciliation_invalid")
+        validated_source_folders.add(folder_id)
+    indexed = {}
+    inventory_folder_ids = set()
+    for item in files:
+        path = item.get("path") if isinstance(item, dict) else None
+        matched = (
+            re.fullmatch(r"faiss_indexes/folder_([0-9]+)\.index", path)
+            if isinstance(path, str)
+            else None
+        )
+        if (
+            matched is None
+            or path in indexed
+            or str(int(matched.group(1))) != matched.group(1)
+        ):
+            raise PublicationError("snapshot_faiss_reconciliation_invalid")
+        indexed[path] = item
+        inventory_folder_ids.add(matched.group(1))
+    vector_total = 0
+    vector_bytes = 0
+    pdf_total = 0
+    nonremoved_folder_ids = set()
+    removed_folder_ids = set()
+    for folder_id, record in folders.items():
+        if (
+            not isinstance(folder_id, str)
+            or not folder_id.isdigit()
+            or str(int(folder_id)) != folder_id
+            or not isinstance(record, dict)
+        ):
+            raise PublicationError("snapshot_faiss_reconciliation_invalid")
+        disposition = record.get("disposition")
+        if disposition == "removed":
+            if (
+                record.get("vector_count") != 0
+                or record.get("pdf_count") != 0
+                or folder_id in inventory_folder_ids
+            ):
+                raise PublicationError(
+                    "snapshot_faiss_reconciliation_invalid"
+                )
+            removed_folder_ids.add(folder_id)
+            continue
+        item = indexed.get(f"faiss_indexes/folder_{folder_id}.index")
+        metadata = item.get("faiss", {}) if isinstance(item, dict) else {}
+        pdf_count = record.get("pdf_count")
+        vector_count = record.get("vector_count")
+        dimensions = record.get("dimensions")
+        digest = record.get("sha256")
+        if (
+            disposition not in {"copied", "rebuilt"}
+            or not isinstance(item, dict)
+            or not isinstance(pdf_count, int)
+            or isinstance(pdf_count, bool)
+            or pdf_count <= 0
+            or not isinstance(vector_count, int)
+            or isinstance(vector_count, bool)
+            or vector_count <= 0
+            or not isinstance(dimensions, int)
+            or isinstance(dimensions, bool)
+            or dimensions <= 0
+            or dimensions > settings.VAULT_SNAPSHOT_FAISS_MAX_DIMENSIONS
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            or item.get("sha256") != digest
+            or metadata.get("loadable") is not True
+            or metadata.get("vector_count") != vector_count
+            or metadata.get("dimensions") != dimensions
+        ):
+            raise PublicationError("snapshot_faiss_reconciliation_invalid")
+        nonremoved_folder_ids.add(folder_id)
+        pdf_total += pdf_count
+        vector_total += vector_count
+        vector_bytes += vector_count * dimensions * 4
+    if (
+        nonremoved_folder_ids != inventory_folder_ids
+        or nonremoved_folder_ids & removed_folder_ids
+        or removed_folder_ids
+        != validated_source_folders - inventory_folder_ids
+        or vector_total != reconciliation.get("vector_count")
+        or vector_bytes != reconciliation.get("vector_bytes")
+        or pdf_total != reconciliation.get("pdf_count")
+        or pdf_total > settings.VAULT_SNAPSHOT_FAISS_MAX_PDFS
+        or vector_total > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+        or vector_bytes > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
+        or not isinstance(reconciliation.get("source_json_bytes"), int)
+        or isinstance(reconciliation.get("source_json_bytes"), bool)
+        or reconciliation["source_json_bytes"] < 0
+        or reconciliation["source_json_bytes"]
+        > settings.VAULT_SNAPSHOT_FAISS_MAX_SOURCE_BYTES
+    ):
+        raise PublicationError("snapshot_faiss_reconciliation_invalid")
+    return reconciliation
+
+
 def _manifest_key_for_generation(dataset_id, generation_id):
     return KeyBuilder(dataset_id).generation_manifest(generation_id)
 
@@ -441,6 +594,14 @@ def publish_snapshot_candidate(
 
     evidence, files = _load_snapshot_files(snapshot)
     _validate_snapshot_media_evidence(evidence)
+    faiss_reconciliation = _validate_faiss_reconciliation_evidence(
+        evidence,
+        trusted_reconciliation=(
+            snapshot.evidence.get("faiss_reconciliation")
+            if isinstance(snapshot.evidence, dict)
+            else None
+        ),
+    )
     capabilities = probe_capabilities(
         vault, deployment_id=identity.deployment_id
     )
@@ -585,6 +746,7 @@ def publish_snapshot_candidate(
                 "model": settings.OPENAI_EMBED_MODEL,
             },
             "faiss": inventory.get("faiss", {}),
+            "faiss_reconciliation": faiss_reconciliation,
             "pdf_storage": inventory.get("pdf_storage", {}),
             "chroma": inventory.get("chroma", {}),
             "static": inventory.get("static", {}),
@@ -630,6 +792,7 @@ def publish_snapshot_candidate(
                 "writer_epoch": writer["writer_epoch"],
                 "snapshot_digest": snapshot.snapshot_digest,
                 "unavailable_documents": unavailable_documents,
+                "faiss_reconciliation": faiss_reconciliation,
             },
             expires_at=timezone.now()
             + timezone.timedelta(

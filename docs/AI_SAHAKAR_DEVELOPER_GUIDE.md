@@ -292,6 +292,16 @@ services in `transaction.atomic()`; use their existing internal row-and-audit
 transaction so the independently durable control epoch can advance only after
 that transaction returns successfully.
 
+Active Sync may reconcile a stale FAISS index only inside its isolated
+incomplete snapshot. The derivation must use the frozen SQLite copy's retained
+embeddings in runtime search order, apply the configured vector and dimension
+bounds, and write via an atomic candidate-local replacement. It must not call
+an embedding provider, import ORM models against the live database, or write
+the live database/index tree. Bind per-folder disposition, count, dimensions,
+and digest into snapshot evidence, the generation manifest, and publication
+validation. Missing or corrupt searchable embeddings remain a fail-closed
+snapshot error.
+
 `archived` and `deprecated` are ordinary product lifecycle states, not custody
 exceptions. Missing, blank, null, or unsafe media references in either state
 must fail inventory, candidate, runtime, and certification gates. Never edit
