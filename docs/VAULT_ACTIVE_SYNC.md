@@ -95,6 +95,15 @@ Cancellation is checked around parsing,
 materialization, index addition, and writing. Cancellation or derivation
 failure leaves no published candidate and cannot modify source artifacts.
 
+The default per-document JSON-cell ceiling is 128 MiB. This admits the
+observed 85,794,946-byte retained-embedding cell for production PDF 301 while
+remaining below the independent 512 MiB normalized-vector and 1 GiB aggregate
+source ceilings. The cell ceiling is not a worker-memory estimate: during one
+PDF batch the source JSON strings, decoded Python values, float64
+normalization workspace, and float32 batch can overlap. Operators must size
+worker memory for that transient expansion and lower this ceiling when the
+deployment has a smaller verified memory budget.
+
 Snapshot evidence, the immutable generation manifest, and the publication
 validation record bind each folder's copied or rebuilt disposition, vector
 count, dimensions, and digest. Source folder identifiers and digests are also
@@ -179,7 +188,7 @@ VAULT_SNAPSHOT_FAISS_MAX_VECTORS=1000000
 VAULT_SNAPSHOT_FAISS_MAX_DIMENSIONS=4096
 VAULT_SNAPSHOT_FAISS_MAX_BYTES=536870912
 VAULT_SNAPSHOT_FAISS_MAX_SOURCE_BYTES=1073741824
-VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES=67108864
+VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES=134217728
 VAULT_SNAPSHOT_FAISS_MAX_PDFS=100000
 VAULT_SNAPSHOT_FAISS_MAX_CHUNKS_PER_PDF=100000
 ```
