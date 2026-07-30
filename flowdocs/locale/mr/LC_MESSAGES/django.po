@@ -3704,6 +3704,36 @@ msgstr "धारण स्थगिती हटवली आहे"
 msgid "Review activation evidence"
 msgstr "सक्रियीकरण पुराव्याचे पुनरावलोकन करा"
 
+msgid "Search index verification is unavailable"
+msgstr "शोध अनुक्रमणिका पडताळणी उपलब्ध नाही"
+
+msgid "This worker cannot load the approved search-index verification library."
+msgstr "हा कार्यकर्ता मान्यताप्राप्त शोध-अनुक्रमणिका पडताळणी ग्रंथालय लोड करू शकत नाही."
+
+msgid "Review worker dependencies"
+msgstr "कार्यकर्ता अवलंबने तपासा"
+
+msgid "Snapshot search metadata cannot be read"
+msgstr "स्नॅपशॉट शोध मेटाडेटा वाचता येत नाही"
+
+msgid "The frozen database could not provide the stored search evidence needed for verification."
+msgstr "गोठवलेल्या डेटाबेसमधून पडताळणीसाठी आवश्यक साठवलेला शोध पुरावा मिळू शकला नाही."
+
+msgid "Review snapshot database evidence"
+msgstr "स्नॅपशॉट डेटाबेस पुरावा तपासा"
+
+msgid "Snapshot work was cancelled"
+msgstr "स्नॅपशॉट काम रद्द करण्यात आले"
+
+msgid "The worker stopped at a safe cancellation checkpoint."
+msgstr "कार्यकर्ता सुरक्षित रद्दीकरण टप्प्यावर थांबला."
+
+msgid "No candidate was published and the live source remains unchanged."
+msgstr "कोणताही उमेदवार प्रकाशित झाला नाही आणि कार्यरत स्रोत बदललेला नाही."
+
+msgid "Review sync jobs"
+msgstr "समक्रमण कामे तपासा"
+
 msgid "Review activation jobs"
 msgstr "सक्रियीकरण कामांचे पुनरावलोकन करा"
 

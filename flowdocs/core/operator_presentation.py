@@ -794,6 +794,15 @@ REASONS.setdefault(
     "snapshot_faiss_rebuild_byte_limit_exceeded",
     REASONS["snapshot_faiss_rebuild_vector_limit_exceeded"],
 )
+for _code in {
+    "snapshot_faiss_rebuild_pdf_limit_exceeded",
+    "snapshot_faiss_rebuild_source_limit_exceeded",
+    "snapshot_faiss_rebuild_cell_limit_exceeded",
+}:
+    REASONS.setdefault(
+        _code,
+        REASONS["snapshot_faiss_rebuild_vector_limit_exceeded"],
+    )
 
 REASONS.setdefault(
     "snapshot_faiss_reconciliation_invalid",
@@ -804,6 +813,42 @@ REASONS.setdefault(
         "Review snapshot evidence",
         "jobs",
         "danger",
+    ),
+)
+
+REASONS.setdefault(
+    "snapshot_faiss_validation_unavailable",
+    _authored(
+        "Search index verification is unavailable",
+        "This worker cannot load the approved search-index verification library.",
+        "The candidate snapshot was not published.",
+        "Review worker dependencies",
+        "configuration",
+        "danger",
+    ),
+)
+
+REASONS.setdefault(
+    "snapshot_faiss_metadata_unavailable",
+    _authored(
+        "Snapshot search metadata cannot be read",
+        "The frozen database could not provide the stored search evidence needed for verification.",
+        "The candidate snapshot was not published.",
+        "Review snapshot database evidence",
+        "jobs",
+        "danger",
+    ),
+)
+
+REASONS.setdefault(
+    "snapshot_cancelled",
+    _authored(
+        "Snapshot work was cancelled",
+        "The worker stopped at a safe cancellation checkpoint.",
+        "No candidate was published and the live source remains unchanged.",
+        "Review sync jobs",
+        "jobs",
+        "info",
     ),
 )
 
