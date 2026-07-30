@@ -488,7 +488,7 @@ REASONS = {
     "maintenance_source_pointer_unverified": (
         "Active search source is not verified",
         "No signed active search generation is available as the source for document maintenance.",
-        "Validation, repair, and reindex work cannot prepare a safe candidate yet.",
+        "Repair and reindex work cannot prepare a safe candidate yet.",
         "Restore or activate a verified generation",
         "restore",
         "warning",

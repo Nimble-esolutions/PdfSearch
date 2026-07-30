@@ -209,6 +209,23 @@ def _maintenance_source_parent():
     )
 
 
+def maintenance_source_capability_reason() -> str:
+    """Return a bounded reason when a mutation source cannot be verified.
+
+    Candidate execution must fail closed when its parent runtime is not
+    authoritative.  Expose the same read-only preflight to presentation and
+    queue gates so operators are not invited to start work that the worker
+    will deterministically reject.
+    """
+    try:
+        _maintenance_source_parent()
+    except CandidateMaintenanceError as exc:
+        return exc.reason_code
+    except Exception:
+        return "maintenance_source_pointer_unverified"
+    return ""
+
+
 def estimate_workspace_bytes(job: MaintenanceJob) -> int:
     database = Path(settings.DATABASES["default"]["NAME"])
     roots = [

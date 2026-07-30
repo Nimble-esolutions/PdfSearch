@@ -3011,11 +3011,9 @@ msgid ""
 msgstr ""
 "दस्तऐवज देखभालीचा स्रोत म्हणून कोणताही स्वाक्षरीत सक्रिय शोध आवृत्ती संच उपलब्ध नाही."
 
-msgid ""
-"Validation, repair, and reindex work cannot prepare a safe candidate yet."
+msgid "Repair and reindex work cannot prepare a safe candidate yet."
 msgstr ""
-"पडताळणी, दुरुस्ती आणि पुनःअनुक्रमण कामातून अद्याप सुरक्षित प्रस्तावित आवृत्ती तयार करता "
-"येणार नाही."
+"दुरुस्ती आणि पुनःअनुक्रमण कामातून अद्याप सुरक्षित प्रस्तावित आवृत्ती तयार करता येणार नाही."
 
 msgid "Restore or activate a verified generation"
 msgstr "पडताळलेला आवृत्ती संच पुनर्स्थापित किंवा सक्रिय करा"
