@@ -155,6 +155,28 @@ Explain the effect in ordinary Marathi. Do not force literal renderings such as
 `तिजोरी`, `लेखक भाडेपट्टा`, `रूपरेषा`, or `कार्यरत प्रणाली` when they change
 the technical meaning.
 
+Do not transliterate an ordinary operator word merely because the English
+source is familiar to developers. Where the meaning is direct, use the literal
+Marathi term consistently:
+
+| English operator term | Required Marathi copy |
+| --- | --- |
+| unavailable | उपलब्ध नाही |
+| warning | इशारा |
+| failed | अयशस्वी |
+| active | सक्रिय |
+| previous | मागील |
+| reason | कारण |
+| action | कृती |
+| result | परिणाम |
+| observed | निरीक्षण केले |
+| search readiness | शोध तयारी |
+| technical details | तांत्रिक तपशील |
+
+These human labels are translated; exact codes and identifiers remain
+English/LTR technical evidence. Review the full sentence for grammar instead
+of mechanically substituting individual words.
+
 Every registry title, detail, consequence, action, and state label must have a
 non-empty, non-fuzzy Marathi catalog entry before merge. Review older
 Dashboard and Workbench translations in the same affected area; gettext fuzzy

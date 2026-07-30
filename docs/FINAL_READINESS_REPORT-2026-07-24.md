@@ -1,4 +1,17 @@
-# Production-Readiness Final Report
+Status: Historical snapshot
+Audience: Release, Recovery, Developer
+Superseded for current decisions by: `docs/RECOVERY_CERTIFICATION.md`,
+`docs/RUSTFS_RECOVERY_VAULT.md`, and current CI results
+
+# Historical Production-Readiness Report — 2026-07-24
+
+This report records the evidence and blockers known on 2026-07-24. Its test
+counts, image references, and **NOT READY** decision are historical and must not
+be used as the current release decision. Later work added lifecycle tests and
+an isolated certification workflow, but those additions do not by themselves
+prove that production RustFS recovery or a production volume drill succeeded.
+Use the current recovery documents and an operator-approved evidence record for
+that decision.
 
 **Date:** 2026-07-24
 **Branch:** `recovery/data-lifecycle-verified-20260724` (merged to `dev` at `2e1ca38`)

@@ -300,12 +300,13 @@ exception text is not an operator-facing status contract.
 `ARTIFACT_VAULT_BOOTSTRAP_GENERATION`, and
 `ARTIFACT_VAULT_RETENTION_COUNT` are not consumed runtime controls.
 
-Scheduled/hybrid modes are not currently production-ready: the scheduler
-requires `MAINTENANCE_SCHEDULER_ENABLED=1`, a writer identity, a non-manual
-sync mode, and a dirty-state signal, but application mutations do not yet call
-the dirty-state marker. Use explicit manual publication and verify the
-resulting immutable generation. This metadata-only historical guidance is
-superseded by the active Vault Operations publication contract.
+Scheduled/hybrid modes require `MAINTENANCE_SCHEDULER_ENABLED=1`, a writer
+identity, a non-manual sync mode, and durable mutation-epoch evidence. Current
+application mutation paths advance that evidence and the worker coalesces it
+into publication work. This implementation and its CI coverage do not
+authorize scheduled publication in production. Until the deployed writer,
+worker, bucket, and recovery-point monitoring are separately certified, use
+explicit manual publication and verify the resulting immutable generation.
 
 ## Bootstrap Credentials
 
