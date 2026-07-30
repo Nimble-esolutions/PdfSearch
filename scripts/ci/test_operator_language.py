@@ -163,6 +163,25 @@ class OperatorLanguageValidatorTests(unittest.TestCase):
     def test_repository_registry_is_fully_authored_in_marathi(self):
         self.assertEqual(validate_operator_language.catalog_violations(), [])
 
+    def test_reviewed_specialist_and_file_terms_are_pinned(self):
+        required = validate_operator_language.REQUIRED_MARATHI_TRANSLATIONS
+        self.assertEqual(
+            required["Republish the generation manifest"],
+            "निर्मिती संचाचा मॅनिफेस्ट पुन्हा प्रकाशित करा",
+        )
+        self.assertEqual(required["Retention & GC"], "जतन आणि जीसी")
+        self.assertEqual(
+            required["Retry from checkpoint"],
+            "चेकपॉइंटपासून पुन्हा प्रयत्न करा",
+        )
+        self.assertIn(
+            "दस्तऐवज संचिका",
+            required[
+                "A document recorded in the candidate database is not "
+                "present in its approved media location."
+            ],
+        )
+
     def test_catalog_rejects_changed_reviewed_marathi_translation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

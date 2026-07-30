@@ -880,7 +880,7 @@ class VaultWorkbenchTests(TestCase):
             reverse("operations_panel"), {"section": "retention"}
         )
         self.assertContains(retention, "निर्मिती संचाची निवृत्ती")
-        self.assertContains(retention, "कचरा संकलन योजना")
+        self.assertContains(retention, "जीसी योजना")
 
     @override_settings(VAULT_UI_PROFILE_CONFIGURATION_ENABLED=True)
     def test_marathi_profile_form_uses_literal_labels_and_errors(self):

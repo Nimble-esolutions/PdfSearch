@@ -75,6 +75,56 @@ REQUIRED_MARATHI_TRANSLATIONS = {
     "Runtime search verification cannot continue.": (
         "कार्यरत प्रणालीतील शोध पडताळणी पुढे सुरू राहू शकत नाही."
     ),
+    "Retry from checkpoint": "चेकपॉइंटपासून पुन्हा प्रयत्न करा",
+    "Resume verified upload checkpoint": (
+        "पडताळलेला अपलोड चेकपॉइंट पुढे सुरू करा"
+    ),
+    "No failed snapshot checkpoint is reused and authority remains unchanged.": (
+        "अयशस्वी स्नॅपशॉटचा कोणताही चेकपॉइंट पुन्हा वापरला जाणार नाही "
+        "आणि प्राधिकृत स्थिती बदलणार नाही."
+    ),
+    "No snapshot or checkpoint reuse is assumed and authority remains unchanged.": (
+        "स्नॅपशॉट किंवा चेकपॉइंट पुन्हा वापरला जाईल असे गृहित धरलेले नाही "
+        "आणि प्राधिकृत स्थिती बदलणार नाही."
+    ),
+    "Review the checkpoint before retrying.": (
+        "पुन्हा प्रयत्न करण्यापूर्वी चेकपॉइंटचा आढावा घ्या."
+    ),
+    "The worker stopped at a safe cancellation checkpoint.": (
+        "कार्यकर्ता सुरक्षित रद्दीकरण चेकपॉइंटवर थांबला."
+    ),
+    "Retention & GC": "जतन आणि जीसी",
+    "Garbage collection plans": "जीसी योजना",
+    "The registration declares a manifest format range this release cannot verify.": (
+        "नोंदणीने जाहीर केलेल्या मॅनिफेस्ट स्वरूपाच्या श्रेणीची या आवृत्तीला "
+        "पडताळणी करता येत नाही."
+    ),
+    "The pointer's manifest location does not match this approved dataset.": (
+        "निर्देशांकातील मॅनिफेस्टचे स्थान या मान्यताप्राप्त माहिती संचाशी "
+        "जुळत नाही."
+    ),
+    "The authoritative manifest checksum does not match": (
+        "अधिकृत मॅनिफेस्टची पडताळणी-बेरीज जुळत नाही"
+    ),
+    "The pointer and stored generation manifest disagree about content identity.": (
+        "निर्देशांक आणि साठवलेल्या निर्मिती संचाचा मॅनिफेस्ट यांतील आशयाची "
+        "ओळख जुळत नाही."
+    ),
+    "Republish the generation manifest": (
+        "निर्मिती संचाचा मॅनिफेस्ट पुन्हा प्रकाशित करा"
+    ),
+    "The manifest does not match the selected generation, dataset, or production source.": (
+        "मॅनिफेस्ट निवडलेल्या निर्मिती संचाशी, माहिती संचाशी किंवा उत्पादन "
+        "स्रोताशी जुळत नाही."
+    ),
+    "At least one stored object does not match the checksum declared by the manifest.": (
+        "किमान एक साठवलेला घटक मॅनिफेस्टमध्ये जाहीर केलेल्या "
+        "पडताळणी-बेरीजेशी जुळत नाही."
+    ),
+    "A document recorded in the candidate database is not present in its approved media location.": (
+        "उमेदवार डेटाबेसमध्ये नोंदलेली दस्तऐवज संचिका तिच्या मंजूर "
+        "संचिका-ठिकाणी उपलब्ध नाही."
+    ),
 }
 
 
