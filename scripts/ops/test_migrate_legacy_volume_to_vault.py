@@ -353,6 +353,7 @@ class CandidatePublicationTests(unittest.TestCase):
             )
             source_manifest.pop("app_release")
             source_manifest.pop("image_digest")
+            source_manifest.pop("production_source_id")
             database = next(
                 entry
                 for entry in source_manifest["files"]
