@@ -1331,6 +1331,171 @@ class SupervisorProtocolTests(SimpleTestCase):
             .exists()
         )
 
+    def test_initial_pre_pointer_validation_failure_releases_maintenance(self):
+        self._replace_with_initial_intent()
+        maintenance = self._quiesce()
+        (self.target_runtime / "runtime-evidence.json").unlink()
+        web = self._supervisor("web", maintenance=maintenance)
+
+        web.web_tick()
+        maintenance.maintenance_tick()
+
+        self.assertFalse(self.paths["active"].exists())
+        self.assertFalse(self.paths["previous"].exists())
+        self.assertEqual(self._result()["status"], "failed")
+        self.assertEqual(
+            self._result()["safe_error_code"],
+            "control_document_missing",
+        )
+        self.assertEqual(maintenance.paused_for_intent, "")
+
+    def test_initial_post_pointer_failure_quiesces_target_and_bootstraps(self):
+        self._replace_with_initial_intent()
+        maintenance = self._quiesce()
+
+        def run_command(command, **_kwargs):
+            if "verify_activation_runtime" in command:
+                return SimpleNamespace(returncode=1)
+            return SimpleNamespace(returncode=0)
+
+        web = self._supervisor(
+            "web",
+            run_command=run_command,
+            maintenance=maintenance,
+        )
+
+        web.web_tick()
+        maintenance.maintenance_tick()
+
+        self.assertFalse(self.paths["active"].exists())
+        self.assertFalse(self.paths["previous"].exists())
+        self.assertEqual(self._result()["status"], "failed")
+        self.assertEqual(
+            self._result()["safe_error_code"],
+            "activation_runtime_command_failed",
+        )
+        self.assertEqual(
+            self.target_runtime.stat().st_mode & 0o222,
+            0,
+        )
+        self.assertEqual(maintenance.paused_for_intent, "")
+
+    def test_process_environment_follows_signed_pointer(self):
+        self._replace_with_initial_intent()
+        supervisor = self._supervisor("web")
+
+        bootstrap = supervisor._resolved_process_environment()
+        self.assertNotIn("RUNTIME_GENERATION_ID", bootstrap)
+        self.assertNotIn("RUNTIME_MANIFEST_DIGEST", bootstrap)
+
+        atomic_write_json(
+            self.paths["active"],
+            build_runtime_pointer(
+                deployment_id=DEPLOYMENT_ID,
+                generation_id=TARGET_GENERATION,
+                manifest_digest=TARGET_DIGEST,
+                runtime_path=self.target_runtime,
+                intent_digest=self.intent["document_digest"],
+                state_version=1,
+                signing_key=SIGNING_KEY,
+            ),
+        )
+        target = supervisor._resolved_process_environment()
+
+        self.assertEqual(
+            target["SQLITE_DB_PATH"],
+            str(self.target_runtime / "db.sqlite3"),
+        )
+        self.assertEqual(
+            target["MEDIA_ROOT"],
+            str(self.target_runtime / "media"),
+        )
+        self.assertEqual(
+            target["FAISS_INDEX_DIR"],
+            str(self.target_runtime / "faiss_indexes"),
+        )
+        self.assertEqual(
+            target["RUNTIME_GENERATION_ID"],
+            TARGET_GENERATION,
+        )
+        self.assertEqual(
+            target["RUNTIME_MANIFEST_DIGEST"],
+            TARGET_DIGEST,
+        )
+
+    def test_child_restart_receives_current_pointer_environment(self):
+        captured = {}
+
+        def popen_factory(_command, **kwargs):
+            captured.update(kwargs["env"])
+            return FakeChild()
+
+        supervisor = RuntimeSupervisor(
+            "web",
+            environment=self.environment,
+            popen_factory=popen_factory,
+        )
+        supervisor.start_child()
+
+        self.assertEqual(
+            captured["SQLITE_DB_PATH"],
+            str(self.current_runtime / "db.sqlite3"),
+        )
+        self.assertEqual(
+            captured["RUNTIME_GENERATION_ID"],
+            CURRENT_GENERATION,
+        )
+        self.assertEqual(captured["FLOWDOCS_SUPERVISOR_CHILD"], "1")
+
+    def test_manage_command_receives_current_pointer_environment(self):
+        captured = {}
+
+        def run_command(_command, **kwargs):
+            captured.update(kwargs["env"])
+            return SimpleNamespace(returncode=0)
+
+        supervisor = self._supervisor("web", run_command=run_command)
+        supervisor._run_manage(["check"], timeout=3)
+
+        self.assertEqual(
+            captured["SQLITE_DB_PATH"],
+            str(self.current_runtime / "db.sqlite3"),
+        )
+        self.assertEqual(
+            captured["RUNTIME_GENERATION_ID"],
+            CURRENT_GENERATION,
+        )
+
+    def test_initial_cutover_resumes_from_owned_target_pointer(self):
+        self._replace_with_initial_intent()
+        maintenance = self._quiesce()
+        atomic_write_json(
+            self.paths["active"],
+            build_runtime_pointer(
+                deployment_id=DEPLOYMENT_ID,
+                generation_id=TARGET_GENERATION,
+                manifest_digest=TARGET_DIGEST,
+                runtime_path=self.target_runtime,
+                intent_digest=self.intent["document_digest"],
+                state_version=1,
+                signing_key=SIGNING_KEY,
+            ),
+        )
+        web = self._supervisor("web", maintenance=maintenance)
+        web._write_ack(self.intent, "applying")
+        atomic_write_json(
+            self.paths["lock"],
+            {
+                "intent_id": self.intent["intent_id"],
+                "process_id": 1,
+            },
+        )
+
+        web.web_tick()
+
+        self.assertEqual(self._result()["status"], "committed")
+        self.assertFalse(self.paths["previous"].exists())
+
     def test_supervisor_run_starts_initial_bootstrap_without_a_pointer(self):
         self._replace_with_initial_intent()
         supervisor = self._supervisor("web")

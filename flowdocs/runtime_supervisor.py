@@ -24,6 +24,7 @@ from vaultops.runtime_control import (
     build_runtime_pointer,
     read_runtime_pointer,
     read_signed_document,
+    resolve_runtime_from_env,
     runtime_control_paths,
     set_runtime_workspace_writable,
     sign_document,
@@ -139,10 +140,34 @@ class RuntimeSupervisor:
             "run_maintenance_jobs",
         ]
 
+    def _resolved_process_environment(self):
+        """Bind a new process to the currently signed runtime authority."""
+        child_environment = dict(self.environment)
+        runtime = resolve_runtime_from_env(child_environment)
+        if runtime is None:
+            for name in (
+                "RUNTIME_GENERATION_ID",
+                "RUNTIME_MANIFEST_DIGEST",
+            ):
+                child_environment.pop(name, None)
+            return child_environment
+        child_environment.update(
+            {
+                "SQLITE_DB_PATH": str(runtime.database_path),
+                "MEDIA_ROOT": str(runtime.media_root),
+                "PDF_CACHE_DIR": str(runtime.pdf_cache_dir),
+                "FAISS_INDEX_DIR": str(runtime.faiss_index_dir),
+                "CHROMA_DIR": str(runtime.chroma_dir),
+                "RUNTIME_GENERATION_ID": runtime.generation_id,
+                "RUNTIME_MANIFEST_DIGEST": runtime.manifest_digest,
+            }
+        )
+        return child_environment
+
     def start_child(self):
         if self.child is not None and self.child.poll() is None:
             return self.child
-        child_environment = dict(self.environment)
+        child_environment = self._resolved_process_environment()
         child_environment["FLOWDOCS_SUPERVISOR_CHILD"] = "1"
         self.child = self.popen_factory(
             self.child_command(),
@@ -449,10 +474,11 @@ class RuntimeSupervisor:
         raise SupervisorError("rollback_previous_pointer_changed")
 
     def _run_manage(self, arguments, *, timeout):
+        process_environment = self._resolved_process_environment()
         result = self.run_command(
             [sys.executable, "manage.py", *arguments],
             cwd=Path(__file__).resolve().parent,
-            env=self.environment,
+            env=process_environment,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=timeout,
@@ -606,6 +632,15 @@ class RuntimeSupervisor:
             sign_document(payload, self.signing_key),
         )
 
+    def _fail_initial_without_pointer(self, intent, reason_code):
+        """Release a maintenance quiesce when bootstrap validation fails."""
+        self._write_ack(intent, "rollback_pointer_switched")
+        self._wait_maintenance_state(intent, "rollback_started")
+        self._write_initial_failure(intent, reason_code)
+        self._write_ack(intent, "rolled_back")
+        if self._reconcile_result_best_effort(intent):
+            self._write_ack(intent, "reconciled")
+
     def _apply_initial_intent(self, intent):
         if not self.initial_activation_enabled:
             return
@@ -627,12 +662,23 @@ class RuntimeSupervisor:
             return
         if not self._maintenance_acknowledged(intent):
             return
-        validate_runtime_workspace(
-            intent["target_runtime_path"],
-            runtime_root=self.runtime_root,
-            generation_id=intent["target_generation_id"],
-            manifest_digest=intent["target_manifest_digest"],
-        )
+        try:
+            validate_runtime_workspace(
+                intent["target_runtime_path"],
+                runtime_root=self.runtime_root,
+                generation_id=intent["target_generation_id"],
+                manifest_digest=intent["target_manifest_digest"],
+            )
+        except Exception as exc:
+            self._fail_initial_without_pointer(
+                intent,
+                getattr(
+                    exc,
+                    "reason_code",
+                    "activation_verification_failed",
+                ),
+            )
+            return
         web_ack = self._read_ack(intent, "web")
         if web_ack and web_ack.get("state") != "applying":
             return
@@ -660,6 +706,10 @@ class RuntimeSupervisor:
                     signing_key=self.signing_key,
                 )
                 atomic_write_json(self.paths["active"], target_document)
+            # The bootstrap web child was intentionally started without a
+            # runtime pointer so the operator could prepare this intent.
+            # Stop it before any target-bound verification or restart.
+            self.stop_child()
             set_runtime_workspace_writable(
                 intent["target_runtime_path"],
                 runtime_root=self.runtime_root,
@@ -709,6 +759,10 @@ class RuntimeSupervisor:
                     active.generation_id == intent["target_generation_id"]
                     and active.intent_digest == intent["document_digest"]
                 ):
+                    self._write_ack(intent, "rollback_pending")
+                    self._wait_maintenance_state(
+                        intent, "rollback_quiesced"
+                    )
                     set_runtime_workspace_writable(
                         intent["target_runtime_path"],
                         runtime_root=self.runtime_root,
@@ -717,7 +771,15 @@ class RuntimeSupervisor:
                         writable=False,
                     )
                     self.paths["active"].unlink(missing_ok=True)
+                    self.start_child()
+                    self._write_ack(intent, "rollback_pointer_switched")
+                    self._wait_maintenance_state(
+                        intent, "rollback_started"
+                    )
                 self._write_initial_failure(intent, reason_code)
+                self._write_ack(intent, "rolled_back")
+                if self._reconcile_result_best_effort(intent):
+                    self._write_ack(intent, "reconciled")
             except Exception:
                 pass
         finally:
