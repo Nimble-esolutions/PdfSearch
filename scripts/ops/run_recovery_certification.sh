@@ -307,14 +307,14 @@ print(json.dumps({
     }),
 }, sort_keys=True))
 ' >"$EVIDENCE_DIR/inventory.json"
-  app_exec web python - <<'PY' >"$EVIDENCE_DIR/database.txt"
+  app_exec web python manage.py shell -c '
 from django.db import connection
 with connection.cursor() as cursor:
     cursor.execute("PRAGMA integrity_check")
     print("integrity", cursor.fetchone()[0])
     cursor.execute("PRAGMA foreign_key_check")
     print("foreign_key_violations", len(cursor.fetchall()))
-PY
+' >"$EVIDENCE_DIR/database.txt"
   echo "Bounded evidence written to $EVIDENCE_DIR"
 }
 
