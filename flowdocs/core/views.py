@@ -882,6 +882,7 @@ def archive_pdf_view(request, pdf_id):
 def mark_pdf_unavailable_view(request, pdf_id):
     """Explicitly quarantine a document row while preserving its identity."""
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    was_unavailable = pdf.lifecycle == "unavailable"
     values = {
         "expected_sha256": request.POST.get("expected_sha256", "").strip().lower(),
         "expected_size": request.POST.get("expected_size", "").strip(),
@@ -889,18 +890,21 @@ def mark_pdf_unavailable_view(request, pdf_id):
         "case_reference": request.POST.get("case_reference", "").strip(),
     }
     errors = {}
-    if not re.fullmatch(r"[0-9a-f]{64}", values["expected_sha256"]):
-        errors["expected_sha256"] = gettext(
-            "Enter the complete 64-character SHA-256."
-        )
-    try:
-        parsed_size = int(values["expected_size"])
-        if parsed_size < 0 or parsed_size > 2**63 - 1:
-            raise ValueError
-    except ValueError:
-        errors["expected_size"] = gettext(
-            "Enter a valid non-negative byte size."
-        )
+    has_digest = bool(values["expected_sha256"])
+    has_size = bool(values["expected_size"])
+    if has_digest or has_size:
+        if not re.fullmatch(r"[0-9a-f]{64}", values["expected_sha256"]):
+            errors["expected_sha256"] = gettext(
+                "Enter the complete 64-character SHA-256, or leave both evidence fields blank."
+            )
+        try:
+            parsed_size = int(values["expected_size"])
+            if parsed_size < 0 or parsed_size > 2**63 - 1:
+                raise ValueError
+        except ValueError:
+            errors["expected_size"] = gettext(
+                "Enter a valid non-negative byte size, or leave both evidence fields blank."
+            )
     if values["reason"] not in MEDIA_QUARANTINE_REASONS:
         errors["reason"] = gettext("Choose a verified reason.")
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", values["case_reference"]):
@@ -951,6 +955,14 @@ def mark_pdf_unavailable_view(request, pdf_id):
             gettext("This document was already marked unavailable; no state changed."),
         )
         return safe_referer_redirect(request)
+    if was_unavailable:
+        messages.success(
+            request,
+            gettext(
+                "Exact recovery evidence was bound. Restoration can now verify the returned file."
+            ),
+        )
+        return safe_referer_redirect(request)
     messages.warning(
         request,
         gettext(
@@ -984,13 +996,22 @@ def restore_pdf_view(request, pdf_id):
             gettext("This document was already available; no state changed."),
         )
         return safe_referer_redirect(request)
-    messages.success(
-        request,
-        gettext(
-            "Document “%(title)s” was restored and queued for index maintenance."
+    if outcome.pdf.lifecycle in {"archived", "deprecated"}:
+        messages.success(
+            request,
+            gettext(
+                "Document “%(title)s” was restored to its preserved lifecycle and remains excluded from search."
+            )
+            % {"title": pdf.title},
         )
-        % {"title": pdf.title},
-    )
+    else:
+        messages.success(
+            request,
+            gettext(
+                "Document “%(title)s” was restored and queued for index maintenance."
+            )
+            % {"title": pdf.title},
+        )
     return safe_referer_redirect(request)
 
 

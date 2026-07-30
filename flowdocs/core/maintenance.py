@@ -304,18 +304,23 @@ def mark_pdf_unavailable(
     case_reference,
 ):
     """Atomically quarantine a row from explicit, bounded operator evidence."""
-    digest = str(expected_sha256).strip().lower()
+    digest = str(expected_sha256 or "").strip().lower()
     reason = str(reason).strip()
     case_reference = str(case_reference).strip()
-    try:
-        size = int(expected_size)
-    except (TypeError, ValueError) as exc:
-        raise SearchDataIntegrityError("Expected media size is invalid") from exc
-    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
-        raise SearchDataIntegrityError("Expected media digest is invalid")
+    if digest or str(expected_size or "").strip():
+        try:
+            size = int(expected_size)
+        except (TypeError, ValueError) as exc:
+            raise SearchDataIntegrityError("Expected media size is invalid") from exc
+        if len(digest) != 64 or any(
+            character not in "0123456789abcdef" for character in digest
+        ):
+            raise SearchDataIntegrityError("Expected media digest is invalid")
+    else:
+        size = None
     if (
-        size < 0
-        or size > 2**63 - 1
+        (size is not None and (size < 0 or size > 2**63 - 1))
+        or bool(digest) != (size is not None)
         or reason not in MEDIA_QUARANTINE_REASONS
         or not case_reference
         or len(case_reference) > 80
@@ -328,6 +333,38 @@ def mark_pdf_unavailable(
     with transaction.atomic():
         current = PDFFile.objects.select_for_update().get(pk=pdf.pk)
         if current.lifecycle == "unavailable":
+            has_existing_digest = bool(current.media_expected_sha256)
+            has_existing_size = current.media_expected_size is not None
+            if has_existing_digest != has_existing_size:
+                raise SearchDataIntegrityError(
+                    "Stored restoration evidence is incomplete"
+                )
+            if (
+                digest
+                and not has_existing_digest
+                and not has_existing_size
+            ):
+                current.media_expected_sha256 = digest
+                current.media_expected_size = size
+                current.media_case_reference = case_reference
+                current.save(
+                    update_fields=[
+                        "media_expected_sha256",
+                        "media_expected_size",
+                        "media_case_reference",
+                    ]
+                )
+                _audit(
+                    event_type="media_recovery_evidence_bound",
+                    actor=requested_by,
+                    payload={
+                        "pdf_id": current.pk,
+                        "expected_sha256": digest,
+                        "expected_size": size,
+                        "case_reference": case_reference,
+                    },
+                )
+                return MediaTransitionOutcome(current, True)
             return MediaTransitionOutcome(current, False)
         try:
             _verified_local_media_evidence(current)
