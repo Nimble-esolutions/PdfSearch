@@ -466,6 +466,7 @@ def validate_manifest(
     *,
     allow_legacy_release_evidence: bool = False,
     allow_legacy_database_binding: bool = False,
+    allow_legacy_source_evidence: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(manifest, dict):
         raise MigrationError("Manifest is not a JSON object")
@@ -473,7 +474,10 @@ def validate_manifest(
         raise MigrationError("Manifest version is unsupported")
     if manifest.get("dataset_id") != dataset_id:
         raise MigrationError("Manifest dataset identity does not match")
-    if not manifest.get("production_source_id"):
+    if (
+        not allow_legacy_source_evidence
+        and not manifest.get("production_source_id")
+    ):
         raise MigrationError("Manifest production source identity is missing")
     if (
         not allow_legacy_release_evidence
@@ -1426,6 +1430,7 @@ def verify_pointer_chain(
         pointer["generation_id"],
         allow_legacy_release_evidence=pointer.get("schema_version") is None,
         allow_legacy_database_binding=pointer.get("schema_version") is None,
+        allow_legacy_source_evidence=pointer.get("schema_version") is None,
     )
     return pointer, etag
 
