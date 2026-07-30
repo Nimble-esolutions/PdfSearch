@@ -7,7 +7,7 @@ import tempfile
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.contrib.auth.hashers import check_password
@@ -22,7 +22,11 @@ from vaultops.models import (
     VaultJob,
     VaultJobStep,
 )
-from vaultops.services.inventory import InventoryError, verify_generation
+from vaultops.services.inventory import (
+    InventoryError,
+    list_generation_ids,
+    verify_generation,
+)
 from vaultops.services.jobs import claim_job
 from vaultops.services.profiles import (
     VaultProfileError,
@@ -295,6 +299,49 @@ class InventoryAndRestoreTests(TestCase):
         ).encode()
         self.client.put(key, body)
         return hashlib.sha256(body).hexdigest()
+
+    def test_generation_listing_reports_item_limit_truthfully(self):
+        second_key = KeyBuilder(self.profile.dataset_id).generation_manifest(
+            "generation-2"
+        )
+        self.client.put(second_key, b"{}")
+
+        bounded, complete = list_generation_ids(
+            self.vault,
+            self.profile,
+            max_items=1,
+            include_status=True,
+        )
+        self.assertEqual(len(bounded), 1)
+        self.assertFalse(complete)
+        all_ids, all_complete = list_generation_ids(
+            self.vault,
+            self.profile,
+            max_items=10,
+            include_status=True,
+        )
+        self.assertEqual(all_ids, ["generation-2", "generation-1"])
+        self.assertTrue(all_complete)
+
+    def test_generation_listing_page_limit_never_claims_completeness(self):
+        self.client.list_objects_v2 = Mock(
+            return_value={
+                "Contents": [],
+                "IsTruncated": True,
+                "NextContinuationToken": "private-cursor",
+            }
+        )
+        with self.assertRaisesMessage(
+            InventoryError,
+            "generation_listing_page_limit",
+        ):
+            list_generation_ids(
+                self.vault,
+                self.profile,
+                max_pages=1,
+                max_items=10,
+                include_status=True,
+            )
 
     def _publish_fixture(self, *, path="db.sqlite3"):
         keys = KeyBuilder(self.profile.dataset_id)

@@ -3,43 +3,16 @@
 from __future__ import annotations
 
 import json
-import os
-import stat
 from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from core.custody_audit import CustodyAuditError, audit_missing_pdf_custody
-
-
-def _read_hmac_key(path_value: str) -> bytes:
-    path = Path(path_value)
-    flags = os.O_RDONLY
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise CustodyAuditError("hmac_key_file_unavailable") from exc
-    try:
-        metadata = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(metadata.st_mode)
-            or metadata.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
-            or metadata.st_size < 32
-            or metadata.st_size > 1024
-        ):
-            raise CustodyAuditError("hmac_key_file_unsafe")
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            key = stream.read(1025)
-    except OSError as exc:
-        raise CustodyAuditError("hmac_key_file_unavailable") from exc
-    finally:
-        os.close(descriptor)
-    if len(key) < 32:
-        raise CustodyAuditError("hmac_key_too_short")
-    return key
+from core.custody_audit import (
+    CustodyAuditError,
+    audit_missing_pdf_custody,
+    read_hmac_key_file,
+)
 
 
 class Command(BaseCommand):
@@ -79,11 +52,40 @@ class Command(BaseCommand):
             type=int,
             default=20 * 1024 * 1024 * 1024,
         )
+        parser.add_argument(
+            "--max-archive-physical-bytes",
+            type=int,
+            default=20 * 1024 * 1024 * 1024,
+        )
+        parser.add_argument(
+            "--max-archive-read-bytes",
+            type=int,
+            default=24 * 1024 * 1024 * 1024,
+        )
+        parser.add_argument(
+            "--max-total-archive-physical-bytes",
+            type=int,
+            default=40 * 1024 * 1024 * 1024,
+        )
+        parser.add_argument(
+            "--max-total-archive-read-bytes",
+            type=int,
+            default=48 * 1024 * 1024 * 1024,
+        )
+        parser.add_argument("--max-compression-ratio", type=int, default=100)
+        parser.add_argument("--max-seconds", type=int, default=900)
+        parser.add_argument("--max-generations", type=int, default=10_000)
+        parser.add_argument(
+            "--max-evidence-per-reference",
+            type=int,
+            default=100,
+        )
+        parser.add_argument("--max-total-evidence", type=int, default=100_000)
 
     def handle(self, *args, **options):
         del args
         try:
-            key = _read_hmac_key(options["hmac_key_file"])
+            key = read_hmac_key_file(Path(options["hmac_key_file"]))
             vault = profile = list_ids = verify = None
             if not options["skip_vault"]:
                 from vaultops.models import VaultConnectionProfile
@@ -116,6 +118,23 @@ class Command(BaseCommand):
                 max_archive_members=options["max_archive_members"],
                 max_candidate_bytes=options["max_candidate_bytes"],
                 max_archive_logical_bytes=options["max_archive_logical_bytes"],
+                max_archive_physical_bytes=options[
+                    "max_archive_physical_bytes"
+                ],
+                max_archive_read_bytes=options["max_archive_read_bytes"],
+                max_total_archive_physical_bytes=options[
+                    "max_total_archive_physical_bytes"
+                ],
+                max_total_archive_read_bytes=options[
+                    "max_total_archive_read_bytes"
+                ],
+                max_compression_ratio=options["max_compression_ratio"],
+                max_seconds=options["max_seconds"],
+                max_generations=options["max_generations"],
+                max_evidence_per_reference=options[
+                    "max_evidence_per_reference"
+                ],
+                max_total_evidence=options["max_total_evidence"],
             )
         except CustodyAuditError as exc:
             raise CommandError(str(exc)) from exc

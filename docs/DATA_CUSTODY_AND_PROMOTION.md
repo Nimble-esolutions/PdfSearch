@@ -76,8 +76,10 @@ archive, or change an authoritative pointer.
 The command emits only numeric row IDs, HMAC-SHA-256 path/source tokens,
 content hashes, byte counts, bounded postures, and these evidence classes:
 
-- `exact_manifest_object`: a historical manifest path matched internally and
-  the content-addressed object HEAD matched the manifest SHA-256 and size;
+- `manifest_object_metadata_exact`: a historical manifest path matched
+  internally and the content-addressed object HEAD metadata matched the
+  manifest SHA-256 and size. This proves metadata consistency, not a fresh
+  byte-for-byte object read;
 - `manifest_reference_only`: the manifest retained hash/size evidence but the
   object could not be proved by a matching HEAD;
 - `exact_manifest_archive`: a streamed archive member matched both the missing
@@ -118,15 +120,38 @@ python manage.py audit_missing_pdf_custody \
 ```
 
 Archive members are streamed without persistent extraction. The command caps
-archive count, member count, declared logical bytes, and candidate bytes, and
-reports whether a bounded candidate begins with the PDF signature. Use
-`--skip-vault` only for a deliberate archive-only pass. Redirect JSON to a
-protected operator evidence file if it must be retained, then remove the
-temporary HMAC key when cross-run correlation is complete.
+archive count, physical bytes, member count, declared logical bytes, total read
+work, compression ratio, candidate bytes, generations, evidence cardinality,
+and elapsed time. Its sequential tar reader accepts ordinary POSIX/USTAR and
+gzip streams, rejects PAX/GNU extended-name and sparse records, and reports
+whether a bounded candidate begins with the PDF signature. Other compression
+formats are rejected.
 
-An exact evidence result authorizes only isolated reconciliation review. It
-does not authorize copying bytes into active custody, changing database rows,
-or promoting a generation.
+Every database, media, HMAC-key, and archive path component is opened through
+no-follow directory descriptors. The HMAC key must be owned by the current
+process user, have one link, have no group/other permissions, and retain the
+same file identity and metadata through its bounded read. Database and archive
+identity are checked again after scanning. Stored and manifest paths match
+exact POSIX case; case-colliding evidence fails closed.
+
+Review `complete`, `vault_posture`, `archive_posture`,
+`vault_generation_counts`, per-source `archive_progress`, and `truncation`
+before interpreting `no_match`. A partial, unavailable, time-limited, or
+truncated scan never proves absence. Use `--skip-vault` only for a deliberate
+archive-only pass. Redirect JSON to a protected operator evidence file if it
+must be retained, then remove the temporary HMAC key when cross-run correlation
+is complete.
+
+`vault_generation_counts.returned` is only the bounded number returned to the
+auditor. Treat it as a total only when `listing_complete` is true. `scanned`
+and `verified` distinguish attempted manifests from manifests that passed the
+existing validation contract.
+
+`exact_manifest_archive` authorizes only isolated reconciliation review because
+the streamed bytes matched manifest hash and size. Metadata-exact HEAD evidence
+alone is not enough to claim the bytes were freshly verified. Neither result
+authorizes copying bytes into active custody, changing database rows, or
+promoting a generation.
 
 ## Gates
 
