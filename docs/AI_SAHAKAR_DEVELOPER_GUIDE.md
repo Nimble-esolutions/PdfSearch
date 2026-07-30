@@ -249,9 +249,14 @@ index gates. It is not a substitute for browser interaction checks.
 `PDFFile.lifecycle="unavailable"` is the non-destructive quarantine for a
 preserved row whose source file cannot currently be verified. Only an explicit
 admin POST with the exact `MARK UNAVAILABLE` confirmation may enter the state.
-The transition sets `indexed=False` and writes a bounded
-`media_unavailable` audit event containing the document ID and prior lifecycle,
-never a filename or document content.
+The request must also provide an expected SHA-256, byte size, allowlisted
+human-readable reason code, and an alphanumeric bounded case reference. This
+prevents raw custody paths from entering the model, audit, or interface. Inside
+one transaction the row is locked, its prior lifecycle
+and bounded evidence are persisted, `indexed=False` is set, and a
+`media_unavailable` event is appended. Repeated requests report a no-op and do
+not create duplicate transition events. Storage keys, absolute paths, and
+document content never enter audit or interface evidence.
 
 All search querysets, FAISS construction, stored-index repair, maintenance
 selection, candidate embedding/media validation, runtime activation file
@@ -259,8 +264,15 @@ verification, and readiness denominators must exclude unavailable rows.
 Dashboard inventory continues to show the preserved row and its human operator
 guidance; the stable code is available only in collapsed technical details.
 
-Restoration verifies the existing `FileField` through configured storage before
-returning the row to `uploaded`, and records `media_restored`. Do not use
+Restoration opens the configured local-storage object without following a final
+symlink, proves it is a regular file, hashes it while checking stable inode,
+size, and modification evidence, and compares exact SHA-256 and byte size. It
+then returns the row to `media_prior_lifecycle` and records bounded verification
+evidence in `media_restored`. Legacy unavailable rows without durable expected
+evidence remain safely unavailable. Candidate, snapshot, and activation
+evidence include a deterministic unavailable-set attestation: total count,
+bounded sorted IDs, truncation, and a digest over the complete canonical
+ID/lifecycle/storage-key-status tuples. Do not use
 `reconcile_media_pdfs` to remap a dangling row: that command only imports media
 paths that have no database row.
 

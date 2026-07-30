@@ -65,8 +65,42 @@ test.describe('Operations Cockpit', () => {
         violation => violation.impact === 'critical' || violation.impact === 'serious',
       ),
     ).toEqual([]);
+
+    await page.goto('/dashboard/?readiness=unavailable');
+    await page.getByRole('link', { name: /Codex Smoke Category Renamed/ }).first().click();
+    await expect(page.getByText('Document file is unavailable')).toBeVisible();
+    await expect(page.getByText('document_media_unavailable')).toBeHidden();
+    const technical = page.getByText('Technical details').first();
+    await technical.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('document_media_unavailable')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('document_media_unavailable')).toBeHidden();
+
+    const quarantine = page.getByText('Mark unavailable').first();
+    await quarantine.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('Expected SHA-256').first()).toBeVisible();
+    await expect(page.locator('input[name="confirmation"]').first()).toHaveAttribute('lang', 'en');
+    await expect(page.locator('input[name="confirmation"]').first()).toHaveAttribute('dir', 'ltr');
+
+    await page.setViewportSize({ width: 320, height: 720 });
+    const quarantineDimensions = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(quarantineDimensions.scroll).toBeLessThanOrEqual(quarantineDimensions.client + 1);
+    const quarantineResults = await new AxeBuilder({ page }).analyze();
+    expect(
+      quarantineResults.violations.filter(
+        violation => violation.impact === 'critical' || violation.impact === 'serious',
+      ),
+    ).toEqual([]);
+
     await switchLanguage(page, 'mr');
     await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
+    await expect(page.getByText('दस्तऐवज फाइल उपलब्ध नाही')).toBeVisible();
+    await expect(page.getByText('अपेक्षित फाइल आकार (बाइटमध्ये)').first()).toHaveCount(1);
     await expectNoVisibleMachineTokens(page);
 
     const marathiResults = await new AxeBuilder({ page }).analyze();
@@ -76,4 +110,5 @@ test.describe('Operations Cockpit', () => {
       ),
     ).toEqual([]);
   });
+
 });

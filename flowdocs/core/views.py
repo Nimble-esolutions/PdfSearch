@@ -297,14 +297,22 @@ def _repair_folder_index_from_stored_artifacts(folder):
         and pdf.file.storage.exists(pdf.file.name)
     ]
     if not eligible_ids:
-        return 0, PDFFile.objects.filter(folder=folder, indexed=False).count()
+        return 0, PDFFile.objects.filter(
+            folder=folder,
+            indexed=False,
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        ).count()
 
     index, _, _ = build_or_load_faiss_index_for_folder(folder, force_rebuild=True)
     if index is None:
         raise SearchDataIntegrityError("No searchable artifacts were available for this category")
 
     repaired = PDFFile.objects.filter(pk__in=eligible_ids).update(indexed=True)
-    remaining = PDFFile.objects.filter(folder=folder, indexed=False).count()
+    remaining = PDFFile.objects.filter(
+        folder=folder,
+        indexed=False,
+        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+    ).count()
     return repaired, remaining
 
 
@@ -871,7 +879,29 @@ def mark_pdf_unavailable_view(request, pdf_id):
             ),
         )
         return safe_referer_redirect(request)
-    mark_pdf_unavailable(pdf, requested_by=request.user)
+    try:
+        outcome = mark_pdf_unavailable(
+            pdf,
+            requested_by=request.user,
+            expected_sha256=request.POST.get("expected_sha256", ""),
+            expected_size=request.POST.get("expected_size", ""),
+            reason=request.POST.get("reason", ""),
+            case_reference=request.POST.get("case_reference", ""),
+        )
+    except SearchDataIntegrityError:
+        messages.error(
+            request,
+            gettext(
+                "Provide the expected SHA-256, byte size, reason, and case reference before marking this file unavailable."
+            ),
+        )
+        return safe_referer_redirect(request)
+    if not outcome.changed:
+        messages.info(
+            request,
+            gettext("This document was already marked unavailable; no state changed."),
+        )
+        return safe_referer_redirect(request)
     messages.warning(
         request,
         gettext(
@@ -887,13 +917,19 @@ def restore_pdf_view(request, pdf_id):
     """Restore a deprecated or archived PDF to uploaded state."""
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
     try:
-        restore_pdf(pdf, requested_by=request.user)
+        outcome = restore_pdf(pdf, requested_by=request.user)
     except SearchDataIntegrityError:
         messages.error(
             request,
             gettext(
                 "Restore the verified document file to its approved location before restoring availability."
             ),
+        )
+        return safe_referer_redirect(request)
+    if not outcome.changed:
+        messages.info(
+            request,
+            gettext("This document was already available; no state changed."),
         )
         return safe_referer_redirect(request)
     messages.success(

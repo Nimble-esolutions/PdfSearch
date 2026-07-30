@@ -91,6 +91,12 @@ class PDFFile(models.Model):
         default="uploaded",
         help_text="Document lifecycle state for search and visibility control",
     )
+    media_prior_lifecycle = models.CharField(max_length=20, blank=True, default="")
+    media_expected_sha256 = models.CharField(max_length=64, blank=True, default="")
+    media_expected_size = models.PositiveBigIntegerField(null=True, blank=True)
+    media_quarantine_reason = models.CharField(max_length=80, blank=True, default="")
+    media_case_reference = models.CharField(max_length=80, blank=True, default="")
+    media_observed_at = models.DateTimeField(null=True, blank=True)
     subject = models.CharField(
         max_length=50,
         blank=True,

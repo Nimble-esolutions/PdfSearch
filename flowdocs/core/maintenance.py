@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import sqlite3
+import stat
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from django.conf import settings
@@ -19,6 +22,12 @@ from .models import ArtifactGeneration, ArtifactValidation, Folder, MaintenanceA
 from .utils import SearchDataIntegrityError, build_or_load_faiss_index_for_folder, precompute_pdf_embeddings
 from .namespace import KeyBuilder
 from .registration import RegistrationError
+
+MEDIA_QUARANTINE_REASONS = {
+    "missing_after_inventory",
+    "custody_restore_pending",
+    "source_recovery_case",
+}
 
 
 def _audit(job=None, *, event_type, actor=None, payload=None):
@@ -151,48 +160,171 @@ def archive_pdf(pdf, *, requested_by=None):
     return pdf
 
 
-def mark_pdf_unavailable(pdf, *, requested_by=None):
-    """Quarantine a row whose source media cannot currently be verified."""
-    if pdf.lifecycle == "unavailable":
-        return pdf
-    prior_lifecycle = pdf.lifecycle
-    pdf.lifecycle = "unavailable"
-    pdf.indexed = False
-    pdf.save(update_fields=["lifecycle", "indexed"])
-    _audit(
-        event_type="media_unavailable",
-        actor=requested_by,
-        payload={"pdf_id": pdf.pk, "prior_lifecycle": prior_lifecycle},
-    )
-    return pdf
+@dataclass(frozen=True)
+class MediaTransitionOutcome:
+    pdf: PDFFile
+    changed: bool
+
+
+def _verified_local_media_evidence(pdf):
+    """Hash a regular, non-symlink file and prove it stayed stable while read."""
+    try:
+        media_root = Path(settings.MEDIA_ROOT).resolve(strict=True)
+        candidate = Path(pdf.file.path)
+        relative = candidate.relative_to(media_root)
+        inspected = media_root
+        for component in relative.parts:
+            inspected = inspected / component
+            if inspected.is_symlink():
+                raise SearchDataIntegrityError(
+                    "Document media path cannot contain a symlink"
+                )
+        candidate.resolve(strict=True).relative_to(media_root)
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(candidate, flags)
+        try:
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode):
+                raise SearchDataIntegrityError("Document media must be a regular file")
+            digest = hashlib.sha256()
+            size = 0
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                size += len(chunk)
+            after = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+    except SearchDataIntegrityError:
+        raise
+    except (AttributeError, FileNotFoundError, OSError, ValueError) as exc:
+        raise SearchDataIntegrityError(
+            "Document media could not be verified from approved local storage"
+        ) from exc
+    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns")
+    if any(getattr(before, key) != getattr(after, key) for key in stable_fields):
+        raise SearchDataIntegrityError("Document media changed while it was verified")
+    return {"sha256": digest.hexdigest(), "size": size}
+
+
+def mark_pdf_unavailable(
+    pdf,
+    *,
+    requested_by=None,
+    expected_sha256,
+    expected_size,
+    reason,
+    case_reference,
+):
+    """Atomically quarantine a row from explicit, bounded operator evidence."""
+    digest = str(expected_sha256).strip().lower()
+    reason = str(reason).strip()
+    case_reference = str(case_reference).strip()
+    try:
+        size = int(expected_size)
+    except (TypeError, ValueError) as exc:
+        raise SearchDataIntegrityError("Expected media size is invalid") from exc
+    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+        raise SearchDataIntegrityError("Expected media digest is invalid")
+    if (
+        size < 0
+        or size > 2**63 - 1
+        or reason not in MEDIA_QUARANTINE_REASONS
+        or not case_reference
+        or len(case_reference) > 80
+        or any(
+            character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"
+            for character in case_reference
+        )
+    ):
+        raise SearchDataIntegrityError("Manual quarantine evidence is incomplete")
+    with transaction.atomic():
+        current = PDFFile.objects.select_for_update().get(pk=pdf.pk)
+        if current.lifecycle == "unavailable":
+            return MediaTransitionOutcome(current, False)
+        prior_lifecycle = current.lifecycle
+        observed_at = timezone.now()
+        current.lifecycle = "unavailable"
+        current.indexed = False
+        current.media_prior_lifecycle = prior_lifecycle
+        current.media_expected_sha256 = digest
+        current.media_expected_size = size
+        current.media_quarantine_reason = reason
+        current.media_case_reference = case_reference
+        current.media_observed_at = observed_at
+        current.save(
+            update_fields=[
+                "lifecycle",
+                "indexed",
+                "media_prior_lifecycle",
+                "media_expected_sha256",
+                "media_expected_size",
+                "media_quarantine_reason",
+                "media_case_reference",
+                "media_observed_at",
+            ]
+        )
+        _audit(
+            event_type="media_unavailable",
+            actor=requested_by,
+            payload={
+                "pdf_id": current.pk,
+                "prior_lifecycle": prior_lifecycle,
+                "expected_sha256": digest,
+                "expected_size": size,
+                "case_reference": case_reference,
+                "reason": reason,
+                "observed_at": observed_at.isoformat(),
+            },
+        )
+        return MediaTransitionOutcome(current, True)
 
 
 def restore_pdf(pdf, *, requested_by=None):
     """Restore a deprecated or archived PDF to uploaded state, requeuing reindex."""
-    prior_lifecycle = pdf.lifecycle
-    if prior_lifecycle == "unavailable":
-        try:
-            media_exists = bool(
-                pdf.file
-                and pdf.file.name
-                and pdf.file.storage.exists(pdf.file.name)
-            )
-        except (OSError, ValueError):
-            media_exists = False
-        if not media_exists:
+    with transaction.atomic():
+        current = PDFFile.objects.select_for_update().get(pk=pdf.pk)
+        prior_lifecycle = current.lifecycle
+        if prior_lifecycle != "unavailable":
+            current.lifecycle = "uploaded"
+            current.indexed = False
+            current.save(update_fields=["lifecycle", "indexed"])
+            return MediaTransitionOutcome(current, prior_lifecycle != "uploaded")
+        if (
+            not current.media_expected_sha256
+            or current.media_expected_size is None
+            or not current.media_prior_lifecycle
+        ):
             raise SearchDataIntegrityError(
-                "Document media must be restored before availability can be restored"
+                "Unavailable media does not have durable restoration evidence"
             )
-    pdf.lifecycle = "uploaded"
-    pdf.indexed = False
-    pdf.save(update_fields=["lifecycle", "indexed"])
-    if prior_lifecycle == "unavailable":
+        evidence = _verified_local_media_evidence(current)
+        if (
+            evidence["sha256"] != current.media_expected_sha256
+            or evidence["size"] != current.media_expected_size
+        ):
+            raise SearchDataIntegrityError(
+                "Restored document media does not match the approved evidence"
+            )
+        restored_lifecycle = current.media_prior_lifecycle
+        current.lifecycle = restored_lifecycle
+        current.indexed = False
+        current.save(update_fields=["lifecycle", "indexed"])
         _audit(
             event_type="media_restored",
             actor=requested_by,
-            payload={"pdf_id": pdf.pk},
+            payload={
+                "pdf_id": current.pk,
+                "prior_lifecycle": prior_lifecycle,
+                "restored_lifecycle": restored_lifecycle,
+                "verified_sha256": evidence["sha256"],
+                "verified_size": evidence["size"],
+                "case_reference": current.media_case_reference,
+            },
         )
-    return pdf
+        return MediaTransitionOutcome(current, True)
 
 
 def queue_job(*, kind: str, requested_by, pdfs=None, folders=None, scope=None, options=None):

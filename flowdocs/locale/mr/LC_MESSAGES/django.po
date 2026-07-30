@@ -4343,3 +4343,33 @@ msgstr "उपलब्धता पुनर्स्थापित करण�
 
 msgid "Document “%(title)s” was restored and queued for index maintenance."
 msgstr "“%(title)s” दस्तऐवज पुनर्स्थापित केला आणि अनुक्रमणिका देखभालीसाठी रांगेत ठेवला."
+
+msgid "Expected SHA-256"
+msgstr "अपेक्षित SHA-256"
+
+msgid "Expected file size in bytes"
+msgstr "अपेक्षित फाइल आकार (बाइटमध्ये)"
+
+msgid "Case reference"
+msgstr "प्रकरण संदर्भ"
+
+msgid "Provide the expected SHA-256, byte size, reason, and case reference before marking this file unavailable."
+msgstr "ही फाइल उपलब्ध नाही अशी नोंद करण्यापूर्वी अपेक्षित SHA-256, बाइटमधील आकार, कारण आणि प्रकरण संदर्भ द्या."
+
+msgid "This document was already marked unavailable; no state changed."
+msgstr "हा दस्तऐवज आधीच उपलब्ध नाही असा नोंदवला आहे; स्थितीत बदल झाला नाही."
+
+msgid "This document was already available; no state changed."
+msgstr "हा दस्तऐवज आधीच उपलब्ध होता; स्थितीत बदल झाला नाही."
+
+msgid "Choose a verified reason"
+msgstr "पडताळलेले कारण निवडा"
+
+msgid "Missing after verified inventory"
+msgstr "पडताळलेल्या सूची तपासणीनंतर फाइल आढळली नाही"
+
+msgid "Approved custody restoration is pending"
+msgstr "मंजूर अभिरक्षणातून फाइल पुनर्स्थापना प्रलंबित आहे"
+
+msgid "Source recovery case is open"
+msgstr "स्रोत फाइल पुनर्प्राप्ती प्रकरण सुरू आहे"

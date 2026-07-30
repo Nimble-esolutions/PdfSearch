@@ -11,6 +11,10 @@ from django.conf import settings
 from django.utils import timezone
 
 from core.management.commands.inventory_artifacts import build_manifest
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_status,
+)
 from vaultops.models import SourceSnapshot, VaultJobStep
 from vaultops.services.mutations import (
     ConsistentSnapshotUnproven,
@@ -242,6 +246,21 @@ def _validate_faiss_coherence(database_path, faiss_root):
             "WHERE folder_id IS NOT NULL "
             f"{lifecycle_clause}ORDER BY id"
         ).fetchall()
+        unavailable_records = (
+            [
+                {
+                    "id": row[0],
+                    "lifecycle": row[1],
+                    "storage_key_status": storage_key_status(row[2]),
+                }
+                for row in connection.execute(
+                    "SELECT id, lifecycle, file FROM core_pdffile "
+                    "WHERE lifecycle = 'unavailable' ORDER BY id"
+                )
+            ]
+            if "lifecycle" in columns
+            else []
+        )
     except sqlite3.Error as exc:
         raise SnapshotError("snapshot_faiss_metadata_unavailable") from exc
     finally:
@@ -295,6 +314,9 @@ def _validate_faiss_coherence(database_path, faiss_root):
             "dimensions": dimensions[folder_id],
             "sha256": _sha256_file(path),
         }
+    evidence["unavailable_documents"] = build_unavailable_attestation(
+        unavailable_records
+    )
     return evidence
 
 

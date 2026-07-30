@@ -139,7 +139,12 @@
                     <span class="badge text-bg-success">{% trans "Ready" %}</span>
                   {% endif %}
                   {% if pdf.lifecycle == 'unavailable' %}
-                    {% include "components/operator_evidence.html" with presentation=unavailable_presentation technical_code="document_media_unavailable" show_action=False only %}
+                    {% if role == 'admin' or role == 'superadmin' %}
+                      {% include "components/operator_evidence.html" with presentation=unavailable_presentation technical_code="document_media_unavailable" show_action=False only %}
+                    {% else %}
+                      <p>{{ unavailable_presentation.title }}</p>
+                      <p>{{ unavailable_presentation.detail }}</p>
+                    {% endif %}
                   {% endif %}
                   {% if not pdf.uploaded_by %}
                     <span class="badge text-bg-light">{% trans "Owner review" %}</span>
@@ -204,8 +209,29 @@
                           <form method="post" action="{% url 'mark_pdf_unavailable' pdf.id %}" class="admin-confirm-form">
                             {% csrf_token %}
                             <label>
+                              {% trans "Expected SHA-256" %}
+                              <input name="expected_sha256" inputmode="text" minlength="64" maxlength="64" required>
+                            </label>
+                            <label>
+                              {% trans "Expected file size in bytes" %}
+                              <input name="expected_size" inputmode="numeric" type="number" min="0" required>
+                            </label>
+                            <label>
+                              {% trans "Reason" %}
+                              <select name="reason" required>
+                                <option value="">{% trans "Choose a verified reason" %}</option>
+                                <option value="missing_after_inventory">{% trans "Missing after verified inventory" %}</option>
+                                <option value="custody_restore_pending">{% trans "Approved custody restoration is pending" %}</option>
+                                <option value="source_recovery_case">{% trans "Source recovery case is open" %}</option>
+                              </select>
+                            </label>
+                            <label>
+                              {% trans "Case reference" %}
+                              <input name="case_reference" maxlength="80" pattern="[A-Za-z0-9._-]+" required>
+                            </label>
+                            <label>
                               {% trans "Type MARK UNAVAILABLE to preserve this record and exclude it from search." %}
-                              <input name="confirmation" autocomplete="off" required>
+                              <input name="confirmation" autocomplete="off" lang="en" dir="ltr" required>
                             </label>
                             <button type="submit" class="btn btn-danger btn-sm">{% trans "Confirm unavailable media" %}</button>
                           </form>

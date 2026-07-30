@@ -9,6 +9,10 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
 from core.models import Folder, PDFFile
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_status,
+)
 from core.utils import SearchDataIntegrityError, search_pdfs_fast
 from vaultops.runtime_control import (
     RuntimeControlError,
@@ -75,6 +79,18 @@ def verify_activation_runtime(intent_id):
         or user.role != "superadmin"
     ):
         raise RuntimeControlError("activation_recovery_superadmin_unproven")
+    unavailable_records = [
+        {
+            "id": pdf_id,
+            "lifecycle": lifecycle,
+            "storage_key_status": storage_key_status(file_name),
+        }
+        for pdf_id, lifecycle, file_name in (
+        PDFFile.objects.filter(lifecycle="unavailable")
+        .order_by("pk")
+        .values_list("pk", "lifecycle", "file")
+        )
+    ]
     for pdf in PDFFile.objects.exclude(lifecycle="unavailable").iterator():
         try:
             path = Path(pdf.file.path).resolve()
@@ -149,6 +165,9 @@ def verify_activation_runtime(intent_id):
         "migrations": "ok",
         "recovery_superadmin": "ok",
         "pdfs": PDFFile.objects.exclude(lifecycle="unavailable").count(),
+        "unavailable_documents": build_unavailable_attestation(
+            unavailable_records
+        ),
         "faiss": "ok",
         "queries": query_results,
         "executed_locales": sorted(

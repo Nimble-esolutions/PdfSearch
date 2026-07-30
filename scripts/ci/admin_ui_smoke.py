@@ -245,6 +245,19 @@ def main():
             pdf_view.status_code == 200 and pdf_view.headers.get("content-type") == "application/pdf",
             f"pdf view failed: {pdf_view.status_code}",
         )
+        PDFFile.objects.create(
+            title="Codex Unavailable PDF",
+            folder=folder,
+            uploaded_by=operator,
+            lifecycle="unavailable",
+            indexed=False,
+            file="pdfs/codex-unavailable.pdf",
+            media_prior_lifecycle="uploaded",
+            media_expected_sha256="0" * 64,
+            media_expected_size=1,
+            media_quarantine_reason="missing_after_inventory",
+            media_case_reference="CI-BROWSER",
+        )
 
         users = client.get("/dashboard/users/")
         require(users.status_code == 200, f"user list failed: {users.status_code}")

@@ -22,6 +22,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .artifact_cleanup import capacity_report
+from .media_quarantine import build_unavailable_attestation, storage_key_status
 from .models import MaintenanceAuditEvent, MaintenanceJob, PDFFile
 
 WORKSPACE_MANIFEST = "maintenance-candidate.json"
@@ -476,10 +477,20 @@ def validate_candidate(workspace: Path) -> dict:
         media_rows = list(
             connection.execute(
                 "SELECT id, file FROM core_pdffile "
-                "WHERE lifecycle != 'unavailable' "
-                "AND file IS NOT NULL AND file != ''"
+                "WHERE lifecycle != 'unavailable'"
             )
         )
+        unavailable_records = [
+            {
+                "id": row[0],
+                "lifecycle": row[1],
+                "storage_key_status": storage_key_status(row[2]),
+            }
+            for row in connection.execute(
+                "SELECT id, lifecycle, file FROM core_pdffile "
+                "WHERE lifecycle = 'unavailable' ORDER BY id"
+            )
+        ]
     finally:
         connection.close()
     if integrity != "ok":
@@ -570,7 +581,11 @@ def validate_candidate(workspace: Path) -> dict:
             )
     return {
         "sqlite": {"integrity": "ok", "foreign_key_violations": 0},
-        "media": {"referenced": len(media_rows), "missing": 0},
+        "media": {
+            "referenced": len(media_rows),
+            "missing": 0,
+            "unavailable": build_unavailable_attestation(unavailable_records),
+        },
         "embeddings": embedding,
         "faiss": faiss_records,
         "affected_folder_ids": affected_folder_ids,
