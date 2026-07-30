@@ -123,6 +123,8 @@ def migration_args(
         dataset_id="ai-sahakar-prod",
         bucket="test-bucket",
         production_source_id="ai-sahakar-prod",
+        app_release="e9d4d8c4870cced6994d5138dbe6feaf2689548c",
+        image_digest="sha256:" + "1" * 64,
         generation_id=generation_id,
         source_label="read-only-test-source",
         output=None,
@@ -156,6 +158,8 @@ class LegacyVolumeInventoryTests(unittest.TestCase):
                 "legacy-20260726T000000Z-a1b2c3d4",
                 "ai-sahakar-prod",
                 False,
+                app_release="e9d4d8c4870cced6994d5138dbe6feaf2689548c",
+                image_digest="sha256:" + "1" * 64,
             )
 
             self.assertEqual(manifest["counts"]["files"], 4)
@@ -179,6 +183,8 @@ class LegacyVolumeInventoryTests(unittest.TestCase):
                 "ai-sahakar-prod",
                 False,
                 include_static=True,
+                app_release="e9d4d8c4870cced6994d5138dbe6feaf2689548c",
+                image_digest="sha256:" + "1" * 64,
             )
             self.assertEqual(with_static["counts"]["files"], 5)
             self.assertEqual(with_static["counts"]["staticfiles"], 1)
@@ -220,7 +226,13 @@ class LegacyVolumeInventoryTests(unittest.TestCase):
             migration.snapshot_sqlite(root / "db.sqlite3", snapshot)
             generation = "legacy-20260726T000000Z-a1b2c3d4"
             manifest = migration.inventory_source(
-                root, snapshot, generation, "ai-sahakar-prod", False
+                root,
+                snapshot,
+                generation,
+                "ai-sahakar-prod",
+                False,
+                app_release="e9d4d8c4870cced6994d5138dbe6feaf2689548c",
+                image_digest="sha256:" + "1" * 64,
             )
             manifest["files"][1]["object_key"] = (
                 "datasets/another-dataset/blobs/files/" + "a" * 64

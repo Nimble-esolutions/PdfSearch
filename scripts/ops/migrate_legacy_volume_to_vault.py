@@ -351,6 +351,8 @@ def inventory_source(
     source_label: str = "",
     source_evidence: dict[str, Any] | None = None,
     production_source_id: str = DEFAULT_PRODUCTION_SOURCE_ID,
+    app_release: str,
+    image_digest: str,
 ) -> dict[str, Any]:
     files: list[dict[str, Any]] = []
 
@@ -403,6 +405,8 @@ def inventory_source(
         "release_id": generation_id,
         "dataset_id": dataset_id,
         "production_source_id": production_source_id,
+        "app_release": app_release,
+        "image_digest": image_digest,
         "schema": {
             "inventory_schema": "legacy-volume-port/v2",
             "django_app": "core",
@@ -468,6 +472,13 @@ def validate_manifest(
         raise MigrationError("Manifest dataset identity does not match")
     if not manifest.get("production_source_id"):
         raise MigrationError("Manifest production source identity is missing")
+    if not isinstance(manifest.get("app_release"), str) or not manifest["app_release"]:
+        raise MigrationError("Manifest application release evidence is missing")
+    if (
+        not isinstance(manifest.get("image_digest"), str)
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest["image_digest"])
+    ):
+        raise MigrationError("Manifest image digest evidence is invalid")
     if manifest.get("release_id") != generation_id:
         raise MigrationError("Manifest generation identity does not match")
     if not isinstance(manifest.get("schema"), dict):
@@ -1568,6 +1579,8 @@ def publish_candidate(args: argparse.Namespace) -> dict[str, Any]:
             source_label=args.source_label,
             source_evidence=evidence,
             production_source_id=args.production_source_id,
+            app_release=args.app_release,
+            image_digest=args.image_digest,
         )
         validate_manifest(manifest, args.dataset_id, generation_id)
         manifest_data = canonical_json(manifest)
@@ -1751,6 +1764,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--production-source-id",
         default=os.environ.get("PRODUCTION_SOURCE_ID", DEFAULT_PRODUCTION_SOURCE_ID),
+    )
+    parser.add_argument(
+        "--app-release",
+        default=os.environ.get("APP_RELEASE_VERSION", ""),
+        help="Exact application release paired with the immutable generation",
+    )
+    parser.add_argument(
+        "--image-digest",
+        default=os.environ.get("APP_IMAGE_DIGEST", ""),
+        help="Exact sha256 image digest paired with the immutable generation",
     )
     parser.add_argument("--generation-id", help="Immutable candidate generation ID")
     parser.add_argument("--source-label", default="sahakar-dev-frontend-dockerfile-1cubi5")
