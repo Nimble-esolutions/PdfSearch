@@ -12,6 +12,7 @@ from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.utils import timezone
 
+from .candidate_maintenance import maintenance_source_capability_reason
 from .emergency_recovery import create_set, list_sets, plan_prune
 from .artifact_cleanup import (
     CleanupError,
@@ -110,10 +111,11 @@ def _vault_health() -> tuple[dict, dict]:
 def capability_reasons() -> dict[str, str]:
     """Return the server-authoritative gate reason for every local operation.
 
-    Validation and stored-index repair only need local maintenance readiness;
-    document reindexing additionally needs embeddings, while force-reindexing
-    has its own explicit authorization flag.  Keep these prerequisites
-    independent so one disabled flag cannot accidentally mask another.
+    Validation only needs local maintenance readiness. Candidate-producing
+    repair and reindex operations also require verified source authority;
+    document reindexing needs embeddings, while force-reindexing has its own
+    explicit authorization flag. Keep these prerequisites independent so one
+    disabled flag cannot accidentally mask another.
     """
     common = ""
     if getattr(settings, "ACTIVE_RUNTIME", None) is not None:
@@ -155,6 +157,16 @@ def capability_reasons() -> dict[str, str]:
         # unavailable: it is the first explicit authorization the operator
         # must grant, while ``reindex_needed`` remains independently gated.
         reasons["reindex_selected"] = "bulk_reindex_disabled"
+
+    source_reason = maintenance_source_capability_reason()
+    if source_reason:
+        for operation in (
+            "repair_indexes",
+            "reindex_needed",
+            "reindex_selected",
+        ):
+            if not reasons[operation]:
+                reasons[operation] = source_reason
     return reasons
 
 

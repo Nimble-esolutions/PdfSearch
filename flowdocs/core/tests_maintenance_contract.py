@@ -10,6 +10,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.maintenance import queue_job, run_job
+from core.candidate_maintenance import (
+    CandidateMaintenanceError,
+    maintenance_source_capability_reason,
+)
 from core.management.commands.run_maintenance_jobs import (
     _execute_local_job,
     _fail_unhandled_local_job,
@@ -45,6 +49,12 @@ class MaintenancePlanningTests(TestCase):
     databases = {"default", "control"}
 
     def setUp(self):
+        source_capability = patch(
+            "core.maintenance_plans.maintenance_source_capability_reason",
+            return_value="",
+        )
+        source_capability.start()
+        self.addCleanup(source_capability.stop)
         self.superadmin = CustomUser.objects.create_user(
             username="root",
             password="password",
@@ -174,6 +184,67 @@ class MaintenancePlanningTests(TestCase):
             self.assertEqual(
                 reasons[operation],
                 "mutation_tracking_disabled",
+            )
+
+    def test_candidate_operations_require_verified_source_authority(self):
+        with patch(
+            "core.maintenance_plans.maintenance_source_capability_reason",
+            return_value="maintenance_source_pointer_unverified",
+        ):
+            reasons = capability_reasons()
+
+        self.assertEqual(reasons["validate"], "")
+        for operation in (
+            "repair_indexes",
+            "reindex_needed",
+            "reindex_selected",
+        ):
+            self.assertEqual(
+                reasons[operation],
+                "maintenance_source_pointer_unverified",
+            )
+
+    def test_queue_rechecks_source_authority_before_recovery_or_job(self):
+        plan = self._plan(operation="repair_indexes")
+        with (
+            patch(
+                "core.maintenance_plans.maintenance_source_capability_reason",
+                return_value="maintenance_source_pointer_unverified",
+            ),
+            patch("core.maintenance_plans.create_set") as create_recovery_set,
+        ):
+            with self.assertRaisesRegex(
+                MaintenancePlanError,
+                "^maintenance_source_pointer_unverified$",
+            ):
+                queue_plan(plan=plan, actor=self.superadmin)
+
+        plan.refresh_from_db()
+        self.assertEqual(plan.state, "previewed")
+        self.assertIsNone(plan.job_id)
+        self.assertFalse(MaintenanceJob.objects.exists())
+        create_recovery_set.assert_not_called()
+
+    def test_source_capability_preserves_typed_candidate_reason(self):
+        with patch(
+            "core.candidate_maintenance._maintenance_source_parent",
+            side_effect=CandidateMaintenanceError(
+                "maintenance_source_observation_stale"
+            ),
+        ):
+            self.assertEqual(
+                maintenance_source_capability_reason(),
+                "maintenance_source_observation_stale",
+            )
+
+    def test_source_capability_fails_closed_on_unexpected_error(self):
+        with patch(
+            "core.candidate_maintenance._maintenance_source_parent",
+            side_effect=RuntimeError("unsafe internal detail"),
+        ):
+            self.assertEqual(
+                maintenance_source_capability_reason(),
+                "maintenance_source_pointer_unverified",
             )
 
     def test_normalize_selection_rejects_inverted_date_range(self):
@@ -381,6 +452,42 @@ class MaintenancePlanningTests(TestCase):
             )
             self.assertContains(disabled, "bulk_reindex_disabled")
             self.assertContains(disabled, "disabled")
+
+    def test_workbench_explains_unverified_source_before_mutation_preview(self):
+        self.client.force_login(self.superadmin)
+        with patch(
+            "core.maintenance_plans.maintenance_source_capability_reason",
+            return_value="maintenance_source_pointer_unverified",
+        ):
+            response = self.client.get(
+                f"{reverse('operations_panel')}?section=maintenance"
+            )
+
+        self.assertContains(response, "Active search source is not verified")
+        self.assertContains(
+            response,
+            "Repair and reindex work cannot prepare a safe candidate yet.",
+        )
+        self.assertContains(
+            response,
+            'name="operation" value="validate"',
+            html=False,
+        )
+        self.assertNotContains(
+            response,
+            'name="operation" value="validate" disabled',
+            html=False,
+        )
+        for operation in (
+            "repair_indexes",
+            "reindex_needed",
+            "reindex_selected",
+        ):
+            self.assertContains(
+                response,
+                f'name="operation" value="{operation}" disabled',
+                html=False,
+            )
 
     def test_workbench_renders_guided_authority_scope_and_preview_contract(self):
         self.client.force_login(self.superadmin)
