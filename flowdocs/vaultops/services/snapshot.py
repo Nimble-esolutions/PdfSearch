@@ -21,6 +21,7 @@ from core.management.commands.inventory_artifacts import (
     MANIFEST_VERSION,
     build_manifest,
 )
+from core.custody_audit import MAX_DATABASE_BYTES
 from core.media_quarantine import (
     build_unavailable_attestation,
     storage_key_evidence,
@@ -86,6 +87,7 @@ def snapshot_configuration_fingerprint():
         "publication_manifest_schema": PUBLICATION_MANIFEST_SCHEMA,
         "snapshot_faiss_reconciliation_schema": FAISS_RECONCILIATION_SCHEMA,
         "snapshot_schema": SNAPSHOT_SCHEMA,
+        "snapshot_database_max_bytes": MAX_DATABASE_BYTES,
     }
     canonical = json.dumps(
         {"schema": SNAPSHOT_CONFIGURATION_SCHEMA, "values": values},
@@ -108,7 +110,7 @@ def _configuration_fingerprint_valid(value):
     )
 
 
-def _stable_file_sha256(path):
+def _stable_file_sha256(path, *, maximum_bytes=None):
     descriptor = -1
     try:
         descriptor = os.open(
@@ -118,12 +120,18 @@ def _stable_file_sha256(path):
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
             return None
+        if maximum_bytes is not None and before.st_size > maximum_bytes:
+            return None
         digest = hashlib.sha256()
+        size = 0
         while True:
             chunk = os.read(descriptor, 1024 * 1024)
             if not chunk:
                 break
             digest.update(chunk)
+            size += len(chunk)
+            if maximum_bytes is not None and size > maximum_bytes:
+                return None
         after = os.fstat(descriptor)
         if (
             before.st_dev,
@@ -168,6 +176,19 @@ def _snapshot_file_configuration(snapshot):
             not isinstance(expected_primary_digest, str)
             or not re.fullmatch(r"[0-9a-f]{64}", expected_primary_digest)
             or _stable_file_sha256(primary_path) != expected_primary_digest
+        ):
+            return None
+        database_path = (root / "db.sqlite3").resolve(strict=True)
+        database_path.relative_to(root)
+        expected_database_digest = snapshot.evidence.get("database_sha256")
+        if (
+            not isinstance(expected_database_digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", expected_database_digest)
+            or _stable_file_sha256(
+                database_path,
+                maximum_bytes=MAX_DATABASE_BYTES,
+            )
+            != expected_database_digest
         ):
             return None
         evidence_path = root / "snapshot-configuration.json"

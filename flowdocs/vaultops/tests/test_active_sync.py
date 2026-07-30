@@ -2176,10 +2176,11 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             )
         )
         canonical_workspace.mkdir()
-        (canonical_workspace / "db.sqlite3").write_bytes(
-            (self.workspace / "db.sqlite3").read_bytes()
-        )
+        database_payload = (self.workspace / "db.sqlite3").read_bytes()
+        database_digest = hashlib.sha256(database_payload).hexdigest()
+        (canonical_workspace / "db.sqlite3").write_bytes(database_payload)
         evidence["configuration_fingerprint"] = fingerprint
+        evidence["database"] = {"sha256": database_digest}
         canonical_evidence_path = canonical_workspace / "snapshot-evidence.json"
         canonical_evidence_path.write_text(
             json.dumps(evidence),
@@ -2197,6 +2198,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
                 canonical_evidence_path.read_bytes()
             ).hexdigest(),
             "configuration_path": "snapshot-configuration.json",
+            "database_sha256": database_digest,
             "configuration_fingerprint": fingerprint,
         }
         scheduled_snapshot.save(

@@ -86,6 +86,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
         checkpoint_overrides=None,
         configuration_bytes=None,
         primary_bytes=None,
+        database_posture="valid",
     ):
         fingerprint = snapshot_configuration_fingerprint()
         trusted_fingerprint = (
@@ -121,6 +122,10 @@ class SyncRetryHardeningTests(TransactionTestCase):
             / f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
         )
         workspace.mkdir()
+        database_payload = b"canonical snapshot database"
+        database_digest = hashlib.sha256(database_payload).hexdigest()
+        database_path = workspace / "db.sqlite3"
+        database_path.write_bytes(database_payload)
         primary_path = workspace / "snapshot-evidence.json"
         primary_path.write_text(
             json.dumps(
@@ -128,6 +133,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
                     "snapshot_id": str(snapshot.public_id),
                     "snapshot_digest": snapshot.snapshot_digest,
                     "configuration_fingerprint": fingerprint,
+                    "database": {"sha256": database_digest},
                 }
             ),
             encoding="utf-8",
@@ -140,6 +146,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
         snapshot.workspace_path = str(workspace)
         snapshot.evidence = {
             **snapshot.evidence,
+            "database_sha256": database_digest,
             "evidence_sha256": hashlib.sha256(
                 primary_path.read_bytes()
             ).hexdigest(),
@@ -160,6 +167,18 @@ class SyncRetryHardeningTests(TransactionTestCase):
                 ),
                 encoding="utf-8",
             )
+        if database_posture == "missing":
+            database_path.unlink()
+        elif database_posture == "mutated":
+            database_path.write_bytes(b"changed database")
+        elif database_posture == "symlink":
+            database_path.unlink()
+            outside = self.root / f"outside-{snapshot.public_id}.sqlite3"
+            outside.write_bytes(database_payload)
+            database_path.symlink_to(outside)
+        elif database_posture == "directory":
+            database_path.unlink()
+            database_path.mkdir()
         checkpoint = {
             "snapshot_id": str(snapshot.public_id),
             "snapshot_digest": snapshot.snapshot_digest,
@@ -313,6 +332,27 @@ class SyncRetryHardeningTests(TransactionTestCase):
         self.assertEqual(
             receipt.mode, VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
         )
+
+    def test_missing_mutated_or_unsafe_snapshot_database_forces_fresh(self):
+        for posture in ("missing", "mutated", "symlink", "directory"):
+            with self.subTest(posture=posture):
+                job = self._job()
+                self._finalized_snapshot(
+                    job,
+                    database_posture=posture,
+                )
+
+                _, receipt, _ = requeue_job(
+                    job.public_id,
+                    expected_state_version=job.state_version,
+                    idempotency_key=f"retry-database-{posture}-0001",
+                    actor_id=self.user.pk,
+                )
+
+                self.assertEqual(
+                    receipt.mode,
+                    VaultJobRetryRequest.Mode.FRESH_SNAPSHOT,
+                )
 
     def test_stale_finalized_workspace_cleanup_succeeds(self):
         job = self._job()
