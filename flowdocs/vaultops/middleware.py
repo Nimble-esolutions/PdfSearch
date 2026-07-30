@@ -29,6 +29,8 @@ MUTATING_VIEW_NAMES = {
     "delete_pdf",
     "deprecate_pdf",
     "archive_pdf",
+    "mark_pdf_unavailable",
+    "bind_pdf_recovery_evidence",
     "restore_pdf",
 }
 

@@ -182,6 +182,9 @@ WSGI_APPLICATION = 'flowdocs.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
+        # Media lifecycle services reject caller-owned transactions so their
+        # committed application row/audit can safely precede the control epoch.
+        'ATOMIC_REQUESTS': False,
         'NAME': str(
             ACTIVE_RUNTIME.database_path
             if ACTIVE_RUNTIME
