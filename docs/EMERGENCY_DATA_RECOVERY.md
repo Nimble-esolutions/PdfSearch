@@ -54,6 +54,16 @@ and reconcile referenced media. A database-only workspace always reports that
 indexes require rebuilding. Do not activate it merely because SQLite integrity
 passes.
 
+If a referenced PDF cannot be recovered, do not delete its production record
+or edit SQLite lifecycle values to make validation pass. `archived` and
+`deprecated` describe product lifecycle; neither authorizes missing custody
+media. Only the supported, audited `unavailable` transition may preserve an
+absent-media row. Rebuild affected search indexes and publish a new generation
+through the normal candidate workflow. Candidate and runtime evidence bind the
+complete unavailable set with a count, bounded ID preview, truncation posture,
+and full-set digest. Every other missing, blank, or unsafe PDF reference remains
+an activation blocker even when a count policy declares preserved rows.
+
 ### Validation and readiness
 
 `prepare` copies the verified databases into a new isolated workspace and

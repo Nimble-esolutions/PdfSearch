@@ -19,7 +19,7 @@ from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
-from core.models import Folder
+from core.models import Folder, PDFFile
 from core.candidate_maintenance import (
     CandidateMaintenanceError,
     _verified_mutable_source_runtime_identity,
@@ -49,7 +49,10 @@ from vaultops.runtime_verification_contract import (
     write_runtime_verification_failure,
     write_runtime_verification_success,
 )
-from core.media_quarantine import build_unavailable_attestation
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
 from vaultops.services.activation import (
     ActivationCoordinatorError,
     prepare_previous_runtime_rollback,
@@ -668,6 +671,27 @@ class ActivationCoordinatorTests(TestCase):
         )
 
     def test_prepared_rollback_uses_existing_signed_activation_protocol(self):
+        storage_evidence = storage_key_evidence("pdfs/missing.pdf")
+        unavailable_documents = build_unavailable_attestation(
+            (
+                {
+                    "id": 1,
+                    "lifecycle": "unavailable",
+                    "storage_key_status": storage_evidence["status"],
+                    "storage_key_token_sha256": storage_evidence[
+                        "token_sha256"
+                    ],
+                    "expected_sha256": "",
+                    "expected_size": None,
+                    "prior_lifecycle": "uploaded",
+                },
+            )
+        )
+        self.current_generation.manifest = {
+            **self.current_generation.manifest,
+            "unavailable_documents": unavailable_documents,
+        }
+        self.current_generation.save(update_fields=["manifest"])
         self._configure_signed_local_candidate_as_active()
         workspace = prepare_previous_runtime_rollback()
 
@@ -688,6 +712,10 @@ class ActivationCoordinatorTests(TestCase):
             intent_document["previous_generation_id"], TARGET_GENERATION
         )
         self.assertEqual(intent_document["activation_mode"], "rollback")
+        self.assertEqual(
+            intent_document["unavailable_documents"],
+            unavailable_documents,
+        )
         self.assertEqual(
             intent_document["rollback_previous_generation_id"],
             CURRENT_GENERATION,
@@ -2285,6 +2313,35 @@ class ActivationRuntimeVerificationTests(TestCase):
                     "verify_activation_runtime",
                     intent_id=self.intent_id,
                 )
+
+    def test_runtime_rejects_archived_blank_unsafe_and_missing_media(self):
+        operator = get_user_model().objects.get(username="recovery")
+        folder = Folder.objects.create(name="Custody", created_by=operator)
+        for label, value, expected_reason in (
+            ("blank", "", "activation_pdf_path_invalid"),
+            ("unsafe", "../outside.pdf", "activation_pdf_path_invalid"),
+            ("missing", "pdfs/missing.pdf", "activation_pdf_missing"),
+        ):
+            with self.subTest(label=label):
+                pdf = PDFFile.objects.create(
+                    title=f"Archived {label}",
+                    file=value,
+                    folder=folder,
+                    uploaded_by=operator,
+                    lifecycle="archived",
+                )
+                with (
+                    patch(
+                        "vaultops.services.runtime_verification."
+                        "_validate_faiss_coherence"
+                    ),
+                    self.assertRaisesRegex(CommandError, expected_reason),
+                ):
+                    call_command(
+                        "verify_activation_runtime",
+                        intent_id=self.intent_id,
+                    )
+                PDFFile.objects.filter(pk=pdf.pk).delete()
 
     def test_management_command_writes_bounded_failure_evidence(self):
         failure_path = self.root / "activation-failure.json"

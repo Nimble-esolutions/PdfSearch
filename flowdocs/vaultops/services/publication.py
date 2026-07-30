@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from core.artifact_vault import ArtifactVault, object_metadata_value
 from core.media_quarantine import (
+    build_unauthorized_missing_attestation,
     build_unavailable_attestation,
     validate_unavailable_attestation,
 )
@@ -266,6 +267,123 @@ def _load_snapshot_files(snapshot):
     return evidence, resolved
 
 
+def _validate_snapshot_media_evidence(evidence):
+    inventory = evidence.get("inventory")
+    faiss = evidence.get("faiss")
+    if not isinstance(inventory, dict) or not isinstance(faiss, dict):
+        raise PublicationError("snapshot_media_evidence_invalid")
+    counts = inventory.get("counts")
+    pdfs = inventory.get("pdfs")
+    if pdfs is None and isinstance(counts, dict) and counts.get("pdf_rows") == 0:
+        pdfs = []
+    if (
+        not isinstance(pdfs, list)
+        or not isinstance(counts, dict)
+        or counts.get("pdf_rows") != len(pdfs)
+    ):
+        raise PublicationError("snapshot_media_evidence_invalid")
+    valid_lifecycles = {
+        "uploaded",
+        "processing",
+        "ready",
+        "deprecated",
+        "archived",
+        "unavailable",
+    }
+    if any(
+        not isinstance(item, dict)
+        or not isinstance(item.get("metadata"), dict)
+        or item["metadata"].get("lifecycle") not in valid_lifecycles
+        for item in pdfs
+    ):
+        raise PublicationError("snapshot_media_evidence_invalid")
+    try:
+        inventory_unavailable = validate_unavailable_attestation(
+            inventory.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
+        )
+        faiss_unavailable = validate_unavailable_attestation(
+            faiss.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
+        )
+        rebuilt_unavailable = build_unavailable_attestation(
+            (
+                {
+                    "id": item["db_id"],
+                    "lifecycle": item["metadata"].get("lifecycle"),
+                    "storage_key_status": item["metadata"].get(
+                        "storage_key_status"
+                    ),
+                    "storage_key_token_sha256": item["metadata"].get(
+                        "storage_key_token_sha256"
+                    ),
+                    "expected_sha256": item["metadata"].get(
+                        "media_expected_sha256"
+                    ),
+                    "expected_size": item["metadata"].get(
+                        "media_expected_size"
+                    ),
+                    "prior_lifecycle": item["metadata"].get(
+                        "media_prior_lifecycle"
+                    ),
+                }
+                for item in pdfs
+                if isinstance(item, dict)
+                and isinstance(item.get("metadata"), dict)
+                and item["metadata"].get("lifecycle") == "unavailable"
+            )
+        )
+        inventory_unauthorized = inventory.get(
+            "unauthorized_missing_documents",
+            build_unauthorized_missing_attestation(()),
+        )
+        rebuilt_unauthorized = build_unauthorized_missing_attestation(
+            (
+                {
+                    "id": item["db_id"],
+                    "lifecycle": item["metadata"].get("lifecycle") or "legacy",
+                    "file_status": item.get("file_status"),
+                    "storage_key_token_sha256": item["metadata"].get(
+                        "storage_key_token_sha256"
+                    ),
+                }
+                for item in pdfs
+                if isinstance(item, dict)
+                and isinstance(item.get("metadata"), dict)
+                and item["metadata"].get("lifecycle") != "unavailable"
+                and item.get("exists") is not True
+            )
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PublicationError("snapshot_media_evidence_invalid") from exc
+    if (
+        inventory_unavailable != faiss_unavailable
+        or inventory_unavailable != rebuilt_unavailable
+    ):
+        raise PublicationError("snapshot_unavailable_attestation_mismatch")
+    if (
+        inventory_unauthorized != rebuilt_unauthorized
+        or rebuilt_unauthorized["count"]
+    ):
+        raise PublicationError("snapshot_media_missing")
+    unauthorized = [
+        item
+        for item in pdfs
+        if not isinstance(item, dict)
+        or not isinstance(item.get("metadata"), dict)
+        or (
+            item["metadata"].get("lifecycle") != "unavailable"
+            and item.get("exists") is not True
+        )
+    ]
+    if unauthorized:
+        raise PublicationError("snapshot_media_missing")
+
+
 def _manifest_key_for_generation(dataset_id, generation_id):
     return KeyBuilder(dataset_id).generation_manifest(generation_id)
 
@@ -321,6 +439,8 @@ def publish_snapshot_candidate(
     if job.profile_fingerprint != profile.fingerprint:
         raise PublicationError("profile_fingerprint_changed")
 
+    evidence, files = _load_snapshot_files(snapshot)
+    _validate_snapshot_media_evidence(evidence)
     capabilities = probe_capabilities(
         vault, deployment_id=identity.deployment_id
     )
@@ -363,7 +483,6 @@ def publish_snapshot_candidate(
     last_renewal = time.monotonic()
     manifest_published = False
     try:
-        evidence, files = _load_snapshot_files(snapshot)
         checkpoint = step.checkpoint if isinstance(step.checkpoint, dict) else {}
         object_checkpoints = checkpoint.get("objects", {})
         for index, record in enumerate(files, start=1):

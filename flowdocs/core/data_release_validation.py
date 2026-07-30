@@ -13,6 +13,10 @@ from .management.commands.inventory_artifacts import (
     build_manifest,
     inspect_faiss_file,
 )
+from .media_quarantine import (
+    build_unavailable_attestation,
+    validate_unavailable_attestation,
+)
 
 
 REQUIRED_COUNTS = (
@@ -313,6 +317,47 @@ def validate_release(
     )
 
     actual_counts = actual.get("counts", {})
+    try:
+        expected_unavailable = validate_unavailable_attestation(
+            manifest.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
+        )
+        actual_unavailable = validate_unavailable_attestation(
+            actual.get("unavailable_documents")
+        )
+    except ValueError:
+        issues.append(_issue("unavailable-attestation-invalid"))
+    else:
+        if expected_unavailable != actual_unavailable:
+            issues.append(
+                _issue(
+                    "unavailable-attestation-mismatch",
+                    expected_count=expected_unavailable["count"],
+                    actual_count=actual_unavailable["count"],
+                )
+            )
+    unauthorized_missing_rows = [
+        item
+        for item in actual.get("pdfs", [])
+        if not item.get("exists")
+        and item.get("metadata", {}).get("lifecycle") != "unavailable"
+    ]
+    if unauthorized_missing_rows:
+        unauthorized_evidence = actual.get(
+            "unauthorized_missing_documents",
+            {},
+        )
+        issues.append(
+            _issue(
+                "unauthorized-missing-pdf",
+                count=len(unauthorized_missing_rows),
+                ids=unauthorized_evidence.get("ids", []),
+                truncated=unauthorized_evidence.get("truncated", False),
+                set_sha256=unauthorized_evidence.get("set_sha256", ""),
+            )
+        )
     expected_count_fields = {
         "pdf_rows": actual_counts.get("pdf_rows"),
         "pdf_storage_files": actual_counts.get("pdf_storage_files"),

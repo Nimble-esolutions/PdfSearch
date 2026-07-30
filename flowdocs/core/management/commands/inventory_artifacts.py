@@ -14,9 +14,21 @@ from urllib.parse import quote
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from core.media_quarantine import (
+    MediaFileAbsentError,
+    MediaFileUnsafeError,
+    build_unauthorized_missing_attestation,
+    build_unavailable_attestation,
+    storage_key_collision_token,
+    storage_key_evidence,
+    verify_local_media_file,
+)
+
 
 INVENTORY_SCHEMA = "pdfsearch-artifact-inventory/v1"
 MANIFEST_VERSION = 1
+DEFAULT_MAX_PDF_ROWS = 100_000
+MAX_PDF_ROWS_CEILING = 1_000_000
 _METADATA_SUFFIXES = {".json", ".jsonl", ".yaml", ".yml", ".npy", ".npz", ".pkl", ".pickle"}
 _METADATA_NAME = re.compile(r"(?:embedding|metadata|index)", re.IGNORECASE)
 
@@ -47,21 +59,6 @@ def _iter_files(root: Path) -> Iterable[Path]:
             path = Path(directory) / filename
             if path.is_file():
                 yield path
-
-
-def _safe_storage_path(media_root: Path, stored_path: str | None) -> Path | None:
-    if not stored_path:
-        return None
-    candidate = Path(stored_path)
-    if candidate.is_absolute():
-        return None
-    resolved_root = media_root.resolve()
-    resolved = (media_root / candidate).resolve()
-    try:
-        resolved.relative_to(resolved_root)
-    except ValueError:
-        return None
-    return resolved
 
 
 def _json_shape(value: Any) -> Any:
@@ -231,15 +228,62 @@ def _pdf_rows(database_path: Path, media_root: Path) -> tuple[list[dict[str, Any
         if "core_pdffile" not in table_names:
             return [], {"available": False, "columns": [], "row_count": 0}
         columns = [row[1] for row in connection.execute('PRAGMA table_info("core_pdffile")')]
-        rows = connection.execute('SELECT * FROM "core_pdffile" ORDER BY id').fetchall()
+        row_limit = int(
+            getattr(settings, "ARTIFACT_INVENTORY_MAX_PDF_ROWS", DEFAULT_MAX_PDF_ROWS)
+        )
+        if not 1 <= row_limit <= MAX_PDF_ROWS_CEILING:
+            raise ValueError("pdf_inventory_row_limit_invalid")
         inventories = []
-        for row in rows:
+        collision_keys = {}
+        rows = connection.execute('SELECT * FROM "core_pdffile" ORDER BY id')
+        for row_number, row in enumerate(rows, start=1):
+            if row_number > row_limit:
+                raise ValueError("pdf_inventory_row_limit_exceeded")
             stored_path = row["file"] if "file" in columns else None
             declared_path = row["file_path"] if "file_path" in columns else None
-            path_value = stored_path or declared_path
-            file_path = _safe_storage_path(media_root, path_value)
-            exists = bool(file_path and file_path.is_file())
-            file_info = _file_record(media_root, file_path) if exists else None
+            raw_path_value = (
+                stored_path
+                if stored_path is not None and stored_path != ""
+                else declared_path
+            )
+            path_value = (
+                str(raw_path_value)
+                if raw_path_value is not None
+                else None
+            )
+            storage_evidence = storage_key_evidence(path_value)
+            file_info = None
+            file_status = (
+                "missing-path"
+                if storage_evidence["status"] == "blank"
+                else "unsafe-path"
+                if storage_evidence["status"] == "unsafe"
+                else "missing"
+            )
+            if storage_evidence["status"] == "present":
+                collision = storage_key_collision_token(path_value)
+                previous = collision_keys.setdefault(collision, row["id"])
+                if previous != row["id"]:
+                    raise ValueError("pdf_storage_key_collision")
+                try:
+                    verified = verify_local_media_file(
+                        media_root,
+                        path_value,
+                        maximum_bytes=int(settings.MAX_FILE_SIZE_MB)
+                        * 1024
+                        * 1024,
+                    )
+                except MediaFileAbsentError:
+                    pass
+                except MediaFileUnsafeError:
+                    file_status = "unsafe-path"
+                else:
+                    file_status = "present"
+                    file_info = {
+                        "size_bytes": verified["size"],
+                        "sha256": verified["sha256"],
+                    }
+            exists = file_info is not None
             page_chunks = _chunk_count(row["page_chunks"] if "page_chunks" in columns else None)
             embeddings = _embedding_metadata(row["chunk_embeddings"] if "chunk_embeddings" in columns else None)
             item: dict[str, Any] = {
@@ -249,16 +293,28 @@ def _pdf_rows(database_path: Path, media_root: Path) -> tuple[list[dict[str, Any
                 "exists": exists,
                 "size_bytes": file_info["size_bytes"] if file_info else None,
                 "sha256": file_info["sha256"] if file_info else None,
-                "file_status": (
-                    "present" if exists else "missing"
-                    if path_value and file_path is not None
-                    else "unsafe-path"
-                    if path_value
-                    else "missing-path"
-                ),
+                "file_status": file_status,
                 "metadata": {
                     "category": row["category"] if "category" in columns else None,
                     "subject": row["subject"] if "subject" in columns else None,
+                    "lifecycle": row["lifecycle"] if "lifecycle" in columns else None,
+                    "storage_key_status": storage_evidence["status"],
+                    "storage_key_token_sha256": storage_evidence["token_sha256"],
+                    "media_expected_sha256": (
+                        row["media_expected_sha256"]
+                        if "media_expected_sha256" in columns
+                        else ""
+                    ),
+                    "media_expected_size": (
+                        row["media_expected_size"]
+                        if "media_expected_size" in columns
+                        else None
+                    ),
+                    "media_prior_lifecycle": (
+                        row["media_prior_lifecycle"]
+                        if "media_prior_lifecycle" in columns
+                        else ""
+                    ),
                     "indexed": bool(row["indexed"]) if "indexed" in columns else None,
                     "has_extracted_text": bool(row["extracted_text"]) if "extracted_text" in columns else False,
                     "has_text_content": bool(row["text_content"]) if "text_content" in columns else False,
@@ -367,6 +423,63 @@ def build_manifest(
         }
     )
     missing_rows = sum(not item["exists"] for item in pdf_rows)
+    valid_lifecycles = {
+        "uploaded",
+        "processing",
+        "ready",
+        "deprecated",
+        "archived",
+        "unavailable",
+    }
+    if "lifecycle" in pdf_schema["columns"]:
+        lifecycle_invalid = any(
+            item["metadata"].get("lifecycle") not in valid_lifecycles
+            for item in pdf_rows
+        )
+    else:
+        lifecycle_invalid = any(
+            item["metadata"].get("lifecycle") is not None
+            for item in pdf_rows
+        )
+    if lifecycle_invalid:
+        raise ValueError("pdf_inventory_lifecycle_invalid")
+    unavailable_missing_rows = sum(
+        not item["exists"]
+        and item["metadata"].get("lifecycle") == "unavailable"
+        for item in pdf_rows
+    )
+    unavailable_documents = build_unavailable_attestation(
+        (
+            {
+                "id": item["db_id"],
+                "lifecycle": item["metadata"].get("lifecycle"),
+                "storage_key_status": item["metadata"]["storage_key_status"],
+                "storage_key_token_sha256": item["metadata"][
+                    "storage_key_token_sha256"
+                ],
+                "expected_sha256": item["metadata"]["media_expected_sha256"],
+                "expected_size": item["metadata"]["media_expected_size"],
+                "prior_lifecycle": item["metadata"]["media_prior_lifecycle"],
+            }
+            for item in pdf_rows
+            if item["metadata"].get("lifecycle") == "unavailable"
+        )
+    )
+    unauthorized_missing_documents = build_unauthorized_missing_attestation(
+        (
+            {
+                "id": item["db_id"],
+                "lifecycle": item["metadata"].get("lifecycle") or "legacy",
+                "file_status": item["file_status"],
+                "storage_key_token_sha256": item["metadata"][
+                    "storage_key_token_sha256"
+                ],
+            }
+            for item in pdf_rows
+            if not item["exists"]
+            and item["metadata"].get("lifecycle") != "unavailable"
+        )
+    )
     manifest = {
         "manifest_version": MANIFEST_VERSION,
         "read_only": True,
@@ -381,6 +494,8 @@ def build_manifest(
         },
         "database": _sqlite_inventory(database_path, root),
         "pdfs": pdf_rows,
+        "unavailable_documents": unavailable_documents,
+        "unauthorized_missing_documents": unauthorized_missing_documents,
         "pdf_storage": {
             "root": media_inventory["root"],
             "contract": media_inventory["contract"],
@@ -411,6 +526,7 @@ def build_manifest(
             "pdf_rows": len(pdf_rows),
             "pdf_rows_with_existing_files": len(pdf_rows) - missing_rows,
             "pdf_rows_missing_files": missing_rows,
+            "pdf_rows_unavailable_missing_files": unavailable_missing_rows,
             "pdf_storage_files": len(pdf_files),
             "faiss_files": len(faiss_files),
             "chroma_files": len(chroma_inventory["files"]),

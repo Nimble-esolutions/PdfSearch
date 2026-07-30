@@ -30,6 +30,7 @@ from core.lease import (
     release_lease,
     renew_lease,
 )
+from core.media_quarantine import build_unavailable_attestation
 from core.namespace import KeyBuilder
 from vaultops.models import (
     ArtifactGeneration,
@@ -173,6 +174,9 @@ class VaultOpsLifecycleIntegrationTests(TransactionTestCase):
                 "pdf_storage": {"count": 0},
                 "chroma": {"file_count": 0},
                 "static": {"file_count": 0},
+            },
+            "faiss": {
+                "unavailable_documents": build_unavailable_attestation(()),
             },
         }
         (workspace / "snapshot-evidence.json").write_text(

@@ -37,7 +37,15 @@ from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, bind_unavailable_recovery_evidence, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf
-from .media_quarantine import build_unavailable_attestation, storage_key_evidence, storage_key_status, validate_unavailable_attestation
+from .media_quarantine import (
+    MediaFileUnsafeError,
+    build_unauthorized_missing_attestation,
+    build_unavailable_attestation,
+    storage_key_evidence,
+    storage_key_status,
+    validate_unavailable_attestation,
+    verify_local_media_file,
+)
 from .maintenance_plans import queue_plan
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat
 from .worker_readiness import heartbeat_path
@@ -1626,6 +1634,167 @@ class ArtifactInventoryTests(TestCase):
         self.assertEqual(pdf['file_status'], 'missing')
         self.assertIsNone(pdf['sha256'])
 
+    def test_inventory_rejects_symlinked_media_entries(self):
+        root = self._root_with_pdf()
+        document = root / 'media' / 'pdfs' / 'document.pdf'
+        outside = root / 'outside.pdf'
+        outside.write_bytes(b'%PDF-1.7\noutside')
+        document.unlink()
+        document.symlink_to(outside)
+
+        pdf = build_manifest(root)['pdfs'][0]
+
+        self.assertFalse(pdf['exists'])
+        self.assertEqual(pdf['file_status'], 'unsafe-path')
+        self.assertIsNone(pdf['sha256'])
+
+    @override_settings(ARTIFACT_INVENTORY_MAX_PDF_ROWS=1)
+    def test_inventory_fails_stably_before_exceeding_configured_row_cap(self):
+        root = self._root_with_pdf()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.execute(
+            "INSERT INTO core_pdffile VALUES "
+            "(2, 'Second', 'pdfs/second.pdf', '', '[]', '[]', '', 0)"
+        )
+        connection.commit()
+        connection.close()
+
+        with self.assertRaisesRegex(
+            ValueError, '^pdf_inventory_row_limit_exceeded$'
+        ):
+            build_manifest(root)
+
+    def test_inventory_rejects_case_colliding_storage_keys(self):
+        root = self._root_with_pdf()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.execute(
+            "INSERT INTO core_pdffile VALUES "
+            "(2, 'Second', 'PDFS/DOCUMENT.PDF', '', '[]', '[]', '', 0)"
+        )
+        connection.commit()
+        connection.close()
+
+        with self.assertRaisesRegex(ValueError, '^pdf_storage_key_collision$'):
+            build_manifest(root)
+
+    def test_inventory_attests_complete_unavailable_set_with_bounded_ids(self):
+        root = Path(self.temp_dir.name) / 'unavailable-set'
+        root.mkdir()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.executescript(
+            'CREATE TABLE django_migrations (app varchar(255), name varchar(255));'
+            'CREATE TABLE core_pdffile ('
+            'id integer primary key, title varchar(200), file varchar(100), '
+            'lifecycle varchar(20), media_expected_sha256 varchar(64), '
+            'media_expected_size integer, media_prior_lifecycle varchar(20));'
+            "INSERT INTO django_migrations VALUES ('core', '0025_latest');"
+        )
+        connection.executemany(
+            'INSERT INTO core_pdffile VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (
+                (
+                    identifier,
+                    f'Unavailable {identifier}',
+                    (
+                        ''
+                        if identifier % 3 == 0
+                        else '../unsafe.pdf'
+                        if identifier % 3 == 1
+                        else f'pdfs/missing-{identifier}.pdf'
+                    ),
+                    'unavailable',
+                    '',
+                    None,
+                    'uploaded',
+                )
+                for identifier in range(1, 26)
+            ),
+        )
+        connection.commit()
+        connection.close()
+
+        first = build_manifest(root)
+        second = build_manifest(root)
+        evidence = first['unavailable_documents']
+
+        self.assertEqual(first, second)
+        self.assertEqual(evidence['count'], 25)
+        self.assertEqual(evidence['ids'], list(range(1, 21)))
+        self.assertTrue(evidence['truncated'])
+        self.assertRegex(evidence['set_sha256'], r'^[0-9a-f]{64}$')
+        self.assertEqual(
+            first['counts']['pdf_rows_unavailable_missing_files'],
+            25,
+        )
+
+    def test_release_rejects_missing_archived_deprecated_blank_null_and_unsafe_rows(self):
+        for identifier, lifecycle, value in (
+            (1, 'archived', 'pdfs/missing.pdf'),
+            (2, 'deprecated', ''),
+            (3, 'archived', None),
+            (4, 'deprecated', '../unsafe.pdf'),
+        ):
+            with self.subTest(lifecycle=lifecycle, value=value):
+                root = Path(self.temp_dir.name) / f'unauthorized-{identifier}'
+                root.mkdir()
+                connection = sqlite3.connect(root / 'db.sqlite3')
+                connection.executescript(
+                    'CREATE TABLE django_migrations '
+                    '(app varchar(255), name varchar(255));'
+                    'CREATE TABLE core_pdffile ('
+                    'id integer primary key, title varchar(200), '
+                    'file varchar(100), lifecycle varchar(20));'
+                    "INSERT INTO django_migrations VALUES "
+                    "('core', '0025_latest');"
+                )
+                connection.execute(
+                    'INSERT INTO core_pdffile VALUES (?, ?, ?, ?)',
+                    (identifier, 'Missing record', value, lifecycle),
+                )
+                connection.commit()
+                connection.close()
+                manifest = self._policy(
+                    build_manifest(root),
+                    preserved_target_only_rows=1,
+                )
+
+                report = validate_release(manifest, root)
+
+                self.assertFalse(report['ok'])
+                self.assertIn(
+                    'unauthorized-missing-pdf',
+                    {issue['kind'] for issue in report['issues']},
+                )
+
+    def test_release_rejects_unavailable_attestation_drift(self):
+        root = Path(self.temp_dir.name) / 'unavailable-drift'
+        root.mkdir()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.executescript(
+            'CREATE TABLE django_migrations (app varchar(255), name varchar(255));'
+            'CREATE TABLE core_pdffile ('
+            'id integer primary key, title varchar(200), file varchar(100), '
+            'lifecycle varchar(20));'
+            "INSERT INTO django_migrations VALUES ('core', '0025_latest');"
+            "INSERT INTO core_pdffile VALUES "
+            "(1, 'Unavailable', 'pdfs/missing.pdf', 'unavailable');"
+        )
+        connection.commit()
+        connection.close()
+        manifest = self._policy(
+            build_manifest(root),
+            preserved_target_only_rows=1,
+        )
+        manifest['unavailable_documents']['set_sha256'] = '0' * 64
+
+        report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn(
+            'unavailable-attestation-mismatch',
+            {issue['kind'] for issue in report['issues']},
+        )
+
     def test_comparison_classifies_hash_difference(self):
         source_root = self._root_with_pdf(b'one', Path(self.temp_dir.name) / 'source')
         target_root = self._root_with_pdf(b'two', Path(self.temp_dir.name) / 'target')
@@ -1746,12 +1915,12 @@ class ArtifactInventoryTests(TestCase):
             'CREATE TABLE core_pdffile ('
             'id integer primary key, title varchar(200), file varchar(100), '
             'extracted_text text, page_chunks text, chunk_embeddings text, '
-            'text_content text, indexed bool);'
+            'text_content text, indexed bool, lifecycle varchar(20));'
             "INSERT INTO django_migrations VALUES ('core', '0012_latest');"
             "INSERT INTO core_pdffile VALUES "
-            "(1, 'Preserved target row', 'pdfs/target-only.pdf', NULL, NULL, NULL, NULL, 0);"
+            "(1, 'Preserved target row', 'pdfs/target-only.pdf', NULL, NULL, NULL, NULL, 0, 'unavailable');"
             "INSERT INTO core_pdffile VALUES "
-            "(2, 'Present row', 'pdfs/present.pdf', NULL, NULL, NULL, NULL, 1);"
+            "(2, 'Present row', 'pdfs/present.pdf', NULL, NULL, NULL, NULL, 1, 'ready');"
         )
         connection.commit()
         connection.close()
@@ -1761,6 +1930,39 @@ class ArtifactInventoryTests(TestCase):
 
         self.assertTrue(report['ok'], report['issues'])
         self.assertEqual(report['checks']['counts']['pdf_rows'], 2)
+        self.assertEqual(
+            report['checks']['counts']['pdf_rows_unavailable_missing_files'],
+            1,
+        )
+
+    def test_release_validation_rejects_active_preserved_target_only_row(self):
+        root = Path(self.temp_dir.name) / 'active-target-only'
+        root.mkdir()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.executescript(
+            'CREATE TABLE django_migrations (app varchar(255), name varchar(255));'
+            'CREATE TABLE core_pdffile ('
+            'id integer primary key, title varchar(200), file varchar(100), '
+            'extracted_text text, page_chunks text, chunk_embeddings text, '
+            'text_content text, indexed bool, lifecycle varchar(20));'
+            "INSERT INTO django_migrations VALUES ('core', '0012_latest');"
+            "INSERT INTO core_pdffile VALUES "
+            "(1, 'Active missing row', 'pdfs/missing.pdf', NULL, NULL, NULL, NULL, 0, 'ready');"
+        )
+        connection.commit()
+        connection.close()
+        manifest = self._policy(
+            build_manifest(root),
+            preserved_target_only_rows=1,
+        )
+
+        report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn(
+            'unauthorized-missing-pdf',
+            {issue['kind'] for issue in report['issues']},
+        )
 
     def test_inventory_covers_configured_chroma_and_static_trees(self):
         root = self._root_with_pdf()
@@ -3019,6 +3221,14 @@ class UnavailableAttestationTests(SimpleTestCase):
             )
         self.assertEqual(storage_key_status(" pdfs/one.pdf"), "unsafe")
         self.assertEqual(storage_key_status(r"pdfs\\one.pdf"), "unsafe")
+        for alias in (
+            "pdfs//one.pdf",
+            "pdfs/./one.pdf",
+            "pdfs/one.pdf/",
+            "pdfs/cafe\u0301.pdf",
+        ):
+            with self.subTest(alias=alias):
+                self.assertEqual(storage_key_status(alias), "unsafe")
 
     def test_unknown_evidence_preserves_prior_lifecycle_and_binding_changes_digest(self):
         storage = storage_key_evidence("pdfs/one.pdf")
@@ -3045,6 +3255,57 @@ class UnavailableAttestationTests(SimpleTestCase):
 
         self.assertEqual(before["count"], 1)
         self.assertNotEqual(before["set_sha256"], after["set_sha256"])
+
+    def test_unauthorized_missing_evidence_is_bounded_and_binds_full_set(self):
+        records = (
+            {
+                "id": identifier,
+                "lifecycle": "archived",
+                "file_status": "missing",
+                "storage_key_token_sha256": storage_key_evidence(
+                    f"pdfs/missing-{identifier}.pdf"
+                )["token_sha256"],
+            }
+            for identifier in range(1, 26)
+        )
+
+        evidence = build_unauthorized_missing_attestation(records)
+
+        self.assertEqual(evidence["count"], 25)
+        self.assertEqual(evidence["ids"], list(range(1, 21)))
+        self.assertTrue(evidence["truncated"])
+        self.assertRegex(evidence["set_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_descriptor_verification_rejects_path_swap_during_read(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = root / "pdfs"
+            media.mkdir()
+            target = media / "one.pdf"
+            replacement = media / "replacement.pdf"
+            target.write_bytes(b"original")
+            replacement.write_bytes(b"replacement")
+            original_read = os.read
+            swapped = False
+
+            def swap_then_read(descriptor, size):
+                nonlocal swapped
+                chunk = original_read(descriptor, size)
+                if chunk and not swapped:
+                    swapped = True
+                    target.unlink()
+                    replacement.rename(target)
+                return chunk
+
+            with (
+                patch("core.media_quarantine.os.read", side_effect=swap_then_read),
+                self.assertRaises(MediaFileUnsafeError),
+            ):
+                verify_local_media_file(
+                    root,
+                    "pdfs/one.pdf",
+                    maximum_bytes=1024,
+                )
 
 
 class UnavailableEvidenceMigrationTests(TransactionTestCase):

@@ -30,6 +30,10 @@ from core.candidate_maintenance import (
     validate_candidate,
 )
 from core.maintenance_plans import workbench_maintenance_state
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
 
 
 class _Values:
@@ -357,8 +361,29 @@ class CandidateWorkspaceTests(SimpleTestCase):
         )
         connection.commit()
         connection.close()
+        storage_evidence = storage_key_evidence("pdfs/one.pdf")
+        unavailable_documents = build_unavailable_attestation(
+            (
+                {
+                    "id": 1,
+                    "lifecycle": "unavailable",
+                    "storage_key_status": storage_evidence["status"],
+                    "storage_key_token_sha256": storage_evidence[
+                        "token_sha256"
+                    ],
+                    "expected_sha256": "",
+                    "expected_size": None,
+                    "prior_lifecycle": "uploaded",
+                },
+            )
+        )
         (workspace / WORKSPACE_MANIFEST).write_text(
-            json.dumps({"affected_folder_ids": []})
+            json.dumps(
+                {
+                    "affected_folder_ids": [],
+                    "unavailable_documents": unavailable_documents,
+                }
+            )
         )
 
         result = validate_candidate(workspace)
@@ -366,6 +391,139 @@ class CandidateWorkspaceTests(SimpleTestCase):
         self.assertEqual(result["media"]["missing"], 0)
         self.assertEqual(result["embeddings"]["vectors"], 0)
         self.assertEqual(result["media"]["unavailable"]["count"], 1)
+
+    def test_candidate_validation_rejects_unavailable_attestation_drift(self):
+        workspace = self.control / "unavailable-drift-workspace"
+        workspace.mkdir()
+        (workspace / "media").mkdir()
+        (workspace / "faiss_indexes").mkdir()
+        workspace_db = workspace / "db.sqlite3"
+        workspace_db.write_bytes(self.database.read_bytes())
+        connection = sqlite3.connect(workspace_db)
+        for definition in (
+            "media_expected_sha256 TEXT",
+            "media_expected_size INTEGER",
+            "media_prior_lifecycle TEXT",
+        ):
+            connection.execute(f"ALTER TABLE core_pdffile ADD COLUMN {definition}")
+        connection.execute(
+            "UPDATE core_pdffile SET lifecycle='unavailable', "
+            "media_expected_sha256='', media_expected_size=NULL, "
+            "media_prior_lifecycle='uploaded' WHERE id=1"
+        )
+        connection.commit()
+        connection.close()
+        (workspace / WORKSPACE_MANIFEST).write_text(
+            json.dumps(
+                {
+                    "affected_folder_ids": [],
+                    "unavailable_documents": build_unavailable_attestation(()),
+                }
+            )
+        )
+
+        with self.assertRaises(CandidateMaintenanceError) as raised:
+            validate_candidate(workspace)
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "candidate_unavailable_attestation_changed",
+        )
+
+    def test_candidate_rejects_blank_null_and_unsafe_archived_media(self):
+        for label, value in (
+            ("blank", ""),
+            ("null", None),
+            ("unsafe", "../outside.pdf"),
+        ):
+            with self.subTest(label=label):
+                workspace = self.control / f"{label}-archived-workspace"
+                workspace.mkdir()
+                (workspace / "media").mkdir()
+                (workspace / "faiss_indexes").mkdir()
+                workspace_db = workspace / "db.sqlite3"
+                workspace_db.write_bytes(self.database.read_bytes())
+                connection = sqlite3.connect(workspace_db)
+                connection.execute(
+                    "UPDATE core_pdffile SET lifecycle='archived', file=? "
+                    "WHERE id=1",
+                    (value,),
+                )
+                connection.commit()
+                connection.close()
+                (workspace / WORKSPACE_MANIFEST).write_text(
+                    json.dumps({"affected_folder_ids": []})
+                )
+
+                with self.assertRaises(CandidateMaintenanceError) as raised:
+                    validate_candidate(workspace)
+
+                self.assertEqual(
+                    raised.exception.reason_code,
+                    "candidate_media_missing",
+                )
+
+    def test_candidate_rejects_null_and_unknown_lifecycle_values(self):
+        for label, lifecycle in (("null", None), ("unknown", "retired")):
+            with self.subTest(label=label):
+                workspace = self.control / f"{label}-lifecycle-workspace"
+                workspace.mkdir()
+                (workspace / "media" / "pdfs").mkdir(parents=True)
+                (workspace / "media" / "pdfs" / "one.pdf").write_bytes(
+                    b"%PDF-1.4"
+                )
+                (workspace / "faiss_indexes").mkdir()
+                workspace_db = workspace / "db.sqlite3"
+                workspace_db.write_bytes(self.database.read_bytes())
+                connection = sqlite3.connect(workspace_db)
+                connection.execute(
+                    "UPDATE core_pdffile SET lifecycle=? WHERE id=1",
+                    (lifecycle,),
+                )
+                connection.commit()
+                connection.close()
+                (workspace / WORKSPACE_MANIFEST).write_text(
+                    json.dumps({"affected_folder_ids": []})
+                )
+
+                with self.assertRaises(CandidateMaintenanceError) as raised:
+                    validate_candidate(workspace)
+
+                self.assertEqual(
+                    raised.exception.reason_code,
+                    "candidate_lifecycle_invalid",
+                )
+
+    def test_candidate_rejects_final_and_intermediate_media_symlinks(self):
+        for label in ("final", "intermediate"):
+            with self.subTest(label=label):
+                workspace = self.control / f"{label}-symlink-workspace"
+                workspace.mkdir()
+                media = workspace / "media"
+                real = workspace / "real-pdfs"
+                real.mkdir()
+                (real / "one.pdf").write_bytes(b"%PDF-1.4")
+                if label == "final":
+                    (media / "pdfs").mkdir(parents=True)
+                    (media / "pdfs" / "one.pdf").symlink_to(real / "one.pdf")
+                else:
+                    media.mkdir()
+                    (media / "pdfs").symlink_to(real, target_is_directory=True)
+                (workspace / "faiss_indexes").mkdir()
+                (workspace / "db.sqlite3").write_bytes(
+                    self.database.read_bytes()
+                )
+                (workspace / WORKSPACE_MANIFEST).write_text(
+                    json.dumps({"affected_folder_ids": []})
+                )
+
+                with self.assertRaises(CandidateMaintenanceError) as raised:
+                    validate_candidate(workspace)
+
+                self.assertEqual(
+                    raised.exception.reason_code,
+                    "candidate_media_missing",
+                )
 
     def test_candidate_validation_rejects_faiss_vector_count_mismatch(self):
         import faiss
