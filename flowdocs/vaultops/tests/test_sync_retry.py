@@ -1,3 +1,4 @@
+import json
 import tempfile
 import threading
 import uuid
@@ -26,6 +27,7 @@ from vaultops.services.snapshot import (
     SnapshotError,
     create_consistent_snapshot,
     reclaim_snapshot_cleanup_intents,
+    snapshot_configuration_fingerprint,
     stage_snapshot_cleanup,
 )
 
@@ -73,6 +75,77 @@ class SyncRetryHardeningTests(TransactionTestCase):
         snapshot.save(update_fields=["workspace_path", "updated_at"])
         return snapshot, workspace
 
+    def _finalized_snapshot(
+        self,
+        job,
+        *,
+        trusted_fingerprint=None,
+        file_fingerprint=None,
+        checkpoint_overrides=None,
+        configuration_bytes=None,
+    ):
+        fingerprint = snapshot_configuration_fingerprint()
+        trusted_fingerprint = (
+            fingerprint
+            if trusted_fingerprint is None
+            else trusted_fingerprint
+        )
+        file_fingerprint = (
+            fingerprint if file_fingerprint is None else file_fingerprint
+        )
+        snapshot = SourceSnapshot.objects.create(
+            job=job,
+            deployment_id="test",
+            state=SourceSnapshot.State.FINALIZED,
+            initial_epoch=1,
+            included_epoch=2,
+            snapshot_digest="a" * 64,
+            finalized_at=timezone.now(),
+            evidence={
+                "snapshot_schema": 1,
+                "evidence_path": "snapshot-evidence.json",
+                "configuration_path": "snapshot-configuration.json",
+                "configuration_fingerprint": trusted_fingerprint,
+            },
+        )
+        workspace = (
+            self.root
+            / f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
+        )
+        workspace.mkdir()
+        (workspace / "snapshot-evidence.json").write_text(
+            json.dumps(
+                {
+                    "snapshot_id": str(snapshot.public_id),
+                    "snapshot_digest": snapshot.snapshot_digest,
+                    "configuration_fingerprint": file_fingerprint,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (workspace / "snapshot-configuration.json").write_bytes(
+            configuration_bytes
+            if configuration_bytes is not None
+            else json.dumps(file_fingerprint, sort_keys=True).encode("utf-8")
+        )
+        snapshot.workspace_path = str(workspace)
+        snapshot.save(update_fields=["workspace_path", "updated_at"])
+        checkpoint = {
+            "snapshot_id": str(snapshot.public_id),
+            "snapshot_digest": snapshot.snapshot_digest,
+            "included_epoch": snapshot.included_epoch,
+            "configuration_fingerprint_sha256": fingerprint["sha256"],
+        }
+        checkpoint.update(checkpoint_overrides or {})
+        VaultJobStep.objects.create(
+            job=job,
+            phase="snapshot",
+            status=VaultJobStep.Status.COMPLETED,
+            checkpoint=checkpoint,
+            finished_at=timezone.now(),
+        )
+        return snapshot, workspace
+
     def test_fresh_snapshot_retry_is_idempotent_and_records_cleanup(self):
         job = self._job()
         snapshot, workspace = self._failed_snapshot(job)
@@ -114,15 +187,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
 
     def test_finalized_snapshot_retry_truthfully_resumes_checkpoint(self):
         job = self._job()
-        final = self.root / "final"
-        final.mkdir()
-        SourceSnapshot.objects.create(
-            job=job,
-            deployment_id="test",
-            state=SourceSnapshot.State.FINALIZED,
-            workspace_path=str(final),
-            snapshot_digest="a" * 64,
-        )
+        snapshot, final = self._finalized_snapshot(job)
 
         _, receipt, _ = requeue_job(
             job.public_id,
@@ -135,6 +200,101 @@ class SyncRetryHardeningTests(TransactionTestCase):
             receipt.mode, VaultJobRetryRequest.Mode.CHECKPOINT_RESUME
         )
         self.assertTrue(final.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(
+            snapshot.cleanup_state, SourceSnapshot.CleanupState.NONE
+        )
+
+    @override_settings(ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=1)
+    def test_changed_custody_cap_forces_fresh_snapshot_retry(self):
+        job = self._job()
+        with override_settings(
+            ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=64 * 1024 * 1024
+        ):
+            snapshot, workspace = self._finalized_snapshot(job)
+
+        _, receipt, _ = requeue_job(
+            job.public_id,
+            expected_state_version=job.state_version,
+            idempotency_key="retry-config-changed-0001",
+            actor_id=self.user.pk,
+        )
+
+        self.assertEqual(
+            receipt.mode, VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
+        )
+        self.assertFalse(workspace.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(
+            snapshot.cleanup_state, SourceSnapshot.CleanupState.COMPLETED
+        )
+
+    def test_untrusted_snapshot_fingerprints_force_fresh_retry(self):
+        cases = {
+            "missing": {"trusted_fingerprint": {}},
+            "forged": {
+                "trusted_fingerprint": {
+                    **snapshot_configuration_fingerprint(),
+                    "sha256": "f" * 64,
+                }
+            },
+            "malformed_file": {"configuration_bytes": b"{not-json"},
+        }
+        for name, fixture_options in cases.items():
+            with self.subTest(name=name):
+                job = self._job()
+                _snapshot, _workspace = self._finalized_snapshot(
+                    job, **fixture_options
+                )
+
+                _, receipt, _ = requeue_job(
+                    job.public_id,
+                    expected_state_version=job.state_version,
+                    idempotency_key=f"retry-fingerprint-{name}-0001",
+                    actor_id=self.user.pk,
+                )
+
+                self.assertEqual(
+                    receipt.mode, VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
+                )
+
+    def test_snapshot_checkpoint_mismatch_forces_fresh_retry(self):
+        job = self._job()
+        self._finalized_snapshot(
+            job,
+            checkpoint_overrides={"snapshot_digest": "b" * 64},
+        )
+
+        _, receipt, _ = requeue_job(
+            job.public_id,
+            expected_state_version=job.state_version,
+            idempotency_key="retry-checkpoint-mismatch-0001",
+            actor_id=self.user.pk,
+        )
+
+        self.assertEqual(
+            receipt.mode, VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
+        )
+
+    def test_stale_finalized_workspace_cleanup_succeeds(self):
+        job = self._job()
+        snapshot, workspace = self._finalized_snapshot(
+            job, trusted_fingerprint={}
+        )
+
+        requeue_job(
+            job.public_id,
+            expected_state_version=job.state_version,
+            idempotency_key="retry-stale-finalized-cleanup-0001",
+            actor_id=self.user.pk,
+        )
+
+        self.assertFalse(workspace.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(
+            snapshot.cleanup_state, SourceSnapshot.CleanupState.COMPLETED
+        )
+        self.assertEqual(snapshot.workspace_path, "")
 
     def test_read_model_distinguishes_fresh_snapshot_and_checkpoint_resume(self):
         fresh = self._job()
@@ -230,27 +390,36 @@ class SyncRetryHardeningTests(TransactionTestCase):
 
     def test_concurrent_duplicate_retry_has_one_counter_and_audit_event(self):
         job = self._job()
+        self._finalized_snapshot(job)
         barrier = threading.Barrier(2)
 
         def submit():
             close_old_connections()
             barrier.wait()
             try:
-                return requeue_job(
+                _job, receipt, created = requeue_job(
                     job.public_id,
                     expected_state_version=job.state_version,
                     idempotency_key="retry-concurrent-0001",
                     actor_id=self.user.pk,
                     actor_name=self.user.get_username(),
-                )[2]
+                )
+                return created, receipt.mode
             finally:
                 close_old_connections()
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            created = list(executor.map(lambda _item: submit(), range(2)))
+            results = list(executor.map(lambda _item: submit(), range(2)))
 
         job.refresh_from_db()
-        self.assertEqual(sorted(created), [False, True])
+        self.assertEqual(
+            sorted(created for created, _mode in results),
+            [False, True],
+        )
+        self.assertEqual(
+            {mode for _created, mode in results},
+            {VaultJobRetryRequest.Mode.CHECKPOINT_RESUME},
+        )
         self.assertEqual(job.retry_count, 1)
         self.assertEqual(VaultJobRetryRequest.objects.count(), 1)
         self.assertEqual(
