@@ -3,6 +3,7 @@ import functools
 import hashlib
 import logging
 import os
+import re
 import uuid
 import time
 from functools import wraps
@@ -62,11 +63,13 @@ from .configuration_registry import build_configuration_groups
 from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultConfigurationError
 from .metrics import metrics_view
 from .maintenance import (
+    MEDIA_QUARANTINE_REASONS,
     archive_pdf,
     deprecate_pdf,
     mark_pdf_unavailable,
     queue_job,
     restore_pdf,
+    restore_unavailable_pdf,
 )
 from .maintenance_plans import (
     LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS,
@@ -183,6 +186,11 @@ def searchable_folders(user, *, public=False):
 def admin_cockpit_context(user, category_query=""):
     folders = searchable_folders(user).annotate(
         pdf_count=Count("files", distinct=True),
+        searchable_count=Count(
+            "files",
+            filter=Q(files__lifecycle__in=SEARCHABLE_PDF_LIFECYCLES),
+            distinct=True,
+        ),
         indexed_count=Count(
             "files",
             filter=Q(
@@ -215,7 +223,8 @@ def admin_cockpit_context(user, category_query=""):
     recent_pdfs = list(pdfs.order_by("-uploaded_at")[:5])
     index_debt_folders = [
         folder for folder in folders
-        if folder.pdf_count and folder.indexed_count < folder.pdf_count
+        if folder.searchable_count
+        and folder.indexed_count < folder.searchable_count
     ][:4]
     owner_review_folders = [
         folder for folder in folders
@@ -230,6 +239,7 @@ def admin_cockpit_context(user, category_query=""):
         "folders_with_pdfs": folders_with_pdfs,
         "empty_folders": max(folder_count - folders_with_pdfs, 0),
         "total_pdfs": total_pdfs,
+        "searchable_pdfs": searchable_pdfs,
         "indexed_pdfs": indexed_pdfs,
         "needs_index_pdfs": max(searchable_pdfs - indexed_pdfs, 0),
         "unknown_uploaders": unknown_uploaders,
@@ -261,6 +271,7 @@ def folder_cockpit_context(user, folder):
     unknown_uploaders = pdfs.filter(uploaded_by__isnull=True).count()
     stats = {
         "total_pdfs": total_pdfs,
+        "searchable_pdfs": searchable_pdfs,
         "indexed_pdfs": indexed_pdfs,
         "needs_index_pdfs": max(searchable_pdfs - indexed_pdfs, 0),
         "unknown_uploaders": unknown_uploaders,
@@ -871,13 +882,42 @@ def archive_pdf_view(request, pdf_id):
 def mark_pdf_unavailable_view(request, pdf_id):
     """Explicitly quarantine a document row while preserving its identity."""
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
-    if request.POST.get("confirmation", "").strip() != "MARK UNAVAILABLE":
-        messages.error(
-            request,
-            gettext(
-                "Type MARK UNAVAILABLE to confirm that this document file is unavailable."
-            ),
+    values = {
+        "expected_sha256": request.POST.get("expected_sha256", "").strip().lower(),
+        "expected_size": request.POST.get("expected_size", "").strip(),
+        "reason": request.POST.get("reason", "").strip(),
+        "case_reference": request.POST.get("case_reference", "").strip(),
+    }
+    errors = {}
+    if not re.fullmatch(r"[0-9a-f]{64}", values["expected_sha256"]):
+        errors["expected_sha256"] = gettext(
+            "Enter the complete 64-character SHA-256."
         )
+    try:
+        parsed_size = int(values["expected_size"])
+        if parsed_size < 0 or parsed_size > 2**63 - 1:
+            raise ValueError
+    except ValueError:
+        errors["expected_size"] = gettext(
+            "Enter a valid non-negative byte size."
+        )
+    if values["reason"] not in MEDIA_QUARANTINE_REASONS:
+        errors["reason"] = gettext("Choose a verified reason.")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", values["case_reference"]):
+        errors["case_reference"] = gettext(
+            "Use 1–80 letters, numbers, periods, underscores, or hyphens."
+        )
+    if request.POST.get("confirmation", "").strip() != "MARK UNAVAILABLE":
+        errors["confirmation"] = gettext(
+            "Type MARK UNAVAILABLE exactly as shown."
+        )
+    if errors:
+        request.session["media_quarantine_form"] = {
+            "pdf_id": pdf.pk,
+            "values": values,
+            "errors": errors,
+        }
+        messages.error(request, gettext("Review the highlighted fields."))
         return safe_referer_redirect(request)
     try:
         outcome = mark_pdf_unavailable(
@@ -889,6 +929,15 @@ def mark_pdf_unavailable_view(request, pdf_id):
             case_reference=request.POST.get("case_reference", ""),
         )
     except SearchDataIntegrityError:
+        request.session["media_quarantine_form"] = {
+            "pdf_id": pdf.pk,
+            "values": values,
+            "errors": {
+                "general": gettext(
+                    "The document could not be marked unavailable from this evidence."
+                )
+            },
+        }
         messages.error(
             request,
             gettext(
@@ -917,7 +966,10 @@ def restore_pdf_view(request, pdf_id):
     """Restore a deprecated or archived PDF to uploaded state."""
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
     try:
-        outcome = restore_pdf(pdf, requested_by=request.user)
+        if pdf.lifecycle == "unavailable":
+            outcome = restore_unavailable_pdf(pdf, requested_by=request.user)
+        else:
+            outcome = restore_pdf(pdf, requested_by=request.user)
     except SearchDataIntegrityError:
         messages.error(
             request,
@@ -1055,6 +1107,10 @@ def dashboard(request, folder_id=None):
                             "unavailable_presentation": present_reason(
                                 "document_media_unavailable"
                             ),
+                            "media_quarantine_form": request.session.pop(
+                                "media_quarantine_form",
+                                None,
+                            ),
                             "breadcrumb_items": [
                                 {"label": gettext("Dashboard"), "url": reverse("dashboard")},
                                 {"label": folder.name, "url": None},
@@ -1081,6 +1137,10 @@ def dashboard(request, folder_id=None):
                 "owner_options": owner_options,
                 "unavailable_presentation": present_reason(
                     "document_media_unavailable"
+                ),
+                "media_quarantine_form": request.session.pop(
+                    "media_quarantine_form",
+                    None,
                 ),
                 "breadcrumb_items": [
                     {"label": gettext("Dashboard"), "url": reverse("dashboard")},

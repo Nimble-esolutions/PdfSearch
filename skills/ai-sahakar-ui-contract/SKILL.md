@@ -30,10 +30,14 @@ documentation.
 6. Review equivalent authored English and Marathi meaning, consequence, and
    next-action copy. Inventory existing translations for the affected
    Dashboard/Workbench area and correct stale fuzzy or misleading entries.
-   Translate ordinary Marathi precisely. Use the contract glossary's reviewed
-   Marathi-script transliteration when a specialist product or infrastructure
-   term would be inaccurate as a literal Marathi word; never force a misleading
-   literal solely to avoid transliteration. Ordinary interface copy must not
+   Translate ordinary Marathi precisely. Prefer established contextual Marathi
+   for operational concepts: `संचिका` (file/media), `परिचालक` (operator),
+   `कार्यरत प्रणाली` (runtime), `जोडणी रूपरेषा` (connection profile),
+   `प्रवेश-प्रमाण` or `प्रमाणीकरण माहिती` (credentials), and
+   `मागील आवृत्ती पुनर्स्थापित करा` (rollback action). Retain a reviewed
+   Marathi-script term when a named product or specialist identity such as
+   Vault, embedding, manifest, or database would become inaccurate as a literal
+   word. Ordinary interface copy must not
    fall back to Latin-script English. Obvious operator terms use established
    Marathi: `उपलब्ध नाही` (unavailable), `इशारा` (warning), `अयशस्वी`
    (failed), `सक्रिय` (active), `मागील` (previous), `कारण` (reason),
@@ -75,11 +79,10 @@ documentation.
   empty, fuzzy, or unchanged-English entries. A compiling catalog or automatic
   fuzzy match is not translation approval.
 - Exact codes, API fields, hashes, UUIDs, filenames, and paths remain
-  English/LTR technical evidence; user-facing specialist concepts use the
-  approved Marathi-script transliteration glossary and ordinary Marathi
-  explanations. Reviewed forms include `ऑपरेटर`, `प्रोफाइल`, `रनटाइम`,
-  `व्हॉल्ट`, `रोलबॅक`, `रायटर लीज`, `एम्बेडिंग`, `मॅनिफेस्ट`,
-  `चेकपॉइंट`, and `जीसी`.
+  English/LTR technical evidence. Literal contextual forms include `संचिका`,
+  `परिचालक`, `कार्यरत प्रणाली`, `जोडणी रूपरेषा`, and
+  `मागील आवृत्ती पुनर्स्थापना`. Reviewed specialist forms include `व्हॉल्ट`,
+  `रायटर लीज`, `एम्बेडिंग`, `मॅनिफेस्ट`, `चेकपॉइंट`, and `जीसी`.
 - Do not transliterate obvious ordinary labels merely because their source
   string is English. Use the reviewed literal Marathi vocabulary from the
   contract, while preserving specialist terms and immutable evidence as above.

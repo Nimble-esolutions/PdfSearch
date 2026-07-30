@@ -22,7 +22,10 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .artifact_cleanup import capacity_report
-from .media_quarantine import build_unavailable_attestation, storage_key_status
+from .media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
 from .models import MaintenanceAuditEvent, MaintenanceJob, PDFFile
 
 WORKSPACE_MANIFEST = "maintenance-candidate.json"
@@ -480,17 +483,27 @@ def validate_candidate(workspace: Path) -> dict:
                 "WHERE lifecycle != 'unavailable'"
             )
         )
-        unavailable_records = [
-            {
-                "id": row[0],
-                "lifecycle": row[1],
-                "storage_key_status": storage_key_status(row[2]),
-            }
-            for row in connection.execute(
-                "SELECT id, lifecycle, file FROM core_pdffile "
-                "WHERE lifecycle = 'unavailable' ORDER BY id"
+        unavailable_attestation = build_unavailable_attestation(
+            (
+                {
+                    "id": row[0],
+                    "lifecycle": row[1],
+                    "storage_key_status": storage_key_evidence(row[2])["status"],
+                    "storage_key_token_sha256": storage_key_evidence(row[2])[
+                        "token_sha256"
+                    ],
+                    "expected_sha256": row[3],
+                    "expected_size": row[4],
+                    "prior_lifecycle": row[5],
+                }
+                for row in connection.execute(
+                    "SELECT id, lifecycle, file, media_expected_sha256, "
+                    "media_expected_size, media_prior_lifecycle "
+                    "FROM core_pdffile "
+                    "WHERE lifecycle = 'unavailable' ORDER BY id"
+                )
             )
-        ]
+        )
     finally:
         connection.close()
     if integrity != "ok":
@@ -584,7 +597,7 @@ def validate_candidate(workspace: Path) -> dict:
         "media": {
             "referenced": len(media_rows),
             "missing": 0,
-            "unavailable": build_unavailable_attestation(unavailable_records),
+            "unavailable": unavailable_attestation,
         },
         "embeddings": embedding,
         "faiss": faiss_records,

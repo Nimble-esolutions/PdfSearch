@@ -32,7 +32,7 @@
     </div>
     <div class="cockpit-metric {% if folder_stats.needs_index_pdfs %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
       <span class="cockpit-metric__label">{% trans "Index readiness" %}</span>
-      <strong>{{ folder_stats.indexed_pdfs }}/{{ folder_stats.total_pdfs }}</strong>
+      <strong>{{ folder_stats.indexed_pdfs }}/{{ folder_stats.searchable_pdfs }}</strong>
       <span>{% trans "indexed" %}</span>
     </div>
     <div class="cockpit-metric {% if folder_stats.unknown_uploaders %}cockpit-metric--warn{% else %}cockpit-metric--ok{% endif %}">
@@ -117,7 +117,6 @@
               <tr>
                 <td>
                   <strong>{{ pdf.title }}</strong>
-                  <small class="d-block text-muted">{{ pdf.file.name|default:"No file path" }}</small>
                 </td>
                 <td>{% if pdf.uploaded_by %}{{ pdf.uploaded_by.username }}{% else %}{% trans "Unknown" %}{% endif %}</td>
                 <td>{{ pdf.uploaded_at|date:"d M Y H:i" }}</td>
@@ -204,35 +203,55 @@
                             {% trans "Archive" %}
                           </button>
                         </form>
-                        <details class="d-inline-block">
-                          <summary class="btn btn-outline-danger btn-sm">{% trans "Mark unavailable" %}</summary>
-                          <form method="post" action="{% url 'mark_pdf_unavailable' pdf.id %}" class="admin-confirm-form">
+                        <details class="d-inline-block"{% if media_quarantine_form.pdf_id == pdf.id %} open{% endif %}>
+                          <summary id="mark_unavailable_label_{{ pdf.id }}" class="btn btn-outline-danger btn-sm">{% trans "Mark unavailable" %}</summary>
+                          <form method="post" action="{% url 'mark_pdf_unavailable' pdf.id %}" class="admin-confirm-form" aria-labelledby="mark_unavailable_label_{{ pdf.id }}">
                             {% csrf_token %}
+                            {% if media_quarantine_form.pdf_id == pdf.id %}
+                              <div class="alert alert-danger" role="alert" tabindex="-1">
+                                <strong>{% trans "Review the highlighted fields." %}</strong>
+                                {% if media_quarantine_form.errors.general %}
+                                  <p>{{ media_quarantine_form.errors.general }}</p>
+                                {% endif %}
+                                <ul>
+                                  {% if media_quarantine_form.errors.expected_sha256 %}<li><a href="#expected_sha256_{{ pdf.id }}">{% trans "Expected SHA-256" %}: {{ media_quarantine_form.errors.expected_sha256 }}</a></li>{% endif %}
+                                  {% if media_quarantine_form.errors.expected_size %}<li><a href="#expected_size_{{ pdf.id }}">{% trans "Expected file size in bytes" %}: {{ media_quarantine_form.errors.expected_size }}</a></li>{% endif %}
+                                  {% if media_quarantine_form.errors.reason %}<li><a href="#reason_{{ pdf.id }}">{% trans "Reason" %}: {{ media_quarantine_form.errors.reason }}</a></li>{% endif %}
+                                  {% if media_quarantine_form.errors.case_reference %}<li><a href="#case_reference_{{ pdf.id }}">{% trans "Case reference" %}: {{ media_quarantine_form.errors.case_reference }}</a></li>{% endif %}
+                                  {% if media_quarantine_form.errors.confirmation %}<li><a href="#confirmation_{{ pdf.id }}">{% trans "Confirmation" %}: {{ media_quarantine_form.errors.confirmation }}</a></li>{% endif %}
+                                </ul>
+                              </div>
+                            {% endif %}
                             <label>
                               {% trans "Expected SHA-256" %}
-                              <input name="expected_sha256" inputmode="text" minlength="64" maxlength="64" required>
+                              <input id="expected_sha256_{{ pdf.id }}" name="expected_sha256" inputmode="text" minlength="64" maxlength="64" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.expected_sha256 }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_sha256 %} aria-invalid="true" aria-describedby="expected_sha256_error_{{ pdf.id }}" autofocus{% endif %} required>
                             </label>
+                            {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_sha256 %}<p id="expected_sha256_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.expected_sha256 }}</p>{% endif %}
                             <label>
                               {% trans "Expected file size in bytes" %}
-                              <input name="expected_size" inputmode="numeric" type="number" min="0" required>
+                              <input id="expected_size_{{ pdf.id }}" name="expected_size" inputmode="numeric" type="number" min="0" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.expected_size }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_size %} aria-invalid="true" aria-describedby="expected_size_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 %} autofocus{% endif %}{% endif %} required>
                             </label>
+                            {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_size %}<p id="expected_size_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.expected_size }}</p>{% endif %}
                             <label>
                               {% trans "Reason" %}
-                              <select name="reason" required>
+                              <select id="reason_{{ pdf.id }}" name="reason"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.reason %} aria-invalid="true" aria-describedby="reason_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size %} autofocus{% endif %}{% endif %} required>
                                 <option value="">{% trans "Choose a verified reason" %}</option>
-                                <option value="missing_after_inventory">{% trans "Missing after verified inventory" %}</option>
-                                <option value="custody_restore_pending">{% trans "Approved custody restoration is pending" %}</option>
-                                <option value="source_recovery_case">{% trans "Source recovery case is open" %}</option>
+                                <option value="missing_after_inventory"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.values.reason == "missing_after_inventory" %} selected{% endif %}>{% trans "Missing after verified inventory" %}</option>
+                                <option value="custody_restore_pending"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.values.reason == "custody_restore_pending" %} selected{% endif %}>{% trans "Approved custody restoration is pending" %}</option>
+                                <option value="source_recovery_case"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.values.reason == "source_recovery_case" %} selected{% endif %}>{% trans "Source recovery case is open" %}</option>
                               </select>
                             </label>
+                            {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.reason %}<p id="reason_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.reason }}</p>{% endif %}
                             <label>
                               {% trans "Case reference" %}
-                              <input name="case_reference" maxlength="80" pattern="[A-Za-z0-9._-]+" required>
+                              <input id="case_reference_{{ pdf.id }}" name="case_reference" maxlength="80" pattern="[A-Za-z0-9._-]+" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.case_reference }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.case_reference %} aria-invalid="true" aria-describedby="case_reference_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size and not media_quarantine_form.errors.reason %} autofocus{% endif %}{% endif %} required>
                             </label>
+                            {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.case_reference %}<p id="case_reference_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.case_reference }}</p>{% endif %}
                             <label>
                               {% trans "Type MARK UNAVAILABLE to preserve this record and exclude it from search." %}
-                              <input name="confirmation" autocomplete="off" lang="en" dir="ltr" required>
+                              <input id="confirmation_{{ pdf.id }}" name="confirmation" autocomplete="off" lang="en" dir="ltr"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.confirmation %} aria-invalid="true" aria-describedby="confirmation_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size and not media_quarantine_form.errors.reason and not media_quarantine_form.errors.case_reference %} autofocus{% endif %}{% endif %} required>
                             </label>
+                            {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.confirmation %}<p id="confirmation_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.confirmation }}</p>{% endif %}
                             <button type="submit" class="btn btn-danger btn-sm">{% trans "Confirm unavailable media" %}</button>
                           </form>
                         </details>
@@ -299,7 +318,7 @@
         <form method="post" action="{% url 'folder_operations' folder.id %}">
           {% csrf_token %}
           <input type="hidden" name="operation" value="repair_stored_index">
-          <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if not folder_stats.total_pdfs %}disabled{% endif %} title="{% trans 'Builds or rebuilds searchable indexes for this category without editing source PDFs.' %}">
+          <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if not folder_stats.searchable_pdfs %}disabled{% endif %} title="{% trans 'Builds or rebuilds searchable indexes for this category without editing source PDFs.' %}">
             {% trans "Repair Stored Index" %}
           </button>
         </form>
@@ -315,7 +334,7 @@
           <input type="hidden" name="operation" value="reprocess_all">
           <button type="submit"
                     class="btn btn-outline-danger btn-sm w-100"
-                    {% if not folder_stats.total_pdfs %}disabled{% endif %}
+                    {% if not folder_stats.searchable_pdfs %}disabled{% endif %}
                     onclick="return confirm('{% trans 'Reprocess every PDF in this category? This may call the embedding service and overwrite stored chunks.' %}')"
                     title="{% trans 'Reprocess all documents with explicit confirmation; this is a full selected-folder reindex.' %}">
             {% trans "Reprocess All" %}

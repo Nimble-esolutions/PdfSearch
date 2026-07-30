@@ -520,6 +520,9 @@ def run_restore_job(
         )
         validation_evidence = _validate_download(quarantine, verified)
         validation_evidence["compatibility_checks"] = compatibility.checks
+        validation_evidence["unavailable_documents"] = verified.manifest[
+            "unavailable_documents"
+        ]
         ArtifactValidation.objects.create(
             generation=generation,
             validation_type="restore_preparation",

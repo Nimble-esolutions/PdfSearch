@@ -137,10 +137,12 @@ with spaces is never an acceptable explanation.
 
 Marathi operator copy is authored copy, not an English fallback. Translate a
 term literally when Marathi has an established, unambiguous equivalent. When a
-specialized product or infrastructure term would become misleading if
-translated—such as Vault, runtime, profile, rollback, embedding, manifest,
-checkpoint, or garbage collection—use a consistent Marathi-script
-transliteration and explain its effect in ordinary Marathi. Do not leave these
+specialized product identity would become misleading if translated—such as
+Vault, embedding, manifest, checkpoint, or garbage collection—use a consistent
+Marathi-script term and explain its effect in ordinary Marathi. Ordinary
+operational concepts are literal: `कार्यरत प्रणाली` for runtime,
+`जोडणी रूपरेषा` for connection profile, `परिचालक` for operator, and
+`मागील आवृत्ती पुनर्स्थापित करा` for a rollback action. Do not leave these
 words in Latin script merely because they originated in English. The only
 intentional English/LTR exceptions are immutable machine evidence: exact
 codes, API field names, hashes, UUIDs, filenames, paths, versions, and
@@ -148,12 +150,10 @@ correlation identifiers.
 
 Prefer precise Marathi vocabulary for ordinary concepts. For specialist
 product and infrastructure concepts, use the reviewed Marathi-script forms:
-ऑपरेटर (operator), प्रोफाइल (profile), रनटाइम (runtime), व्हॉल्ट (Vault),
-रोलबॅक (rollback), रायटर लीज (writer lease), एम्बेडिंग (embedding),
+व्हॉल्ट (Vault), रायटर लीज (writer lease), एम्बेडिंग (embedding),
 मॅनिफेस्ट (manifest), चेकपॉइंट (checkpoint), and जीसी (garbage collection).
-Explain the effect in ordinary Marathi. Do not force literal renderings such as
-`तिजोरी`, `लेखक भाडेपट्टा`, `रूपरेषा`, or `कार्यरत प्रणाली` when they change
-the technical meaning.
+Explain the effect in ordinary Marathi. Do not substitute physical-vault or
+property-lease vocabulary for a named technical concept.
 
 Do not transliterate an ordinary operator word merely because the English
 source is familiar to developers. Where the meaning is direct, use the literal

@@ -25,6 +25,7 @@ from core.candidate_maintenance import (
 )
 from core.artifact_cleanup import capacity_report
 from core.emergency_recovery import RecoverySetError, verify_set
+from core.media_quarantine import validate_unavailable_attestation
 from core.rehearsal import RehearsalError, rehearse_migrations
 from vaultops.models import (
     ArtifactGeneration,
@@ -391,7 +392,14 @@ def _profile():
     return profile
 
 
-def _manifest(job, candidate_manifest, parent, records, total_bytes):
+def _manifest(
+    job,
+    candidate_manifest,
+    parent,
+    records,
+    total_bytes,
+    unavailable_documents,
+):
     identity = settings.ENV_IDENTITY
     payload = {
         "manifest_version": 1,
@@ -403,6 +411,9 @@ def _manifest(job, candidate_manifest, parent, records, total_bytes):
         "image_digest": identity.app_image_digest,
         "files": records,
         "total_bytes": total_bytes,
+        "unavailable_documents": validate_unavailable_attestation(
+            unavailable_documents
+        ),
         "derived_from": {
             "generation_id": parent.generation_id,
             "manifest_digest": parent.manifest_digest,
@@ -542,7 +553,12 @@ def import_maintenance_candidate(
                 raise MaintenanceImportError(exc.reason_code) from exc
             post_records, post_bytes = _safe_files(incomplete)
             post_manifest, post_digest, post_generation_id = _manifest(
-                job, candidate_manifest, parent, post_records, post_bytes
+                job,
+                candidate_manifest,
+                parent,
+                post_records,
+                post_bytes,
+                validation["media"]["unavailable"],
             )
             manifest = post_manifest
             manifest_digest = post_digest
@@ -570,6 +586,9 @@ def import_maintenance_candidate(
                         "generation_id": generation_id,
                         "manifest_digest": manifest_digest,
                         "origin": ArtifactGeneration.Origin.LOCAL_MAINTENANCE,
+                        "unavailable_documents": manifest[
+                            "unavailable_documents"
+                        ],
                         "parent_generation_id": parent.generation_id,
                         "parent_manifest_digest": parent.manifest_digest,
                         "maintenance_job_public_id": str(job.public_id),

@@ -53,15 +53,15 @@ Marathi terminology follows a reviewed glossary:
 
 | English concept | Required Marathi rendering |
 | --- | --- |
-| Dashboard | डॅशबोर्ड |
+| Dashboard | नियंत्रण फलक |
 | Workbench | कार्यपटल |
-| operator | ऑपरेटर |
+| operator | परिचालक |
 | Vault | व्हॉल्ट |
-| runtime | रनटाइम |
-| profile | प्रोफाइल |
-| rollback | रोलबॅक |
+| runtime | कार्यरत प्रणाली |
+| profile | रूपरेषा |
+| rollback | मागील आवृत्ती पुनर्स्थापना |
 | writer lease | रायटर लीज |
-| credentials | क्रेडेन्शियल्स |
+| credentials | प्रवेश-प्रमाण / प्रमाणीकरण माहिती |
 | embedding | एम्बेडिंग |
 | manifest | मॅनिफेस्ट |
 | checkpoint | चेकपॉइंट |
@@ -70,11 +70,13 @@ Marathi terminology follows a reviewed glossary:
 | generation | निर्मिती संच |
 | reindex | पुनःअनुक्रमण |
 
-Use an established literal Marathi term where it stays precise. Use the
-glossary's Marathi-script transliteration for specialist terms whose literal
-rendering changes the technical meaning, and explain the operational effect in
-ordinary Marathi. Do not force misleading literal forms such as physical-vault
-or property-lease vocabulary. Latin-script English is reserved for exact
+Use an established literal Marathi term wherever it stays precise, including
+ordinary file/media language (`संचिका`), runtime posture
+(`कार्यरत प्रणाली`), connection profiles (`जोडणी रूपरेषा`), operators
+(`परिचालक`), and rollback actions (`मागील आवृत्ती पुनर्स्थापित करा`). Retain
+a reviewed Marathi-script product term only when a literal rendering would
+change a specialist identity, such as Vault, manifest, embedding, or database.
+Latin-script English is reserved for exact
 technical evidence such as codes, API fields, UUIDs, hashes, filenames, and
 paths. Do not translate those identifiers.
 
@@ -95,8 +97,9 @@ Latin-script fallback or unnecessary phonetic spelling:
 | search readiness | शोध तयारी |
 | technical details | तांत्रिक तपशील |
 
-Translate the complete sentence and review its grammar. Do not perform blind
-word replacement, and do not translate immutable codes or identifiers.
+Translate the complete sentence and review its grammar, including older catalog
+entries touched by the same concept. Do not perform blind word replacement,
+and do not translate immutable codes or identifiers.
 
 ## Operations information architecture
 

@@ -13,7 +13,7 @@ from django.utils import timezone
 from core.management.commands.inventory_artifacts import build_manifest
 from core.media_quarantine import (
     build_unavailable_attestation,
-    storage_key_status,
+    storage_key_evidence,
 )
 from vaultops.models import SourceSnapshot, VaultJobStep
 from vaultops.services.mutations import (
@@ -246,20 +246,30 @@ def _validate_faiss_coherence(database_path, faiss_root):
             "WHERE folder_id IS NOT NULL "
             f"{lifecycle_clause}ORDER BY id"
         ).fetchall()
-        unavailable_records = (
-            [
+        unavailable_attestation = (
+            build_unavailable_attestation(
+                (
                 {
                     "id": row[0],
                     "lifecycle": row[1],
-                    "storage_key_status": storage_key_status(row[2]),
+                    "storage_key_status": storage_key_evidence(row[2])["status"],
+                    "storage_key_token_sha256": storage_key_evidence(row[2])[
+                        "token_sha256"
+                    ],
+                    "expected_sha256": row[3],
+                    "expected_size": row[4],
+                    "prior_lifecycle": row[5],
                 }
                 for row in connection.execute(
-                    "SELECT id, lifecycle, file FROM core_pdffile "
+                    "SELECT id, lifecycle, file, media_expected_sha256, "
+                    "media_expected_size, media_prior_lifecycle "
+                    "FROM core_pdffile "
                     "WHERE lifecycle = 'unavailable' ORDER BY id"
                 )
-            ]
+                )
+            )
             if "lifecycle" in columns
-            else []
+            else build_unavailable_attestation(())
         )
     except sqlite3.Error as exc:
         raise SnapshotError("snapshot_faiss_metadata_unavailable") from exc
@@ -314,9 +324,7 @@ def _validate_faiss_coherence(database_path, faiss_root):
             "dimensions": dimensions[folder_id],
             "sha256": _sha256_file(path),
         }
-    evidence["unavailable_documents"] = build_unavailable_attestation(
-        unavailable_records
-    )
+    evidence["unavailable_documents"] = unavailable_attestation
     return evidence
 
 

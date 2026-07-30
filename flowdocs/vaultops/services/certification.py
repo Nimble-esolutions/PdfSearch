@@ -87,6 +87,8 @@ def verify_recovery_certification(
         or readiness.get("runtime_manifest_digest")
         != expected_manifest_digest
         or readiness.get("runtime_smoke") != "passed"
+        or readiness.get("unavailable_documents")
+        != signed_intent.get("unavailable_documents")
     ):
         _fail("recovery_certification_readiness_mismatch")
     try:

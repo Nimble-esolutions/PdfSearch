@@ -9,8 +9,9 @@ import secrets
 import sqlite3
 import stat
 import tempfile
+import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from django.conf import settings
 from django.db import transaction
@@ -28,6 +29,10 @@ MEDIA_QUARANTINE_REASONS = {
     "custody_restore_pending",
     "source_recovery_case",
 }
+
+
+class MediaAbsentError(SearchDataIntegrityError):
+    """The approved local storage entry is definitively absent."""
 
 
 def _audit(job=None, *, event_type, actor=None, payload=None):
@@ -166,45 +171,125 @@ class MediaTransitionOutcome:
     changed: bool
 
 
-def _verified_local_media_evidence(pdf):
-    """Hash a regular, non-symlink file and prove it stayed stable while read."""
+def _same_identity(*records):
+    fields = ("st_dev", "st_ino", "st_mode")
+    return all(
+        all(getattr(records[0], field) == getattr(record, field) for field in fields)
+        for record in records[1:]
+    )
+
+
+def _verified_local_media_evidence(pdf, *, expected_size=None):
+    """Open beneath MEDIA_ROOT with dirfds and hash one stable regular file."""
+    descriptors = []
     try:
-        media_root = Path(settings.MEDIA_ROOT).resolve(strict=True)
-        candidate = Path(pdf.file.path)
-        relative = candidate.relative_to(media_root)
-        inspected = media_root
-        for component in relative.parts:
-            inspected = inspected / component
-            if inspected.is_symlink():
+        key = str(pdf.file.name or "")
+        relative = PurePosixPath(key)
+        if (
+            not key
+            or key != key.strip()
+            or "\\" in key
+            or any(ord(character) < 32 or ord(character) == 127 for character in key)
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or any(part in {"", "."} for part in relative.parts)
+        ):
+            raise SearchDataIntegrityError("Document media storage key is unsafe")
+        root_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        parent = os.open(settings.MEDIA_ROOT, root_flags)
+        descriptors.append(parent)
+        for component in relative.parts[:-1]:
+            before = os.stat(component, dir_fd=parent, follow_symlinks=False)
+            child = os.open(component, root_flags, dir_fd=parent)
+            descriptors.append(child)
+            opened = os.fstat(child)
+            after = os.stat(component, dir_fd=parent, follow_symlinks=False)
+            if not stat.S_ISDIR(opened.st_mode) or not _same_identity(
+                before, opened, after
+            ):
                 raise SearchDataIntegrityError(
-                    "Document media path cannot contain a symlink"
+                    "Document media directory identity changed"
                 )
-        candidate.resolve(strict=True).relative_to(media_root)
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(candidate, flags)
-        try:
-            before = os.fstat(descriptor)
-            if not stat.S_ISREG(before.st_mode):
-                raise SearchDataIntegrityError("Document media must be a regular file")
-            digest = hashlib.sha256()
-            size = 0
-            while True:
-                chunk = os.read(descriptor, 1024 * 1024)
-                if not chunk:
-                    break
-                digest.update(chunk)
-                size += len(chunk)
-            after = os.fstat(descriptor)
-        finally:
-            os.close(descriptor)
+            parent = child
+        filename = relative.parts[-1]
+        before = os.stat(filename, dir_fd=parent, follow_symlinks=False)
+        descriptor = os.open(
+            filename,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent,
+        )
+        descriptors.append(descriptor)
+        opened = os.fstat(descriptor)
+        after_open = os.stat(filename, dir_fd=parent, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or not _same_identity(before, opened, after_open)
+        ):
+            raise SearchDataIntegrityError(
+                "Document media must be one stable regular file"
+            )
+        maximum = int(settings.MAX_FILE_SIZE_MB) * 1024 * 1024
+        if opened.st_size > maximum:
+            raise SearchDataIntegrityError("Document media exceeds the approved size")
+        if expected_size is not None and opened.st_size != expected_size:
+            raise SearchDataIntegrityError(
+                "Restored document media size does not match approved evidence"
+            )
+        deadline = time.monotonic() + 30
+        read_cap = opened.st_size + 1
+        digest = hashlib.sha256()
+        size = 0
+        while True:
+            if time.monotonic() > deadline:
+                raise SearchDataIntegrityError(
+                    "Document media verification exceeded its deadline"
+                )
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            size += len(chunk)
+            if size > read_cap or size > maximum:
+                raise SearchDataIntegrityError(
+                    "Document media changed size while verified"
+                )
+        after_read = os.fstat(descriptor)
+        after_path = os.stat(
+            filename,
+            dir_fd=parent,
+            follow_symlinks=False,
+        )
     except SearchDataIntegrityError:
         raise
-    except (AttributeError, FileNotFoundError, OSError, ValueError) as exc:
+    except FileNotFoundError as exc:
+        raise MediaAbsentError(
+            "Document media is absent from approved local storage"
+        ) from exc
+    except (AttributeError, OSError, TypeError, ValueError) as exc:
         raise SearchDataIntegrityError(
             "Document media could not be verified from approved local storage"
         ) from exc
-    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns")
-    if any(getattr(before, key) != getattr(after, key) for key in stable_fields):
+    finally:
+        for open_descriptor in reversed(descriptors):
+            try:
+                os.close(open_descriptor)
+            except OSError:
+                pass
+    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if (
+        not _same_identity(opened, after_read, after_path)
+        or any(
+            getattr(opened, field) != getattr(after_read, field)
+            or getattr(opened, field) != getattr(after_path, field)
+            for field in stable_fields
+        )
+        or size != opened.st_size
+    ):
         raise SearchDataIntegrityError("Document media changed while it was verified")
     return {"sha256": digest.hexdigest(), "size": size}
 
@@ -244,6 +329,14 @@ def mark_pdf_unavailable(
         current = PDFFile.objects.select_for_update().get(pk=pdf.pk)
         if current.lifecycle == "unavailable":
             return MediaTransitionOutcome(current, False)
+        try:
+            _verified_local_media_evidence(current)
+        except MediaAbsentError:
+            pass
+        else:
+            raise SearchDataIntegrityError(
+                "Document media is currently available and cannot be quarantined"
+            )
         prior_lifecycle = current.lifecycle
         observed_at = timezone.now()
         current.lifecycle = "unavailable"
@@ -283,15 +376,28 @@ def mark_pdf_unavailable(
 
 
 def restore_pdf(pdf, *, requested_by=None):
-    """Restore a deprecated or archived PDF to uploaded state, requeuing reindex."""
+    """Restore an ordinary archived/deprecated PDF to uploaded state."""
     with transaction.atomic():
         current = PDFFile.objects.select_for_update().get(pk=pdf.pk)
         prior_lifecycle = current.lifecycle
-        if prior_lifecycle != "unavailable":
-            current.lifecycle = "uploaded"
-            current.indexed = False
-            current.save(update_fields=["lifecycle", "indexed"])
-            return MediaTransitionOutcome(current, prior_lifecycle != "uploaded")
+        if prior_lifecycle == "unavailable":
+            raise SearchDataIntegrityError(
+                "Unavailable media requires the verified availability restore"
+            )
+        current.lifecycle = "uploaded"
+        current.indexed = False
+        current.save(update_fields=["lifecycle", "indexed"])
+        return MediaTransitionOutcome(current, prior_lifecycle != "uploaded")
+
+
+def restore_unavailable_pdf(pdf, *, requested_by=None):
+    """Restore only unavailable media after descriptor-safe evidence verification."""
+    with transaction.atomic():
+        current = PDFFile.objects.select_for_update().get(pk=pdf.pk)
+        if current.lifecycle != "unavailable":
+            raise SearchDataIntegrityError(
+                "Only unavailable media can use the verified availability restore"
+            )
         if (
             not current.media_expected_sha256
             or current.media_expected_size is None
@@ -300,7 +406,10 @@ def restore_pdf(pdf, *, requested_by=None):
             raise SearchDataIntegrityError(
                 "Unavailable media does not have durable restoration evidence"
             )
-        evidence = _verified_local_media_evidence(current)
+        evidence = _verified_local_media_evidence(
+            current,
+            expected_size=current.media_expected_size,
+        )
         if (
             evidence["sha256"] != current.media_expected_sha256
             or evidence["size"] != current.media_expected_size
@@ -309,15 +418,33 @@ def restore_pdf(pdf, *, requested_by=None):
                 "Restored document media does not match the approved evidence"
             )
         restored_lifecycle = current.media_prior_lifecycle
+        if restored_lifecycle not in {
+            "uploaded",
+            "processing",
+            "ready",
+            "deprecated",
+            "archived",
+        }:
+            raise SearchDataIntegrityError(
+                "Unavailable media has an invalid prior lifecycle"
+            )
         current.lifecycle = restored_lifecycle
         current.indexed = False
         current.save(update_fields=["lifecycle", "indexed"])
+        final_evidence = _verified_local_media_evidence(
+            current,
+            expected_size=current.media_expected_size,
+        )
+        if final_evidence != evidence:
+            raise SearchDataIntegrityError(
+                "Restored document media changed before availability was committed"
+            )
         _audit(
             event_type="media_restored",
             actor=requested_by,
             payload={
                 "pdf_id": current.pk,
-                "prior_lifecycle": prior_lifecycle,
+                "prior_lifecycle": "unavailable",
                 "restored_lifecycle": restored_lifecycle,
                 "verified_sha256": evidence["sha256"],
                 "verified_size": evidence["size"],

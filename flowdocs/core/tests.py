@@ -36,8 +36,8 @@ from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
-from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, mark_pdf_unavailable, restore_pdf
-from .media_quarantine import build_unavailable_attestation, storage_key_status
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf
+from .media_quarantine import build_unavailable_attestation, storage_key_evidence, storage_key_status, validate_unavailable_attestation
 from .maintenance_plans import queue_plan
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat
 from .worker_readiness import heartbeat_path
@@ -2440,7 +2440,7 @@ class DocumentLifecycleTests(TestCase):
                 target = Path(media_root) / self.pdf.file.name
                 target.parent.mkdir(parents=True)
                 target.write_bytes(self.restored_bytes)
-                restore_pdf(self.pdf, requested_by=self.admin)
+                restore_unavailable_pdf(self.pdf, requested_by=self.admin)
 
         self.pdf.refresh_from_db()
         self.assertEqual(self.pdf.lifecycle, "archived")
@@ -2456,7 +2456,45 @@ class DocumentLifecycleTests(TestCase):
                     SearchDataIntegrityError,
                     "does not match",
                 ):
-                    restore_pdf(self.pdf, requested_by=self.admin)
+                    restore_unavailable_pdf(self.pdf, requested_by=self.admin)
+
+    def test_healthy_media_cannot_be_marked_unavailable(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                target = Path(media_root) / self.pdf.file.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(b"healthy")
+                with self.assertRaisesRegex(
+                    SearchDataIntegrityError,
+                    "currently available",
+                ):
+                    self.mark_unavailable()
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+
+    def test_hardlinked_media_cannot_be_restored(self):
+        self.mark_unavailable()
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                target = Path(media_root) / self.pdf.file.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(self.restored_bytes)
+                os.link(target, target.with_name("second-link.pdf"))
+                with self.assertRaisesRegex(
+                    SearchDataIntegrityError,
+                    "stable regular file",
+                ):
+                    restore_unavailable_pdf(self.pdf, requested_by=self.admin)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "unavailable")
+
+    @patch("core.maintenance._audit", side_effect=RuntimeError("audit failed"))
+    def test_audit_failure_rolls_back_unavailable_transition(self, _audit):
+        with self.assertRaisesRegex(RuntimeError, "audit failed"):
+            self.mark_unavailable()
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self.assertEqual(self.pdf.media_expected_sha256, "")
 
     def test_unavailable_document_is_excluded_from_index_matrix(self):
         self.pdf.page_chunks = ["preserved"]
@@ -2507,16 +2545,16 @@ class DocumentLifecycleTests(TestCase):
                 self.mark_unavailable()
                 with self.assertRaisesRegex(
                     SearchDataIntegrityError,
-                    "could not be verified",
+                    "absent from approved local storage",
                 ):
-                    restore_pdf(self.pdf, requested_by=self.admin)
+                    restore_unavailable_pdf(self.pdf, requested_by=self.admin)
                 self.pdf.refresh_from_db()
                 self.assertEqual(self.pdf.lifecycle, "unavailable")
 
                 target = Path(media_root) / self.pdf.file.name
                 target.parent.mkdir(parents=True)
                 target.write_bytes(self.restored_bytes)
-                outcome = restore_pdf(self.pdf, requested_by=self.admin)
+                outcome = restore_unavailable_pdf(self.pdf, requested_by=self.admin)
                 self.assertTrue(outcome.changed)
 
         self.pdf.refresh_from_db()
@@ -2570,8 +2608,8 @@ class DocumentLifecycleTests(TestCase):
             reverse("dashboard_folder", args=[self.folder.pk])
         )
 
-        self.assertContains(response, "दस्तऐवज फाइल उपलब्ध नाही")
-        self.assertContains(response, "अपेक्षित फाइल आकार (बाइटमध्ये)")
+        self.assertContains(response, "दस्तऐवज संचिका उपलब्ध नाही")
+        self.assertContains(response, "अपेक्षित संचिका आकार (बाइटमध्ये)")
         self.assertContains(response, 'lang="en" dir="ltr"')
 
     def test_unavailable_file_is_not_served_to_public_or_ordinary_user(self):
@@ -2671,8 +2709,21 @@ class DocumentLifecycleTests(TestCase):
 class UnavailableAttestationTests(SimpleTestCase):
     def test_attestation_is_deterministic_bounded_and_secret_free(self):
         records = [
-            {"id": 2, "lifecycle": "unavailable", "storage_key_status": "unsafe"},
-            {"id": 1, "lifecycle": "unavailable", "storage_key_status": "present"},
+            {
+                "id": identifier,
+                "lifecycle": "unavailable",
+                "storage_key_status": storage["status"],
+                "storage_key_token_sha256": storage["token_sha256"],
+                "expected_sha256": hashlib.sha256(
+                    f"document-{identifier}".encode()
+                ).hexdigest(),
+                "expected_size": identifier,
+                "prior_lifecycle": "uploaded",
+            }
+            for identifier, storage in (
+                (1, storage_key_evidence("pdfs/one.pdf")),
+                (2, storage_key_evidence("../secret.pdf")),
+            )
         ]
 
         evidence = build_unavailable_attestation(records, id_limit=1)
@@ -2680,9 +2731,42 @@ class UnavailableAttestationTests(SimpleTestCase):
         self.assertEqual(evidence["count"], 2)
         self.assertEqual(evidence["ids"], [1])
         self.assertTrue(evidence["truncated"])
+        self.assertEqual(evidence["preview_limit"], 1)
         self.assertRegex(evidence["set_sha256"], r"^[0-9a-f]{64}$")
         self.assertNotIn("storage", json.dumps(evidence))
         self.assertEqual(storage_key_status("../secret.pdf"), "unsafe")
+
+    def test_attestation_rejects_coercion_missing_evidence_and_forged_preview(self):
+        storage = storage_key_evidence("pdfs/one.pdf")
+        valid = {
+            "id": 1,
+            "lifecycle": "unavailable",
+            "storage_key_status": storage["status"],
+            "storage_key_token_sha256": storage["token_sha256"],
+            "expected_sha256": "a" * 64,
+            "expected_size": 1,
+            "prior_lifecycle": "uploaded",
+        }
+        for changed in (
+            {**valid, "id": True},
+            {**valid, "expected_size": True},
+            {**valid, "expected_sha256": ""},
+            {**valid, "prior_lifecycle": "unavailable"},
+        ):
+            with self.assertRaises(ValueError):
+                build_unavailable_attestation((changed,))
+        with self.assertRaises(ValueError):
+            validate_unavailable_attestation(
+                {
+                    "count": 1,
+                    "ids": [1, 2],
+                    "truncated": False,
+                    "preview_limit": 20,
+                    "set_sha256": "a" * 64,
+                }
+            )
+        self.assertEqual(storage_key_status(" pdfs/one.pdf"), "unsafe")
+        self.assertEqual(storage_key_status(r"pdfs\\one.pdf"), "unsafe")
 
 
 class UnavailableEvidenceMigrationTests(TransactionTestCase):

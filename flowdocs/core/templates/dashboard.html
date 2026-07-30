@@ -39,7 +39,7 @@
     <div class="cockpit-metric">
       <span class="cockpit-metric__label">{% trans "Search readiness" %}</span>
       {% if cockpit.search_available %}
-        <strong>{{ cockpit.indexed_pdfs }}/{{ cockpit.total_pdfs }}</strong>
+        <strong>{{ cockpit.indexed_pdfs }}/{{ cockpit.searchable_pdfs }}</strong>
         <span>{% trans "documents searchable" %}</span>
       {% else %}
         <strong>{% trans "Unavailable" %}</strong>
@@ -180,7 +180,11 @@
             <div class="cockpit-badge-row">
               {% if folder.pdf_count == 0 %}
                 <span class="badge text-bg-secondary">{% trans "Empty" %}</span>
-              {% elif folder.indexed_count < folder.pdf_count %}
+              {% elif folder.searchable_count == 0 and folder.unavailable_count == folder.pdf_count %}
+                <span class="badge text-bg-danger">{% trans "Unavailable media" %}</span>
+              {% elif folder.searchable_count == 0 %}
+                <span class="badge text-bg-secondary">{% trans "No searchable documents" %}</span>
+              {% elif folder.indexed_count < folder.searchable_count %}
                 <span class="badge text-bg-warning">{% trans "Index review" %}</span>
               {% else %}
                 <span class="badge text-bg-success">{% trans "Indexed" %}</span>
@@ -246,7 +250,19 @@
               <small>{% if pdf.folder %}{{ pdf.folder.name }}{% else %}{% trans "No category" %}{% endif %}</small>
             </span>
             <span class="cockpit-feed-item__status">
-              {% if pdf.indexed %}{% trans "Indexed" %}{% else %}{% trans "Needs index" %}{% endif %}
+              {% if pdf.lifecycle == "unavailable" %}
+                {% trans "Unavailable" %}
+              {% elif pdf.lifecycle == "archived" %}
+                {% trans "Archived" %}
+              {% elif pdf.lifecycle == "deprecated" %}
+                {% trans "Deprecated" %}
+              {% elif pdf.lifecycle == "processing" %}
+                {% trans "Processing" %}
+              {% elif pdf.indexed %}
+                {% trans "Indexed" %}
+              {% else %}
+                {% trans "Needs index" %}
+              {% endif %}
             </span>
           </a>
         {% empty %}

@@ -76,6 +76,16 @@ def normalize_dashboard_filters(data):
 def _category_queryset(user, filters):
     folders = _visible_folders(user).annotate(
         pdf_count=Count("files", distinct=True),
+        searchable_count=Count(
+            "files",
+            filter=Q(files__lifecycle__in=SEARCHABLE_PDF_LIFECYCLES),
+            distinct=True,
+        ),
+        unavailable_count=Count(
+            "files",
+            filter=Q(files__lifecycle="unavailable"),
+            distinct=True,
+        ),
         indexed_count=Count(
             "files",
             filter=Q(
@@ -103,7 +113,7 @@ def _category_queryset(user, filters):
     if filters.query:
         folders = folders.filter(name__icontains=filters.query)
     if filters.readiness == "ready":
-        folders = folders.filter(pdf_count__gt=0, index_debt=0)
+        folders = folders.filter(searchable_count__gt=0, index_debt=0)
     elif filters.readiness == "needs_index":
         folders = folders.filter(index_debt__gt=0)
     elif filters.readiness == "unavailable":
@@ -313,6 +323,7 @@ def build_dashboard_state(*, user, data):
         "folders_with_pdfs": folders_with_documents,
         "empty_folders": empty_folders,
         "total_pdfs": total_pdfs,
+        "searchable_pdfs": searchable_pdfs,
         "indexed_pdfs": indexed_pdfs,
         "unavailable_pdfs": unavailable_pdfs,
         "needs_index_pdfs": needs_index,

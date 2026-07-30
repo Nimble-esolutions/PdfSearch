@@ -33,6 +33,7 @@ from vaultops.runtime_control import (
 from vaultops.runtime_verification_contract import (
     GENERIC_RUNTIME_VERIFICATION_REASON,
     read_runtime_verification_failure,
+    read_runtime_verification_success,
 )
 
 
@@ -480,6 +481,7 @@ class RuntimeSupervisor:
     def _run_manage(self, arguments, *, timeout):
         process_environment = self._resolved_process_environment()
         failure_path = None
+        success_path = None
         if arguments and arguments[0] == "verify_activation_runtime":
             failure_path = self.paths["activation_dir"] / (
                 f".runtime-verification-{os.getpid()}.json"
@@ -488,6 +490,13 @@ class RuntimeSupervisor:
             process_environment[
                 "ACTIVATION_VERIFICATION_FAILURE_PATH"
             ] = str(failure_path)
+            success_path = self.paths["activation_dir"] / (
+                f".runtime-verification-success-{os.getpid()}.json"
+            )
+            success_path.unlink(missing_ok=True)
+            process_environment[
+                "ACTIVATION_VERIFICATION_SUCCESS_PATH"
+            ] = str(success_path)
         result = self.run_command(
             [sys.executable, "manage.py", *arguments],
             cwd=Path(__file__).resolve().parent,
@@ -504,6 +513,13 @@ class RuntimeSupervisor:
             raise SupervisorError(reason_code)
         if failure_path is not None:
             failure_path.unlink(missing_ok=True)
+            try:
+                return read_runtime_verification_success(success_path)
+            except (OSError, UnicodeDecodeError, ValueError) as exc:
+                raise SupervisorError(
+                    GENERIC_RUNTIME_VERIFICATION_REASON
+                ) from exc
+        return None
 
     def _reconcile_result_best_effort(self, intent):
         try:
@@ -747,7 +763,7 @@ class RuntimeSupervisor:
                 intent["target_generation_id"],
                 intent["target_manifest_digest"],
             )
-            self._run_manage(
+            runtime_unavailable = self._run_manage(
                 ["verify_activation_runtime", "--intent-id", intent["intent_id"]],
                 timeout=self.readiness_timeout,
             )
@@ -761,6 +777,7 @@ class RuntimeSupervisor:
                     **readiness,
                     "runtime_smoke": "passed",
                     "initial_activation": True,
+                    "unavailable_documents": runtime_unavailable,
                 },
             )
             self._write_ack(intent, "committed")
@@ -994,7 +1011,7 @@ class RuntimeSupervisor:
                 intent["target_generation_id"],
                 intent["target_manifest_digest"],
             )
-            self._run_manage(
+            runtime_unavailable = self._run_manage(
                 [
                     "verify_activation_runtime",
                     "--intent-id",
@@ -1011,6 +1028,7 @@ class RuntimeSupervisor:
                 readiness_evidence={
                     **readiness,
                     "runtime_smoke": "passed",
+                    "unavailable_documents": runtime_unavailable,
                 },
             )
             self._write_ack(intent, "committed")

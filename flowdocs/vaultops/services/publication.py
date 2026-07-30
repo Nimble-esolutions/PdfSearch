@@ -11,6 +11,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.artifact_vault import ArtifactVault, object_metadata_value
+from core.media_quarantine import validate_unavailable_attestation
 from core.global_writer import (
     acquire_global_writer,
     release_global_writer,
@@ -434,6 +435,9 @@ def publish_snapshot_candidate(
             expected_epoch=writer["writer_epoch"],
         )
         inventory = evidence.get("inventory", {})
+        unavailable_documents = validate_unavailable_attestation(
+            evidence.get("faiss", {}).get("unavailable_documents")
+        )
         manifest = {
             "release_id": generation_id,
             "manifest_version": 1,
@@ -459,6 +463,7 @@ def publish_snapshot_candidate(
             "pdf_storage": inventory.get("pdf_storage", {}),
             "chroma": inventory.get("chroma", {}),
             "static": inventory.get("static", {}),
+            "unavailable_documents": unavailable_documents,
             "files": uploaded_files,
         }
         manifest_data = _canonical_bytes(manifest)
@@ -499,6 +504,7 @@ def publish_snapshot_candidate(
                 "files_verified": len(uploaded_files),
                 "writer_epoch": writer["writer_epoch"],
                 "snapshot_digest": snapshot.snapshot_digest,
+                "unavailable_documents": unavailable_documents,
             },
             expires_at=timezone.now()
             + timezone.timedelta(

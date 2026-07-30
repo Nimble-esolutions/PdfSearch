@@ -16,6 +16,10 @@ from core.recovery_auth import (
     RecoveryAuthenticationError,
     verify_recovery_superadmin_database,
 )
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    validate_unavailable_attestation,
+)
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -526,6 +530,17 @@ def schedule_activation(
             )
 
     intent_public_id = uuid.uuid4()
+    try:
+        unavailable_documents = validate_unavailable_attestation(
+            target_generation.manifest.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
+        )
+    except ValueError as exc:
+        raise ActivationCoordinatorError(
+            "activation_unavailable_attestation_invalid"
+        ) from exc
     expires_at = timezone.now() + timedelta(seconds=expires_seconds)
     payload = {
         "schema_version": 1,
@@ -554,6 +569,7 @@ def schedule_activation(
         "expires_at_unix": int(expires_at.timestamp()),
         "state_version": 1,
         "recovery_set_id": recovery_set_id,
+        "unavailable_documents": unavailable_documents,
     }
     if rollback_previous_pointer is not None:
         payload.update(

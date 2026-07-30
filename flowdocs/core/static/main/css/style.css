@@ -304,10 +304,17 @@ body {
 }
 
 .admin-shell .btn-outline-primary {
-  --bs-btn-color: var(--admin-primary);
-  --bs-btn-border-color: var(--admin-primary);
-  --bs-btn-hover-bg: var(--admin-primary);
-  --bs-btn-hover-border-color: var(--admin-primary);
+  --bs-btn-color: #5c0f1b;
+  --bs-btn-border-color: #5c0f1b;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #5c0f1b;
+  --bs-btn-hover-border-color: #5c0f1b;
+  --bs-btn-focus-shadow-rgb: 92, 15, 27;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #3a091a;
+  --bs-btn-active-border-color: #3a091a;
+  --bs-btn-disabled-color: #5c0f1b;
+  --bs-btn-disabled-border-color: #5c0f1b;
 }
 
 .admin-panel {
@@ -1144,23 +1151,47 @@ body {
 }
 
 .admin-shell .btn-outline-secondary {
-  color: #545b62;
-  border-color: #545b62;
+  --bs-btn-color: #495057;
+  --bs-btn-border-color: #495057;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #495057;
+  --bs-btn-hover-border-color: #495057;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #343a40;
+  --bs-btn-active-border-color: #343a40;
 }
 
 .admin-shell .btn-outline-success {
-  color: #146c43;
-  border-color: #146c43;
+  --bs-btn-color: #0f5132;
+  --bs-btn-border-color: #0f5132;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #0f5132;
+  --bs-btn-hover-border-color: #0f5132;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #0a3622;
+  --bs-btn-active-border-color: #0a3622;
 }
 
 .admin-shell .btn-outline-danger {
-  color: #b02a37;
-  border-color: #b02a37;
+  --bs-btn-color: #842029;
+  --bs-btn-border-color: #842029;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #842029;
+  --bs-btn-hover-border-color: #842029;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #58151c;
+  --bs-btn-active-border-color: #58151c;
 }
 
 .admin-shell .btn-outline-warning {
-  color: #664d03;
-  border-color: #664d03;
+  --bs-btn-color: #664d03;
+  --bs-btn-border-color: #664d03;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #664d03;
+  --bs-btn-hover-border-color: #664d03;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #4d3a02;
+  --bs-btn-active-border-color: #4d3a02;
 }
 
 .admin-shell .admin-upload-panel,
