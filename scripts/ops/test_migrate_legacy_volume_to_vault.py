@@ -249,6 +249,25 @@ class LegacyVolumeInventoryTests(unittest.TestCase):
 
 
 class CandidatePublicationTests(unittest.TestCase):
+    def test_remote_verification_accepts_rustfs_metadata_casing(self):
+        client = FakeS3()
+        body = b"stable"
+        digest = hashlib.sha256(body).hexdigest()
+        client.objects["blob"] = {
+            "body": body,
+            "metadata": {"Sha256": digest, "Immutable": "true"},
+            "etag": '"etag-1"',
+            "content_type": "application/octet-stream",
+        }
+
+        migration.verify_remote_object(
+            client,
+            "vault",
+            "blob",
+            digest,
+            len(body),
+        )
+
     def test_publish_is_candidate_only_and_retry_is_byte_identical(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "source"
