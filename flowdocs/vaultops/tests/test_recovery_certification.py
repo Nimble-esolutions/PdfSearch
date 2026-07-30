@@ -9,6 +9,10 @@ from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -179,6 +183,7 @@ class RecoveryCertificationTests(TestCase):
                 "manifest_digest": TARGET_DIGEST,
                 "executed_locales": ["en", "mr"],
                 "queries": [],
+                "unavailable_documents": build_unavailable_attestation(()),
             },
         )
         self.runtime_patch.start()
@@ -280,10 +285,39 @@ class RecoveryCertificationTests(TestCase):
     def test_rejects_incomplete_bilingual_runtime_smoke(self):
         with patch(
             "vaultops.services.certification.verify_activation_runtime",
-            return_value={"executed_locales": ["en"]},
+            return_value={
+                "executed_locales": ["en"],
+                "unavailable_documents": build_unavailable_attestation(()),
+            },
         ):
             self.assert_reason(
                 "recovery_certification_bilingual_smoke_incomplete"
+            )
+
+    def test_missing_legacy_intent_rejects_nonempty_runtime_attestation(self):
+        storage = storage_key_evidence("pdfs/unavailable.pdf")
+        actual = build_unavailable_attestation(
+            (
+                {
+                    "id": 1,
+                    "lifecycle": "unavailable",
+                    "storage_key_status": storage["status"],
+                    "storage_key_token_sha256": storage["token_sha256"],
+                    "expected_sha256": "a" * 64,
+                    "expected_size": 10,
+                    "prior_lifecycle": "uploaded",
+                },
+            )
+        )
+        with patch(
+            "vaultops.services.certification.verify_activation_runtime",
+            return_value={
+                "executed_locales": ["en", "mr"],
+                "unavailable_documents": actual,
+            },
+        ):
+            self.assert_reason(
+                "recovery_certification_runtime_attestation_mismatch"
             )
 
     def test_command_fails_closed_with_stable_reason(self):
