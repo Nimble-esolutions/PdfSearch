@@ -15,6 +15,9 @@ from django.test import SimpleTestCase
 
 from core.custody_audit import (
     CustodyAuditError,
+    _open_entry_no_follow,
+    _require_exact_entry,
+    _scan_vault,
     audit_missing_pdf_custody,
     read_hmac_key_file,
 )
@@ -128,6 +131,23 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
             offset += 512 + size + ((-size) % 512)
         canonical = raw[: offset + 1024]
         archive.write_bytes(gzip.compress(canonical) if compressed else canonical)
+
+    def _changed_metadata(self, metadata):
+        values = {
+            name: getattr(metadata, name)
+            for name in (
+                "st_dev",
+                "st_ino",
+                "st_mode",
+                "st_uid",
+                "st_nlink",
+                "st_size",
+                "st_mtime_ns",
+                "st_ctime_ns",
+            )
+        }
+        values["st_ctime_ns"] += 1
+        return SimpleNamespace(**values)
 
     def _extended_archive(self, *, sparse=False):
         archive = self.root / ("sparse.tar" if sparse else "pax.tar")
@@ -478,22 +498,26 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
             )
 
     def test_archive_identity_change_is_reported_without_evidence_claim(self):
+        archive = self._archive()
+        from core import custody_audit
+
+        real_open = custody_audit._open_path_no_follow
+
+        def changed_archive_open(path, **kwargs):
+            descriptor, metadata = real_open(path, **kwargs)
+            if path == archive:
+                metadata = self._changed_metadata(metadata)
+            return descriptor, metadata
+
         with patch(
-            "core.custody_audit._stat_identity",
-            side_effect=[
-                "database",
-                "database",
-                "database",
-                "database",
-                "before",
-                "after",
-            ],
+            "core.custody_audit._open_path_no_follow",
+            side_effect=changed_archive_open,
         ):
             result = audit_missing_pdf_custody(
                 database=self.database,
                 media_root=self.media,
                 hmac_key=self.key,
-                archives=[self._archive()],
+                archives=[archive],
             )
         self.assertEqual(
             result["archive_progress"][0]["posture"],
@@ -502,9 +526,21 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
         self.assertFalse(result["complete"])
 
     def test_database_identity_change_fails_before_output(self):
+        from core import custody_audit
+
+        real_open = custody_audit._open_entry_no_follow
+
+        def changed_database_open(directory_fd, name, flags, **kwargs):
+            descriptor, metadata = real_open(
+                directory_fd, name, flags, **kwargs
+            )
+            if name == self.database.name:
+                metadata = self._changed_metadata(metadata)
+            return descriptor, metadata
+
         with patch(
-            "core.custody_audit._stat_identity",
-            side_effect=["before", "after"],
+            "core.custody_audit._open_entry_no_follow",
+            side_effect=changed_database_open,
         ):
             with self.assertRaisesMessage(
                 CustodyAuditError,
@@ -548,32 +584,20 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
             ):
                 read_hmac_key_file(key_path)
 
-        real_fstat = os.fstat
-        calls = 0
+        from core import custody_audit
 
-        def changed_fstat(descriptor):
-            nonlocal calls
-            calls += 1
-            result = real_fstat(descriptor)
-            if calls == 2:
-                values = {
-                    name: getattr(result, name)
-                    for name in (
-                        "st_dev",
-                        "st_ino",
-                        "st_mode",
-                        "st_uid",
-                        "st_nlink",
-                        "st_size",
-                        "st_mtime_ns",
-                        "st_ctime_ns",
-                    )
-                }
-                values["st_size"] += 1
-                return SimpleNamespace(**values)
-            return result
+        real_open = custody_audit._open_path_no_follow
 
-        with patch("core.custody_audit.os.fstat", side_effect=changed_fstat):
+        def changed_key_open(path, **kwargs):
+            descriptor, metadata = real_open(path, **kwargs)
+            if path == key_path:
+                metadata = self._changed_metadata(metadata)
+            return descriptor, metadata
+
+        with patch(
+            "core.custody_audit._open_path_no_follow",
+            side_effect=changed_key_open,
+        ):
             with self.assertRaisesMessage(
                 CustodyAuditError,
                 "hmac_key_file_changed",
@@ -821,6 +845,27 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
                 },
             )
 
+    def test_standard_tarfile_zero_padding_is_accepted(self):
+        for compressed in (False, True):
+            archive = self.root / (
+                "python-standard.tar.gz" if compressed else "python-standard.tar"
+            )
+            with tarfile.open(archive, "w:gz" if compressed else "w") as bundle:
+                info = tarfile.TarInfo("volume/media/pdfs/private-name.pdf")
+                info.size = len(self.payload)
+                bundle.addfile(info, io.BytesIO(self.payload))
+            result = audit_missing_pdf_custody(
+                database=self.database,
+                media_root=self.media,
+                hmac_key=self.key,
+                archives=[archive],
+            )
+            self.assertEqual(result["archive_posture"], "completed")
+            self.assertEqual(
+                result["results"][0]["evidence"][0]["evidence_class"],
+                "path_only_candidate",
+            )
+
     def test_gzip_crc_truncation_and_trailing_members_are_rejected(self):
         valid = bytearray(self._archive().read_bytes())
         corrupt = self.root / "corrupt.tar.gz"
@@ -890,13 +935,119 @@ class MissingPdfCustodyAuditTests(SimpleTestCase):
     def test_case_mismatched_directory_entry_is_rejected(self):
         descriptor = os.open(self.root, os.O_RDONLY)
         try:
-            with patch("core.custody_audit.os.listdir", return_value=["DB.SQLITE3"]):
-                with self.assertRaisesMessage(CustodyAuditError, "path_case_mismatch"):
-                    from core.custody_audit import _require_exact_entry
-
-                    _require_exact_entry(descriptor, "db.sqlite3")
+            with self.assertRaisesMessage(CustodyAuditError, "path_case_mismatch"):
+                _require_exact_entry(descriptor, "DB.SQLITE3")
         finally:
             os.close(descriptor)
+
+    def test_directory_enumeration_is_bounded_and_deadline_aware(self):
+        descriptor = os.open(self.root, os.O_RDONLY)
+        try:
+            with patch("core.custody_audit.MAX_DIRECTORY_ENTRIES", 1):
+                with self.assertRaisesMessage(
+                    CustodyAuditError, "directory_entry_limit_exceeded"
+                ):
+                    _require_exact_entry(descriptor, "not-present")
+            with patch("core.custody_audit.time.monotonic", return_value=2):
+                with self.assertRaisesMessage(
+                    CustodyAuditError, "audit_time_limit_exceeded"
+                ):
+                    _require_exact_entry(
+                        descriptor,
+                        "not-present",
+                        deadline=1,
+                    )
+        finally:
+            os.close(descriptor)
+
+    def test_entry_swap_between_listing_and_open_fails_closed(self):
+        descriptor = os.open(self.root, os.O_RDONLY)
+        before = os.stat("db.sqlite3", dir_fd=descriptor, follow_symlinks=False)
+        values = {
+            name: getattr(before, name)
+            for name in (
+                "st_dev",
+                "st_ino",
+                "st_mode",
+                "st_uid",
+                "st_nlink",
+                "st_size",
+                "st_mtime_ns",
+                "st_ctime_ns",
+            )
+        }
+        values["st_ino"] += 1
+        changed = SimpleNamespace(**values)
+        try:
+            with patch(
+                "core.custody_audit.os.stat",
+                side_effect=[before, changed],
+            ):
+                with self.assertRaisesMessage(
+                    CustodyAuditError, "path_changed_during_open"
+                ):
+                    _open_entry_no_follow(
+                        descriptor,
+                        "db.sqlite3",
+                        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                    )
+        finally:
+            os.close(descriptor)
+
+    def test_manifest_and_head_work_observe_cooperative_deadline(self):
+        reference = {
+            "row_id": 1,
+            "path_token": "token",
+            "_path": "pdfs/private-name.pdf",
+        }
+        manifest = self._verified().manifest
+        manifest["files"].insert(
+            0,
+            {**manifest["files"][0], "path": "media/pdfs/unmatched.pdf"},
+        )
+        with patch(
+            "core.custody_audit.time.monotonic",
+            side_effect=[0, 0, 0, 0, 0, 2],
+        ):
+            result = _scan_vault(
+                vault=FakeVault(),
+                profile=self.profile,
+                references=[reference],
+                key=self.key,
+                list_generation_ids=lambda *args, **kwargs: (["one"], True),
+                verify_generation=lambda *args, **kwargs: SimpleNamespace(
+                    manifest=manifest
+                ),
+                max_pages=1,
+                max_generations=1,
+                max_evidence_per_reference=1,
+                max_total_evidence=1,
+                max_manifest_entries=2,
+                deadline=1,
+            )
+        self.assertTrue(result[4]["time_limit"])
+
+        vault = FakeVault()
+        with patch(
+            "core.custody_audit.time.monotonic",
+            side_effect=[0, 0, 0, 0, 0, 0, 2],
+        ):
+            result = _scan_vault(
+                vault=vault,
+                profile=self.profile,
+                references=[reference],
+                key=self.key,
+                list_generation_ids=lambda *args, **kwargs: (["one"], True),
+                verify_generation=lambda *args, **kwargs: self._verified(),
+                max_pages=1,
+                max_generations=1,
+                max_evidence_per_reference=1,
+                max_total_evidence=1,
+                max_manifest_entries=1,
+                deadline=1,
+            )
+        self.assertEqual(len(vault.head_calls), 1)
+        self.assertTrue(result[4]["time_limit"])
 
     def test_duplicate_archive_identity_is_rejected(self):
         archive = self._archive()

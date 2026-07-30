@@ -125,9 +125,11 @@ bytes, total read work, compression ratio, candidate bytes, database rows,
 media probes, manifest entries, generations, and evidence cardinality. Its
 cooperative deadline starts before the database snapshot and is checked between
 local work units. It is not a hard network timeout for an already-running
-provider call. Its sequential tar reader requires a canonical two-zero-block
-end followed by EOF, accepts ordinary POSIX/USTAR and exactly one CRC-valid gzip
-member, rejects trailing/concatenated data plus PAX/GNU extended-name and sparse
+provider call. The deadline is checked for every manifest entry and immediately
+before and after each object metadata probe. Its sequential tar reader requires
+a canonical two-zero-block end, permits only zero padding through true EOF,
+accepts ordinary POSIX/USTAR and exactly one CRC-valid gzip member, rejects
+nonzero trailing/concatenated data plus PAX/GNU extended-name and sparse
 records, and reports whether a bounded candidate begins with the PDF signature.
 Other compression formats are rejected.
 
@@ -139,8 +141,10 @@ identity are checked again after scanning. SQLite is copied from the opened
 descriptor into an immutable temporary snapshot; `-wal` or `-shm` siblings are
 rejected, so operators must checkpoint the database before auditing. Stored,
 manifest, and TAR paths must already be canonical relative POSIX paths. Exact
-directory-entry spelling is verified at every component; noncanonical paths,
-case mismatches, and case-colliding evidence fail closed.
+directory-entry spelling is verified with bounded, deadline-aware enumeration
+at every component. Listing, pre-open metadata, the no-follow opened descriptor,
+and post-open directory entry must retain one identity; noncanonical paths,
+namespace swaps, case mismatches, and case-colliding evidence fail closed.
 
 Review `complete`, `vault_posture`, `archive_posture`,
 `vault_generation_counts`, per-source `archive_progress`, and `truncation`

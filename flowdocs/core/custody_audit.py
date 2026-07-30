@@ -43,6 +43,7 @@ MAX_DATABASE_ROWS = 1_000_000
 MAX_MANIFEST_ENTRIES = 1_000_000
 MAX_MEDIA_PROBES = 1_000_000
 MAX_DATABASE_BYTES = 4 * 1024 * 1024 * 1024
+MAX_DIRECTORY_ENTRIES = 100_000
 READ_CHUNK_BYTES = 1024 * 1024
 TAR_BLOCK_BYTES = 512
 
@@ -84,23 +85,75 @@ def _path_parts(path: Path) -> tuple[str, ...]:
     return tuple(parts[1:])
 
 
-def _require_exact_entry(directory_fd: int, component: str, *, missing_ok: bool = False) -> bool:
+def _require_exact_entry(
+    directory_fd: int,
+    component: str,
+    *,
+    missing_ok: bool = False,
+    deadline: float | None = None,
+) -> os.stat_result | bool:
     """Require the requested directory-entry spelling, even on case-insensitive filesystems."""
+    case_match = False
     try:
-        entries = os.listdir(directory_fd)
+        entries = os.scandir(directory_fd)
     except OSError as exc:
         raise CustodyAuditError("path_unavailable") from exc
     component_bytes = os.fsencode(component)
-    if any(os.fsencode(entry) == component_bytes for entry in entries):
-        return True
-    if any(entry.casefold() == component.casefold() for entry in entries):
+    try:
+        for index, entry in enumerate(entries, start=1):
+            if index > MAX_DIRECTORY_ENTRIES:
+                raise CustodyAuditError("directory_entry_limit_exceeded")
+            if deadline is not None and time.monotonic() > deadline:
+                raise CustodyAuditError("audit_time_limit_exceeded")
+            if os.fsencode(entry.name) == component_bytes:
+                try:
+                    return entry.stat(follow_symlinks=False)
+                except OSError as exc:
+                    raise CustodyAuditError("path_changed_during_open") from exc
+            case_match = case_match or entry.name.casefold() == component.casefold()
+    finally:
+        entries.close()
+    if case_match:
         raise CustodyAuditError("path_case_mismatch")
     if missing_ok:
         return False
     raise CustodyAuditError("path_missing")
 
 
-def _open_parent_no_follow(path: Path) -> tuple[int, str]:
+def _open_entry_no_follow(
+    directory_fd: int,
+    name: str,
+    flags: int,
+    *,
+    deadline: float | None = None,
+) -> tuple[int, os.stat_result]:
+    listed = _require_exact_entry(directory_fd, name, deadline=deadline)
+    try:
+        before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        descriptor = os.open(name, flags, dir_fd=directory_fd)
+        opened = os.fstat(descriptor)
+        after = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError as exc:
+        if "descriptor" in locals():
+            os.close(descriptor)
+        reason = "path_missing" if exc.errno == errno.ENOENT else "path_unsafe"
+        raise CustodyAuditError(reason) from exc
+    if (
+        not isinstance(listed, os.stat_result)
+        or _stat_identity(listed) != _stat_identity(before)
+        or _stat_identity(before) != _stat_identity(opened)
+        or _stat_identity(before) != _stat_identity(after)
+    ):
+        os.close(descriptor)
+        raise CustodyAuditError("path_changed_during_open")
+    return descriptor, opened
+
+
+def _open_parent_no_follow(
+    path: Path,
+    *,
+    deadline: float | None = None,
+) -> tuple[int, str]:
     parts = _path_parts(path)
     if not parts:
         raise CustodyAuditError("path_unsafe")
@@ -112,8 +165,15 @@ def _open_parent_no_follow(path: Path) -> tuple[int, str]:
     directory_fd = os.open("/", directory_flags)
     try:
         for component in parts[:-1]:
-            _require_exact_entry(directory_fd, component)
-            next_fd = os.open(component, directory_flags, dir_fd=directory_fd)
+            next_fd, metadata = _open_entry_no_follow(
+                directory_fd,
+                component,
+                directory_flags,
+                deadline=deadline,
+            )
+            if not stat.S_ISDIR(metadata.st_mode):
+                os.close(next_fd)
+                raise CustodyAuditError("path_unsafe")
             os.close(directory_fd)
             directory_fd = next_fd
     except CustodyAuditError:
@@ -130,31 +190,33 @@ def _open_path_no_follow(
     *,
     final_flags: int = os.O_RDONLY,
     final_regular: bool = True,
+    deadline: float | None = None,
 ) -> tuple[int, os.stat_result]:
     """Open every absolute-path component through stable directory descriptors."""
-    directory_fd, name = _open_parent_no_follow(path)
+    directory_fd, name = _open_parent_no_follow(path, deadline=deadline)
     if hasattr(os, "O_NOFOLLOW"):
         final_flags |= os.O_NOFOLLOW
     try:
-        _require_exact_entry(directory_fd, name)
-        descriptor = os.open(name, final_flags, dir_fd=directory_fd)
-    except OSError as exc:
-        reason = "path_missing" if exc.errno == errno.ENOENT else "path_unsafe"
-        raise CustodyAuditError(reason) from exc
+        descriptor, metadata = _open_entry_no_follow(
+            directory_fd,
+            name,
+            final_flags,
+            deadline=deadline,
+        )
     finally:
         os.close(directory_fd)
-    try:
-        metadata = os.fstat(descriptor)
-    except OSError as exc:
-        os.close(descriptor)
-        raise CustodyAuditError("path_unavailable") from exc
     if final_regular and not stat.S_ISREG(metadata.st_mode):
         os.close(descriptor)
         raise CustodyAuditError("path_unsafe")
     return descriptor, metadata
 
 
-def _open_relative_no_follow(root_fd: int, value: str) -> tuple[int, os.stat_result]:
+def _open_relative_no_follow(
+    root_fd: int,
+    value: str,
+    *,
+    deadline: float | None = None,
+) -> tuple[int, os.stat_result]:
     parts = PurePosixPath(value).parts
     if not parts or any(part in {"", ".", ".."} for part in parts):
         raise CustodyAuditError("path_unsafe")
@@ -166,25 +228,28 @@ def _open_relative_no_follow(root_fd: int, value: str) -> tuple[int, os.stat_res
     current_fd = os.dup(root_fd)
     try:
         for component in parts[:-1]:
-            _require_exact_entry(current_fd, component)
-            next_fd = os.open(component, directory_flags, dir_fd=current_fd)
+            next_fd, metadata = _open_entry_no_follow(
+                current_fd,
+                component,
+                directory_flags,
+                deadline=deadline,
+            )
+            if not stat.S_ISDIR(metadata.st_mode):
+                os.close(next_fd)
+                raise CustodyAuditError("path_unsafe")
             os.close(current_fd)
             current_fd = next_fd
         final_flags = os.O_RDONLY
         if hasattr(os, "O_NOFOLLOW"):
             final_flags |= os.O_NOFOLLOW
-        _require_exact_entry(current_fd, parts[-1])
-        descriptor = os.open(parts[-1], final_flags, dir_fd=current_fd)
-    except OSError as exc:
-        reason = "path_missing" if exc.errno == errno.ENOENT else "path_unsafe"
-        raise CustodyAuditError(reason) from exc
+        descriptor, metadata = _open_entry_no_follow(
+            current_fd,
+            parts[-1],
+            final_flags,
+            deadline=deadline,
+        )
     finally:
         os.close(current_fd)
-    try:
-        metadata = os.fstat(descriptor)
-    except OSError as exc:
-        os.close(descriptor)
-        raise CustodyAuditError("path_unavailable") from exc
     if not stat.S_ISREG(metadata.st_mode):
         os.close(descriptor)
         raise CustodyAuditError("path_unsafe")
@@ -255,9 +320,18 @@ def _stored_path(row: sqlite3.Row, columns: set[str]) -> str | None:
     return _safe_relative_path(stored or declared)
 
 
-def _relative_regular_exists(root_fd: int, stored_path: str) -> bool:
+def _relative_regular_exists(
+    root_fd: int,
+    stored_path: str,
+    *,
+    deadline: float,
+) -> bool:
     try:
-        descriptor, _metadata = _open_relative_no_follow(root_fd, stored_path)
+        descriptor, _metadata = _open_relative_no_follow(
+            root_fd,
+            stored_path,
+            deadline=deadline,
+        )
     except CustodyAuditError as exc:
         if str(exc) == "path_missing":
             return False
@@ -266,8 +340,13 @@ def _relative_regular_exists(root_fd: int, stored_path: str) -> bool:
     return True
 
 
-def _sibling_exists(parent_fd: int, name: str) -> bool:
-    if not _require_exact_entry(parent_fd, name, missing_ok=True):
+def _sibling_exists(parent_fd: int, name: str, *, deadline: float) -> bool:
+    if not _require_exact_entry(
+        parent_fd,
+        name,
+        missing_ok=True,
+        deadline=deadline,
+    ):
         return False
     try:
         os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
@@ -290,26 +369,36 @@ def missing_pdf_references(
     snapshot = None
     connection = None
     try:
-        database_parent_fd, database_name = _open_parent_no_follow(database)
-        _require_exact_entry(database_parent_fd, database_name)
-        database_fd = os.open(
+        database_parent_fd, database_name = _open_parent_no_follow(
+            database,
+            deadline=deadline,
+        )
+        database_parent_before = os.fstat(database_parent_fd)
+        database_fd, database_before = _open_entry_no_follow(
+            database_parent_fd,
             database_name,
             os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
-            dir_fd=database_parent_fd,
+            deadline=deadline,
         )
-        database_before = os.fstat(database_fd)
         if not stat.S_ISREG(database_before.st_mode):
             raise CustodyAuditError("path_unsafe")
         if database_before.st_size > MAX_DATABASE_BYTES:
             raise CustodyAuditError("application_database_byte_limit_exceeded")
-        if _sibling_exists(database_parent_fd, f"{database_name}-wal") or _sibling_exists(
-            database_parent_fd, f"{database_name}-shm"
+        if _sibling_exists(
+            database_parent_fd,
+            f"{database_name}-wal",
+            deadline=deadline,
+        ) or _sibling_exists(
+            database_parent_fd,
+            f"{database_name}-shm",
+            deadline=deadline,
         ):
             raise CustodyAuditError("application_database_wal_unsupported")
         media_fd, _media_metadata = _open_path_no_follow(
             media_root,
             final_flags=os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
             final_regular=False,
+            deadline=deadline,
         )
         snapshot = tempfile.NamedTemporaryFile(
             prefix="custody-db-", suffix=".sqlite3"
@@ -361,7 +450,11 @@ def missing_pdf_references(
             media_probes += 1
             if media_probes > max_media_probes:
                 raise CustodyAuditError("media_probe_limit_exceeded")
-            if _relative_regular_exists(media_fd, stored_path):
+            if _relative_regular_exists(
+                media_fd,
+                stored_path,
+                deadline=deadline,
+            ):
                 continue
             missing.append(
                 {
@@ -379,8 +472,18 @@ def missing_pdf_references(
         if (
             _stat_identity(database_before) != _stat_identity(database_after)
             or _stat_identity(database_before) != _stat_identity(path_after)
-            or _sibling_exists(database_parent_fd, f"{database_name}-wal")
-            or _sibling_exists(database_parent_fd, f"{database_name}-shm")
+            or _stat_identity(database_parent_before)
+            != _stat_identity(os.fstat(database_parent_fd))
+            or _sibling_exists(
+                database_parent_fd,
+                f"{database_name}-wal",
+                deadline=deadline,
+            )
+            or _sibling_exists(
+                database_parent_fd,
+                f"{database_name}-shm",
+                deadline=deadline,
+            )
         ):
             raise CustodyAuditError("application_database_changed")
         return missing
@@ -414,12 +517,17 @@ def _manifest_matches(
     missing_by_path: dict[str, dict[str, Any]],
     *,
     max_entries: int,
-) -> Iterable[tuple[dict[str, Any], dict[str, Any]]]:
+) -> Iterable[
+    tuple[dict[str, Any] | None, dict[str, Any] | None]
+]:
     files = manifest.get("files")
     if not isinstance(files, list):
         return
     seen_case_paths: dict[str, str] = {}
     for index, entry in enumerate(files, start=1):
+        # Let the caller enforce the cooperative deadline before parsing each
+        # entry, including entries that do not match a missing path.
+        yield None, None
         if index > max_entries:
             raise CustodyAuditError("manifest_entry_limit_exceeded")
         if not isinstance(entry, dict):
@@ -432,8 +540,7 @@ def _manifest_matches(
         if previous != path:
             raise CustodyAuditError("manifest_path_case_collision")
         reference = missing_by_path.get(path)
-        if reference is not None:
-            yield reference, entry
+        yield reference, entry
 
 
 def _valid_manifest_evidence(entry: dict[str, Any]) -> tuple[str, int, str] | None:
@@ -503,6 +610,23 @@ def _scan_vault(
                 "time_limit": False,
             },
         )
+    if time.monotonic() > deadline:
+        return (
+            evidence,
+            expected,
+            "partial",
+            {
+                "returned": len(generation_ids),
+                "verified": 0,
+                "scanned": 0,
+                "listing_complete": listing_complete,
+            },
+            {
+                "generation_limit": not listing_complete,
+                "evidence_limit": False,
+                "time_limit": True,
+            },
+        )
     generation_limit = not listing_complete
     selected_generation_ids = generation_ids
     verified_count = 0
@@ -510,24 +634,28 @@ def _scan_vault(
     total_evidence = 0
     evidence_limit = False
     manifest_entries_scanned = 0
+
+    def time_limited_result():
+        return (
+            evidence,
+            expected,
+            "partial",
+            {
+                "returned": len(generation_ids),
+                "scanned": scanned_count,
+                "verified": verified_count,
+                "listing_complete": listing_complete,
+            },
+            {
+                "generation_limit": generation_limit,
+                "evidence_limit": evidence_limit,
+                "time_limit": True,
+            },
+        )
+
     for generation_id in selected_generation_ids:
         if time.monotonic() > deadline:
-            return (
-                evidence,
-                expected,
-                "partial",
-                {
-                    "returned": len(generation_ids),
-                    "scanned": scanned_count,
-                    "verified": verified_count,
-                    "listing_complete": listing_complete,
-                },
-                {
-                    "generation_limit": generation_limit,
-                    "evidence_limit": evidence_limit,
-                    "time_limit": True,
-                },
-            )
+            return time_limited_result()
         scanned_count += 1
         try:
             verified = verify_generation(
@@ -537,7 +665,11 @@ def _scan_vault(
                 verify_objects=False,
             )
         except Exception:
+            if time.monotonic() > deadline:
+                return time_limited_result()
             continue
+        if time.monotonic() > deadline:
+            return time_limited_result()
         verified_count += 1
         generation_token = _token(key, "generation", generation_id)
         files = verified.manifest.get("files")
@@ -551,6 +683,12 @@ def _scan_vault(
             missing_by_path,
             max_entries=len(files),
         ):
+            if time.monotonic() > deadline:
+                return time_limited_result()
+            if entry is None:
+                continue
+            if reference is None:
+                continue
             if (
                 len(evidence[reference["row_id"]]) >= max_evidence_per_reference
                 or total_evidence >= max_total_evidence
@@ -564,12 +702,16 @@ def _scan_vault(
             expected[reference["path_token"]].add((digest, size))
             posture = "probe_failed"
             exact = False
+            if time.monotonic() > deadline:
+                return time_limited_result()
             try:
                 metadata = vault.head(object_key, expected_sha256=digest)
                 exact = metadata.sha256 == digest and metadata.size == size
                 posture = "verified" if exact else "metadata_mismatch"
             except Exception:
                 posture = "unavailable"
+            if time.monotonic() > deadline:
+                return time_limited_result()
             evidence[reference["row_id"]].append(
                 {
                     "evidence_class": (
@@ -801,7 +943,10 @@ def _scan_archives(
     seen_archive_identities: set[tuple[int, int]] = set()
     for archive in archives:
         try:
-            descriptor, metadata_before = _open_path_no_follow(archive)
+            descriptor, metadata_before = _open_path_no_follow(
+                archive,
+                deadline=deadline,
+            )
         except CustodyAuditError:
             progress.append(
                 {
@@ -879,10 +1024,14 @@ def _scan_archives(
                             raise CustodyAuditError(
                                 "archive_end_marker_invalid"
                             )
-                        if reader.read(1):
-                            raise CustodyAuditError(
-                                "archive_trailing_data_rejected"
-                            )
+                        while True:
+                            trailing = reader.read(READ_CHUNK_BYTES)
+                            if not trailing:
+                                break
+                            if any(trailing):
+                                raise CustodyAuditError(
+                                    "archive_trailing_data_rejected"
+                                )
                         break
                     member_name, member_size, typeflag = parsed
                     source_progress["members_scanned"] += 1
