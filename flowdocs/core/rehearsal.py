@@ -98,6 +98,7 @@ def rehearse_migrations(
             "VAULT_ADMIN_MUTATIONS_ENABLED": "0",
             "VAULT_RESTORE_ENABLED": "0",
             "STAGING_RUNTIME_ACTIVATION_ENABLED": "0",
+            "STAGING_INITIAL_ACTIVATION_ENABLED": "0",
         }
     )
     try:
