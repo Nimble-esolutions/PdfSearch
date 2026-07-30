@@ -315,6 +315,8 @@ body {
   --bs-btn-active-border-color: #3a091a;
   --bs-btn-disabled-color: #5c0f1b;
   --bs-btn-disabled-border-color: #5c0f1b;
+  opacity: 1;
+  transition: none;
 }
 
 .admin-panel {
@@ -1159,6 +1161,21 @@ body {
   --bs-btn-active-color: #fff;
   --bs-btn-active-bg: #343a40;
   --bs-btn-active-border-color: #343a40;
+  opacity: 1;
+  transition: none;
+}
+
+.admin-shell .btn-outline-dark {
+  --bs-btn-color: #343a40;
+  --bs-btn-border-color: #343a40;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #343a40;
+  --bs-btn-hover-border-color: #343a40;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #212529;
+  --bs-btn-active-border-color: #212529;
+  opacity: 1;
+  transition: none;
 }
 
 .admin-shell .btn-outline-success {
@@ -1170,6 +1187,8 @@ body {
   --bs-btn-active-color: #fff;
   --bs-btn-active-bg: #0a3622;
   --bs-btn-active-border-color: #0a3622;
+  opacity: 1;
+  transition: none;
 }
 
 .admin-shell .btn-outline-danger {
@@ -1181,6 +1200,8 @@ body {
   --bs-btn-active-color: #fff;
   --bs-btn-active-bg: #58151c;
   --bs-btn-active-border-color: #58151c;
+  opacity: 1;
+  transition: none;
 }
 
 .admin-shell .btn-outline-warning {
@@ -1192,6 +1213,17 @@ body {
   --bs-btn-active-color: #fff;
   --bs-btn-active-bg: #4d3a02;
   --bs-btn-active-border-color: #4d3a02;
+  opacity: 1;
+  transition: none;
+}
+
+.admin-shell details[open] > summary.btn-outline-danger,
+.admin-shell summary.btn-outline-danger:hover,
+.admin-shell summary.btn-outline-danger:focus-visible {
+  color: #fff;
+  background: #842029;
+  border-color: #842029;
+  opacity: 1;
 }
 
 .admin-shell .admin-upload-panel,

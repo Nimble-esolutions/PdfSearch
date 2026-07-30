@@ -36,6 +36,21 @@ RAW_ERROR_SUMMARY = re.compile(
     r"{%\s*include\b[^%]*\btechnical_code\s*=\s*[^%\s]*error_summary\b[^%]*%})"
 )
 PRESENTATION_FIELDS = {"title", "detail", "consequence", "action_label"}
+MALFORMED_MARATHI_TOKENS = (
+    "प्रोसंचिका",
+    "संचिका्स",
+    "रोलबॅक",
+    "परिचालकला",
+    "परिचालकने",
+    "परिचालकची",
+    "प्रवेश-प्रमाणचा",
+    "रूपरेषाचा",
+    "रूपरेषाची",
+    "रूपरेषामध्ये",
+    "रूपरेषामधील",
+    "रूपरेषाने",
+    "रूपरेषाला",
+)
 
 
 def _literal(node: ast.AST) -> str | None:
@@ -148,6 +163,13 @@ def catalog_violations(
 ) -> list[str]:
     entries = catalog_entries(catalog_path)
     errors: list[str] = []
+    catalog_text = catalog_path.read_text(encoding="utf-8")
+    for token in MALFORMED_MARATHI_TOKENS:
+        if token in catalog_text:
+            errors.append(
+                f"{catalog_path.relative_to(display_root)}: "
+                f"malformed or unreviewed Marathi token: {token!r}"
+            )
     for message in sorted(registry_messages(registry_path)):
         translated, fuzzy = entries.get(message, ("", False))
         if not translated:

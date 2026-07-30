@@ -162,3 +162,22 @@ class OperatorLanguageValidatorTests(unittest.TestCase):
 
     def test_repository_registry_is_fully_authored_in_marathi(self):
         self.assertEqual(validate_operator_language.catalog_violations(), [])
+
+    def test_catalog_rejects_malformed_marathi_tokens(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registry = root / "registry.py"
+            catalog = root / "django.po"
+            registry.write_text("REASONS = {}\nLABELS = {}\n", encoding="utf-8")
+            catalog.write_text(
+                'msgid "Rollback"\nmsgstr "रोलबॅक"\n',
+                encoding="utf-8",
+            )
+
+            errors = validate_operator_language.catalog_violations(
+                registry_path=registry,
+                catalog_path=catalog,
+                display_root=root,
+            )
+
+        self.assertTrue(any("malformed or unreviewed" in error for error in errors))
