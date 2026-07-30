@@ -88,7 +88,10 @@ copied index file size is bounded before FAISS loads it, and projected
 per-document chunks, dimensions, total vectors, and resident vector bytes are
 checked before allocation or index addition. Verification and rebuilding use
 separate passes so a copied index and its replacement are not resident
-together. Cancellation is checked around parsing,
+together. Per-PDF remaining vector and byte budgets are checked before NumPy
+vectors are accumulated or stacked, and the rebuilt in-memory index is
+released before the written candidate is loaded for verification.
+Cancellation is checked around parsing,
 materialization, index addition, and writing. Cancellation or derivation
 failure leaves no published candidate and cannot modify source artifacts.
 
@@ -96,8 +99,11 @@ Snapshot evidence, the immutable generation manifest, and the publication
 validation record bind each folder's copied or rebuilt disposition, vector
 count, dimensions, and digest. Source folder identifiers and digests are also
 bound so the removed set must be exactly the source set absent from the
-candidate; publication rechecks computed PDF, vector, and byte totals against
-configured limits. This evidence is used by the existing restore,
+candidate. A canonical digest of those pre-reconciliation source records is
+stored independently on the control-database `SourceSnapshot`; publication
+requires workspace evidence to match that trusted digest. Publication also
+rechecks computed PDF, vector, and byte totals against configured limits. This
+evidence is used by the existing restore,
 activation, runtime, and certification gates; it does not weaken their
 independent count and digest checks.
 
