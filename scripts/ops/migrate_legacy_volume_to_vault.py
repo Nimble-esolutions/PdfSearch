@@ -1116,6 +1116,8 @@ def repack_authoritative(args: argparse.Namespace) -> dict[str, Any]:
             "production_source_id": args.production_source_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "repacked_from_generation_id": source_generation_id,
+            "app_release": args.app_release,
+            "image_digest": args.image_digest,
             "files": repacked_files,
         }
     )

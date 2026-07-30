@@ -351,6 +351,8 @@ class CandidatePublicationTests(unittest.TestCase):
             source_manifest = json.loads(
                 client.objects[source_manifest_key]["body"]
             )
+            source_manifest.pop("app_release")
+            source_manifest.pop("image_digest")
             database = next(
                 entry
                 for entry in source_manifest["files"]
@@ -402,6 +404,22 @@ class CandidatePublicationTests(unittest.TestCase):
             self.assertTrue(result["candidate_published"])
             self.assertFalse(result["pointer_updated"])
             self.assertIn(current_database_key, client.objects)
+            repacked_manifest = json.loads(
+                client.objects[
+                    migration.manifest_key(
+                        repack_args.dataset_id,
+                        repack_args.generation_id,
+                    )
+                ]["body"]
+            )
+            self.assertEqual(
+                repacked_manifest["app_release"],
+                repack_args.app_release,
+            )
+            self.assertEqual(
+                repacked_manifest["image_digest"],
+                repack_args.image_digest,
+            )
             registration_head = client.head_object(
                 Bucket=args.bucket,
                 Key=migration.registration_key(args.dataset_id),
