@@ -52,6 +52,12 @@ documentation.
    ordinary words literally where Marathi remains precise; retain identifiers
    such as S3, HTTP, HTTPS, DNS, codes, aliases, and environment keys as
    technical evidence rather than inventing misleading translations.
+   When manifest, garbage collection/GC, checkpoint, or ordinary file/media
+   appears anywhere in the affected active catalog, audit the older related
+   entries too. Use reviewed `मॅनिफेस्ट`, `जीसी`, `चेकपॉइंट`, and contextual
+   `संचिका`, then pin each corrected complete sentence in
+   `REQUIRED_MARATHI_TRANSLATIONS`; a glossary paragraph alone is not a
+   regression gate.
    Treat ordinary document maintenance and advanced Vault recovery as separate
    journeys: confirm Dashboard links enter Documents & Search directly, local
    maintenance does not imply profile setup, and advanced authority evidence is
@@ -83,6 +89,9 @@ documentation.
   `परिचालक`, `कार्यरत प्रणाली`, `जोडणी रूपरेषा`, and
   `मागील आवृत्ती पुनर्स्थापना`. Reviewed specialist forms include `व्हॉल्ट`,
   `रायटर लीज`, `एम्बेडिंग`, `मॅनिफेस्ट`, `चेकपॉइंट`, and `जीसी`.
+- Reviewed specialist strings and contextual ordinary file/media strings must
+  remain exact-validator fixtures; removing a fixture requires explicit
+  Marathi copy review, not catalog cleanup.
 - Do not transliterate obvious ordinary labels merely because their source
   string is English. Use the reviewed literal Marathi vocabulary from the
   contract, while preserving specialist terms and immutable evidence as above.

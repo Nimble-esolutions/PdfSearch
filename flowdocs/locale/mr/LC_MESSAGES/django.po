@@ -2153,10 +2153,10 @@ msgstr "पुनर्संचयन कार्यक्षेत्रे"
 
 #: core/templates/vaultops/workbench.html:221
 msgid "Retry from checkpoint"
-msgstr "तपासणी बिंदूपासून पुन्हा प्रयत्न करा"
+msgstr "चेकपॉइंटपासून पुन्हा प्रयत्न करा"
 
 msgid "Resume verified upload checkpoint"
-msgstr "पडताळलेला अपलोड तपासणी बिंदू पुढे सुरू करा"
+msgstr "पडताळलेल्या अपलोडच्या चेकपॉइंटपासून पुढे सुरू करा"
 
 msgid "Create a fresh snapshot and retry"
 msgstr "नवीन स्नॅपशॉट तयार करून पुन्हा प्रयत्न करा"
@@ -2183,7 +2183,7 @@ msgid "The failed snapshot workspace is scheduled for bounded cleanup and the wo
 msgstr "अयशस्वी स्नॅपशॉट कार्यक्षेत्र मर्यादित स्वच्छतेसाठी नियोजित केले आहे आणि कामगार नवीन विलग स्नॅपशॉट तयार करेल."
 
 msgid "No failed snapshot checkpoint is reused and authority remains unchanged."
-msgstr "अयशस्वी स्नॅपशॉटचा कोणताही तपासणी बिंदू पुन्हा वापरला जाणार नाही आणि प्राधिकृत स्थिती बदलणार नाही."
+msgstr "अयशस्वी स्नॅपशॉटचा कोणताही चेकपॉइंट पुन्हा वापरला जाणार नाही आणि प्राधिकृत स्थिती बदलणार नाही."
 
 msgid "Retry this operation"
 msgstr "ही क्रिया पुन्हा करा"
@@ -2198,7 +2198,7 @@ msgid "The worker will reuse progress only when this operation proves that its d
 msgstr "या क्रियेचा टिकाऊ पुरावा वैध असल्याचे सिद्ध झाल्यावरच कामगार प्रगतीचा पुन्हा वापर करेल."
 
 msgid "No snapshot or checkpoint reuse is assumed and authority remains unchanged."
-msgstr "स्नॅपशॉट किंवा तपासणी बिंदू पुन्हा वापरला जाईल असे गृहित धरलेले नाही आणि प्राधिकृत स्थिती बदलणार नाही."
+msgstr "स्नॅपशॉट किंवा चेकपॉइंट पुन्हा वापरला जाईल असे गृहित धरलेले नाही आणि प्राधिकृत स्थिती बदलणार नाही."
 
 msgid "The activation candidate's unavailable-document evidence changed during verification."
 msgstr "सक्रियकरण उमेदवाराचा अनुपलब्ध दस्तऐवज पुरावा पडताळणीदरम्यान बदलला."
@@ -2329,7 +2329,7 @@ msgstr "वस्तू"
 
 #: core/templates/vaultops/workbench.html
 msgid "Retention & GC"
-msgstr "जतन आणि कचरा संकलन"
+msgstr "जतन आणि जीसी"
 
 #: core/templates/vaultops/workbench.html
 msgid "Protected by"
@@ -2401,7 +2401,7 @@ msgstr "केवळ पूर्वचाचणी"
 
 #: core/templates/vaultops/workbench.html
 msgid "Garbage collection plans"
-msgstr "कचरा संकलन योजना"
+msgstr "जीसी योजना"
 
 #: core/templates/vaultops/workbench.html
 msgid ""
@@ -3000,7 +3000,7 @@ msgid "The job heartbeat expired before the work reached a durable outcome."
 msgstr "कामाचा टिकाऊ निकाल लागण्यापूर्वी कार्याचा संपर्क संकेत कालबाह्य झाला."
 
 msgid "Review the checkpoint before retrying."
-msgstr "पुन्हा प्रयत्न करण्यापूर्वी तपासणी बिंदूचा आढावा घ्या."
+msgstr "पुन्हा प्रयत्न करण्यापूर्वी चेकपॉइंटचा आढावा घ्या."
 
 msgid "Restore preparation did not complete"
 msgstr "पुनर्स्थापनेची तयारी पूर्ण झाली नाही"
@@ -3777,7 +3777,7 @@ msgid "Snapshot work was cancelled"
 msgstr "स्नॅपशॉट काम रद्द करण्यात आले"
 
 msgid "The worker stopped at a safe cancellation checkpoint."
-msgstr "कार्यकर्ता सुरक्षित रद्दीकरण टप्प्यावर थांबला."
+msgstr "कार्यकर्ता सुरक्षित रद्दीकरण चेकपॉइंटवर थांबला."
 
 msgid "No candidate was published and the live source remains unchanged."
 msgstr "कोणताही उमेदवार प्रकाशित झाला नाही आणि कार्यरत स्रोत बदललेला नाही."
@@ -4192,7 +4192,7 @@ msgid "Vault registration format is unsupported"
 msgstr "व्हॉल्ट नोंदणीचे स्वरूप समर्थित नाही"
 
 msgid "The registration declares a manifest format range this release cannot verify."
-msgstr "नोंदणीने जाहीर केलेल्या प्रकटन स्वरूपाच्या श्रेणीची या आवृत्तीला पडताळणी करता येत नाही."
+msgstr "नोंदणीने जाहीर केलेल्या मॅनिफेस्ट स्वरूपाच्या श्रेणीची या आवृत्तीला पडताळणी करता येत नाही."
 
 msgid "Review release compatibility"
 msgstr "आवृत्ती सुसंगततेचे पुनरावलोकन करा"
@@ -4213,7 +4213,7 @@ msgid "The authoritative pointer targets another dataset"
 msgstr "अधिकृत निर्देशांक दुसऱ्या माहिती संचाकडे निर्देश करतो"
 
 msgid "The pointer's manifest location does not match this approved dataset."
-msgstr "निर्देशांकातील प्रकटनाचे स्थान या मान्यताप्राप्त माहिती संचाशी जुळत नाही."
+msgstr "निर्देशांकातील मॅनिफेस्टचे स्थान या मान्यताप्राप्त माहिती संचाशी जुळत नाही."
 
 msgid "Restore and authority decisions remain blocked."
 msgstr "पुनर्स्थापना आणि अधिकृततेचे निर्णय अवरोधित राहतील."
@@ -4222,22 +4222,22 @@ msgid "Review dataset publication"
 msgstr "माहिती संच प्रकाशनाचे पुनरावलोकन करा"
 
 msgid "The authoritative manifest checksum does not match"
-msgstr "अधिकृत प्रकटनाची पडताळणी-बेरीज जुळत नाही"
+msgstr "अधिकृत मॅनिफेस्टची पडताळणी-बेरीज जुळत नाही"
 
 msgid "The pointer and stored generation manifest disagree about content identity."
-msgstr "निर्देशांक आणि साठवलेले निर्मिती संच प्रकटन आशयाच्या ओळखीबाबत जुळत नाहीत."
+msgstr "निर्देशांक आणि साठवलेल्या निर्मिती संचाचा मॅनिफेस्ट यांतील आशयाची ओळख जुळत नाही."
 
 msgid "The generation cannot be verified or restored."
 msgstr "निर्मिती संचाची पडताळणी किंवा पुनर्स्थापना करता येणार नाही."
 
 msgid "Republish the generation manifest"
-msgstr "निर्मिती संच प्रकटन पुन्हा प्रकाशित करा"
+msgstr "निर्मिती संचाचा मॅनिफेस्ट पुन्हा प्रकाशित करा"
 
 msgid "The published generation identity does not match"
 msgstr "प्रकाशित निर्मिती संचाची ओळख जुळत नाही"
 
 msgid "The manifest does not match the selected generation, dataset, or production source."
-msgstr "प्रकटन निवडलेल्या निर्मिती संचाशी, माहिती संचाशी किंवा उत्पादन स्रोताशी जुळत नाही."
+msgstr "मॅनिफेस्ट निवडलेल्या निर्मिती संचाशी, माहिती संचाशी किंवा उत्पादन स्रोताशी जुळत नाही."
 
 msgid "The generation cannot become authoritative."
 msgstr "निर्मिती संच अधिकृत होऊ शकत नाही."
@@ -4249,7 +4249,7 @@ msgid "A published generation object failed checksum verification"
 msgstr "प्रकाशित निर्मिती संच घटकाची पडताळणी-बेरीज तपासणी अयशस्वी झाली"
 
 msgid "At least one stored object does not match the checksum declared by the manifest."
-msgstr "किमान एक साठवलेला घटक प्रकटनाने जाहीर केलेल्या पडताळणी-बेरीजेशी जुळत नाही."
+msgstr "किमान एक साठवलेला घटक मॅनिफेस्टमध्ये जाहीर केलेल्या पडताळणी-बेरीजेशी जुळत नाही."
 
 msgid "The generation cannot be trusted or restored."
 msgstr "निर्मिती संचावर विश्वास ठेवता किंवा तो पुनर्स्थापित करता येणार नाही."
@@ -4261,7 +4261,7 @@ msgid "An activated document file is missing"
 msgstr "सक्रिय करण्याच्या उमेदवारातील दस्तऐवज संचिका उपलब्ध नाही"
 
 msgid "A document recorded in the candidate database is not present in its approved media location."
-msgstr "उमेदवार डेटाबेसमध्ये नोंदलेला दस्तऐवज त्याच्या मंजूर मीडिया ठिकाणी उपलब्ध नाही."
+msgstr "उमेदवार डेटाबेसमध्ये नोंदलेला दस्तऐवज त्याच्या मंजूर संचिका-स्थानावर उपलब्ध नाही."
 
 msgid "The candidate cannot become the active runtime."
 msgstr "हा उमेदवार सक्रिय कार्यरत प्रणाली होऊ शकत नाही."

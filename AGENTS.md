@@ -118,9 +118,11 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   requires a remote profile. In Marathi, use the reviewed specialist terms
   contextual literal terms `परिचालक`, `जोडणी रूपरेषा`,
   `कार्यरत प्रणाली`, and `मागील आवृत्ती पुनर्स्थापना`; keep the specialist
-  product name `व्हॉल्ट`. Use `संचिका` for ordinary file/media copy. Review
-  complete sentences and older related catalog entries; preserve immutable
-  codes and identifiers as English/LTR evidence.
+  product name `व्हॉल्ट`. Use the reviewed specialist forms `मॅनिफेस्ट`,
+  `जीसी`, and `चेकपॉइंट`; use `संचिका` for ordinary file/media copy. Review
+  complete sentences and older related catalog entries, and add exact reviewed
+  catalog strings to the operator-language validator so old variants cannot
+  return. Preserve immutable codes and identifiers as English/LTR evidence.
 
 ## Local Validation
 

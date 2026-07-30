@@ -94,12 +94,15 @@ with a degraded local posture assertion and a healthy test-fixture posture.
 
 ## Done criteria
 
-- [ ] `profile_unavailable` and other degraded states have actionable,
+- Historical acceptance checklist: these conditions were completed by Plans
+  017–023. The checked items record completion; they are not an active backlog.
+
+- [x] `profile_unavailable` and other degraded states have actionable,
   safe-next-step destinations.
-- [ ] Disabled flags are explained as posture, not presented as unexplained dead
+- [x] Disabled flags are explained as posture, not presented as unexplained dead
   buttons.
-- [ ] Health visibility improves without exposing secrets or enabling mutations.
-- [ ] English/Marathi, Axe, browser, and Workbench tests pass.
+- [x] Health visibility improves without exposing secrets or enabling mutations.
+- [x] English/Marathi, Axe, browser, and Workbench tests pass.
 
 ## STOP conditions
 
@@ -114,7 +117,8 @@ Every new typed degraded state must define an operator explanation and a safe
 destination before it is allowed into the Workbench envelope.
 # Successor note
 
-Implementation improved readiness structure but did not complete presentation
-quality: raw machine reasons and state tokens remained visible in multiple
-Workbench sections. Plan 017 supersedes that incomplete operator-language
-portion while preserving this plan's backend readiness and remediation work.
+At this plan's original completion point, readiness structure had improved but
+presentation quality was still incomplete: raw machine reasons and state tokens
+remained visible in multiple Workbench sections. Plan 017 superseded that
+operator-language portion, and Plans 018–022 later closed it, while preserving
+this plan's backend readiness and remediation work.
