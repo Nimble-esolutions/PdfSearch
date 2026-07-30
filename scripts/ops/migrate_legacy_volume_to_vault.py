@@ -719,7 +719,11 @@ def verify_remote_object(
         head = client.head_object(Bucket=bucket, Key=key)
     except Exception as exc:
         raise MigrationError(f"Remote object verification failed: {key}") from exc
-    metadata_digest = (head.get("Metadata") or {}).get("sha256", "")
+    metadata = {
+        str(name).lower(): value
+        for name, value in (head.get("Metadata") or {}).items()
+    }
+    metadata_digest = metadata.get("sha256", "")
     if metadata_digest != digest or int(head.get("ContentLength", -1)) != size:
         raise MigrationError(f"Remote object digest or size mismatch: {key}")
 
@@ -933,7 +937,11 @@ def repair_registration_metadata(
         json.loads(body), dataset_id, production_source_id
     )
     head = client.head_object(Bucket=bucket, Key=key)
-    if (head.get("Metadata") or {}).get("sha256") == digest:
+    metadata = {
+        str(name).lower(): value
+        for name, value in (head.get("Metadata") or {}).items()
+    }
+    if metadata.get("sha256") == digest:
         return registration
 
     recovery_key = (
