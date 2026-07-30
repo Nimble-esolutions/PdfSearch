@@ -1331,6 +1331,30 @@ class SupervisorProtocolTests(SimpleTestCase):
             .exists()
         )
 
+    def test_supervisor_run_starts_initial_bootstrap_without_a_pointer(self):
+        self._replace_with_initial_intent()
+        supervisor = self._supervisor("web")
+        supervisor.web_tick = lambda: None
+        supervisor.sleep = lambda _seconds: setattr(
+            supervisor, "shutdown_requested", True
+        )
+
+        self.assertEqual(supervisor.run(), 0)
+        self.assertFalse(self.paths["active"].exists())
+        self.assertFalse(self.paths["previous"].exists())
+
+    def test_supervisor_run_rejects_partial_initial_authority(self):
+        self._replace_with_initial_intent()
+        atomic_write_json(
+            self.paths["previous"], self.current_pointer_document
+        )
+        supervisor = self._supervisor("web")
+
+        with self.assertRaisesMessage(
+            RuntimeControlError, "control_document_missing"
+        ):
+            supervisor.run()
+
     def test_readiness_rejects_matching_generation_with_wrong_manifest(self):
         def urlopen(request, timeout=5):
             if request.full_url.endswith("/livez"):

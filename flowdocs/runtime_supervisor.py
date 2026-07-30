@@ -1023,14 +1023,23 @@ class RuntimeSupervisor:
     def run(self):
         self.install_signal_handlers()
         if self.activation_enabled and self.app_env == "staging":
-            active = self._current_pointer()
-            set_runtime_workspace_writable(
-                active.runtime_path,
-                runtime_root=self.runtime_root,
-                generation_id=active.generation_id,
-                manifest_digest=active.manifest_digest,
-                writable=True,
-            )
+            try:
+                active = self._current_pointer()
+            except RuntimeControlError:
+                if (
+                    not self.initial_activation_enabled
+                    or self.paths["active"].exists()
+                    or self.paths["previous"].exists()
+                ):
+                    raise
+            else:
+                set_runtime_workspace_writable(
+                    active.runtime_path,
+                    runtime_root=self.runtime_root,
+                    generation_id=active.generation_id,
+                    manifest_digest=active.manifest_digest,
+                    writable=True,
+                )
         self.start_child()
         while not self.shutdown_requested:
             if self.activation_enabled:
