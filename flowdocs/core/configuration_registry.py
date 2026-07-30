@@ -31,6 +31,11 @@ CONFIGURATION_DEFINITIONS = (
     ConfigurationDefinition("SETTINGS_EDIT_ENABLED", "Settings editing", "Runtime controls"),
     ConfigurationDefinition("REDIS_URL", "Redis backend", "Infrastructure", secret=True),
     ConfigurationDefinition("MAX_FILE_SIZE_MB", "Maximum upload size (MB)", "Document processing"),
+    ConfigurationDefinition(
+        "ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES",
+        "Maximum existing-media custody size (bytes)",
+        "Document processing",
+    ),
     ConfigurationDefinition("PDF_CHUNK_SIZE", "PDF chunk size", "Document processing"),
     ConfigurationDefinition("PDF_CHUNK_OVERLAP", "PDF chunk overlap", "Document processing"),
     ConfigurationDefinition("MAX_CONTEXT_WORDS", "Maximum context words", "Document processing"),

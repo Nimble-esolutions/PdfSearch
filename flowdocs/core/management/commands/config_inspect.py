@@ -86,6 +86,10 @@ class Command(BaseCommand):
         self._kv("EMBEDDING_TTL", str(settings.EMBEDDING_TTL))
         self._kv("SEARCH_CACHE_TTL", str(settings.SEARCH_CACHE_TTL))
         self._kv("MAX_FILE_SIZE_MB", str(settings.MAX_FILE_SIZE_MB))
+        self._kv(
+            "ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES",
+            str(settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES),
+        )
         self._kv("REDIS_URL", "configured" if settings.REDIS_URL else "(not set)")
         self._kv("DEBUG", "yes" if settings.DEBUG else "no")
 
