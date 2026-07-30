@@ -747,6 +747,130 @@ for _code in {
         ),
     )
 
+for _code in {
+    "snapshot_searchable_embeddings_invalid",
+    "snapshot_embedding_dimensions_inconsistent",
+}:
+    REASONS.setdefault(
+        _code,
+        _authored(
+            "Stored search evidence is incomplete",
+            "One or more searchable documents do not contain complete, valid stored embeddings.",
+            "The candidate snapshot was not published.",
+            "Review document index readiness",
+            "maintenance",
+            "danger",
+        ),
+    )
+
+for _code in {
+    "snapshot_faiss_rebuild_failed",
+    "snapshot_faiss_rebuild_verification_failed",
+    "snapshot_faiss_index_missing",
+    "snapshot_faiss_index_unreadable",
+    "snapshot_faiss_count_mismatch",
+}:
+    REASONS.setdefault(
+        _code,
+        _authored(
+            "Candidate search index could not be prepared",
+            "The isolated snapshot could not derive and verify its search index.",
+            "The live source remains unchanged and no candidate was published.",
+            "Review the failed sync job",
+            "jobs",
+            "danger",
+        ),
+    )
+
+REASONS.setdefault(
+    "snapshot_faiss_rebuild_vector_limit_exceeded",
+    _authored(
+        "Snapshot search index exceeds safe limits",
+        "The stored embeddings exceed the configured candidate rebuild bound.",
+        "The candidate snapshot was stopped before publication.",
+        "Review snapshot safety limits",
+        "configuration",
+        "danger",
+    ),
+)
+REASONS.setdefault(
+    "snapshot_faiss_rebuild_byte_limit_exceeded",
+    REASONS["snapshot_faiss_rebuild_vector_limit_exceeded"],
+)
+for _code in {
+    "snapshot_faiss_rebuild_pdf_limit_exceeded",
+    "snapshot_faiss_rebuild_source_limit_exceeded",
+    "snapshot_faiss_rebuild_cell_limit_exceeded",
+}:
+    REASONS.setdefault(
+        _code,
+        REASONS["snapshot_faiss_rebuild_vector_limit_exceeded"],
+    )
+
+REASONS.setdefault(
+    "snapshot_faiss_reconciliation_invalid",
+    _authored(
+        "Snapshot search evidence does not match",
+        "The candidate index evidence does not match the verified snapshot inventory.",
+        "Publication remains blocked.",
+        "Review snapshot evidence",
+        "jobs",
+        "danger",
+    ),
+)
+
+REASONS.setdefault(
+    "snapshot_faiss_validation_unavailable",
+    _authored(
+        "Search index verification is unavailable",
+        "This worker cannot load the approved search-index verification library.",
+        "The candidate snapshot was not published.",
+        "Review worker dependencies",
+        "configuration",
+        "danger",
+    ),
+)
+
+REASONS.setdefault(
+    "snapshot_faiss_metadata_unavailable",
+    _authored(
+        "Snapshot search metadata cannot be read",
+        "The frozen database could not provide the stored search evidence needed for verification.",
+        "The candidate snapshot was not published.",
+        "Review snapshot database evidence",
+        "jobs",
+        "danger",
+    ),
+)
+
+REASONS.setdefault(
+    "snapshot_cancelled",
+    _authored(
+        "Snapshot work was cancelled",
+        "The worker stopped at a safe cancellation checkpoint.",
+        "No candidate was published and the live source remains unchanged.",
+        "Review sync jobs",
+        "jobs",
+        "info",
+    ),
+)
+
+for _code in {
+    "activation_unavailable_attestation_changed",
+    "activation_unavailable_attestation_invalid",
+}:
+    REASONS.setdefault(
+        _code,
+        _authored(
+            "Unavailable-document evidence needs review",
+            "The activation candidate's unavailable-document evidence is invalid or changed during verification.",
+            "Runtime activation remains blocked.",
+            "Review activation evidence",
+            "activation",
+            "danger",
+        ),
+    )
+
 
 # Stable reasons emitted directly by Dashboard, maintenance, and Workbench UI
 # producers. Keep this inventory explicit: adding a producer reason must add

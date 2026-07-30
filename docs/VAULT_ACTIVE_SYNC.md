@@ -13,12 +13,14 @@ An Active Sync run follows this authority chain:
 3. SQLite is copied with the online backup API and checked for integrity.
 4. Media, PDF cache, FAISS, Chroma, and custody-only static files are reconciled
    into an immutable local snapshot.
-5. Every snapshot artifact is re-hashed before upload.
-6. Content-addressed objects are conditionally created or verified for reuse.
-7. An immutable dataset-scoped manifest is conditionally published and
+5. A stale copied FAISS folder index is derived again inside the isolated
+   snapshot from the frozen database's retained embeddings.
+6. Every snapshot artifact is re-hashed before upload.
+7. Content-addressed objects are conditionally created or verified for reuse.
+8. An immutable dataset-scoped manifest is conditionally published and
    re-read.
-8. The result is a candidate generation.
-9. Pointer promotion is a separate, confirmation-gated CAS operation.
+9. The result is a candidate generation.
+10. Pointer promotion is a separate, confirmation-gated CAS operation.
 
 Publication never changes the authoritative pointer. A cancellation after
 manifest publication preserves the immutable candidate rather than claiming
@@ -69,6 +71,42 @@ Direct filesystem changes outside these cooperative paths are not accepted as
 proof of consistency. A final source metadata scan detects such changes and
 fails with `snapshot_untracked_source_mutation`.
 
+Candidate FAISS reconciliation never changes the live database or live index
+tree and never calls an embedding provider. Searchable rows are read from the
+frozen SQLite snapshot in deterministic folder, document, and chunk order.
+Every stored chunk and embedding must be complete, finite, non-zero, and
+dimensionally consistent. A coherent copied folder index is retained
+byte-for-byte only after its supported inner-product index type, dimensions,
+count, vector values, and deterministic vector order match the normalized
+frozen-database batches byte-for-byte as canonical float32 values; a
+near-tolerance numeric match is not accepted. A missing, unreadable,
+unsupported, reordered, or
+stale folder index is atomically derived only under the incomplete snapshot
+workspace. Indexes for folders with no searchable rows are omitted from the
+candidate. SQL row and source-cell sizes are bounded before JSON parsing;
+copied index file size is bounded before FAISS loads it, and projected
+per-document chunks, dimensions, total vectors, and resident vector bytes are
+checked before allocation or index addition. Verification and rebuilding use
+separate passes so a copied index and its replacement are not resident
+together. Per-PDF remaining vector and byte budgets are checked before NumPy
+vectors are accumulated or stacked, and the rebuilt in-memory index is
+released before the written candidate is loaded for verification.
+Cancellation is checked around parsing,
+materialization, index addition, and writing. Cancellation or derivation
+failure leaves no published candidate and cannot modify source artifacts.
+
+Snapshot evidence, the immutable generation manifest, and the publication
+validation record bind each folder's copied or rebuilt disposition, vector
+count, dimensions, and digest. Source folder identifiers and digests are also
+bound so the removed set must be exactly the source set absent from the
+candidate. A canonical digest of those pre-reconciliation source records is
+stored independently on the control-database `SourceSnapshot`; publication
+requires workspace evidence to match that trusted digest. Publication also
+rechecks computed PDF, vector, and byte totals against configured limits. This
+evidence is used by the existing restore,
+activation, runtime, and certification gates; it does not weaken their
+independent count and digest checks.
+
 ## Publication and resume
 
 Each job binds to:
@@ -117,6 +155,13 @@ VAULT_SYNC_PROMOTION_MODE=manual
 DATA_CONTROL_ROOT=/app/data-control
 CONTROL_DB_PATH=/app/data-control/control.sqlite3
 VAULT_SNAPSHOT_ROOT=/app/data-control/snapshots
+VAULT_SNAPSHOT_FAISS_MAX_VECTORS=1000000
+VAULT_SNAPSHOT_FAISS_MAX_DIMENSIONS=4096
+VAULT_SNAPSHOT_FAISS_MAX_BYTES=536870912
+VAULT_SNAPSHOT_FAISS_MAX_SOURCE_BYTES=1073741824
+VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES=67108864
+VAULT_SNAPSHOT_FAISS_MAX_PDFS=100000
+VAULT_SNAPSHOT_FAISS_MAX_CHUNKS_PER_PDF=100000
 ```
 
 Production publication additionally requires the existing authoritative
@@ -146,6 +191,9 @@ Typical fail-closed outcomes include:
 - `fresh_validation_required`.
 
 An interrupted pre-manifest upload can retry the same job and generation.
+A retry after a failed snapshot creates a fresh snapshot identity and derives
+candidate indexes again from the then-current frozen source. A retry after
+snapshot finalization reuses that immutable snapshot and resumes publication.
 A manifest already published remains a candidate. A pointer already promoted
 requires a separately confirmed compensating promotion.
 

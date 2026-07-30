@@ -1,12 +1,15 @@
+import gc
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import stat
 import time
 from pathlib import Path
 
+import numpy as np
 from django.conf import settings
 from django.utils import timezone
 
@@ -328,6 +331,402 @@ def _validate_faiss_coherence(database_path, faiss_root):
     return evidence
 
 
+def _searchable_sql_contract(connection):
+    columns = {
+        row[1]
+        for row in connection.execute('PRAGMA table_info("core_pdffile")')
+    }
+    lifecycle_clause = (
+        "AND lifecycle IN ('uploaded', 'processing', 'ready') "
+        if "lifecycle" in columns
+        else ""
+    )
+    return lifecycle_clause
+
+
+def _preflight_searchable_embeddings(connection, lifecycle_clause):
+    row_count, source_bytes, max_cell_bytes = connection.execute(
+        "SELECT COUNT(*), "
+        "COALESCE(SUM(COALESCE(LENGTH(page_chunks), 0) + "
+        "COALESCE(LENGTH(chunk_embeddings), 0)), 0), "
+        "COALESCE(MAX(MAX(COALESCE(LENGTH(page_chunks), 0), "
+        "COALESCE(LENGTH(chunk_embeddings), 0))), 0) "
+        "FROM core_pdffile WHERE folder_id IS NOT NULL "
+        f"{lifecycle_clause}"
+    ).fetchone()
+    if row_count > settings.VAULT_SNAPSHOT_FAISS_MAX_PDFS:
+        raise SnapshotError("snapshot_faiss_rebuild_pdf_limit_exceeded")
+    if source_bytes > settings.VAULT_SNAPSHOT_FAISS_MAX_SOURCE_BYTES:
+        raise SnapshotError("snapshot_faiss_rebuild_source_limit_exceeded")
+    if max_cell_bytes > settings.VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES:
+        raise SnapshotError("snapshot_faiss_rebuild_cell_limit_exceeded")
+    folder_ids = [
+        int(row[0])
+        for row in connection.execute(
+            "SELECT DISTINCT folder_id FROM core_pdffile "
+            "WHERE folder_id IS NOT NULL "
+            f"{lifecycle_clause}ORDER BY folder_id"
+        )
+    ]
+    return folder_ids, {
+        "pdf_count": int(row_count),
+        "source_json_bytes": int(source_bytes),
+    }
+
+
+def _normalized_pdf_batch(
+    chunks_raw,
+    embeddings_raw,
+    *,
+    cancellation_check,
+    remaining_vectors=None,
+    remaining_bytes=None,
+):
+    try:
+        chunks = json.loads(chunks_raw)
+        embeddings = json.loads(embeddings_raw)
+    except (TypeError, ValueError) as exc:
+        raise SnapshotError("snapshot_searchable_embeddings_invalid") from exc
+    if (
+        not isinstance(chunks, list)
+        or not isinstance(embeddings, list)
+        or not chunks
+        or len(chunks) != len(embeddings)
+        or len(chunks) > settings.VAULT_SNAPSHOT_FAISS_MAX_CHUNKS_PER_PDF
+    ):
+        raise SnapshotError("snapshot_searchable_embeddings_invalid")
+    if remaining_vectors is not None and len(embeddings) > remaining_vectors:
+        raise SnapshotError("snapshot_faiss_rebuild_vector_limit_exceeded")
+    normalized = []
+    dimension = None
+    for chunk, embedding in zip(chunks, embeddings):
+        if cancellation_check():
+            raise SnapshotCancelled("snapshot_cancelled")
+        if (
+            not isinstance(chunk, str)
+            or not chunk.strip()
+            or not isinstance(embedding, list)
+            or not embedding
+        ):
+            raise SnapshotError("snapshot_searchable_embeddings_invalid")
+        try:
+            vector = np.asarray(embedding, dtype=np.float64)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise SnapshotError("snapshot_searchable_embeddings_invalid") from exc
+        if (
+            vector.ndim != 1
+            or vector.size > settings.VAULT_SNAPSHOT_FAISS_MAX_DIMENSIONS
+            or not np.isfinite(vector).all()
+        ):
+            raise SnapshotError("snapshot_searchable_embeddings_invalid")
+        maximum = float(np.max(np.abs(vector)))
+        if not np.isfinite(maximum) or maximum <= 0:
+            raise SnapshotError("snapshot_searchable_embeddings_invalid")
+        scaled = vector / maximum
+        norm = float(np.linalg.norm(scaled))
+        if not np.isfinite(norm) or norm <= 0:
+            raise SnapshotError("snapshot_searchable_embeddings_invalid")
+        candidate = (scaled / norm).astype(np.float32)
+        if (
+            not np.isfinite(candidate).all()
+            or not np.any(candidate)
+        ):
+            raise SnapshotError("snapshot_searchable_embeddings_invalid")
+        if dimension is not None and dimension != int(candidate.shape[0]):
+            raise SnapshotError("snapshot_embedding_dimensions_inconsistent")
+        dimension = int(candidate.shape[0])
+        projected_bytes = (len(normalized) + 1) * dimension * 4
+        if (
+            remaining_bytes is not None
+            and projected_bytes > remaining_bytes
+        ):
+            raise SnapshotError("snapshot_faiss_rebuild_byte_limit_exceeded")
+        normalized.append(candidate)
+    if cancellation_check():
+        raise SnapshotCancelled("snapshot_cancelled")
+    return np.vstack(normalized).astype(np.float32, copy=False)
+
+
+def _reconcile_candidate_faiss(
+    database_path,
+    faiss_root,
+    *,
+    cancellation_check,
+    source_faiss_records=None,
+):
+    """Keep coherent indexes and derive stale ones only in the snapshot."""
+    try:
+        import faiss
+    except ImportError as exc:
+        raise SnapshotError("snapshot_faiss_validation_unavailable") from exc
+
+    faiss_root.mkdir(parents=True, exist_ok=True)
+    folders = {}
+    source_folders = []
+    for path, record in (source_faiss_records or {}).items():
+        matched = re.fullmatch(r"faiss_indexes/folder_([0-9]+)\.index", path)
+        if matched and str(int(matched.group(1))) == matched.group(1):
+            source_folders.append(
+                {
+                    "folder_id": matched.group(1),
+                    "sha256": record["sha256"],
+                }
+            )
+    source_folders.sort(key=lambda item: int(item["folder_id"]))
+    connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
+    try:
+        lifecycle_clause = _searchable_sql_contract(connection)
+        folder_ids, totals = _preflight_searchable_embeddings(
+            connection, lifecycle_clause
+        )
+        expected_names = {
+            f"folder_{folder_id}.index" for folder_id in folder_ids
+        }
+        for candidate in sorted(faiss_root.glob("folder_*.index")):
+            matched = re.fullmatch(r"folder_([0-9]+)\.index", candidate.name)
+            if matched and candidate.name not in expected_names:
+                candidate.unlink()
+                folders[str(int(matched.group(1)))] = {
+                    "disposition": "removed",
+                    "pdf_count": 0,
+                    "vector_count": 0,
+                }
+
+        vector_total = 0
+        vector_bytes = 0
+        for folder_id in folder_ids:
+            if cancellation_check():
+                raise SnapshotCancelled("snapshot_cancelled")
+            path = faiss_root / f"folder_{folder_id}.index"
+            previous = {}
+            existing = None
+            content_matches = True
+            if path.is_file() and not path.is_symlink():
+                if path.stat().st_size > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES:
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_byte_limit_exceeded"
+                    )
+                previous["sha256"] = _sha256_file(path)
+                try:
+                    existing = faiss.read_index(str(path))
+                except Exception:
+                    previous["readable"] = False
+                else:
+                    previous.update(
+                        {
+                            "readable": True,
+                            "vector_count": int(existing.ntotal),
+                            "dimensions": int(existing.d),
+                            "index_type": type(existing).__name__,
+                        }
+                    )
+                    if (
+                        type(existing).__name__ != "IndexFlatIP"
+                        or int(existing.metric_type)
+                        != int(faiss.METRIC_INNER_PRODUCT)
+                    ):
+                        content_matches = False
+            else:
+                content_matches = False
+
+            pdf_count = 0
+            folder_count = 0
+            dimension = None
+            rows = connection.execute(
+                "SELECT id, page_chunks, chunk_embeddings "
+                "FROM core_pdffile WHERE folder_id = ? "
+                f"{lifecycle_clause}ORDER BY id",
+                (folder_id,),
+            )
+            for _pdf_id, chunks_raw, embeddings_raw in rows:
+                if cancellation_check():
+                    raise SnapshotCancelled("snapshot_cancelled")
+                batch = _normalized_pdf_batch(
+                    chunks_raw,
+                    embeddings_raw,
+                    cancellation_check=cancellation_check,
+                    remaining_vectors=(
+                        settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+                        - vector_total
+                    ),
+                    remaining_bytes=(
+                        settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
+                        - vector_bytes
+                    ),
+                )
+                pdf_count += 1
+                projected_count = folder_count + int(batch.shape[0])
+                projected_total = vector_total + int(batch.shape[0])
+                projected_bytes = vector_bytes + int(batch.nbytes)
+                if (
+                    projected_count
+                    > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+                    or projected_total
+                    > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+                ):
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_vector_limit_exceeded"
+                    )
+                if projected_bytes > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES:
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_byte_limit_exceeded"
+                    )
+                if dimension is not None and dimension != int(batch.shape[1]):
+                    raise SnapshotError(
+                        "snapshot_embedding_dimensions_inconsistent"
+                    )
+                dimension = int(batch.shape[1])
+                if existing is not None and content_matches:
+                    try:
+                        observed = existing.reconstruct_n(
+                            folder_count, int(batch.shape[0])
+                        )
+                    except Exception:
+                        content_matches = False
+                    else:
+                        observed = np.asarray(observed, dtype=np.float32)
+                        content_matches = bool(
+                            observed.shape == batch.shape
+                            and observed.tobytes(order="C")
+                            == batch.tobytes(order="C")
+                        )
+                folder_count = projected_count
+                vector_total = projected_total
+                vector_bytes = projected_bytes
+            coherent = bool(
+                existing is not None
+                and content_matches
+                and int(existing.ntotal) == folder_count
+                and int(existing.d) == dimension
+            )
+            if coherent:
+                folders[str(folder_id)] = {
+                    "disposition": "copied",
+                    "pdf_count": pdf_count,
+                    "vector_count": folder_count,
+                    "dimensions": dimension,
+                    "sha256": previous["sha256"],
+                }
+                continue
+            if not folder_count or dimension is None:
+                raise SnapshotError("snapshot_searchable_embeddings_invalid")
+            # Do not retain the copied index while building its replacement.
+            existing = None
+            rebuilt = faiss.IndexFlatIP(dimension)
+            rebuilt_count = 0
+            rows = connection.execute(
+                "SELECT id, page_chunks, chunk_embeddings "
+                "FROM core_pdffile WHERE folder_id = ? "
+                f"{lifecycle_clause}ORDER BY id",
+                (folder_id,),
+            )
+            for _pdf_id, chunks_raw, embeddings_raw in rows:
+                batch = _normalized_pdf_batch(
+                    chunks_raw,
+                    embeddings_raw,
+                    cancellation_check=cancellation_check,
+                    remaining_vectors=folder_count - rebuilt_count,
+                    remaining_bytes=(
+                        settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
+                        - rebuilt_count * dimension * 4
+                    ),
+                )
+                projected_rebuilt_count = rebuilt_count + int(batch.shape[0])
+                if (
+                    projected_rebuilt_count > folder_count
+                    or projected_rebuilt_count
+                    > settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+                    or projected_rebuilt_count * dimension * 4
+                    > settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
+                ):
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_vector_limit_exceeded"
+                    )
+                if cancellation_check():
+                    raise SnapshotCancelled("snapshot_cancelled")
+                rebuilt.add(batch)
+                rebuilt_count = projected_rebuilt_count
+            if rebuilt_count != folder_count:
+                raise SnapshotError("snapshot_faiss_rebuild_verification_failed")
+            temporary = path.with_name(
+                f".{path.name}.{secrets.token_hex(6)}.partial"
+            )
+            try:
+                if cancellation_check():
+                    raise SnapshotCancelled("snapshot_cancelled")
+                faiss.write_index(rebuilt, str(temporary))
+                with temporary.open("rb") as stream:
+                    os.fsync(stream.fileno())
+                if cancellation_check():
+                    raise SnapshotCancelled("snapshot_cancelled")
+                rebuilt = None
+                gc.collect()
+                written = faiss.read_index(str(temporary))
+                if (
+                    type(written).__name__ != "IndexFlatIP"
+                    or int(written.metric_type)
+                    != int(faiss.METRIC_INNER_PRODUCT)
+                    or int(written.ntotal) != folder_count
+                    or int(written.d) != dimension
+                ):
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_verification_failed"
+                    )
+                os.replace(temporary, path)
+            except (SnapshotError, SnapshotCancelled):
+                raise
+            except Exception as exc:
+                raise SnapshotError("snapshot_faiss_rebuild_failed") from exc
+            finally:
+                temporary.unlink(missing_ok=True)
+            folders[str(folder_id)] = {
+                "disposition": "rebuilt",
+                "pdf_count": pdf_count,
+                "vector_count": folder_count,
+                "dimensions": dimension,
+                "sha256": _sha256_file(path),
+                "previous": previous,
+            }
+        totals.update(
+            {
+                "vector_count": vector_total,
+                "vector_bytes": vector_bytes,
+            }
+        )
+    except sqlite3.Error as exc:
+        raise SnapshotError("snapshot_faiss_metadata_unavailable") from exc
+    finally:
+        connection.close()
+    source_digest = hashlib.sha256(
+        json.dumps(
+            source_folders,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    return {
+        "schema": 1,
+        "source": "stored_embeddings",
+        "source_folders": source_folders,
+        "source_folders_digest": source_digest,
+        **totals,
+        "folders": folders,
+    }
+
+
+def _workspace_tree_records(category, root):
+    records = {}
+    for relative, path in _safe_files(root):
+        key = f"{category}/{relative.as_posix()}"
+        records[key] = {
+            "size_bytes": path.stat().st_size,
+            "sha256": _sha256_file(path),
+            "category": category,
+            "relative_path": relative.as_posix(),
+        }
+    return records
+
+
 def _canonical_digest(records):
     canonical = [
         {
@@ -468,7 +867,30 @@ def create_consistent_snapshot(
             snapshot.initial_epoch,
             source_deployment=source_deployment,
         )
-        _assert_source_trees_stable(roots, records)
+        source_records = dict(records)
+        _assert_source_trees_stable(roots, source_records)
+        faiss_reconciliation = _reconcile_candidate_faiss(
+            incomplete / "db.sqlite3",
+            incomplete / "faiss_indexes",
+            cancellation_check=cancellation_check,
+            source_faiss_records={
+                key: value
+                for key, value in source_records.items()
+                if value["category"] == "faiss_indexes"
+            },
+        )
+        _assert_source_trees_stable(roots, source_records)
+        records = {
+            key: value
+            for key, value in records.items()
+            if value["category"] != "faiss_indexes"
+        }
+        records.update(
+            _workspace_tree_records(
+                "faiss_indexes",
+                incomplete / "faiss_indexes",
+            )
+        )
         snapshot_digest, canonical_files = _canonical_digest(records)
         inventory = build_manifest(
             incomplete,
@@ -492,6 +914,7 @@ def create_consistent_snapshot(
             "index_writers_drained": True,
             "database": database_record,
             "faiss": faiss_evidence,
+            "faiss_reconciliation": faiss_reconciliation,
             "files": canonical_files,
             "inventory": inventory,
             "duration_seconds": round(time.monotonic() - started, 3),
@@ -516,6 +939,7 @@ def create_consistent_snapshot(
             "database_sha256": database_record["sha256"],
             "journal_change_count": len(changes),
             "index_writers_drained": True,
+            "faiss_reconciliation": faiss_reconciliation,
         }
         snapshot.finalized_at = timezone.now()
         snapshot.save(
