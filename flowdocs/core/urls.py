@@ -82,6 +82,7 @@ urlpatterns = [
     path("pdf/<int:pdf_id>/deprecate/", views.deprecate_pdf_view, name="deprecate_pdf"),
     path("pdf/<int:pdf_id>/archive/", views.archive_pdf_view, name="archive_pdf"),
     path("pdf/<int:pdf_id>/unavailable/", views.mark_pdf_unavailable_view, name="mark_pdf_unavailable"),
+    path("pdf/<int:pdf_id>/recovery-evidence/", views.bind_pdf_recovery_evidence_view, name="bind_pdf_recovery_evidence"),
     path("pdf/<int:pdf_id>/restore/", views.restore_pdf_view, name="restore_pdf"),
     path("pdf/<int:pdf_id>/public/", views.public_view_pdf, name="public_view_pdf"),
     path("pdf/<int:pdf_id>/view/", views.view_pdf, name="view_pdf"),

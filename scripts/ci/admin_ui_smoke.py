@@ -253,8 +253,8 @@ def main():
             indexed=False,
             file="pdfs/codex-unavailable.pdf",
             media_prior_lifecycle="uploaded",
-            media_expected_sha256="0" * 64,
-            media_expected_size=1,
+            media_expected_sha256="",
+            media_expected_size=None,
             media_quarantine_reason="missing_after_inventory",
             media_case_reference="CI-BROWSER",
         )

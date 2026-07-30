@@ -65,6 +65,7 @@ from .metrics import metrics_view
 from .maintenance import (
     MEDIA_QUARANTINE_REASONS,
     archive_pdf,
+    bind_unavailable_recovery_evidence,
     deprecate_pdf,
     mark_pdf_unavailable,
     queue_job,
@@ -882,7 +883,6 @@ def archive_pdf_view(request, pdf_id):
 def mark_pdf_unavailable_view(request, pdf_id):
     """Explicitly quarantine a document row while preserving its identity."""
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
-    was_unavailable = pdf.lifecycle == "unavailable"
     values = {
         "expected_sha256": request.POST.get("expected_sha256", "").strip().lower(),
         "expected_size": request.POST.get("expected_size", "").strip(),
@@ -955,18 +955,91 @@ def mark_pdf_unavailable_view(request, pdf_id):
             gettext("This document was already marked unavailable; no state changed."),
         )
         return safe_referer_redirect(request)
-    if was_unavailable:
-        messages.success(
-            request,
-            gettext(
-                "Exact recovery evidence was bound. Restoration can now verify the returned file."
-            ),
-        )
-        return safe_referer_redirect(request)
     messages.warning(
         request,
         gettext(
             "The document is unavailable and excluded from search and index work."
+        ),
+    )
+    return safe_referer_redirect(request)
+
+
+@admin_required
+@require_POST
+def bind_pdf_recovery_evidence_view(request, pdf_id):
+    """Bind approved exact evidence to an unavailable record."""
+    pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    values = {
+        "expected_sha256": request.POST.get("expected_sha256", "").strip().lower(),
+        "expected_size": request.POST.get("expected_size", "").strip(),
+        "binding_reason": request.POST.get("binding_reason", "").strip(),
+        "case_reference": request.POST.get("case_reference", "").strip(),
+    }
+    errors = {}
+    if not re.fullmatch(r"[0-9a-f]{64}", values["expected_sha256"]):
+        errors["expected_sha256"] = gettext(
+            "Enter the complete 64-character SHA-256."
+        )
+    try:
+        parsed_size = int(values["expected_size"])
+        if parsed_size < 0 or parsed_size > 2**63 - 1:
+            raise ValueError
+    except ValueError:
+        errors["expected_size"] = gettext("Enter a valid non-negative byte size.")
+    if values["binding_reason"] not in MEDIA_QUARANTINE_REASONS:
+        errors["binding_reason"] = gettext("Choose a verified reason.")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", values["case_reference"]):
+        errors["case_reference"] = gettext(
+            "Use 1–80 letters, numbers, periods, underscores, or hyphens."
+        )
+    if request.POST.get("confirmation", "").strip() != "BIND RECOVERY EVIDENCE":
+        errors["confirmation"] = gettext(
+            "Type BIND RECOVERY EVIDENCE exactly as shown."
+        )
+    if errors:
+        request.session["media_quarantine_form"] = {
+            "pdf_id": pdf.pk,
+            "mode": "bind",
+            "values": values,
+            "errors": errors,
+        }
+        messages.error(request, gettext("Review the highlighted fields."))
+        return safe_referer_redirect(request)
+    try:
+        outcome = bind_unavailable_recovery_evidence(
+            pdf,
+            requested_by=request.user,
+            expected_sha256=values["expected_sha256"],
+            expected_size=values["expected_size"],
+            binding_reason=values["binding_reason"],
+            case_reference=values["case_reference"],
+        )
+    except SearchDataIntegrityError:
+        request.session["media_quarantine_form"] = {
+            "pdf_id": pdf.pk,
+            "mode": "bind",
+            "values": values,
+            "errors": {
+                "general": gettext(
+                    "Exact recovery evidence could not be bound to this record."
+                )
+            },
+        }
+        messages.error(
+            request,
+            gettext("Review the recovery evidence and try again."),
+        )
+        return safe_referer_redirect(request)
+    if not outcome.changed:
+        messages.info(
+            request,
+            gettext("Exact recovery evidence was already bound; no state changed."),
+        )
+        return safe_referer_redirect(request)
+    messages.success(
+        request,
+        gettext(
+            "Exact recovery evidence was bound. Restoration can now verify the returned file."
         ),
     )
     return safe_referer_redirect(request)

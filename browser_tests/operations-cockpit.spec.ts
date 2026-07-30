@@ -86,6 +86,30 @@ test.describe('Operations Cockpit', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByText('document_media_unavailable')).toBeHidden();
 
+    const bindRecovery = page.getByText('Bind recovery evidence').first();
+    await bindRecovery.click();
+    const bindingForm = page.locator('form[action$="/recovery-evidence/"]');
+    await bindingForm.evaluate((form: HTMLFormElement) => {
+      form.noValidate = true;
+    });
+    await bindingForm.locator('input[name="expected_sha256"]').fill('not-a-digest');
+    await bindingForm.locator('input[name="expected_size"]').fill('19');
+    await bindingForm.locator('input[name="case_reference"]').fill('SAFE-RECOVERY');
+    await bindingForm.locator('input[name="confirmation"]').fill('BIND RECOVERY EVIDENCE');
+    await Promise.all([
+      page.waitForURL('**/dashboard/folder/**'),
+      bindingForm.locator('button[type="submit"]').click(),
+    ]);
+    await expect(page.getByText('Review the highlighted fields.').last()).toBeVisible();
+    await expect(page.locator('a[href^="#expected_sha256_"]').last()).toBeVisible();
+    await expect(page.locator('a[href^="#binding_reason_"]').last()).toBeVisible();
+    const bindingAfterRedirect = page.locator('form[action$="/recovery-evidence/"]');
+    await expect(bindingAfterRedirect.locator('input[name="case_reference"]')).toHaveValue(
+      'SAFE-RECOVERY',
+    );
+    await expect(bindingAfterRedirect.locator('input[name="expected_sha256"]')).toBeFocused();
+    await expect(page.getByText('Restore is unavailable until approved').first()).toBeVisible();
+
     const quarantine = page.getByText('Mark unavailable').first();
     await quarantine.hover();
     await expectNoSeriousAxeViolations(page);

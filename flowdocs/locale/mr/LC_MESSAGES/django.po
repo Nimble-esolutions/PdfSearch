@@ -2184,7 +2184,7 @@ msgstr "कार्यरत निर्मिती संच"
 #: core/templates/vaultops/workbench.html:84
 #| msgid "Index readiness"
 msgid "Runtime readiness"
-msgstr "कार्यरत प्रणालीची तयारी"
+msgstr "कार्यरत प्रणालीची सज्जता"
 
 #: core/templates/vaultops/workbench.html:243
 msgid "Server-approved sources"
@@ -2407,12 +2407,12 @@ msgid ""
 "active runtime is its verified local-maintenance child. Vault authority is "
 "not changed."
 msgstr ""
-"सक्रिय कार्यरत प्रणाली हा मागील स्वाक्षरीत कार्यरत प्रणालीचा सत्यापित स्थानिक-देखभाल वारस असेल तरच ही "
-"कृती तो मागील कार्यरत प्रणाली जाणीवपूर्वक पुनर्स्थापित करते. व्हॉल्ट अधिकार बदलत नाही."
+"सक्रिय कार्यरत प्रणाली ही मागील स्वाक्षरीत कार्यरत प्रणालीचा सत्यापित स्थानिक-देखभाल वारस असेल तरच ही "
+"कृती ती मागील कार्यरत प्रणाली जाणीवपूर्वक पुनर्स्थापित करते. व्हॉल्ट अधिकार बदलत नाही."
 
 #: core/templates/vaultops/workbench.html
 msgid "Review signed rollback"
-msgstr "स्वाक्षरीत मागील आवृत्ती पुनर्स्थापना तपासा"
+msgstr "स्वाक्षरीत मागील आवृत्ती पुनर्स्थापित करा"
 
 #: core/templates/vaultops/workbench.html
 msgid "Verified previous runtime:"
@@ -2662,7 +2662,7 @@ msgid "Approved Vault profile is unavailable"
 msgstr "मंजूर व्हॉल्ट रूपरेषा उपलब्ध नाही"
 
 msgid "The server-approved remote profile could not be loaded."
-msgstr "सर्व्हरने मंजूर केलेले दूरस्थ रूपरेषा लोड करता आले नाही."
+msgstr "सर्व्हरने मंजूर केलेली दूरस्थ रूपरेषा लोड करता आली नाही."
 
 msgid "Remote inventory and restore work remain unavailable."
 msgstr "दूरस्थ सूची आणि पुनर्स्थापना कार्य उपलब्ध राहणार नाही."
@@ -2714,7 +2714,7 @@ msgstr "स्थानिक देखभाल कार्य पूर्ण
 
 msgid ""
 "The active runtime remains unchanged, but the requested work is incomplete."
-msgstr "सक्रिय कार्यरत प्रणाली बदललेला नाही; मात्र विनंती केलेले काम अपूर्ण आहे."
+msgstr "सक्रिय कार्यरत प्रणाली अपरिवर्तित आहे; मात्र विनंती केलेले काम अपूर्ण आहे."
 
 msgid "Review jobs"
 msgstr "कार्यांचा आढावा घ्या"
@@ -2750,7 +2750,7 @@ msgid "A bounded maintenance job is still running."
 msgstr "मर्यादित व्याप्तीचे देखभाल कार्य अद्याप सुरू आहे."
 
 msgid "The active runtime remains unchanged while work continues."
-msgstr "काम सुरू असताना सक्रिय कार्यरत प्रणाली बदलणार नाही."
+msgstr "काम सुरू असताना सक्रिय कार्यरत प्रणाली अपरिवर्तित राहील."
 
 msgid "View active work"
 msgstr "सक्रिय काम पहा"
@@ -2985,7 +2985,7 @@ msgid "The maintenance candidate could not be imported safely."
 msgstr "देखभाल उमेदवार सुरक्षितपणे आयात करता आला नाही."
 
 msgid "The active runtime remains unchanged."
-msgstr "सक्रिय कार्यरत प्रणाली बदललेला नाही."
+msgstr "सक्रिय कार्यरत प्रणाली अपरिवर्तित आहे."
 
 msgid "Review maintenance jobs"
 msgstr "देखभाल कार्यांचा आढावा घ्या"
@@ -3732,7 +3732,7 @@ msgid "Review maintenance plan"
 msgstr "देखभाल योजनेचे पुनरावलोकन करा"
 
 msgid "Review profile evidence"
-msgstr "रूपरेषा पुराव्याचे पुनरावलोकन करा"
+msgstr "रूपरेषेच्या पुराव्याचे पुनरावलोकन करा"
 
 msgid "Review publication jobs"
 msgstr "प्रकाशन कामांचे पुनरावलोकन करा"
@@ -3771,7 +3771,7 @@ msgid "Runtime activation is scheduled"
 msgstr "कार्यरत प्रणाली सक्रियीकरण नियोजित आहे"
 
 msgid "Runtime rollback is scheduled"
-msgstr "कार्यरत प्रणाली मागील आवृत्ती पुनर्स्थापना नियोजित आहे"
+msgstr "कार्यरत प्रणालीची मागील आवृत्ती पुनर्स्थापना नियोजित आहे"
 
 msgid "Secrets cannot be entered here"
 msgstr "गुप्त मूल्ये येथे भरता येत नाहीत"
@@ -3824,16 +3824,16 @@ msgid "The confirmed candidate is waiting for verified publication."
 msgstr "पुष्टी झालेला उमेदवार पडताळलेल्या प्रकाशनाची प्रतीक्षा करत आहे."
 
 msgid "The confirmed previous runtime is queued for signed rollback."
-msgstr "पुष्टी झालेला मागील कार्यरत प्रणाली स्वाक्षरीत मागील आवृत्ती पुनर्स्थापनासाठी रांगेत आहे."
+msgstr "पुष्टी झालेली मागील कार्यरत प्रणाली स्वाक्षरीत पुनर्स्थापनेसाठी रांगेत आहे."
 
 msgid "The confirmed workspace is queued for a verified runtime change."
 msgstr "पुष्टी झालेले कार्यक्षेत्र पडताळलेल्या कार्यरत प्रणाली बदलासाठी रांगेत आहे."
 
 msgid "The current runtime remains authoritative until activation succeeds."
-msgstr "सक्रियीकरण यशस्वी होईपर्यंत सध्याचा कार्यरत प्रणाली अधिकृत राहील."
+msgstr "सक्रियीकरण यशस्वी होईपर्यंत सध्याची कार्यरत प्रणाली अधिकृत राहील."
 
 msgid "The current runtime remains authoritative until rollback succeeds."
-msgstr "मागील आवृत्ती पुनर्स्थापना यशस्वी होईपर्यंत सध्याचा कार्यरत प्रणाली अधिकृत राहील."
+msgstr "मागील आवृत्ती पुनर्स्थापना यशस्वी होईपर्यंत सध्याची कार्यरत प्रणाली अधिकृत राहील."
 
 msgid "The environment does not permit document mutation work."
 msgstr "हे पर्यावरण दस्तऐवजांमध्ये बदल करण्याच्या कामाला परवानगी देत नाही."
@@ -3997,7 +3997,7 @@ msgid "This request key was already used"
 msgstr "ही विनंती कळ आधीच वापरली आहे"
 
 msgid "This runtime is read-only"
-msgstr "हा कार्यरत प्रणाली केवळ-वाचन आहे"
+msgstr "ही कार्यरत प्रणाली केवळ-वाचन आहे"
 
 msgid "This workspace cannot be used for rollback"
 msgstr "हे कार्यक्षेत्र मागील आवृत्ती पुनर्स्थापनासाठी वापरता येत नाही"
@@ -4321,7 +4321,7 @@ msgid "The preserved document record does not currently have verified source med
 msgstr "जतन केलेल्या दस्तऐवज नोंदीसाठी सध्या पडताळलेली स्रोत संचिका उपलब्ध नाही."
 
 msgid "It is excluded from search, indexing, and runtime readiness until the file is restored."
-msgstr "संचिका पुनर्स्थापित होईपर्यंत ही नोंद शोध, अनुक्रमण आणि कार्यरत प्रणाली सज्जतेतून वगळली आहे."
+msgstr "संचिका पुनर्स्थापित होईपर्यंत ही नोंद शोध, अनुक्रमण आणि कार्यरत प्रणालीच्या सज्जतेतून वगळली आहे."
 
 msgid "Restore verified document media"
 msgstr "पडताळलेली दस्तऐवज संचिका पुनर्स्थापित करा"
@@ -4380,13 +4380,13 @@ msgid "Bind recovery evidence"
 msgstr "पुनर्प्राप्तीचा पुरावा जोडा"
 
 msgid "Use exact SHA-256 and byte size from approved custody evidence. Do not guess."
-msgstr "मान्य ताबा-पुराव्यातील अचूक SHA-256 आणि बाइट आकार वापरा. अंदाज लावू नका."
+msgstr "मान्य अभिरक्षण पुराव्यातील अचूक SHA-256 आणि बाइट आकार वापरा. अंदाज लावू नका."
 
 msgid "Bind exact evidence"
 msgstr "अचूक पुरावा जोडा"
 
 msgid "Leave both evidence fields blank when the exact source digest and size are not yet known. Restoration stays disabled until approved evidence is bound."
-msgstr "स्रोताचा अचूक सारांश आणि आकार अद्याप माहीत नसल्यास दोन्ही पुरावा क्षेत्रे रिकामी ठेवा. मान्य पुरावा जोडला जाईपर्यंत पुनर्स्थापना बंद राहील."
+msgstr "स्रोताचे अचूक हॅश मूल्य आणि आकार अद्याप माहीत नसल्यास दोन्ही पुरावा क्षेत्रे रिकामी ठेवा. मान्य पुरावा जोडला जाईपर्यंत पुनर्स्थापना बंद राहील."
 
 msgid "Enter the complete 64-character SHA-256, or leave both evidence fields blank."
 msgstr "संपूर्ण ६४-अक्षरी SHA-256 नोंदवा किंवा दोन्ही पुरावा क्षेत्रे रिकामी ठेवा."
@@ -4399,3 +4399,21 @@ msgstr "पुनर्प्राप्तीचा अचूक पुरा�
 
 msgid "Document “%(title)s” was restored to its preserved lifecycle and remains excluded from search."
 msgstr "“%(title)s” दस्तऐवज त्याच्या जतन केलेल्या जीवनचक्रात पुनर्स्थापित केला आहे आणि तो शोधातून वगळलेलाच राहील."
+
+msgid "Restore is unavailable until approved SHA-256 and byte-size evidence is bound."
+msgstr "मान्य SHA-256 आणि बाइट आकाराचा पुरावा जोडला जाईपर्यंत पुनर्स्थापना उपलब्ध नाही."
+
+msgid "Evidence binding reason"
+msgstr "पुरावा जोडण्याचे कारण"
+
+msgid "Type BIND RECOVERY EVIDENCE exactly as shown."
+msgstr "दाखवल्याप्रमाणे BIND RECOVERY EVIDENCE अचूक टाइप करा."
+
+msgid "Exact recovery evidence could not be bound to this record."
+msgstr "पुनर्प्राप्तीचा अचूक पुरावा या नोंदीशी जोडता आला नाही."
+
+msgid "Review the recovery evidence and try again."
+msgstr "पुनर्प्राप्तीच्या पुराव्याचा आढावा घेऊन पुन्हा प्रयत्न करा."
+
+msgid "Exact recovery evidence was already bound; no state changed."
+msgstr "पुनर्प्राप्तीचा अचूक पुरावा आधीच जोडला आहे; स्थितीत बदल झाला नाही."

@@ -184,35 +184,46 @@
                       {% if pdf.lifecycle == 'unavailable' %}
                         <form method="post" action="{% url 'restore_pdf' pdf.id %}" class="d-inline">
                           {% csrf_token %}
-                          <button type="submit" class="btn btn-outline-success btn-sm"{% if not pdf.media_expected_sha256 or pdf.media_expected_size == None %} disabled title="{% trans 'Bind exact recovery evidence before restoring availability.' %}"{% endif %}>
+                          <button type="submit" class="btn btn-outline-success btn-sm"{% if not pdf.media_expected_sha256 or pdf.media_expected_size == None %} disabled aria-describedby="restore_blocker_{{ pdf.id }}"{% endif %}>
                             {% trans "Restore availability" %}
                           </button>
                         </form>
                         {% if not pdf.media_expected_sha256 or pdf.media_expected_size == None %}
+                          <p id="restore_blocker_{{ pdf.id }}" class="ops-control-note">{% trans "Restore is unavailable until approved SHA-256 and byte-size evidence is bound." %}</p>
                           <details class="d-inline-block"{% if media_quarantine_form.pdf_id == pdf.id %} open{% endif %}>
                             <summary id="bind_recovery_label_{{ pdf.id }}" class="btn btn-outline-primary btn-sm">{% trans "Bind recovery evidence" %}</summary>
-                            <form method="post" action="{% url 'mark_pdf_unavailable' pdf.id %}" class="admin-confirm-form" aria-labelledby="bind_recovery_label_{{ pdf.id }}">
+                            <form method="post" action="{% url 'bind_pdf_recovery_evidence' pdf.id %}" class="admin-confirm-form" aria-labelledby="bind_recovery_label_{{ pdf.id }}">
                               {% csrf_token %}
                               {% if media_quarantine_form.pdf_id == pdf.id %}
                                 <div class="alert alert-danger" role="alert" tabindex="-1">
                                   <strong>{% trans "Review the highlighted fields." %}</strong>
+                                  {% if media_quarantine_form.errors.general %}<p>{{ media_quarantine_form.errors.general }}</p>{% endif %}
                                   <ul>
                                     {% if media_quarantine_form.errors.expected_sha256 %}<li><a href="#expected_sha256_{{ pdf.id }}">{% trans "Expected SHA-256" %}: {{ media_quarantine_form.errors.expected_sha256 }}</a></li>{% endif %}
                                     {% if media_quarantine_form.errors.expected_size %}<li><a href="#expected_size_{{ pdf.id }}">{% trans "Expected file size in bytes" %}: {{ media_quarantine_form.errors.expected_size }}</a></li>{% endif %}
+                                    {% if media_quarantine_form.errors.binding_reason %}<li><a href="#binding_reason_{{ pdf.id }}">{% trans "Evidence binding reason" %}: {{ media_quarantine_form.errors.binding_reason }}</a></li>{% endif %}
                                     {% if media_quarantine_form.errors.case_reference %}<li><a href="#case_reference_{{ pdf.id }}">{% trans "Case reference" %}: {{ media_quarantine_form.errors.case_reference }}</a></li>{% endif %}
                                     {% if media_quarantine_form.errors.confirmation %}<li><a href="#confirmation_{{ pdf.id }}">{% trans "Confirmation" %}: {{ media_quarantine_form.errors.confirmation }}</a></li>{% endif %}
                                   </ul>
                                 </div>
                               {% endif %}
                               <p>{% trans "Use exact SHA-256 and byte size from approved custody evidence. Do not guess." %}</p>
-                              <input type="hidden" name="reason" value="{{ pdf.media_quarantine_reason }}">
-                              <label>{% trans "Expected SHA-256" %}<input id="expected_sha256_{{ pdf.id }}" name="expected_sha256" minlength="64" maxlength="64" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.expected_sha256 }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_sha256 %} aria-invalid="true" aria-describedby="expected_sha256_error_{{ pdf.id }}" autofocus{% endif %} required></label>
+                              <label>{% trans "Expected SHA-256" %}<input id="expected_sha256_{{ pdf.id }}" name="expected_sha256" lang="en" dir="ltr" minlength="64" maxlength="64" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.expected_sha256 }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_sha256 %} aria-invalid="true" aria-describedby="expected_sha256_error_{{ pdf.id }}" autofocus{% endif %} required></label>
                               {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_sha256 %}<p id="expected_sha256_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.expected_sha256 }}</p>{% endif %}
                               <label>{% trans "Expected file size in bytes" %}<input id="expected_size_{{ pdf.id }}" name="expected_size" type="number" min="0" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.expected_size }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_size %} aria-invalid="true" aria-describedby="expected_size_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 %} autofocus{% endif %}{% endif %} required></label>
                               {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_size %}<p id="expected_size_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.expected_size }}</p>{% endif %}
-                              <label>{% trans "Case reference" %}<input id="case_reference_{{ pdf.id }}" name="case_reference" maxlength="80" pattern="[A-Za-z0-9._-]+" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.case_reference }}{% else %}{{ pdf.media_case_reference }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.case_reference %} aria-invalid="true" aria-describedby="case_reference_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size %} autofocus{% endif %}{% endif %} required></label>
+                              <label>{% trans "Evidence binding reason" %}
+                                <select id="binding_reason_{{ pdf.id }}" name="binding_reason"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.binding_reason %} aria-invalid="true" aria-describedby="binding_reason_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size %} autofocus{% endif %}{% endif %} required>
+                                  <option value="">{% trans "Choose a verified reason" %}</option>
+                                  <option value="missing_after_inventory"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.values.binding_reason == "missing_after_inventory" %} selected{% endif %}>{% trans "Missing after verified inventory" %}</option>
+                                  <option value="custody_restore_pending"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.values.binding_reason == "custody_restore_pending" %} selected{% endif %}>{% trans "Approved custody restoration is pending" %}</option>
+                                  <option value="source_recovery_case"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.values.binding_reason == "source_recovery_case" %} selected{% endif %}>{% trans "Source recovery case is open" %}</option>
+                                </select>
+                              </label>
+                              {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.binding_reason %}<p id="binding_reason_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.binding_reason }}</p>{% endif %}
+                              <label>{% trans "Case reference" %}<input id="case_reference_{{ pdf.id }}" name="case_reference" lang="en" dir="ltr" maxlength="80" pattern="[A-Za-z0-9._-]+" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.case_reference }}{% else %}{{ pdf.media_case_reference }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.case_reference %} aria-invalid="true" aria-describedby="case_reference_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size and not media_quarantine_form.errors.binding_reason %} autofocus{% endif %}{% endif %} required></label>
                               {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.case_reference %}<p id="case_reference_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.case_reference }}</p>{% endif %}
-                              <label>{% trans "Type MARK UNAVAILABLE exactly as shown." %}<input id="confirmation_{{ pdf.id }}" name="confirmation" lang="en" dir="ltr" autocomplete="off"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.confirmation %} aria-invalid="true" aria-describedby="confirmation_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size and not media_quarantine_form.errors.case_reference %} autofocus{% endif %}{% endif %} required></label>
+                              <label>{% trans "Type BIND RECOVERY EVIDENCE exactly as shown." %}<input id="confirmation_{{ pdf.id }}" name="confirmation" lang="en" dir="ltr" autocomplete="off"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.confirmation %} aria-invalid="true" aria-describedby="confirmation_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size and not media_quarantine_form.errors.binding_reason and not media_quarantine_form.errors.case_reference %} autofocus{% endif %}{% endif %} required></label>
                               {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.confirmation %}<p id="confirmation_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.confirmation }}</p>{% endif %}
                               <button type="submit" class="btn btn-primary btn-sm">{% trans "Bind exact evidence" %}</button>
                             </form>
@@ -254,7 +265,7 @@
                             {% endif %}
                             <label>
                               {% trans "Expected SHA-256" %}
-                              <input id="expected_sha256_{{ pdf.id }}" name="expected_sha256" inputmode="text" minlength="64" maxlength="64" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.expected_sha256 }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_sha256 %} aria-invalid="true" aria-describedby="expected_sha256_error_{{ pdf.id }}" autofocus{% endif %}>
+                              <input id="expected_sha256_{{ pdf.id }}" name="expected_sha256" lang="en" dir="ltr" inputmode="text" minlength="64" maxlength="64" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.expected_sha256 }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_sha256 %} aria-invalid="true" aria-describedby="expected_sha256_error_{{ pdf.id }}" autofocus{% endif %}>
                             </label>
                             {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.expected_sha256 %}<p id="expected_sha256_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.expected_sha256 }}</p>{% endif %}
                             <label>
@@ -275,7 +286,7 @@
                             {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.reason %}<p id="reason_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.reason }}</p>{% endif %}
                             <label>
                               {% trans "Case reference" %}
-                              <input id="case_reference_{{ pdf.id }}" name="case_reference" maxlength="80" pattern="[A-Za-z0-9._-]+" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.case_reference }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.case_reference %} aria-invalid="true" aria-describedby="case_reference_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size and not media_quarantine_form.errors.reason %} autofocus{% endif %}{% endif %} required>
+                              <input id="case_reference_{{ pdf.id }}" name="case_reference" lang="en" dir="ltr" maxlength="80" pattern="[A-Za-z0-9._-]+" value="{% if media_quarantine_form.pdf_id == pdf.id %}{{ media_quarantine_form.values.case_reference }}{% endif %}"{% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.case_reference %} aria-invalid="true" aria-describedby="case_reference_error_{{ pdf.id }}"{% if not media_quarantine_form.errors.expected_sha256 and not media_quarantine_form.errors.expected_size and not media_quarantine_form.errors.reason %} autofocus{% endif %}{% endif %} required>
                             </label>
                             {% if media_quarantine_form.pdf_id == pdf.id and media_quarantine_form.errors.case_reference %}<p id="case_reference_error_{{ pdf.id }}" class="text-danger">{{ media_quarantine_form.errors.case_reference }}</p>{% endif %}
                             <label>

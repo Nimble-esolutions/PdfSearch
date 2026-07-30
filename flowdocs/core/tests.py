@@ -36,7 +36,7 @@ from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
-from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, bind_unavailable_recovery_evidence, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf
 from .media_quarantine import build_unavailable_attestation, storage_key_evidence, storage_key_status, validate_unavailable_attestation
 from .maintenance_plans import queue_plan
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat
@@ -2378,6 +2378,20 @@ class DocumentLifecycleTests(TestCase):
         data.update(overrides)
         return data
 
+    def bind_recovery_evidence(self, **overrides):
+        evidence = {
+            "expected_sha256": hashlib.sha256(self.restored_bytes).hexdigest(),
+            "expected_size": len(self.restored_bytes),
+            "binding_reason": "source_recovery_case",
+            "case_reference": "RECOVERY-123",
+        }
+        evidence.update(overrides)
+        return bind_unavailable_recovery_evidence(
+            self.pdf,
+            requested_by=self.admin,
+            **evidence,
+        )
+
     def test_default_lifecycle_is_uploaded(self):
         self.assertEqual(self.pdf.lifecycle, "uploaded")
 
@@ -2453,7 +2467,9 @@ class DocumentLifecycleTests(TestCase):
 
     def test_exact_recovery_evidence_can_be_bound_once_and_is_audited(self):
         self.mark_unavailable(expected_sha256="", expected_size="")
-        outcome = self.mark_unavailable()
+        self.pdf.media_quarantine_reason = ""
+        self.pdf.save(update_fields=["media_quarantine_reason"])
+        outcome = self.bind_recovery_evidence()
         self.assertTrue(outcome.changed)
         self.pdf.refresh_from_db()
         self.assertEqual(
@@ -2464,10 +2480,11 @@ class DocumentLifecycleTests(TestCase):
             MaintenanceAuditEvent.objects.filter(
                 event_type="media_recovery_evidence_bound",
                 payload__pdf_id=self.pdf.pk,
+                payload__binding_reason="source_recovery_case",
             ).exists()
         )
 
-        second = self.mark_unavailable(
+        second = self.bind_recovery_evidence(
             expected_sha256="f" * 64,
             expected_size="7",
         )
@@ -2492,8 +2509,63 @@ class DocumentLifecycleTests(TestCase):
             side_effect=RuntimeError("audit failed"),
         ):
             with self.assertRaisesRegex(RuntimeError, "audit failed"):
-                self.mark_unavailable()
+                self.bind_recovery_evidence()
 
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.media_expected_sha256, "")
+        self.assertIsNone(self.pdf.media_expected_size)
+
+    def test_recovery_binding_service_error_is_visible_after_redirect(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        self.pdf.media_expected_sha256 = "f" * 64
+        self.pdf.save(update_fields=["media_expected_sha256"])
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("bind_pdf_recovery_evidence", args=[self.pdf.pk]),
+            {
+                "expected_sha256": hashlib.sha256(self.restored_bytes).hexdigest(),
+                "expected_size": len(self.restored_bytes),
+                "binding_reason": "source_recovery_case",
+                "case_reference": "SAFE-RECOVERY",
+                "confirmation": "BIND RECOVERY EVIDENCE",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+
+        self.assertContains(
+            response,
+            "Exact recovery evidence could not be bound to this record.",
+        )
+        self.assertContains(response, "<details class=\"d-inline-block\" open>")
+
+    def test_invalid_recovery_binding_survives_no_js_redirect_with_visible_errors(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        self.pdf.media_quarantine_reason = ""
+        self.pdf.save(update_fields=["media_quarantine_reason"])
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("bind_pdf_recovery_evidence", args=[self.pdf.pk]),
+            {
+                "expected_sha256": "not-a-digest",
+                "expected_size": "19",
+                "binding_reason": "",
+                "case_reference": "SAFE-RECOVERY",
+                "confirmation": "BIND RECOVERY EVIDENCE",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="#expected_sha256_')
+        self.assertContains(response, 'href="#binding_reason_')
+        self.assertContains(response, 'aria-invalid="true"')
+        self.assertContains(response, "autofocus")
+        self.assertContains(response, 'value="SAFE-RECOVERY"')
+        self.assertContains(response, "Restore is unavailable until approved")
         self.pdf.refresh_from_db()
         self.assertEqual(self.pdf.media_expected_sha256, "")
         self.assertIsNone(self.pdf.media_expected_size)
@@ -2694,7 +2766,7 @@ class DocumentLifecycleTests(TestCase):
         self.assertContains(response, "Bind recovery evidence")
         self.assertContains(
             response,
-            "Bind exact recovery evidence before restoring availability.",
+            "Restore is unavailable until approved SHA-256 and byte-size evidence is bound.",
         )
         self.assertContains(
             response,
@@ -2720,6 +2792,14 @@ class DocumentLifecycleTests(TestCase):
         self.assertContains(response, "दस्तऐवज संचिका उपलब्ध नाही")
         self.assertContains(response, "अपेक्षित संचिका आकार (बाइटमध्ये)")
         self.assertContains(response, 'lang="en" dir="ltr"')
+        self.assertContains(
+            response,
+            'name="expected_sha256" lang="en" dir="ltr"',
+        )
+        self.assertContains(
+            response,
+            'name="case_reference" lang="en" dir="ltr"',
+        )
 
     def test_unavailable_file_is_not_served_to_public_or_ordinary_user(self):
         self.mark_unavailable()
