@@ -930,20 +930,28 @@ def _rollback_capability(*, pending_activation=None):
 
 
 def build_workbench_state(*, profile_key=None):
-    from vaultops.services.profiles import ensure_environment_profile
+    from vaultops.services.profiles import (
+        VaultProfileError,
+        ensure_environment_profile,
+    )
 
     identity = settings.ENV_IDENTITY
-    ensure_environment_profile()
     profile_key = profile_key or settings.VAULT_DEFAULT_PROFILE
     observed_at = timezone.now()
+    unavailable_reason = ""
     try:
+        ensure_environment_profile()
         profile = VaultConnectionProfile.objects.get(
             key=profile_key, enabled=True
         )
+    except (ArtifactVaultConfigurationError, VaultProfileError):
+        unavailable_reason = "vault_environment_configuration_invalid"
     except VaultConnectionProfile.DoesNotExist:
+        unavailable_reason = "profile_unavailable"
+    if unavailable_reason:
         return {
             "status": "unknown",
-            "reason_code": "profile_unavailable",
+            "reason_code": unavailable_reason,
             "severity": "warning",
             "recommended_action": "Configure or materialize the locked profile.",
             "observed_at": observed_at,
@@ -958,7 +966,7 @@ def build_workbench_state(*, profile_key=None):
             "authority": {
                 "remote": {"state": "unknown"},
                 "runtime": {"state": "unknown"},
-                "blocking_reasons": ["profile_unavailable"],
+                "blocking_reasons": [unavailable_reason],
                 "allowed_actions": [],
             },
             "profiles": _profile_records(),
