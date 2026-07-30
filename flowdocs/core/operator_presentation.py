@@ -900,8 +900,16 @@ REASONS.update(
         ),
         "job_retry_fresh_snapshot_queued": _authored(
             "Fresh snapshot retry is queued",
-            "The failed snapshot workspace was removed and the worker will create a new isolated snapshot.",
+            "The failed snapshot workspace is scheduled for bounded cleanup and the worker will create a new isolated snapshot.",
             "No failed snapshot checkpoint is reused and authority remains unchanged.",
+            "Review jobs",
+            "jobs",
+            "success",
+        ),
+        "job_retry_operation_queued": _authored(
+            "Operation retry is queued",
+            "The worker will reuse progress only when this operation proves that its durable evidence is valid.",
+            "No snapshot or checkpoint reuse is assumed and authority remains unchanged.",
             "Review jobs",
             "jobs",
             "success",

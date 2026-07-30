@@ -90,12 +90,16 @@ Replaying the same key and request returns the original receipt; concurrent
 submissions increment the retry counter and append `job_requeued` exactly once.
 Reusing a key for another actor or state version fails closed.
 
-The operator interface distinguishes two retry modes. A job with a finalized
+The operator interface distinguishes three retry modes. A job with a finalized
 snapshot resumes its verified object-upload checkpoint. A job that failed
 before snapshot finalization never calls that a checkpoint resume: its failed
-or hard-kill `.incomplete` workspace is removed and the worker creates a fresh
-snapshot. Failed snapshot rows and bounded cleanup evidence remain in the
-control database; partial files do not remain publishable.
+or hard-kill `.incomplete` workspace receives a durable cleanup intent and the
+worker creates a fresh snapshot. Reclamation runs only after the retry
+transaction commits, after a grace period and fenced-owner recheck, and within
+configured item, byte, and time bounds. Failed snapshot rows and cleanup
+evidence remain in the control database; partial files never become publishable.
+Non-sync operations use neutral retry guidance unless that operation separately
+proves a reusable durable checkpoint.
 
 Writer ownership is renewable and fenced by epoch. Release re-reads the writer
 record, verifies the token hash and epoch, and expires it with `If-Match`.

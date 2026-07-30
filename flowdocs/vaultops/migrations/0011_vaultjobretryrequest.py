@@ -32,6 +32,7 @@ class Migration(migrations.Migration):
                         choices=[
                             ("fresh_snapshot", "Fresh snapshot"),
                             ("checkpoint_resume", "Checkpoint resume"),
+                            ("operation_retry", "Operation retry"),
                         ],
                         max_length=24,
                     ),
@@ -54,6 +55,41 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 fields=("job", "idempotency_key"),
                 name="vaultops_unique_job_retry_request",
+            ),
+        ),
+        migrations.AddField(
+            model_name="sourcesnapshot",
+            name="cleanup_attempts",
+            field=models.PositiveIntegerField(default=0),
+        ),
+        migrations.AddField(
+            model_name="sourcesnapshot",
+            name="cleanup_error_code",
+            field=models.CharField(blank=True, default="", max_length=80),
+        ),
+        migrations.AddField(
+            model_name="sourcesnapshot",
+            name="cleanup_not_before",
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="sourcesnapshot",
+            name="cleanup_path",
+            field=models.CharField(blank=True, default="", max_length=1000),
+        ),
+        migrations.AddField(
+            model_name="sourcesnapshot",
+            name="cleanup_state",
+            field=models.CharField(
+                choices=[
+                    ("none", "No cleanup"),
+                    ("pending", "Cleanup pending"),
+                    ("reclaiming", "Cleanup in progress"),
+                    ("completed", "Cleanup completed"),
+                    ("failed", "Cleanup failed"),
+                ],
+                default="none",
+                max_length=16,
             ),
         ),
     ]

@@ -848,19 +848,22 @@ def job_retry(request, job_id):
             actor_id=request.user.pk,
             actor_name=request.user.get_username(),
         )
-        reason_code = (
+        retry_reason_code = (
             "job_retry_fresh_snapshot_queued"
             if receipt.mode == receipt.Mode.FRESH_SNAPSHOT
             else "job_retry_checkpoint_resume_queued"
+            if receipt.mode == receipt.Mode.CHECKPOINT_RESUME
+            else "job_retry_operation_queued"
         )
         return _mutation_success(
             request,
             section="jobs",
-            reason_code=reason_code,
-            message=present_reason(reason_code)["title"],
+            reason_code="job_retry_queued",
+            message=present_reason(retry_reason_code)["title"],
             data={
                 "job_id": str(job.public_id),
                 "retry_mode": receipt.mode,
+                "retry_presentation": present_reason(retry_reason_code),
                 "idempotent_replay": not created,
                 "retry_count": receipt.resulting_retry_count,
             },

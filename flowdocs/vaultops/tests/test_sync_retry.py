@@ -1,11 +1,14 @@
 import tempfile
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
-from django.db import close_old_connections
+from django.db import close_old_connections, connections, transaction
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import CustomUser
 from vaultops.models import (
@@ -14,11 +17,17 @@ from vaultops.models import (
     VaultAuditEvent,
     VaultJob,
     VaultJobRetryRequest,
+    VaultJobStep,
 )
 from vaultops.services.jobs import requeue_job
 from vaultops.services.lifecycle import LifecycleConflict
 from vaultops.services.read_model import _job_records
-from vaultops.services.snapshot import SnapshotError, cleanup_snapshot_workspace
+from vaultops.services.snapshot import (
+    SnapshotError,
+    create_consistent_snapshot,
+    reclaim_snapshot_cleanup_intents,
+    stage_snapshot_cleanup,
+)
 
 
 @override_settings(VAULT_SNAPSHOT_ROOT="")
@@ -45,7 +54,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
         return VaultJob.objects.create(
             operation=operation,
             status=VaultJob.Status.RETRYABLE_FAILED,
-            idempotency_key=f"original-{operation}",
+            idempotency_key=f"original-{operation}-{uuid.uuid4()}",
             requested_by_id=self.user.pk,
             requested_by_name=self.user.get_username(),
         )
@@ -64,7 +73,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
         snapshot.save(update_fields=["workspace_path", "updated_at"])
         return snapshot, workspace
 
-    def test_fresh_snapshot_retry_is_idempotent_and_cleans_failed_workspace(self):
+    def test_fresh_snapshot_retry_is_idempotent_and_records_cleanup(self):
         job = self._job()
         snapshot, workspace = self._failed_snapshot(job)
 
@@ -91,9 +100,9 @@ class SyncRetryHardeningTests(TransactionTestCase):
         self.assertEqual(receipt.mode, VaultJobRetryRequest.Mode.FRESH_SNAPSHOT)
         self.assertFalse(workspace.exists())
         snapshot.refresh_from_db()
-        self.assertEqual(snapshot.workspace_path, "")
+        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.COMPLETED)
         self.assertEqual(
-            snapshot.evidence["workspace_cleanup"]["status"], "removed"
+            snapshot.evidence["workspace_cleanup"]["status"], "completed"
         )
         self.assertEqual(
             VaultAuditEvent.objects.filter(
@@ -139,7 +148,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
         self.assertEqual(records[str(fresh.public_id)]["retry_mode"], "fresh_snapshot")
         self.assertEqual(
             records[str(resumed.public_id)]["retry_mode"],
-            "checkpoint_resume",
+            "operation_retry",
         )
         self.assertNotEqual(
             records[str(fresh.public_id)]["retry_action_label"],
@@ -165,6 +174,13 @@ class SyncRetryHardeningTests(TransactionTestCase):
 
         self.assertEqual(first.status_code, 202)
         self.assertEqual(second.status_code, 202)
+        self.assertEqual(first.json()["reason_code"], "job_retry_queued")
+        self.assertEqual(
+            first.json()["data"]["retry_mode"], "fresh_snapshot"
+        )
+        self.assertIn(
+            "retry_presentation", first.json()["data"]
+        )
         self.assertFalse(first.json()["data"]["idempotent_replay"])
         self.assertTrue(second.json()["data"]["idempotent_replay"])
         self.assertEqual(
@@ -173,6 +189,30 @@ class SyncRetryHardeningTests(TransactionTestCase):
         self.assertEqual(
             VaultAuditEvent.objects.filter(action="job_requeued").count(), 1
         )
+
+    @override_settings(VAULT_ADMIN_MUTATIONS_ENABLED=True)
+    def test_cleanup_failure_cannot_turn_committed_retry_into_503(self):
+        job = self._job()
+        _snapshot, workspace = self._failed_snapshot(job)
+        self.client.force_login(self.user)
+        with patch(
+            "vaultops.services.snapshot.reclaim_snapshot_cleanup_intents",
+            side_effect=RuntimeError("cleanup unavailable"),
+        ):
+            response = self.client.post(
+                reverse("vaultops:job_retry", args=[job.public_id]),
+                {
+                    "idempotency_key": "retry-cleanup-503-0001",
+                    "job_state_version": str(job.state_version),
+                },
+                HTTP_ACCEPT="application/json",
+            )
+
+        self.assertEqual(response.status_code, 202, response.content)
+        self.assertEqual(response.json()["reason_code"], "job_retry_queued")
+        self.assertTrue(workspace.exists())
+        job.refresh_from_db()
+        self.assertEqual(job.status, VaultJob.Status.QUEUED)
 
     def test_stale_state_and_conflicting_replay_change_nothing(self):
         job = self._job()
@@ -217,15 +257,16 @@ class SyncRetryHardeningTests(TransactionTestCase):
             VaultAuditEvent.objects.filter(action="job_requeued").count(), 1
         )
 
-    def test_hard_kill_copying_workspace_is_reclaimed_before_retry(self):
+    def test_hard_kill_workspace_waits_for_grace_and_live_owner_recheck(self):
         job = self._job()
         snapshot, workspace = self._failed_snapshot(
             job, state=SourceSnapshot.State.COPYING
         )
         SourceMutationState.objects.create(
-            deployment_id="local",
+            deployment_id="test",
             barrier_state=SourceMutationState.BarrierState.ACTIVE,
             barrier_owner_job=job.public_id,
+            active_mutations=1,
         )
 
         requeue_job(
@@ -235,24 +276,260 @@ class SyncRetryHardeningTests(TransactionTestCase):
             actor_id=self.user.pk,
         )
 
+        self.assertTrue(workspace.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.PENDING)
+        state = SourceMutationState.objects.get(deployment_id="test")
+        self.assertEqual(state.barrier_state, SourceMutationState.BarrierState.ACTIVE)
+        self.assertEqual(state.barrier_owner_job, job.public_id)
+
+        snapshot.cleanup_not_before = timezone.now() - timezone.timedelta(seconds=1)
+        snapshot.save(update_fields=["cleanup_not_before", "updated_at"])
+        reclaim_snapshot_cleanup_intents(
+            now=timezone.now() + timezone.timedelta(minutes=5)
+        )
+        self.assertTrue(workspace.exists())
+
+        state.active_mutations = 0
+        state.save(update_fields=["active_mutations", "updated_at"])
+        reclaim_snapshot_cleanup_intents(
+            now=timezone.now() + timezone.timedelta(minutes=5)
+        )
         self.assertFalse(workspace.exists())
         snapshot.refresh_from_db()
-        self.assertEqual(snapshot.workspace_path, "")
-        state = SourceMutationState.objects.get(deployment_id="local")
-        self.assertEqual(
-            state.barrier_state, SourceMutationState.BarrierState.OPEN
-        )
+        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.COMPLETED)
+        state.refresh_from_db()
+        self.assertEqual(state.barrier_state, SourceMutationState.BarrierState.OPEN)
         self.assertIsNone(state.barrier_owner_job)
 
-    def test_cleanup_refuses_path_outside_snapshot_root(self):
+    def test_cleanup_refuses_unowned_path_without_deleting_it(self):
         job = self._job()
+        outside = Path(self.temporary.name).parent / "not-owned.incomplete"
+        outside.mkdir(exist_ok=True)
         snapshot = SourceSnapshot.objects.create(
             job=job,
             deployment_id="test",
             state=SourceSnapshot.State.FAILED,
-            workspace_path="/tmp/not-owned.incomplete",
+            workspace_path=str(outside),
+            cleanup_state=SourceSnapshot.CleanupState.PENDING,
+            cleanup_path=str(outside),
+            cleanup_not_before=timezone.now(),
         )
-        with self.assertRaisesRegex(
-            SnapshotError, "snapshot_cleanup_path_invalid"
+        reclaim_snapshot_cleanup_intents()
+        self.assertTrue(outside.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.FAILED)
+        self.assertEqual(
+            snapshot.cleanup_error_code, "snapshot_cleanup_path_invalid"
+        )
+        outside.rmdir()
+
+    def test_receipt_and_audit_failures_preserve_workspace_and_job_state(self):
+        for target in (
+            "vaultops.services.jobs.VaultJobRetryRequest.objects.create",
+            "vaultops.services.jobs.append_event",
         ):
-            cleanup_snapshot_workspace(snapshot, reason="test")
+            with self.subTest(target=target):
+                job = self._job()
+                snapshot, workspace = self._failed_snapshot(job)
+                with patch(target, side_effect=RuntimeError("injected failure")):
+                    with self.assertRaisesRegex(RuntimeError, "injected failure"):
+                        requeue_job(
+                            job.public_id,
+                            expected_state_version=job.state_version,
+                            idempotency_key=f"retry-failure-{job.pk:04d}",
+                            actor_id=self.user.pk,
+                        )
+                self.assertTrue(workspace.exists())
+                job.refresh_from_db()
+                snapshot.refresh_from_db()
+                self.assertEqual(job.status, VaultJob.Status.RETRYABLE_FAILED)
+                self.assertEqual(job.retry_count, 0)
+                self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.NONE)
+
+    def test_control_commit_failure_preserves_workspace(self):
+        job = self._job()
+        snapshot, workspace = self._failed_snapshot(job)
+        with patch.object(
+            connections["control"],
+            "commit",
+            side_effect=RuntimeError("commit failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "commit failed"):
+                requeue_job(
+                    job.public_id,
+                    expected_state_version=job.state_version,
+                    idempotency_key="retry-commit-failure-0001",
+                    actor_id=self.user.pk,
+                )
+        self.assertTrue(workspace.exists())
+
+    def test_live_claim_prevents_due_cleanup(self):
+        job = self._job()
+        snapshot, workspace = self._failed_snapshot(job)
+        with transaction.atomic(using="control"):
+            stage_snapshot_cleanup(job, reason="test")
+        job.status = VaultJob.Status.RUNNING
+        job.claim_token_hash = "a" * 64
+        job.heartbeat_at = timezone.now()
+        job.save(
+            update_fields=[
+                "status",
+                "claim_token_hash",
+                "heartbeat_at",
+                "updated_at",
+            ]
+        )
+        snapshot.refresh_from_db()
+        snapshot.cleanup_not_before = timezone.now() - timezone.timedelta(seconds=1)
+        snapshot.save(update_fields=["cleanup_not_before", "updated_at"])
+
+        reclaim_snapshot_cleanup_intents(
+            now=timezone.now() + timezone.timedelta(minutes=5)
+        )
+
+        self.assertTrue(workspace.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.PENDING)
+
+    @override_settings(VAULT_SNAPSHOT_CLEANUP_MAX_ITEMS=1)
+    def test_cleanup_batch_is_bounded_and_recorded_tombstone_resumes(self):
+        first_job = self._job()
+        second_job = self._job()
+        first, first_path = self._failed_snapshot(first_job)
+        second, second_path = self._failed_snapshot(second_job)
+        with transaction.atomic(using="control"):
+            stage_snapshot_cleanup(first_job, reason="test")
+            stage_snapshot_cleanup(second_job, reason="test")
+        first_path.rename(self.root / f".{first.public_id}.cleanup")
+        first.cleanup_state = SourceSnapshot.CleanupState.RECLAIMING
+        first.cleanup_path = str(self.root / f".{first.public_id}.cleanup")
+        first.save(
+            update_fields=["cleanup_state", "cleanup_path", "updated_at"]
+        )
+
+        reclaimed = reclaim_snapshot_cleanup_intents()
+
+        self.assertEqual(reclaimed, 1)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.cleanup_state, SourceSnapshot.CleanupState.COMPLETED)
+        self.assertEqual(second.cleanup_state, SourceSnapshot.CleanupState.PENDING)
+        self.assertTrue(second_path.exists())
+
+    @override_settings(VAULT_SNAPSHOT_CLEANUP_MAX_BYTES=1)
+    def test_cleanup_byte_bound_preserves_resumable_tombstone(self):
+        job = self._job()
+        snapshot, workspace = self._failed_snapshot(job)
+        with transaction.atomic(using="control"):
+            stage_snapshot_cleanup(job, reason="test")
+
+        self.assertEqual(reclaim_snapshot_cleanup_intents(), 0)
+
+        snapshot.refresh_from_db()
+        tombstone = self.root / f".{snapshot.public_id}.cleanup"
+        self.assertFalse(workspace.exists())
+        self.assertTrue(tombstone.exists())
+        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.FAILED)
+        self.assertEqual(
+            snapshot.cleanup_error_code,
+            "snapshot_cleanup_byte_limit_exceeded",
+        )
+        self.assertGreater(snapshot.cleanup_not_before, timezone.now())
+
+    def test_snapshot_primary_failure_is_retained_when_cleanup_fails(self):
+        job = self._job()
+        source = self.root / "source"
+        source.mkdir()
+        with (
+            patch(
+                "vaultops.services.snapshot._copy_tree",
+                side_effect=SnapshotError("snapshot_searchable_embeddings_invalid"),
+            ),
+            patch(
+                "vaultops.services.snapshot.reclaim_snapshot_cleanup_intents",
+                side_effect=RuntimeError("cleanup failed"),
+            ),
+            self.assertRaisesRegex(
+                SnapshotError, "snapshot_searchable_embeddings_invalid"
+            ),
+        ):
+            create_consistent_snapshot(
+                job,
+                source_roots={"media": source},
+                snapshot_root=self.root,
+            )
+
+        snapshot = SourceSnapshot.objects.get(job=job)
+        step = VaultJobStep.objects.get(job=job, phase="snapshot")
+        self.assertEqual(
+            snapshot.safe_error_code,
+            "snapshot_searchable_embeddings_invalid",
+        )
+        self.assertEqual(snapshot.state, SourceSnapshot.State.FAILED)
+        self.assertEqual(step.status, VaultJobStep.Status.FAILED)
+        self.assertEqual(
+            step.checkpoint["safe_error_code"],
+            "snapshot_searchable_embeddings_invalid",
+        )
+        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.PENDING)
+
+    def test_snapshot_primary_failure_is_not_masked_by_cleanup_staging(self):
+        job = self._job()
+        source = self.root / "source-staging"
+        source.mkdir()
+        with (
+            patch(
+                "vaultops.services.snapshot._copy_tree",
+                side_effect=SnapshotError("snapshot_faiss_index_missing"),
+            ),
+            patch(
+                "vaultops.services.snapshot.stage_snapshot_cleanup",
+                side_effect=RuntimeError("control cleanup unavailable"),
+            ),
+            self.assertRaisesRegex(
+                SnapshotError, "snapshot_faiss_index_missing"
+            ),
+        ):
+            create_consistent_snapshot(
+                job,
+                source_roots={"media": source},
+                snapshot_root=self.root,
+            )
+
+        snapshot = SourceSnapshot.objects.get(job=job)
+        self.assertEqual(
+            snapshot.safe_error_code, "snapshot_faiss_index_missing"
+        )
+        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.FAILED)
+        self.assertEqual(
+            snapshot.cleanup_error_code, "snapshot_cleanup_staging_failed"
+        )
+        self.assertEqual(snapshot.cleanup_path, snapshot.workspace_path)
+
+    @override_settings(VAULT_SNAPSHOT_CLEANUP_MAX_BYTES=5)
+    def test_cleanup_partial_progress_debits_aggregate_byte_bound(self):
+        first_job = self._job()
+        second_job = self._job()
+        first, first_path = self._failed_snapshot(first_job)
+        second, second_path = self._failed_snapshot(second_job)
+        for workspace in (first_path, second_path):
+            (workspace / "partial.bin").unlink()
+            (workspace / "a.bin").write_bytes(b"abc")
+            (workspace / "b.bin").write_bytes(b"defg")
+        with transaction.atomic(using="control"):
+            stage_snapshot_cleanup(first_job, reason="test")
+            stage_snapshot_cleanup(second_job, reason="test")
+
+        self.assertEqual(reclaim_snapshot_cleanup_intents(), 0)
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+        first_tombstone = self.root / f".{first.public_id}.cleanup"
+        second_tombstone = self.root / f".{second.public_id}.cleanup"
+        self.assertFalse((first_tombstone / "a.bin").exists())
+        self.assertTrue((first_tombstone / "b.bin").exists())
+        self.assertTrue((second_tombstone / "a.bin").exists())
+        self.assertTrue((second_tombstone / "b.bin").exists())
+        self.assertEqual(first.cleanup_state, SourceSnapshot.CleanupState.FAILED)
+        self.assertEqual(second.cleanup_state, SourceSnapshot.CleanupState.FAILED)

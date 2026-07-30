@@ -377,6 +377,7 @@ class VaultJobRetryRequest(TimeStampedModel):
     class Mode(models.TextChoices):
         FRESH_SNAPSHOT = "fresh_snapshot", "Fresh snapshot"
         CHECKPOINT_RESUME = "checkpoint_resume", "Checkpoint resume"
+        OPERATION_RETRY = "operation_retry", "Operation retry"
 
     job = models.ForeignKey(
         VaultJob,
@@ -450,6 +451,13 @@ class SourceSnapshot(TimeStampedModel):
         FINALIZED = "finalized", "Finalized"
         FAILED = "failed", "Failed"
 
+    class CleanupState(models.TextChoices):
+        NONE = "none", "No cleanup"
+        PENDING = "pending", "Cleanup pending"
+        RECLAIMING = "reclaiming", "Cleanup in progress"
+        COMPLETED = "completed", "Cleanup completed"
+        FAILED = "failed", "Cleanup failed"
+
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     job = models.ForeignKey(
         VaultJob,
@@ -469,6 +477,15 @@ class SourceSnapshot(TimeStampedModel):
     evidence = models.JSONField(default=dict, blank=True)
     safe_error_code = models.CharField(max_length=80, blank=True, default="")
     finalized_at = models.DateTimeField(null=True, blank=True)
+    cleanup_state = models.CharField(
+        max_length=16, choices=CleanupState.choices, default=CleanupState.NONE
+    )
+    cleanup_path = models.CharField(max_length=1000, blank=True, default="")
+    cleanup_not_before = models.DateTimeField(null=True, blank=True)
+    cleanup_attempts = models.PositiveIntegerField(default=0)
+    cleanup_error_code = models.CharField(
+        max_length=80, blank=True, default=""
+    )
 
     class Meta:
         ordering = ["-created_at"]

@@ -2164,8 +2164,8 @@ msgstr "नवीन स्नॅपशॉट तयार करून पु�
 msgid "Verified uploaded objects will be checked and reused."
 msgstr "पडताळलेल्या अपलोड वस्तू तपासून पुन्हा वापरल्या जातील."
 
-msgid "The failed snapshot workspace will be removed before a new snapshot is created."
-msgstr "नवीन स्नॅपशॉट तयार करण्यापूर्वी अयशस्वी स्नॅपशॉट कार्यक्षेत्र काढले जाईल."
+msgid "The failed snapshot workspace is scheduled for safe removal; the retry creates a new isolated snapshot."
+msgstr "अयशस्वी स्नॅपशॉट कार्यक्षेत्र सुरक्षितपणे काढण्यासाठी नियोजित केले आहे; पुन्हा प्रयत्नासाठी नवीन विलग स्नॅपशॉट तयार होईल."
 
 msgid "Verified upload resume is queued"
 msgstr "पडताळलेला अपलोड पुढे सुरू करण्यासाठी रांगेत ठेवला आहे"
@@ -2179,11 +2179,26 @@ msgstr "नवीन स्नॅपशॉट तयार केला जा�
 msgid "Fresh snapshot retry is queued"
 msgstr "नवीन स्नॅपशॉटसह पुन्हा प्रयत्न रांगेत ठेवला आहे"
 
-msgid "The failed snapshot workspace was removed and the worker will create a new isolated snapshot."
-msgstr "अयशस्वी स्नॅपशॉट कार्यक्षेत्र काढले आहे आणि कामगार नवीन विलग स्नॅपशॉट तयार करेल."
+msgid "The failed snapshot workspace is scheduled for bounded cleanup and the worker will create a new isolated snapshot."
+msgstr "अयशस्वी स्नॅपशॉट कार्यक्षेत्र मर्यादित स्वच्छतेसाठी नियोजित केले आहे आणि कामगार नवीन विलग स्नॅपशॉट तयार करेल."
 
 msgid "No failed snapshot checkpoint is reused and authority remains unchanged."
 msgstr "अयशस्वी स्नॅपशॉटचा कोणताही तपासणी बिंदू पुन्हा वापरला जाणार नाही आणि प्राधिकृत स्थिती बदलणार नाही."
+
+msgid "Retry this operation"
+msgstr "ही क्रिया पुन्हा करा"
+
+msgid "The worker will reuse progress only when this operation has verified durable evidence."
+msgstr "या क्रियेकडे पडताळलेला टिकाऊ पुरावा असेल तेव्हाच कामगार प्रगतीचा पुन्हा वापर करेल."
+
+msgid "Operation retry is queued"
+msgstr "क्रिया पुन्हा करण्यासाठी रांगेत ठेवली आहे"
+
+msgid "The worker will reuse progress only when this operation proves that its durable evidence is valid."
+msgstr "या क्रियेचा टिकाऊ पुरावा वैध असल्याचे सिद्ध झाल्यावरच कामगार प्रगतीचा पुन्हा वापर करेल."
+
+msgid "No snapshot or checkpoint reuse is assumed and authority remains unchanged."
+msgstr "स्नॅपशॉट किंवा तपासणी बिंदू पुन्हा वापरला जाईल असे गृहित धरलेले नाही आणि प्राधिकृत स्थिती बदलणार नाही."
 
 msgid "Unavailable-document evidence needs review"
 msgstr "अनुपलब्ध दस्तऐवजांचा पुरावा तपासणे आवश्यक आहे"

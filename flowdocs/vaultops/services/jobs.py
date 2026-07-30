@@ -434,18 +434,33 @@ def _requeue_job_once(
         )
         retry_mode = (
             VaultJobRetryRequest.Mode.CHECKPOINT_RESUME
-            if finalized_snapshot or job.operation != "sync_publish"
+            if finalized_snapshot
             else VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
+            if job.operation == "sync_publish"
+            else VaultJobRetryRequest.Mode.OPERATION_RETRY
         )
-        cleaned_snapshots = 0
+        cleanup_intents = 0
         if retry_mode == VaultJobRetryRequest.Mode.FRESH_SNAPSHOT:
-            from vaultops.services.snapshot import cleanup_retry_snapshots
+            from vaultops.services.snapshot import (
+                reclaim_snapshot_cleanup_intents_safely,
+                stage_snapshot_cleanup,
+            )
 
-            cleaned_snapshots = cleanup_retry_snapshots(job)
+            cleanup_intents = stage_snapshot_cleanup(
+                job, reason="retry_preparation"
+            )
+            transaction.on_commit(
+                reclaim_snapshot_cleanup_intents_safely,
+                using=CONTROL_DB,
+                robust=True,
+            )
         job.status = VaultJob.Status.QUEUED
         job.retry_count += 1
         job.safe_error_code = ""
         job.heartbeat_at = None
+        job.claim_token_hash = ""
+        job.claimed_by = ""
+        job.fencing_epoch += 1
         job.state_version += 1
         job.save(
             update_fields=[
@@ -453,6 +468,9 @@ def _requeue_job_once(
                 "retry_count",
                 "safe_error_code",
                 "heartbeat_at",
+                "claim_token_hash",
+                "claimed_by",
+                "fencing_epoch",
                 "state_version",
                 "updated_at",
             ]
@@ -482,7 +500,7 @@ def _requeue_job_once(
             },
             evidence={
                 "retry_mode": retry_mode,
-                "failed_snapshot_workspaces_cleaned": cleaned_snapshots,
+                "snapshot_cleanup_intents": cleanup_intents,
             },
         )
         return job, receipt, True

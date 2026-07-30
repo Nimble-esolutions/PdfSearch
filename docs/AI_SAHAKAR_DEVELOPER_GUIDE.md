@@ -278,8 +278,10 @@ receipt keyed by job and operator idempotency key. The locked job state version,
 resulting retry count, retry mode, and actor are stored in the same control
 transaction as the state transition and audit event. A finalized snapshot uses
 `checkpoint_resume`; a pre-finalization failure uses `fresh_snapshot` after
-bounded workspace cleanup. UI copy must describe those modes separately and
-must not promise checkpoint reuse for a failed snapshot.
+a durable, post-commit bounded workspace-cleanup intent. Other operations use
+`operation_retry` unless their own service proves resumable evidence. UI copy
+must describe those modes separately and must not promise checkpoint reuse for
+a failed snapshot.
 
 Each supported media transition must be the outermost transaction owner for
 the application database. The service rejects a caller-owned atomic block with
