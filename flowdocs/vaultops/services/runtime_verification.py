@@ -12,6 +12,7 @@ from core.models import Folder, PDFFile
 from core.media_quarantine import (
     build_unavailable_attestation,
     storage_key_evidence,
+    storage_key_status,
     validate_unavailable_attestation,
 )
 from core.utils import SearchDataIntegrityError, search_pdfs_fast
@@ -130,6 +131,8 @@ def verify_activation_runtime(intent_id):
             "activation_unavailable_attestation_changed"
         )
     for pdf in PDFFile.objects.exclude(lifecycle="unavailable").iterator():
+        if storage_key_status(pdf.file.name) != "present":
+            raise RuntimeControlError("activation_pdf_path_invalid")
         try:
             path = Path(pdf.file.path).resolve()
             path.relative_to(Path(settings.MEDIA_ROOT).resolve())

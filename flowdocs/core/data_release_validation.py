@@ -13,6 +13,7 @@ from .management.commands.inventory_artifacts import (
     build_manifest,
     inspect_faiss_file,
 )
+from .media_quarantine import validate_unavailable_attestation
 
 
 REQUIRED_COUNTS = (
@@ -313,6 +314,24 @@ def validate_release(
     )
 
     actual_counts = actual.get("counts", {})
+    try:
+        expected_unavailable = validate_unavailable_attestation(
+            manifest.get("unavailable_documents")
+        )
+        actual_unavailable = validate_unavailable_attestation(
+            actual.get("unavailable_documents")
+        )
+    except ValueError:
+        issues.append(_issue("unavailable-attestation-invalid"))
+    else:
+        if expected_unavailable != actual_unavailable:
+            issues.append(
+                _issue(
+                    "unavailable-attestation-mismatch",
+                    expected_count=expected_unavailable["count"],
+                    actual_count=actual_unavailable["count"],
+                )
+            )
     unauthorized_missing_rows = [
         item
         for item in actual.get("pdfs", [])

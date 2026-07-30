@@ -14,6 +14,11 @@ from urllib.parse import quote
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
+
 
 INVENTORY_SCHEMA = "pdfsearch-artifact-inventory/v1"
 MANIFEST_VERSION = 1
@@ -236,7 +241,17 @@ def _pdf_rows(database_path: Path, media_root: Path) -> tuple[list[dict[str, Any
         for row in rows:
             stored_path = row["file"] if "file" in columns else None
             declared_path = row["file_path"] if "file_path" in columns else None
-            path_value = stored_path or declared_path
+            raw_path_value = (
+                stored_path
+                if stored_path is not None and stored_path != ""
+                else declared_path
+            )
+            path_value = (
+                str(raw_path_value)
+                if raw_path_value is not None
+                else None
+            )
+            storage_evidence = storage_key_evidence(path_value)
             file_path = _safe_storage_path(media_root, path_value)
             exists = bool(file_path and file_path.is_file())
             file_info = _file_record(media_root, file_path) if exists else None
@@ -260,6 +275,23 @@ def _pdf_rows(database_path: Path, media_root: Path) -> tuple[list[dict[str, Any
                     "category": row["category"] if "category" in columns else None,
                     "subject": row["subject"] if "subject" in columns else None,
                     "lifecycle": row["lifecycle"] if "lifecycle" in columns else None,
+                    "storage_key_status": storage_evidence["status"],
+                    "storage_key_token_sha256": storage_evidence["token_sha256"],
+                    "media_expected_sha256": (
+                        row["media_expected_sha256"]
+                        if "media_expected_sha256" in columns
+                        else ""
+                    ),
+                    "media_expected_size": (
+                        row["media_expected_size"]
+                        if "media_expected_size" in columns
+                        else None
+                    ),
+                    "media_prior_lifecycle": (
+                        row["media_prior_lifecycle"]
+                        if "media_prior_lifecycle" in columns
+                        else ""
+                    ),
                     "indexed": bool(row["indexed"]) if "indexed" in columns else None,
                     "has_extracted_text": bool(row["extracted_text"]) if "extracted_text" in columns else False,
                     "has_text_content": bool(row["text_content"]) if "text_content" in columns else False,
@@ -373,6 +405,23 @@ def build_manifest(
         and item["metadata"].get("lifecycle") == "unavailable"
         for item in pdf_rows
     )
+    unavailable_documents = build_unavailable_attestation(
+        (
+            {
+                "id": item["db_id"],
+                "lifecycle": item["metadata"].get("lifecycle"),
+                "storage_key_status": item["metadata"]["storage_key_status"],
+                "storage_key_token_sha256": item["metadata"][
+                    "storage_key_token_sha256"
+                ],
+                "expected_sha256": item["metadata"]["media_expected_sha256"],
+                "expected_size": item["metadata"]["media_expected_size"],
+                "prior_lifecycle": item["metadata"]["media_prior_lifecycle"],
+            }
+            for item in pdf_rows
+            if item["metadata"].get("lifecycle") == "unavailable"
+        )
+    )
     manifest = {
         "manifest_version": MANIFEST_VERSION,
         "read_only": True,
@@ -387,6 +436,7 @@ def build_manifest(
         },
         "database": _sqlite_inventory(database_path, root),
         "pdfs": pdf_rows,
+        "unavailable_documents": unavailable_documents,
         "pdf_storage": {
             "root": media_inventory["root"],
             "contract": media_inventory["contract"],

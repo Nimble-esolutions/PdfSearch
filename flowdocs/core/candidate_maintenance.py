@@ -25,6 +25,7 @@ from .artifact_cleanup import capacity_report
 from .media_quarantine import (
     build_unavailable_attestation,
     storage_key_evidence,
+    validate_unavailable_attestation,
 )
 from .models import MaintenanceAuditEvent, MaintenanceJob, PDFFile
 
@@ -323,6 +324,9 @@ def create_workspace(job: MaintenanceJob) -> Path:
                 "maintenance_source_snapshot_changed"
             )
         source["snapshot"] = _tree_identity(temporary)
+        unavailable_documents = _database_unavailable_attestation(
+            temporary / "db.sqlite3"
+        )
         (temporary / WORKSPACE_MANIFEST).write_text(
             json.dumps(
                 {
@@ -335,6 +339,7 @@ def create_workspace(job: MaintenanceJob) -> Path:
                     ).isoformat(),
                     "source": source,
                     "operation": job.kind,
+                    "unavailable_documents": unavailable_documents,
                     "capacity": capacity,
                     "selected_pdf_ids": list(
                         job.items.exclude(pdf_id=None).values_list(
@@ -381,6 +386,55 @@ def _candidate_environment(workspace: Path) -> dict:
         }
     )
     return environment
+
+
+def _database_unavailable_attestation(database: Path) -> dict:
+    connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+    try:
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(core_pdffile)")
+        }
+        if "lifecycle" not in columns:
+            return build_unavailable_attestation(())
+        expected_sha_column = (
+            "media_expected_sha256"
+            if "media_expected_sha256" in columns
+            else "''"
+        )
+        expected_size_column = (
+            "media_expected_size"
+            if "media_expected_size" in columns
+            else "NULL"
+        )
+        prior_lifecycle_column = (
+            "media_prior_lifecycle"
+            if "media_prior_lifecycle" in columns
+            else "''"
+        )
+        rows = connection.execute(
+            f"SELECT id, lifecycle, file, {expected_sha_column}, "
+            f"{expected_size_column}, {prior_lifecycle_column} "
+            "FROM core_pdffile WHERE lifecycle = 'unavailable' ORDER BY id"
+        )
+        return build_unavailable_attestation(
+            (
+                {
+                    "id": row[0],
+                    "lifecycle": row[1],
+                    "storage_key_status": storage_key_evidence(row[2])["status"],
+                    "storage_key_token_sha256": storage_key_evidence(row[2])[
+                        "token_sha256"
+                    ],
+                    "expected_sha256": row[3],
+                    "expected_size": row[4],
+                    "prior_lifecycle": row[5],
+                }
+                for row in rows
+            )
+        )
+    finally:
+        connection.close()
 
 
 def _embedding_validation(database: Path) -> dict:
@@ -483,60 +537,38 @@ def validate_candidate(workspace: Path) -> dict:
                 "WHERE lifecycle != 'unavailable'"
             )
         )
-        pdf_columns = {
-            row[1]
-            for row in connection.execute("PRAGMA table_info(core_pdffile)")
-        }
-        expected_sha_column = (
-            "media_expected_sha256"
-            if "media_expected_sha256" in pdf_columns
-            else "''"
-        )
-        expected_size_column = (
-            "media_expected_size"
-            if "media_expected_size" in pdf_columns
-            else "NULL"
-        )
-        prior_lifecycle_column = (
-            "media_prior_lifecycle"
-            if "media_prior_lifecycle" in pdf_columns
-            else "''"
-        )
-        unavailable_attestation = build_unavailable_attestation(
-            (
-                {
-                    "id": row[0],
-                    "lifecycle": row[1],
-                    "storage_key_status": storage_key_evidence(row[2])["status"],
-                    "storage_key_token_sha256": storage_key_evidence(row[2])[
-                        "token_sha256"
-                    ],
-                    "expected_sha256": row[3],
-                    "expected_size": row[4],
-                    "prior_lifecycle": row[5],
-                }
-                for row in connection.execute(
-                    f"SELECT id, lifecycle, file, {expected_sha_column}, "
-                    f"{expected_size_column}, {prior_lifecycle_column} "
-                    "FROM core_pdffile WHERE lifecycle = 'unavailable' "
-                    "ORDER BY id"
-                )
-            )
-        )
     finally:
         connection.close()
     if integrity != "ok":
         raise CandidateMaintenanceError("candidate_sqlite_integrity_failed")
     if foreign_keys:
         raise CandidateMaintenanceError("candidate_foreign_keys_failed")
+    unavailable_attestation = _database_unavailable_attestation(database)
+    try:
+        expected_unavailable = validate_unavailable_attestation(
+            manifest.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
+        )
+    except ValueError as exc:
+        raise CandidateMaintenanceError(
+            "candidate_unavailable_attestation_invalid"
+        ) from exc
+    if unavailable_attestation != expected_unavailable:
+        raise CandidateMaintenanceError(
+            "candidate_unavailable_attestation_changed"
+        )
     media_root = (workspace / "media").resolve()
     missing_media = []
     for pdf_id, value in media_rows:
-        media_path = workspace / "media" / value
         try:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("blank media reference")
+            media_path = workspace / "media" / value
             resolved_media = media_path.resolve(strict=True)
             resolved_media.relative_to(media_root)
-        except (OSError, RuntimeError, ValueError):
+        except (OSError, RuntimeError, TypeError, ValueError):
             missing_media.append(pdf_id)
             continue
         if media_path.is_symlink() or not resolved_media.is_file():
