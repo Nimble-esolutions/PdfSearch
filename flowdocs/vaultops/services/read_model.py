@@ -28,6 +28,7 @@ from vaultops.models import (
     VaultJob,
 )
 from vaultops.services.retention import generation_protection_reasons
+from vaultops.services.snapshot import eligible_finalized_snapshot
 from vaultops.runtime_control import (
     RuntimeControlError,
     read_runtime_pointer,
@@ -699,12 +700,10 @@ def _job_records(profile, dataset_id, limit=50):
     for job in VaultJob.objects.filter(
         profile=profile, dataset_id=dataset_id
     ).order_by("-created_at")[:limit]:
-        finalized_snapshot = job.source_snapshots.filter(
-            state="finalized"
-        ).exists()
+        resumable_snapshot = eligible_finalized_snapshot(job)
         retry_mode = (
             "checkpoint_resume"
-            if job.operation == "sync_publish" and finalized_snapshot
+            if job.operation == "sync_publish" and resumable_snapshot is not None
             else "fresh_snapshot"
             if job.operation == "sync_publish"
             else "operation_retry"
@@ -729,7 +728,7 @@ def _job_records(profile, dataset_id, limit=50):
                 retry_mode
             ),
             "retry_action_label": (
-                gettext("Resume verified upload checkpoint")
+                gettext("Resume verified snapshot checkpoint")
                 if retry_mode == "checkpoint_resume"
                 else gettext("Create a fresh snapshot and retry")
                 if retry_mode == "fresh_snapshot"
@@ -737,7 +736,7 @@ def _job_records(profile, dataset_id, limit=50):
             ),
             "retry_guidance": (
                 gettext(
-                    "Verified uploaded objects will be checked and reused."
+                    "The verified snapshot matches current safety settings and will be reused."
                 )
                 if retry_mode == "checkpoint_resume"
                 else gettext(

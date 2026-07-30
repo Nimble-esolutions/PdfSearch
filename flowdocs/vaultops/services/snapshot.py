@@ -15,7 +15,13 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from core.management.commands.inventory_artifacts import build_manifest
+from core.management.commands.inventory_artifacts import (
+    DEFAULT_MAX_PDF_ROWS,
+    INVENTORY_SCHEMA,
+    MANIFEST_VERSION,
+    build_manifest,
+)
+from core.custody_audit import MAX_DATABASE_BYTES
 from core.media_quarantine import (
     build_unavailable_attestation,
     storage_key_evidence,
@@ -38,6 +44,326 @@ from vaultops.services.mutations import (
 
 logger = logging.getLogger(__name__)
 
+SNAPSHOT_SCHEMA = 1
+FAISS_RECONCILIATION_SCHEMA = 1
+PUBLICATION_MANIFEST_SCHEMA = 1
+SNAPSHOT_CONFIGURATION_SCHEMA = 1
+SNAPSHOT_CONFIGURATION_MAX_BYTES = 64 * 1024
+SNAPSHOT_PRIMARY_EVIDENCE_MAX_BYTES = 64 * 1024 * 1024
+
+
+def snapshot_configuration_fingerprint():
+    """Return bounded non-secret inputs that determine snapshot safety."""
+    values = {
+        "artifact_inventory_max_media_file_bytes": int(
+            settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES
+        ),
+        "artifact_inventory_max_pdf_rows": int(
+            getattr(
+                settings,
+                "ARTIFACT_INVENTORY_MAX_PDF_ROWS",
+                DEFAULT_MAX_PDF_ROWS,
+            )
+        ),
+        "faiss_max_bytes": int(settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES),
+        "faiss_max_chunks_per_pdf": int(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_CHUNKS_PER_PDF
+        ),
+        "faiss_max_dimensions": int(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_DIMENSIONS
+        ),
+        "faiss_max_pdf_json_bytes": int(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES
+        ),
+        "faiss_max_pdfs": int(settings.VAULT_SNAPSHOT_FAISS_MAX_PDFS),
+        "faiss_max_source_bytes": int(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_SOURCE_BYTES
+        ),
+        "faiss_max_vectors": int(settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS),
+        "inventory_schema": INVENTORY_SCHEMA,
+        "inventory_manifest_version": MANIFEST_VERSION,
+        "openai_embed_model": str(settings.OPENAI_EMBED_MODEL),
+        "pdf_chunk_overlap": int(settings.PDF_CHUNK_OVERLAP),
+        "pdf_chunk_size": int(settings.PDF_CHUNK_SIZE),
+        "publication_manifest_schema": PUBLICATION_MANIFEST_SCHEMA,
+        "snapshot_faiss_reconciliation_schema": FAISS_RECONCILIATION_SCHEMA,
+        "snapshot_schema": SNAPSHOT_SCHEMA,
+        "snapshot_database_max_bytes": MAX_DATABASE_BYTES,
+    }
+    canonical = json.dumps(
+        {"schema": SNAPSHOT_CONFIGURATION_SCHEMA, "values": values},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "schema": SNAPSHOT_CONFIGURATION_SCHEMA,
+        "values": values,
+        "sha256": hashlib.sha256(canonical).hexdigest(),
+    }
+
+
+def _configuration_fingerprint_valid(value):
+    current = snapshot_configuration_fingerprint()
+    return (
+        isinstance(value, dict)
+        and set(value) == {"schema", "values", "sha256"}
+        and value == current
+    )
+
+
+def _stable_file_sha256_at(directory_descriptor, name, *, maximum_bytes=None):
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=directory_descriptor,
+        )
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            return None
+        if maximum_bytes is not None and before.st_size > maximum_bytes:
+            return None
+        digest = hashlib.sha256()
+        size = 0
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            size += len(chunk)
+            if maximum_bytes is not None and size > maximum_bytes:
+                return None
+        after = os.fstat(descriptor)
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        ) or not stat.S_ISREG(after.st_mode) or after.st_nlink != 1:
+            return None
+        return digest.hexdigest()
+    except OSError:
+        return None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _read_regular_file_bounded_at(directory_descriptor, name, *, maximum_bytes):
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=directory_descriptor,
+        )
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+            return None
+        chunks = []
+        size = 0
+        read_limit = maximum_bytes + 1
+        while size < read_limit:
+            chunk = os.read(descriptor, min(64 * 1024, read_limit - size))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        raw = b"".join(chunks)
+        if len(raw) > maximum_bytes:
+            return None
+        after = os.fstat(descriptor)
+        if (
+            opened.st_dev,
+            opened.st_ino,
+            opened.st_size,
+            opened.st_mtime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        ) or not stat.S_ISREG(after.st_mode) or after.st_nlink != 1:
+            return None
+        return raw
+    except OSError:
+        return None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _reject_non_json_constant(value):
+    raise ValueError(f"non-JSON numeric constant: {value}")
+
+
+def _primary_resume_binding(raw):
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            parse_constant=_reject_non_json_constant,
+        )
+        canonical = json.dumps(
+            value,
+            sort_keys=True,
+            indent=2,
+            default=str,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (UnicodeDecodeError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if raw != canonical or not isinstance(value, dict):
+        return None
+    binding = value.get("checkpoint_binding")
+    return binding if isinstance(binding, dict) else None
+
+
+def _snapshot_file_configuration(snapshot):
+    workspace = Path(snapshot.workspace_path)
+    snapshot_root = Path(settings.VAULT_SNAPSHOT_ROOT).resolve()
+    workspace_name = f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
+    expected_workspace = snapshot_root / workspace_name
+    if (
+        not snapshot.workspace_path
+        or workspace.absolute() != expected_workspace
+    ):
+        return None
+    root_descriptor = -1
+    workspace_descriptor = -1
+    try:
+        directory_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        root_descriptor = os.open(snapshot_root, directory_flags)
+        workspace_descriptor = os.open(
+            workspace_name,
+            directory_flags,
+            dir_fd=root_descriptor,
+        )
+        workspace_stat = os.fstat(workspace_descriptor)
+        if not stat.S_ISDIR(workspace_stat.st_mode):
+            return None
+        expected_primary_digest = snapshot.evidence.get("evidence_sha256")
+        primary_raw = _read_regular_file_bounded_at(
+            workspace_descriptor,
+            "snapshot-evidence.json",
+            maximum_bytes=SNAPSHOT_PRIMARY_EVIDENCE_MAX_BYTES,
+        )
+        if (
+            not isinstance(expected_primary_digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", expected_primary_digest)
+            or primary_raw is None
+            or hashlib.sha256(primary_raw).hexdigest() != expected_primary_digest
+        ):
+            return None
+        expected_database_digest = snapshot.evidence.get("database_sha256")
+        if (
+            not isinstance(expected_database_digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", expected_database_digest)
+            or _stable_file_sha256_at(
+                workspace_descriptor,
+                "db.sqlite3",
+                maximum_bytes=MAX_DATABASE_BYTES,
+            )
+            != expected_database_digest
+        ):
+            return None
+        trusted_fingerprint = snapshot.evidence.get(
+            "configuration_fingerprint"
+        )
+        expected_binding = {
+            "configuration_fingerprint": trusted_fingerprint,
+            "database_sha256": expected_database_digest,
+            "deployment_id": snapshot.deployment_id,
+            "included_epoch": snapshot.included_epoch,
+            "initial_epoch": snapshot.initial_epoch,
+            "snapshot_digest": snapshot.snapshot_digest,
+            "snapshot_id": str(snapshot.public_id),
+        }
+        if _primary_resume_binding(primary_raw) != expected_binding:
+            return None
+        raw = _read_regular_file_bounded_at(
+            workspace_descriptor,
+            "snapshot-configuration.json",
+            maximum_bytes=SNAPSHOT_CONFIGURATION_MAX_BYTES,
+        )
+        if raw is None:
+            return None
+        evidence = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    finally:
+        if workspace_descriptor >= 0:
+            os.close(workspace_descriptor)
+        if root_descriptor >= 0:
+            os.close(root_descriptor)
+    if not isinstance(evidence, dict):
+        return None
+    return evidence
+
+
+def finalized_snapshot_resume_eligible(snapshot):
+    """Require exact trusted/file configuration and durable snapshot proof."""
+    if (
+        snapshot.state != SourceSnapshot.State.FINALIZED
+        or snapshot.cleanup_state != SourceSnapshot.CleanupState.NONE
+        or snapshot.finalized_at is None
+        or snapshot.included_epoch < snapshot.initial_epoch
+        or not re.fullmatch(r"[0-9a-f]{64}", snapshot.snapshot_digest or "")
+        or not isinstance(snapshot.evidence, dict)
+        or snapshot.evidence.get("evidence_path") != "snapshot-evidence.json"
+        or snapshot.evidence.get("configuration_path")
+        != "snapshot-configuration.json"
+    ):
+        return False
+    trusted = (
+        snapshot.evidence.get("configuration_fingerprint")
+        if isinstance(snapshot.evidence, dict)
+        else None
+    )
+    if not _configuration_fingerprint_valid(trusted):
+        return False
+    if _snapshot_file_configuration(snapshot) != trusted:
+        return False
+    step = snapshot.job.steps.filter(phase="snapshot").first()
+    checkpoint = step.checkpoint if step and isinstance(step.checkpoint, dict) else {}
+    return bool(
+        step
+        and step.status == VaultJobStep.Status.COMPLETED
+        and checkpoint
+        == {
+            "snapshot_id": str(snapshot.public_id),
+            "snapshot_digest": snapshot.snapshot_digest,
+            "included_epoch": snapshot.included_epoch,
+            "configuration_fingerprint_sha256": trusted["sha256"],
+        }
+    )
+
+
+def eligible_finalized_snapshot(job, *, queryset=None):
+    snapshots = queryset
+    if snapshots is None:
+        snapshots = SourceSnapshot.objects.filter(
+            job=job, state=SourceSnapshot.State.FINALIZED
+        )
+    for snapshot in snapshots.order_by("-finalized_at", "-created_at"):
+        if finalized_snapshot_resume_eligible(snapshot):
+            return snapshot
+    return None
+
 
 class SnapshotError(RuntimeError):
     reason_code = "consistent_snapshot_unproven"
@@ -58,19 +384,26 @@ class SnapshotCleanupBoundExceeded(SnapshotError):
         self.consumed_bytes = consumed_bytes
 
 
-def stage_snapshot_cleanup(job, *, reason, now=None):
+def stage_snapshot_cleanup(
+    job,
+    *,
+    reason,
+    now=None,
+    include_finalized=False,
+    exclude_snapshot_id=None,
+):
     """Record cleanup intent without touching the filesystem."""
     now = now or timezone.now()
     grace = int(
         getattr(settings, "VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS", 120)
     )
     count = 0
-    snapshots = (
-        SourceSnapshot.objects.select_for_update()
-        .filter(job=job)
-        .exclude(state=SourceSnapshot.State.FINALIZED)
-        .order_by("created_at")
-    )
+    snapshots = SourceSnapshot.objects.select_for_update().filter(job=job)
+    if not include_finalized:
+        snapshots = snapshots.exclude(state=SourceSnapshot.State.FINALIZED)
+    if exclude_snapshot_id is not None:
+        snapshots = snapshots.exclude(pk=exclude_snapshot_id)
+    snapshots = snapshots.order_by("created_at")
     for snapshot in snapshots:
         if not snapshot.workspace_path:
             continue
@@ -113,7 +446,12 @@ def stage_snapshot_cleanup(job, *, reason, now=None):
 
 def _validated_cleanup_paths(snapshot):
     root = Path(settings.VAULT_SNAPSHOT_ROOT).resolve()
-    source = root / f".{snapshot.public_id}.incomplete"
+    source = (
+        root / f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
+        if snapshot.state == SourceSnapshot.State.FINALIZED
+        and re.fullmatch(r"[0-9a-f]{64}", snapshot.snapshot_digest or "")
+        else root / f".{snapshot.public_id}.incomplete"
+    )
     tombstone = root / f".{snapshot.public_id}.cleanup"
     recorded = Path(snapshot.cleanup_path).absolute()
     if (
@@ -1085,7 +1423,7 @@ def _reconcile_candidate_faiss(
         ).encode()
     ).hexdigest()
     return {
-        "schema": 1,
+        "schema": FAISS_RECONCILIATION_SCHEMA,
         "source": "stored_embeddings",
         "source_folders": source_folders,
         "source_folders_digest": source_digest,
@@ -1357,8 +1695,19 @@ def create_consistent_snapshot(
             incomplete / "db.sqlite3",
             incomplete / "faiss_indexes",
         )
+        configuration_fingerprint = snapshot_configuration_fingerprint()
+        checkpoint_binding = {
+            "configuration_fingerprint": configuration_fingerprint,
+            "database_sha256": database_record["sha256"],
+            "deployment_id": source_deployment,
+            "included_epoch": included_epoch,
+            "initial_epoch": snapshot.initial_epoch,
+            "snapshot_digest": snapshot_digest,
+            "snapshot_id": str(snapshot.public_id),
+        }
         evidence = {
-            "snapshot_schema": 1,
+            "checkpoint_binding": checkpoint_binding,
+            "snapshot_schema": SNAPSHOT_SCHEMA,
             "snapshot_id": str(snapshot.public_id),
             "deployment_id": source_deployment,
             "initial_epoch": snapshot.initial_epoch,
@@ -1370,11 +1719,21 @@ def create_consistent_snapshot(
             "faiss_reconciliation": faiss_reconciliation,
             "files": canonical_files,
             "inventory": inventory,
+            "configuration_fingerprint": configuration_fingerprint,
             "duration_seconds": round(time.monotonic() - started, 3),
         }
         evidence_path = incomplete / "snapshot-evidence.json"
         evidence_path.write_text(
             json.dumps(evidence, sort_keys=True, indent=2, default=str),
+            encoding="utf-8",
+        )
+        evidence_sha256 = _sha256_file(evidence_path)
+        (incomplete / "snapshot-configuration.json").write_text(
+            json.dumps(
+                configuration_fingerprint,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
             encoding="utf-8",
         )
         final_path = root / f"{snapshot.public_id}-{snapshot_digest[:12]}"
@@ -1387,12 +1746,15 @@ def create_consistent_snapshot(
         snapshot.file_count = len(canonical_files)
         snapshot.byte_count = sum(item["size_bytes"] for item in canonical_files)
         snapshot.evidence = {
-            "snapshot_schema": 1,
+            "snapshot_schema": SNAPSHOT_SCHEMA,
             "evidence_path": "snapshot-evidence.json",
+            "evidence_sha256": evidence_sha256,
+            "configuration_path": "snapshot-configuration.json",
             "database_sha256": database_record["sha256"],
             "journal_change_count": len(changes),
             "index_writers_drained": True,
             "faiss_reconciliation": faiss_reconciliation,
+            "configuration_fingerprint": configuration_fingerprint,
         }
         snapshot.finalized_at = timezone.now()
         snapshot.save(
@@ -1413,6 +1775,9 @@ def create_consistent_snapshot(
             "snapshot_id": str(snapshot.public_id),
             "snapshot_digest": snapshot_digest,
             "included_epoch": included_epoch,
+            "configuration_fingerprint_sha256": configuration_fingerprint[
+                "sha256"
+            ],
         }
         step.completed_objects = snapshot.file_count
         step.completed_bytes = snapshot.byte_count

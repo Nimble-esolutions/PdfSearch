@@ -1,3 +1,6 @@
+import hashlib
+import json
+import os
 import tempfile
 import threading
 import uuid
@@ -25,7 +28,9 @@ from vaultops.services.read_model import _job_records
 from vaultops.services.snapshot import (
     SnapshotError,
     create_consistent_snapshot,
+    finalized_snapshot_resume_eligible,
     reclaim_snapshot_cleanup_intents,
+    snapshot_configuration_fingerprint,
     stage_snapshot_cleanup,
 )
 
@@ -73,6 +78,182 @@ class SyncRetryHardeningTests(TransactionTestCase):
         snapshot.save(update_fields=["workspace_path", "updated_at"])
         return snapshot, workspace
 
+    def _finalized_snapshot(
+        self,
+        job,
+        *,
+        trusted_fingerprint=None,
+        file_fingerprint=None,
+        primary_fingerprint=None,
+        checkpoint_overrides=None,
+        configuration_bytes=None,
+        primary_bytes=None,
+        primary_suffix=b"",
+        primary_replace=None,
+        primary_binding_overrides=None,
+        database_posture="valid",
+        rebind_primary_digest=False,
+    ):
+        fingerprint = snapshot_configuration_fingerprint()
+        trusted_fingerprint = (
+            fingerprint
+            if trusted_fingerprint is None
+            else trusted_fingerprint
+        )
+        file_fingerprint = (
+            fingerprint if file_fingerprint is None else file_fingerprint
+        )
+        primary_fingerprint = (
+            fingerprint
+            if primary_fingerprint is None
+            else primary_fingerprint
+        )
+        snapshot = SourceSnapshot.objects.create(
+            job=job,
+            deployment_id="test",
+            state=SourceSnapshot.State.FINALIZED,
+            initial_epoch=1,
+            included_epoch=2,
+            snapshot_digest="a" * 64,
+            finalized_at=timezone.now(),
+            evidence={
+                "snapshot_schema": 1,
+                "evidence_path": "snapshot-evidence.json",
+                "configuration_path": "snapshot-configuration.json",
+                "configuration_fingerprint": trusted_fingerprint,
+            },
+        )
+        workspace = (
+            self.root
+            / f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
+        )
+        workspace.mkdir()
+        database_payload = b"canonical snapshot database"
+        database_digest = hashlib.sha256(database_payload).hexdigest()
+        database_path = workspace / "db.sqlite3"
+        database_path.write_bytes(database_payload)
+        primary_path = workspace / "snapshot-evidence.json"
+        primary_path.write_text(
+            json.dumps(
+                {
+                    "checkpoint_binding": {
+                        "configuration_fingerprint": fingerprint,
+                        "database_sha256": database_digest,
+                        "deployment_id": snapshot.deployment_id,
+                        "included_epoch": snapshot.included_epoch,
+                        "initial_epoch": snapshot.initial_epoch,
+                        "snapshot_digest": snapshot.snapshot_digest,
+                        "snapshot_id": str(snapshot.public_id),
+                    },
+                    "snapshot_id": str(snapshot.public_id),
+                    "snapshot_digest": snapshot.snapshot_digest,
+                    "configuration_fingerprint": fingerprint,
+                    "database": {"sha256": database_digest},
+                    "duration_seconds": 1.0,
+                },
+                sort_keys=True,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        (workspace / "snapshot-configuration.json").write_bytes(
+            configuration_bytes
+            if configuration_bytes is not None
+            else json.dumps(file_fingerprint, sort_keys=True).encode("utf-8")
+        )
+        snapshot.workspace_path = str(workspace)
+        snapshot.evidence = {
+            **snapshot.evidence,
+            "database_sha256": database_digest,
+            "evidence_sha256": hashlib.sha256(
+                primary_path.read_bytes()
+            ).hexdigest(),
+        }
+        snapshot.save(
+            update_fields=["workspace_path", "evidence", "updated_at"]
+        )
+        if primary_bytes is not None:
+            primary_path.write_bytes(primary_bytes)
+        elif primary_fingerprint != fingerprint:
+            primary_path.write_text(
+                json.dumps(
+                    {
+                        "checkpoint_binding": {
+                            "configuration_fingerprint": primary_fingerprint,
+                            "database_sha256": database_digest,
+                            "deployment_id": snapshot.deployment_id,
+                            "included_epoch": snapshot.included_epoch,
+                            "initial_epoch": snapshot.initial_epoch,
+                            "snapshot_digest": snapshot.snapshot_digest,
+                            "snapshot_id": str(snapshot.public_id),
+                        },
+                        "snapshot_id": str(snapshot.public_id),
+                        "snapshot_digest": snapshot.snapshot_digest,
+                        "configuration_fingerprint": primary_fingerprint,
+                    },
+                    sort_keys=True,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        if primary_binding_overrides:
+            primary_payload = json.loads(primary_path.read_text(encoding="utf-8"))
+            primary_payload["checkpoint_binding"].update(
+                primary_binding_overrides
+            )
+            primary_path.write_text(
+                json.dumps(primary_payload, sort_keys=True, indent=2),
+                encoding="utf-8",
+            )
+        if primary_suffix:
+            primary_path.write_bytes(primary_path.read_bytes() + primary_suffix)
+        if primary_replace:
+            old, new = primary_replace
+            primary_path.write_bytes(primary_path.read_bytes().replace(old, new))
+        if rebind_primary_digest:
+            snapshot.evidence = {
+                **snapshot.evidence,
+                "evidence_sha256": hashlib.sha256(
+                    primary_path.read_bytes()
+                ).hexdigest(),
+            }
+            snapshot.save(update_fields=["evidence", "updated_at"])
+        if database_posture == "missing":
+            database_path.unlink()
+        elif database_posture == "mutated":
+            database_path.write_bytes(b"changed database")
+        elif database_posture == "symlink":
+            database_path.unlink()
+            outside = self.root / f"outside-{snapshot.public_id}.sqlite3"
+            outside.write_bytes(database_payload)
+            database_path.symlink_to(outside)
+        elif database_posture == "internal_symlink":
+            database_path.unlink()
+            sibling = workspace / "sibling.sqlite3"
+            sibling.write_bytes(database_payload)
+            database_path.symlink_to(sibling.name)
+        elif database_posture == "fifo":
+            database_path.unlink()
+            os.mkfifo(database_path)
+        elif database_posture == "directory":
+            database_path.unlink()
+            database_path.mkdir()
+        checkpoint = {
+            "snapshot_id": str(snapshot.public_id),
+            "snapshot_digest": snapshot.snapshot_digest,
+            "included_epoch": snapshot.included_epoch,
+            "configuration_fingerprint_sha256": fingerprint["sha256"],
+        }
+        checkpoint.update(checkpoint_overrides or {})
+        VaultJobStep.objects.create(
+            job=job,
+            phase="snapshot",
+            status=VaultJobStep.Status.COMPLETED,
+            checkpoint=checkpoint,
+            finished_at=timezone.now(),
+        )
+        return snapshot, workspace
+
     def test_fresh_snapshot_retry_is_idempotent_and_records_cleanup(self):
         job = self._job()
         snapshot, workspace = self._failed_snapshot(job)
@@ -114,15 +295,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
 
     def test_finalized_snapshot_retry_truthfully_resumes_checkpoint(self):
         job = self._job()
-        final = self.root / "final"
-        final.mkdir()
-        SourceSnapshot.objects.create(
-            job=job,
-            deployment_id="test",
-            state=SourceSnapshot.State.FINALIZED,
-            workspace_path=str(final),
-            snapshot_digest="a" * 64,
-        )
+        snapshot, final = self._finalized_snapshot(job)
 
         _, receipt, _ = requeue_job(
             job.public_id,
@@ -135,6 +308,220 @@ class SyncRetryHardeningTests(TransactionTestCase):
             receipt.mode, VaultJobRetryRequest.Mode.CHECKPOINT_RESUME
         )
         self.assertTrue(final.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(
+            snapshot.cleanup_state, SourceSnapshot.CleanupState.NONE
+        )
+
+    def test_resume_reads_children_from_opened_workspace_directory(self):
+        job = self._job()
+        snapshot, workspace = self._finalized_snapshot(job)
+        retained = workspace.with_name(f"{workspace.name}-retained")
+        original_open = os.open
+        swapped = False
+
+        def replace_workspace_after_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            descriptor = original_open(path, flags, *args, **kwargs)
+            if (
+                not swapped
+                and path == workspace.name
+                and kwargs.get("dir_fd") is not None
+            ):
+                workspace.rename(retained)
+                workspace.mkdir()
+                swapped = True
+            return descriptor
+
+        with patch(
+            "vaultops.services.snapshot.os.open",
+            side_effect=replace_workspace_after_open,
+        ):
+            self.assertTrue(finalized_snapshot_resume_eligible(snapshot))
+        self.assertTrue(swapped)
+
+    def test_primary_child_swap_cannot_mix_digest_and_binding(self):
+        job = self._job()
+        snapshot, workspace = self._finalized_snapshot(
+            job,
+            primary_binding_overrides={"deployment_id": "wrong-deployment"},
+            rebind_primary_digest=True,
+        )
+        primary = workspace / "snapshot-evidence.json"
+        retained = workspace / "snapshot-evidence.retained.json"
+        replacement_payload = json.loads(primary.read_text(encoding="utf-8"))
+        replacement_payload["checkpoint_binding"]["deployment_id"] = (
+            snapshot.deployment_id
+        )
+        replacement = json.dumps(
+            replacement_payload, sort_keys=True, indent=2
+        ).encode("utf-8")
+        original_open = os.open
+        swapped = False
+
+        def replace_primary_after_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            descriptor = original_open(path, flags, *args, **kwargs)
+            if not swapped and path == primary.name:
+                primary.rename(retained)
+                primary.write_bytes(replacement)
+                swapped = True
+            return descriptor
+
+        with patch(
+            "vaultops.services.snapshot.os.open",
+            side_effect=replace_primary_after_open,
+        ):
+            self.assertFalse(finalized_snapshot_resume_eligible(snapshot))
+        self.assertTrue(swapped)
+
+    @override_settings(ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=1)
+    def test_changed_custody_cap_forces_fresh_snapshot_retry(self):
+        job = self._job()
+        with override_settings(
+            ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=64 * 1024 * 1024
+        ):
+            snapshot, workspace = self._finalized_snapshot(job)
+
+        _, receipt, _ = requeue_job(
+            job.public_id,
+            expected_state_version=job.state_version,
+            idempotency_key="retry-config-changed-0001",
+            actor_id=self.user.pk,
+        )
+
+        self.assertEqual(
+            receipt.mode, VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
+        )
+        self.assertFalse(workspace.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(
+            snapshot.cleanup_state, SourceSnapshot.CleanupState.COMPLETED
+        )
+
+    def test_untrusted_snapshot_fingerprints_force_fresh_retry(self):
+        cases = {
+            "missing": {"trusted_fingerprint": {}},
+            "forged": {
+                "trusted_fingerprint": {
+                    **snapshot_configuration_fingerprint(),
+                    "sha256": "f" * 64,
+                }
+            },
+            "malformed_file": {"configuration_bytes": b"{not-json"},
+            "missing_primary": {"primary_fingerprint": {}},
+            "forged_primary": {
+                "primary_fingerprint": {
+                    **snapshot_configuration_fingerprint(),
+                    "sha256": "e" * 64,
+                },
+                "rebind_primary_digest": True,
+            },
+            "malformed_primary": {
+                "primary_bytes": b"{not-json",
+                "rebind_primary_digest": True,
+            },
+            "trailing_primary": {
+                "primary_suffix": b"\n{}",
+                "rebind_primary_digest": True,
+            },
+            "non_json_constant": {
+                "primary_replace": (
+                    b'"duration_seconds": 1.0',
+                    b'"duration_seconds": NaN',
+                ),
+                "rebind_primary_digest": True,
+            },
+            "wrong_deployment": {
+                "primary_binding_overrides": {
+                    "deployment_id": "different-deployment"
+                },
+                "rebind_primary_digest": True,
+            },
+        }
+        for name, fixture_options in cases.items():
+            with self.subTest(name=name):
+                job = self._job()
+                _snapshot, _workspace = self._finalized_snapshot(
+                    job, **fixture_options
+                )
+
+                _, receipt, _ = requeue_job(
+                    job.public_id,
+                    expected_state_version=job.state_version,
+                    idempotency_key=f"retry-fingerprint-{name}-0001",
+                    actor_id=self.user.pk,
+                )
+
+                self.assertEqual(
+                    receipt.mode, VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
+                )
+
+    def test_snapshot_checkpoint_mismatch_forces_fresh_retry(self):
+        job = self._job()
+        self._finalized_snapshot(
+            job,
+            checkpoint_overrides={"snapshot_digest": "b" * 64},
+        )
+
+        _, receipt, _ = requeue_job(
+            job.public_id,
+            expected_state_version=job.state_version,
+            idempotency_key="retry-checkpoint-mismatch-0001",
+            actor_id=self.user.pk,
+        )
+
+        self.assertEqual(
+            receipt.mode, VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
+        )
+
+    def test_missing_mutated_or_unsafe_snapshot_database_forces_fresh(self):
+        for posture in (
+            "missing",
+            "mutated",
+            "symlink",
+            "internal_symlink",
+            "fifo",
+            "directory",
+        ):
+            with self.subTest(posture=posture):
+                job = self._job()
+                self._finalized_snapshot(
+                    job,
+                    database_posture=posture,
+                )
+
+                _, receipt, _ = requeue_job(
+                    job.public_id,
+                    expected_state_version=job.state_version,
+                    idempotency_key=f"retry-database-{posture}-0001",
+                    actor_id=self.user.pk,
+                )
+
+                self.assertEqual(
+                    receipt.mode,
+                    VaultJobRetryRequest.Mode.FRESH_SNAPSHOT,
+                )
+
+    def test_stale_finalized_workspace_cleanup_succeeds(self):
+        job = self._job()
+        snapshot, workspace = self._finalized_snapshot(
+            job, trusted_fingerprint={}
+        )
+
+        requeue_job(
+            job.public_id,
+            expected_state_version=job.state_version,
+            idempotency_key="retry-stale-finalized-cleanup-0001",
+            actor_id=self.user.pk,
+        )
+
+        self.assertFalse(workspace.exists())
+        snapshot.refresh_from_db()
+        self.assertEqual(
+            snapshot.cleanup_state, SourceSnapshot.CleanupState.COMPLETED
+        )
+        self.assertEqual(snapshot.workspace_path, "")
 
     def test_read_model_distinguishes_fresh_snapshot_and_checkpoint_resume(self):
         fresh = self._job()
@@ -230,27 +617,36 @@ class SyncRetryHardeningTests(TransactionTestCase):
 
     def test_concurrent_duplicate_retry_has_one_counter_and_audit_event(self):
         job = self._job()
+        self._finalized_snapshot(job)
         barrier = threading.Barrier(2)
 
         def submit():
             close_old_connections()
             barrier.wait()
             try:
-                return requeue_job(
+                _job, receipt, created = requeue_job(
                     job.public_id,
                     expected_state_version=job.state_version,
                     idempotency_key="retry-concurrent-0001",
                     actor_id=self.user.pk,
                     actor_name=self.user.get_username(),
-                )[2]
+                )
+                return created, receipt.mode
             finally:
                 close_old_connections()
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            created = list(executor.map(lambda _item: submit(), range(2)))
+            results = list(executor.map(lambda _item: submit(), range(2)))
 
         job.refresh_from_db()
-        self.assertEqual(sorted(created), [False, True])
+        self.assertEqual(
+            sorted(created for created, _mode in results),
+            [False, True],
+        )
+        self.assertEqual(
+            {mode for _created, mode in results},
+            {VaultJobRetryRequest.Mode.CHECKPOINT_RESUME},
+        )
         self.assertEqual(job.retry_count, 1)
         self.assertEqual(VaultJobRetryRequest.objects.count(), 1)
         self.assertEqual(

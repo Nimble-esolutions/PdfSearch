@@ -49,6 +49,7 @@ from vaultops.models import (
     SyncPolicy,
     VaultConnectionProfile,
     VaultJob,
+    VaultJobStep,
 )
 from vaultops.services.mutations import (
     BarrierOwnershipLost,
@@ -902,6 +903,23 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         self.assertEqual(self.database.read_bytes(), database_bytes)
         evidence = json.loads(
             (workspace / "snapshot-evidence.json").read_text()
+        )
+        expected_fingerprint = (
+            snapshot_service.snapshot_configuration_fingerprint()
+        )
+        self.assertEqual(
+            evidence["configuration_fingerprint"],
+            expected_fingerprint,
+        )
+        self.assertEqual(
+            json.loads(
+                (workspace / "snapshot-configuration.json").read_text()
+            ),
+            expected_fingerprint,
+        )
+        self.assertEqual(
+            snapshot.evidence["configuration_fingerprint"],
+            expected_fingerprint,
         )
         folder = evidence["faiss_reconciliation"]["folders"]["7"]
         self.assertEqual(folder["disposition"], "copied")
@@ -2149,8 +2167,67 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
         evidence["snapshot_id"] = str(scheduled_snapshot.public_id)
         evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+        fingerprint = snapshot_service.snapshot_configuration_fingerprint()
+        canonical_workspace = (
+            self.workspace
+            / (
+                f"{scheduled_snapshot.public_id}-"
+                f"{scheduled_snapshot.snapshot_digest[:12]}"
+            )
+        )
+        canonical_workspace.mkdir()
+        database_payload = (self.workspace / "db.sqlite3").read_bytes()
+        database_digest = hashlib.sha256(database_payload).hexdigest()
+        (canonical_workspace / "db.sqlite3").write_bytes(database_payload)
+        evidence["configuration_fingerprint"] = fingerprint
+        evidence["database"] = {"sha256": database_digest}
+        evidence["checkpoint_binding"] = {
+            "configuration_fingerprint": fingerprint,
+            "database_sha256": database_digest,
+            "deployment_id": scheduled_snapshot.deployment_id,
+            "included_epoch": scheduled_snapshot.included_epoch,
+            "initial_epoch": scheduled_snapshot.initial_epoch,
+            "snapshot_digest": scheduled_snapshot.snapshot_digest,
+            "snapshot_id": str(scheduled_snapshot.public_id),
+        }
+        canonical_evidence_path = canonical_workspace / "snapshot-evidence.json"
+        canonical_evidence_path.write_text(
+            json.dumps(evidence, sort_keys=True, indent=2),
+            encoding="utf-8",
+        )
+        (canonical_workspace / "snapshot-configuration.json").write_text(
+            json.dumps(fingerprint, sort_keys=True),
+            encoding="utf-8",
+        )
+        scheduled_snapshot.workspace_path = str(canonical_workspace)
+        scheduled_snapshot.evidence = {
+            "snapshot_schema": 1,
+            "evidence_path": "snapshot-evidence.json",
+            "evidence_sha256": hashlib.sha256(
+                canonical_evidence_path.read_bytes()
+            ).hexdigest(),
+            "configuration_path": "snapshot-configuration.json",
+            "database_sha256": database_digest,
+            "configuration_fingerprint": fingerprint,
+        }
+        scheduled_snapshot.save(
+            update_fields=["workspace_path", "evidence", "updated_at"]
+        )
+        VaultJobStep.objects.create(
+            job=first,
+            phase="snapshot",
+            status=VaultJobStep.Status.COMPLETED,
+            checkpoint={
+                "snapshot_id": str(scheduled_snapshot.public_id),
+                "snapshot_digest": scheduled_snapshot.snapshot_digest,
+                "included_epoch": scheduled_snapshot.included_epoch,
+                "configuration_fingerprint_sha256": fingerprint["sha256"],
+            },
+            finished_at=timezone.now(),
+        )
         claimed, token = claim_job(first.public_id, worker_id="test-worker")
-        completed = execute_claimed_job(claimed, token, vault=self.vault)
+        with override_settings(VAULT_SNAPSHOT_ROOT=self.workspace):
+            completed = execute_claimed_job(claimed, token, vault=self.vault)
 
         self.assertEqual(
             completed.status,

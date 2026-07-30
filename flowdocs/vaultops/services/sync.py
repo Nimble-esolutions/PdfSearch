@@ -181,16 +181,11 @@ def _heartbeat(job, token, fencing_epoch):
 
 
 def _run_publish(job, token, fencing_epoch, vault):
+    from vaultops.services.snapshot import eligible_finalized_snapshot
+
     profile = job.profile or materialize_environment_profile(vault)
     policy = materialize_sync_policy(profile)
-    snapshot = (
-        SourceSnapshot.objects.filter(
-            job=job,
-            state=SourceSnapshot.State.FINALIZED,
-        )
-        .order_by("-created_at")
-        .first()
-    )
+    snapshot = eligible_finalized_snapshot(job)
     if snapshot is None:
         snapshot = create_consistent_snapshot(
             job,

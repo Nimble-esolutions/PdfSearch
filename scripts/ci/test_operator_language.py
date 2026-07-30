@@ -172,7 +172,11 @@ class OperatorLanguageValidatorTests(unittest.TestCase):
         self.assertEqual(required["Retention & GC"], "जतन आणि जीसी")
         self.assertEqual(
             required["Retry from checkpoint"],
-            "चेकपॉइंटपासून पुन्हा प्रयत्न करा",
+            "तपासबिंदूपासून पुन्हा प्रयत्न करा",
+        )
+        self.assertEqual(
+            required["Resume verified snapshot checkpoint"],
+            "सत्यापित क्षणचित्र तपासबिंदूपासून पुन्हा सुरू करा",
         )
         self.assertEqual(
             required[

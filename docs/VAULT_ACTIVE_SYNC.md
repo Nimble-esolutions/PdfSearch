@@ -144,11 +144,23 @@ Replaying the same key and request returns the original receipt; concurrent
 submissions increment the retry counter and append `job_requeued` exactly once.
 Reusing a key for another actor or state version fails closed.
 
-The operator interface distinguishes three retry modes. A job with a finalized
-snapshot resumes its verified object-upload checkpoint. A job that failed
-before snapshot finalization never calls that a checkpoint resume: its failed
-or hard-kill `.incomplete` workspace receives a durable cleanup intent and the
-worker creates a fresh snapshot. Reclamation runs only after the retry
+The operator interface distinguishes three retry modes. A sync job resumes a
+verified snapshot checkpoint only when the finalized workspace, trusted
+control-plane evidence, immutable configuration sidecar, and completed snapshot
+step agree on deployment identity, snapshot identity, digest, epoch, and the
+current safety-setting fingerprint. Legacy, missing, malformed, forged, or
+configuration-mismatched evidence fails closed to a fresh snapshot; there is
+no operator override. Child evidence is opened relative to an already-opened,
+non-symlink workspace directory so a path replacement cannot redirect
+verification. The small `snapshot-configuration.json` sidecar and the
+`checkpoint_binding` in authenticated `snapshot-evidence.json` must agree
+exactly. Primary evidence is size-bounded, parsed as one complete JSON object,
+and required to use the canonical encoding produced by the snapshot writer.
+Its digest and semantic binding are both derived from that same anchored read;
+leading, trailing, non-JSON numeric constants, or noncanonical bytes make the
+checkpoint ineligible.
+An ineligible workspace receives a durable cleanup intent and the worker
+creates a fresh snapshot. Reclamation runs only after the retry
 transaction commits, after a grace period and fenced-owner recheck, and within
 configured item, byte, and time bounds. Failed snapshot rows and cleanup
 evidence remain in the control database; partial files never become publishable.
@@ -229,7 +241,9 @@ Typical fail-closed outcomes include:
 An interrupted pre-manifest upload can retry the same job and generation.
 A retry after a failed snapshot creates a fresh snapshot identity and derives
 candidate indexes again from the then-current frozen source. A retry after
-snapshot finalization reuses that immutable snapshot and resumes publication.
+snapshot finalization reuses that immutable snapshot only when its bounded,
+non-secret configuration fingerprint still matches every inventory, FAISS, and
+publication safety input; otherwise it creates a fresh snapshot first.
 A manifest already published remains a candidate. A pointer already promoted
 requires a separately confirmed compensating promotion.
 

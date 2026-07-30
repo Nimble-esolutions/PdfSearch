@@ -75,23 +75,32 @@ REQUIRED_MARATHI_TRANSLATIONS = {
     "Runtime search verification cannot continue.": (
         "कार्यरत प्रणालीतील शोध पडताळणी पुढे सुरू राहू शकत नाही."
     ),
-    "Retry from checkpoint": "चेकपॉइंटपासून पुन्हा प्रयत्न करा",
+    "Retry from checkpoint": "तपासबिंदूपासून पुन्हा प्रयत्न करा",
     "Resume verified upload checkpoint": (
-        "पडताळलेल्या अपलोडच्या चेकपॉइंटपासून पुढे सुरू करा"
+        "पडताळलेल्या अपलोडच्या तपासबिंदूपासून पुढे सुरू करा"
+    ),
+    "Resume verified snapshot checkpoint": (
+        "सत्यापित क्षणचित्र तपासबिंदूपासून पुन्हा सुरू करा"
+    ),
+    "Create a fresh snapshot and retry": (
+        "नवीन क्षणचित्र तयार करून पुन्हा प्रयत्न करा"
+    ),
+    "The verified snapshot matches current safety settings and will be reused.": (
+        "सत्यापित क्षणचित्र सध्याच्या सुरक्षा संरचनेशी जुळते आणि पुन्हा वापरले जाईल."
     ),
     "No failed snapshot checkpoint is reused and authority remains unchanged.": (
-        "अयशस्वी स्नॅपशॉटचा कोणताही चेकपॉइंट पुन्हा वापरला जाणार नाही "
+        "अयशस्वी क्षणचित्राचा कोणताही तपासबिंदू पुन्हा वापरला जाणार नाही "
         "आणि प्राधिकृत स्थिती बदलणार नाही."
     ),
     "No snapshot or checkpoint reuse is assumed and authority remains unchanged.": (
-        "स्नॅपशॉट किंवा चेकपॉइंट पुन्हा वापरला जाईल असे गृहित धरलेले नाही "
+        "क्षणचित्र किंवा तपासबिंदू पुन्हा वापरला जाईल असे गृहित धरलेले नाही "
         "आणि प्राधिकृत स्थिती बदलणार नाही."
     ),
     "Review the checkpoint before retrying.": (
-        "पुन्हा प्रयत्न करण्यापूर्वी चेकपॉइंटचा आढावा घ्या."
+        "पुन्हा प्रयत्न करण्यापूर्वी तपासबिंदूचा आढावा घ्या."
     ),
     "The worker stopped at a safe cancellation checkpoint.": (
-        "कार्यकर्ता सुरक्षित रद्दीकरण चेकपॉइंटवर थांबला."
+        "कार्यकर्ता सुरक्षित रद्दीकरण तपासबिंदूवर थांबला."
     ),
     "Retention & GC": "जतन आणि जीसी",
     "Garbage collection plans": "जीसी योजना",
