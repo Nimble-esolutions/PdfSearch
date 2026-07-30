@@ -45,6 +45,21 @@ FAISS-building functions also enter a scope, including deferred
 `transaction.on_commit` index promotion. Nested scopes count as one source
 mutation.
 
+Audited unavailable-media transitions enter their own service-level scope so
+the contract also applies to supported management-shell and recovery callers
+that do not pass through request middleware. A successful
+`media_unavailable`, `media_evidence_bound`, or `media_restored` transition
+advances the epoch only after its row change and audit event commit. An
+idempotent no-op, validation failure, or rolled-back audit advances nothing.
+If request middleware already owns a scope, the nested service scope shares
+its outcome and the committed transition still advances exactly once.
+These services reject entry from a caller-owned transaction on the application
+database with `media_transition_outer_atomic_unsupported`. This fail-closed
+boundary prevents an outer rollback from occurring after the independently
+durable control epoch advances. `ATOMIC_REQUESTS` must remain disabled for the
+application database; callers must invoke each supported media transition as
+the outermost application-database unit of work.
+
 Snapshot finalization changes the barrier from `open` to `requested`, waits
 for active scopes to drain, then changes it to `active`. New writes receive
 `snapshot_barrier_active`. The barrier is released in a `finally` block and

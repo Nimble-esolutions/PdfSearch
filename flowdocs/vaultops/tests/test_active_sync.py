@@ -24,12 +24,17 @@ from django.utils import timezone
 from core import utils as core_utils
 from core import candidate_maintenance
 from core.artifact_vault import ArtifactVault, VaultConfig
+from core.maintenance import (
+    bind_unavailable_recovery_evidence,
+    mark_pdf_unavailable,
+    restore_unavailable_pdf,
+)
 from core.media_quarantine import (
     build_unauthorized_missing_attestation,
     build_unavailable_attestation,
     storage_key_evidence,
 )
-from core.models import Folder
+from core.models import Folder, MaintenanceAuditEvent, PDFFile
 from core.global_writer import GlobalWriterConflict, release_global_writer
 from core.registration import RegistrationError, get_authoritative_pointer
 from vaultops.middleware import MUTATING_VIEW_NAMES, SourceMutationBarrierMiddleware
@@ -410,6 +415,8 @@ class ChangeAwareWebMutationTests(TransactionTestCase):
                 "delete_pdf",
                 "deprecate_pdf",
                 "archive_pdf",
+                "mark_pdf_unavailable",
+                "bind_pdf_recovery_evidence",
                 "restore_pdf",
             },
         )
@@ -467,6 +474,296 @@ class ChangeAwareWebMutationTests(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Folder.objects.filter(name="rolled-back").exists())
         self._assert_epoch(0)
+
+
+@override_settings(
+    VAULT_SYNC_ENABLED=True,
+    VAULT_MUTATION_TRACKING_ENABLED=True,
+    VAULT_SYNC_MODE="manual",
+    VAULT_SYNC_PROMOTION_MODE="manual",
+    VAULT_SYNC_QUIET_PERIOD_SECONDS=120,
+    VAULT_SYNC_INTERVAL_SECONDS=900,
+    VAULT_SYNC_MAX_LAG_SECONDS=3600,
+    VAULT_DEFAULT_PROFILE="production",
+    ENV_IDENTITY=fake_identity(),
+)
+class MediaLifecycleMutationTrackingTests(TransactionTestCase):
+    databases = {"default", "control"}
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.media_root = Path(self.temporary.name) / "media"
+        (self.media_root / "pdfs").mkdir(parents=True)
+        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.settings_override.enable()
+        self.factory = RequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="media-mutation-operator",
+            password="test-only-password",
+        )
+        self.folder = Folder.objects.create(
+            name="Media mutation",
+            created_by=self.user,
+        )
+        self.pdf = PDFFile.objects.create(
+            title="Tracked media",
+            folder=self.folder,
+            uploaded_by=self.user,
+            file="pdfs/tracked.pdf",
+            indexed=True,
+        )
+        self.profile = VaultConnectionProfile.objects.create(
+            key="production",
+            display_name="Environment",
+            source=VaultConnectionProfile.Source.ENVIRONMENT,
+            enabled=True,
+            read_only=False,
+            environment_locked=True,
+            endpoint_origin="https://vault.example",
+            bucket="artifacts",
+            region="test",
+            dataset_id="ai-sahakar-test",
+            production_source_id="source-1",
+            credential_alias="environment:ARTIFACT_VAULT",
+            fingerprint="f" * 64,
+        )
+
+    def tearDown(self):
+        self.settings_override.disable()
+        self.temporary.cleanup()
+        super().tearDown()
+
+    def _request(self, path, transition):
+        def response(_request):
+            transition()
+            return HttpResponse(status=200)
+
+        middleware = SourceMutationBarrierMiddleware(response)
+        return middleware(self.factory.post(path))
+
+    def _mark(self, *, exact_evidence=False):
+        content = b"%PDF-1.7\nrestored"
+        return mark_pdf_unavailable(
+            self.pdf,
+            requested_by=self.user,
+            expected_sha256=(
+                hashlib.sha256(content).hexdigest() if exact_evidence else ""
+            ),
+            expected_size=len(content) if exact_evidence else "",
+            reason="missing_after_inventory",
+            case_reference="CASE-TRACKED",
+        )
+
+    def _assert_epoch(self, expected):
+        state = SourceMutationState.objects.filter(
+            deployment_id="deployment-1"
+        ).first()
+        self.assertEqual(state.current_epoch if state else 0, expected)
+        self.assertEqual(state.active_mutations if state else 0, 0)
+        self.assertEqual(MutationJournalEntry.objects.count(), expected)
+
+    def _assert_no_transition(self, *, lifecycle, event_type):
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, lifecycle)
+        self.assertFalse(
+            MaintenanceAuditEvent.objects.filter(event_type=event_type).exists()
+        )
+        self._assert_epoch(0)
+
+    def test_production_database_does_not_wrap_requests_atomically(self):
+        self.assertIs(
+            settings.DATABASES["default"].get("ATOMIC_REQUESTS", False),
+            False,
+        )
+
+    def test_outer_atomic_rejects_unavailable_before_commit_or_rollback(self):
+        for should_commit in (True, False):
+            with self.subTest(outer_commit=should_commit):
+                try:
+                    with transaction.atomic(using="default"):
+                        with self.assertRaisesRegex(
+                            core_utils.SearchDataIntegrityError,
+                            "media_transition_outer_atomic_unsupported",
+                        ):
+                            self._mark()
+                        if not should_commit:
+                            raise RuntimeError("roll back outer transaction")
+                except RuntimeError:
+                    pass
+                self._assert_no_transition(
+                    lifecycle="uploaded",
+                    event_type="media_unavailable",
+                )
+
+    def test_outer_atomic_rollback_rejects_evidence_binding(self):
+        PDFFile.objects.filter(pk=self.pdf.pk).update(
+            lifecycle="unavailable",
+            indexed=False,
+            media_prior_lifecycle="uploaded",
+            media_quarantine_reason="missing_after_inventory",
+            media_case_reference="CASE-PREEXISTING",
+            media_observed_at=timezone.now(),
+        )
+
+        try:
+            with transaction.atomic(using="default"):
+                with self.assertRaisesRegex(
+                    core_utils.SearchDataIntegrityError,
+                    "media_transition_outer_atomic_unsupported",
+                ):
+                    bind_unavailable_recovery_evidence(
+                        self.pdf,
+                        requested_by=self.user,
+                        expected_sha256="a" * 64,
+                        expected_size=17,
+                        binding_reason="source_recovery_case",
+                        case_reference="RECOVERY-ROLLBACK",
+                    )
+                raise RuntimeError("roll back outer transaction")
+        except RuntimeError:
+            pass
+
+        self._assert_no_transition(
+            lifecycle="unavailable",
+            event_type="media_evidence_bound",
+        )
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.media_expected_sha256, "")
+
+    def test_outer_atomic_rollback_rejects_verified_restore(self):
+        content = b"%PDF-1.7\nrestored"
+        (self.media_root / "pdfs" / "tracked.pdf").write_bytes(content)
+        PDFFile.objects.filter(pk=self.pdf.pk).update(
+            lifecycle="unavailable",
+            indexed=False,
+            media_prior_lifecycle="uploaded",
+            media_expected_sha256=hashlib.sha256(content).hexdigest(),
+            media_expected_size=len(content),
+            media_quarantine_reason="missing_after_inventory",
+            media_case_reference="CASE-PREEXISTING",
+            media_observed_at=timezone.now(),
+        )
+
+        try:
+            with transaction.atomic(using="default"):
+                with self.assertRaisesRegex(
+                    core_utils.SearchDataIntegrityError,
+                    "media_transition_outer_atomic_unsupported",
+                ):
+                    restore_unavailable_pdf(self.pdf, requested_by=self.user)
+                raise RuntimeError("roll back outer transaction")
+        except RuntimeError:
+            pass
+
+        self._assert_no_transition(
+            lifecycle="unavailable",
+            event_type="media_restored",
+        )
+
+    def test_committed_unavailable_transition_advances_exactly_once(self):
+        response = self._request(
+            f"/pdf/{self.pdf.pk}/unavailable/",
+            self._mark,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "unavailable")
+        self._assert_epoch(1)
+
+    def test_idempotent_unavailable_transition_does_not_advance_again(self):
+        self._mark()
+        outcome = self._mark()
+
+        self.assertFalse(outcome.changed)
+        self._assert_epoch(1)
+
+    def test_audit_rollback_does_not_advance_epoch(self):
+        with patch(
+            "core.maintenance._audit",
+            side_effect=RuntimeError("audit failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "audit failed"):
+                self._mark()
+
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self._assert_epoch(0)
+
+    def test_binding_rollback_and_failed_restore_do_not_advance(self):
+        self._mark()
+        with patch(
+            "core.maintenance._audit",
+            side_effect=RuntimeError("audit failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "audit failed"):
+                bind_unavailable_recovery_evidence(
+                    self.pdf,
+                    requested_by=self.user,
+                    expected_sha256="a" * 64,
+                    expected_size=17,
+                    binding_reason="source_recovery_case",
+                    case_reference="RECOVERY-ROLLBACK",
+                )
+        self._assert_epoch(1)
+
+        with self.assertRaises(core_utils.SearchDataIntegrityError):
+            restore_unavailable_pdf(self.pdf, requested_by=self.user)
+
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "unavailable")
+        self.assertEqual(self.pdf.media_expected_sha256, "")
+        self._assert_epoch(1)
+
+    def test_evidence_binding_and_restore_each_advance_once(self):
+        self._mark()
+
+        def bind():
+            return bind_unavailable_recovery_evidence(
+                self.pdf,
+                requested_by=self.user,
+                expected_sha256=hashlib.sha256(b"%PDF-1.7\nrestored").hexdigest(),
+                expected_size=len(b"%PDF-1.7\nrestored"),
+                binding_reason="source_recovery_case",
+                case_reference="RECOVERY-TRACKED",
+            )
+
+        bind()
+        second = bind()
+        self.assertFalse(second.changed)
+        (self.media_root / "pdfs" / "tracked.pdf").write_bytes(
+            b"%PDF-1.7\nrestored"
+        )
+        restore_unavailable_pdf(self.pdf, requested_by=self.user)
+
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self._assert_epoch(3)
+
+    @patch("vaultops.services.sync.materialize_environment_profile")
+    def test_committed_transition_makes_manual_sync_queue_eligible(
+        self, profile_factory
+    ):
+        profile_factory.return_value = self.profile
+        SourceMutationState.objects.create(
+            deployment_id="deployment-1",
+            current_epoch=0,
+        )
+        policy = materialize_sync_policy(self.profile)
+        policy.last_run_at = timezone.now()
+        policy.last_completed_epoch = 0
+        policy.save(update_fields=["last_run_at", "last_completed_epoch"])
+        self.assertIsNone(queue_sync_job(trigger="manual"))
+
+        self._mark()
+        job = queue_sync_job(trigger="manual")
+
+        self.assertIsNotNone(job)
+        self.assertEqual(job.progress["source_epoch"], 1)
+        self.assertEqual(
+            SyncPolicy.objects.get(pk=policy.pk).pending_epoch,
+            1,
+        )
 
 
 @override_settings(

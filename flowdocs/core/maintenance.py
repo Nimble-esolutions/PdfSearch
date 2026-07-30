@@ -11,6 +11,7 @@ import stat
 import tempfile
 import time
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path, PurePosixPath
 
 from django.conf import settings
@@ -29,10 +30,47 @@ MEDIA_QUARANTINE_REASONS = {
     "custody_restore_pending",
     "source_recovery_case",
 }
+MEDIA_TRANSITION_OUTER_ATOMIC_UNSUPPORTED = (
+    "media_transition_outer_atomic_unsupported"
+)
 
 
 class MediaAbsentError(SearchDataIntegrityError):
     """The approved local storage entry is definitively absent."""
+
+
+def _tracked_media_transition(action):
+    """Advance source authority only after one transition commits."""
+
+    def decorator(transition):
+        @wraps(transition)
+        def wrapped(pdf, *args, **kwargs):
+            from vaultops.services.mutations import mutation_scope
+
+            connection = transaction.get_connection("default")
+            caller_atomic_blocks = [
+                block
+                for block in connection.atomic_blocks
+                if not getattr(block, "_from_testcase", False)
+            ]
+            if caller_atomic_blocks:
+                raise SearchDataIntegrityError(
+                    MEDIA_TRANSITION_OUTER_ATOMIC_UNSUPPORTED
+                )
+            with mutation_scope(
+                category="media_lifecycle",
+                relative_path=action,
+                operation="write",
+                record_on_change=True,
+            ) as mutation:
+                result = transition(pdf, *args, **kwargs)
+                if result.changed:
+                    mutation.mark_changed()
+                return result
+
+        return wrapped
+
+    return decorator
 
 
 def _audit(job=None, *, event_type, actor=None, payload=None):
@@ -294,6 +332,7 @@ def _verified_local_media_evidence(pdf, *, expected_size=None):
     return {"sha256": digest.hexdigest(), "size": size}
 
 
+@_tracked_media_transition("media_unavailable")
 def mark_pdf_unavailable(
     pdf,
     *,
@@ -380,6 +419,7 @@ def mark_pdf_unavailable(
         return MediaTransitionOutcome(current, True)
 
 
+@_tracked_media_transition("media_evidence_bound")
 def bind_unavailable_recovery_evidence(
     pdf,
     *,
@@ -463,6 +503,7 @@ def restore_pdf(pdf, *, requested_by=None):
         return MediaTransitionOutcome(current, prior_lifecycle != "uploaded")
 
 
+@_tracked_media_transition("media_restored")
 def restore_unavailable_pdf(pdf, *, requested_by=None):
     """Restore only unavailable media after descriptor-safe evidence verification."""
     with transaction.atomic():

@@ -265,6 +265,23 @@ and bounded evidence are persisted, `indexed=False` is set, and a
 not create duplicate transition events. Storage keys, absolute paths, and
 document content never enter audit or interface evidence.
 
+The quarantine, recovery-evidence binding, and verified restoration services
+also own a durable source-mutation scope. They mark that scope changed only
+after the existing atomic row-and-audit transaction commits, including when
+called from a supported management shell instead of HTTP. Nested request
+middleware coalesces with the service scope, while no-op, failed, and
+rolled-back transitions do not advance the source epoch or make a sync job
+eligible.
+
+Each supported media transition must be the outermost transaction owner for
+the application database. The service rejects a caller-owned atomic block with
+the stable technical reason `media_transition_outer_atomic_unsupported` before
+opening a mutation scope or changing row, audit, epoch, or journal state.
+`DATABASES["default"]["ATOMIC_REQUESTS"]` must remain `False`. Do not wrap these
+services in `transaction.atomic()`; use their existing internal row-and-audit
+transaction so the independently durable control epoch can advance only after
+that transaction returns successfully.
+
 `archived` and `deprecated` are ordinary product lifecycle states, not custody
 exceptions. Missing, blank, null, or unsafe media references in either state
 must fail inventory, candidate, runtime, and certification gates. Never edit
