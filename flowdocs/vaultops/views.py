@@ -13,6 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
+from django.utils.translation import gettext
 from django.views.decorators.http import require_GET, require_POST
 
 from core.views import superadmin_required
@@ -228,11 +229,13 @@ def profile_configure(request):
         }
         missing = [field for field, value in values.items() if not value]
         errors = {
-            field: "This field is required."
+            field: gettext("This field is required.")
             for field in missing
         }
         if reason_code == "vault_profile_invalid" and not missing:
-            errors["key"] = "Use letters, numbers, dots, underscores, or hyphens."
+            errors["key"] = gettext(
+                "Use letters, numbers, dots, underscores, or hyphens."
+            )
         elif field_by_reason.get(reason_code):
             errors[field_by_reason[reason_code]] = present_reason(reason_code)["detail"]
         request.session["vault_profile_form"] = {
@@ -343,7 +346,11 @@ def _mutation_error(request, exc, *, section="overview"):
             recommended_action="Refresh state and review the blocking reason.",
             http_status=http_status,
         )
-    messages.error(request, present_reason(reason_code)["title"])
+    presentation = present_reason(reason_code)
+    messages.error(
+        request,
+        f"{presentation['title']} {presentation['detail']}",
+    )
     return _form_redirect(section)
 
 
