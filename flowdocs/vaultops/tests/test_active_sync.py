@@ -1299,6 +1299,75 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         ):
             self._snapshot()
 
+    def test_production_sized_pdf_json_is_within_default_preflight_cap(self):
+        class Cursor:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def fetchone(self):
+                return self.rows[0]
+
+            def __iter__(self):
+                return iter(self.rows)
+
+        class PreflightConnection:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql):
+                self.calls.append(sql)
+                if "COUNT(*)" in sql:
+                    # Production PDF 301: 85,794,946-byte embedding cell.
+                    return Cursor([(1, 85_800_000, 85_794_946)])
+                return Cursor([(7,)])
+
+        connection = PreflightConnection()
+
+        folder_ids, totals = snapshot_service._preflight_searchable_embeddings(
+            connection,
+            "AND lifecycle IN ('uploaded', 'processing', 'ready') ",
+        )
+
+        self.assertEqual(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES,
+            134_217_728,
+        )
+        self.assertEqual(folder_ids, [7])
+        self.assertEqual(totals["pdf_count"], 1)
+        self.assertEqual(totals["source_json_bytes"], 85_800_000)
+        self.assertEqual(len(connection.calls), 2)
+
+    def test_pdf_json_above_default_cap_fails_before_row_iteration(self):
+        class Cursor:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def fetchone(self):
+                return self.rows[0]
+
+        class PreflightConnection:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql):
+                self.calls.append(sql)
+                if "COUNT(*)" in sql:
+                    return Cursor([(1, 134_217_729, 134_217_729)])
+                raise AssertionError("folder rows must not be requested")
+
+        connection = PreflightConnection()
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_faiss_rebuild_cell_limit_exceeded",
+        ):
+            snapshot_service._preflight_searchable_embeddings(
+                connection,
+                "AND lifecycle IN ('uploaded', 'processing', 'ready') ",
+            )
+
+        self.assertEqual(len(connection.calls), 1)
+
     def test_candidate_rebuild_cancellation_removes_partial_file(self):
         self._add_lifecycle_columns()
         self._insert_pdf(
