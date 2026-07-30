@@ -293,7 +293,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
         state.active_mutations = 0
         state.save(update_fields=["active_mutations", "updated_at"])
         reclaim_snapshot_cleanup_intents(
-            now=timezone.now() + timezone.timedelta(minutes=5)
+            now=timezone.now() + timezone.timedelta(minutes=10)
         )
         self.assertFalse(workspace.exists())
         snapshot.refresh_from_db()
@@ -318,7 +318,10 @@ class SyncRetryHardeningTests(TransactionTestCase):
         reclaim_snapshot_cleanup_intents()
         self.assertTrue(outside.exists())
         snapshot.refresh_from_db()
-        self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.FAILED)
+        self.assertEqual(
+            snapshot.cleanup_state,
+            SourceSnapshot.CleanupState.QUARANTINED,
+        )
         self.assertEqual(
             snapshot.cleanup_error_code, "snapshot_cleanup_path_invalid"
         )
@@ -391,6 +394,89 @@ class SyncRetryHardeningTests(TransactionTestCase):
         self.assertTrue(workspace.exists())
         snapshot.refresh_from_db()
         self.assertEqual(snapshot.cleanup_state, SourceSnapshot.CleanupState.PENDING)
+
+    @override_settings(
+        VAULT_SNAPSHOT_CLEANUP_MAX_ITEMS=1,
+        VAULT_SNAPSHOT_CLEANUP_MAX_SCAN_ITEMS=8,
+    )
+    def test_live_oldest_intent_does_not_starve_later_cleanup(self):
+        live_job = self._job()
+        later_job = self._job()
+        live, live_path = self._failed_snapshot(live_job)
+        later, later_path = self._failed_snapshot(later_job)
+        with transaction.atomic(using="control"):
+            stage_snapshot_cleanup(live_job, reason="test")
+            stage_snapshot_cleanup(later_job, reason="test")
+        live_job.status = VaultJob.Status.RUNNING
+        live_job.claim_token_hash = "b" * 64
+        live_job.heartbeat_at = timezone.now()
+        live_job.save(
+            update_fields=[
+                "status",
+                "claim_token_hash",
+                "heartbeat_at",
+                "updated_at",
+            ]
+        )
+        due = timezone.now() - timezone.timedelta(seconds=1)
+        SourceSnapshot.objects.filter(pk__in=[live.pk, later.pk]).update(
+            cleanup_not_before=due
+        )
+        observed = timezone.now()
+
+        self.assertEqual(
+            reclaim_snapshot_cleanup_intents(now=observed), 1
+        )
+
+        live.refresh_from_db()
+        later.refresh_from_db()
+        self.assertTrue(live_path.exists())
+        self.assertFalse(later_path.exists())
+        self.assertEqual(live.cleanup_state, SourceSnapshot.CleanupState.PENDING)
+        self.assertGreater(live.cleanup_not_before, observed)
+        self.assertEqual(
+            later.cleanup_state, SourceSnapshot.CleanupState.COMPLETED
+        )
+
+    @override_settings(
+        VAULT_SNAPSHOT_CLEANUP_MAX_ITEMS=1,
+        VAULT_SNAPSHOT_CLEANUP_MAX_SCAN_ITEMS=8,
+    )
+    def test_invalid_oldest_intent_is_quarantined_without_starvation(self):
+        invalid_job = self._job()
+        outside = Path(self.temporary.name).parent / "invalid-oldest.incomplete"
+        outside.mkdir(exist_ok=True)
+        invalid = SourceSnapshot.objects.create(
+            job=invalid_job,
+            deployment_id="test",
+            state=SourceSnapshot.State.FAILED,
+            workspace_path=str(outside),
+            cleanup_state=SourceSnapshot.CleanupState.PENDING,
+            cleanup_path=str(outside),
+            cleanup_not_before=timezone.now() - timezone.timedelta(seconds=1),
+        )
+        later_job = self._job()
+        later, later_path = self._failed_snapshot(later_job)
+        with transaction.atomic(using="control"):
+            stage_snapshot_cleanup(later_job, reason="test")
+        later.cleanup_not_before = timezone.now() - timezone.timedelta(seconds=1)
+        later.save(update_fields=["cleanup_not_before", "updated_at"])
+
+        self.assertEqual(reclaim_snapshot_cleanup_intents(), 1)
+
+        invalid.refresh_from_db()
+        later.refresh_from_db()
+        self.assertTrue(outside.exists())
+        self.assertEqual(
+            invalid.cleanup_state,
+            SourceSnapshot.CleanupState.QUARANTINED,
+        )
+        self.assertIsNone(invalid.cleanup_not_before)
+        self.assertFalse(later_path.exists())
+        self.assertEqual(
+            later.cleanup_state, SourceSnapshot.CleanupState.COMPLETED
+        )
+        outside.rmdir()
 
     @override_settings(VAULT_SNAPSHOT_CLEANUP_MAX_ITEMS=1)
     def test_cleanup_batch_is_bounded_and_recorded_tombstone_resumes(self):

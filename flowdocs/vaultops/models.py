@@ -457,6 +457,7 @@ class SourceSnapshot(TimeStampedModel):
         RECLAIMING = "reclaiming", "Cleanup in progress"
         COMPLETED = "completed", "Cleanup completed"
         FAILED = "failed", "Cleanup failed"
+        QUARANTINED = "quarantined", "Cleanup quarantined"
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     job = models.ForeignKey(

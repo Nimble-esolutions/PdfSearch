@@ -87,6 +87,7 @@ class Migration(migrations.Migration):
                     ("reclaiming", "Cleanup in progress"),
                     ("completed", "Cleanup completed"),
                     ("failed", "Cleanup failed"),
+                    ("quarantined", "Cleanup quarantined"),
                 ],
                 default="none",
                 max_length=16,

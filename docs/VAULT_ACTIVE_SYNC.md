@@ -98,6 +98,9 @@ worker creates a fresh snapshot. Reclamation runs only after the retry
 transaction commits, after a grace period and fenced-owner recheck, and within
 configured item, byte, and time bounds. Failed snapshot rows and cleanup
 evidence remain in the control database; partial files never become publishable.
+The reclaimer scans a separately bounded candidate window, backs off live
+owners, and quarantines invalid paths so an old blocked row cannot starve later
+eligible cleanup.
 Non-sync operations use neutral retry guidance unless that operation separately
 proves a reusable durable checkpoint.
 

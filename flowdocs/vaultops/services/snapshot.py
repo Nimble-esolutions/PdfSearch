@@ -221,6 +221,14 @@ def reclaim_snapshot_cleanup_intents(*, now=None):
     maximum_items = int(
         getattr(settings, "VAULT_SNAPSHOT_CLEANUP_MAX_ITEMS", 8)
     )
+    maximum_scan_items = max(
+        maximum_items,
+        int(
+            getattr(
+                settings, "VAULT_SNAPSHOT_CLEANUP_MAX_SCAN_ITEMS", 64
+            )
+        ),
+    )
     remaining_bytes = int(
         getattr(settings, "VAULT_SNAPSHOT_CLEANUP_MAX_BYTES", 536_870_912)
     )
@@ -242,11 +250,16 @@ def reclaim_snapshot_cleanup_intents(*, now=None):
             cleanup_not_before__lte=now,
         )
         .order_by("cleanup_not_before", "created_at")
-        .values_list("pk", flat=True)[:maximum_items]
+        .values_list("pk", flat=True)[:maximum_scan_items]
     )
     reclaimed = 0
+    attempted = 0
     for snapshot_id in candidate_ids:
-        if time.monotonic() > deadline or remaining_bytes < 0:
+        if (
+            attempted >= maximum_items
+            or time.monotonic() > deadline
+            or remaining_bytes < 0
+        ):
             break
         with transaction.atomic(using="control"):
             snapshot = (
@@ -262,14 +275,21 @@ def reclaim_snapshot_cleanup_intents(*, now=None):
                     SourceSnapshot.CleanupState.FAILED,
                 }
                 or snapshot.cleanup_not_before > now
-                or not _cleanup_owner_is_quiesced(snapshot, now=now)
             ):
+                continue
+            if not _cleanup_owner_is_quiesced(snapshot, now=now):
+                snapshot.cleanup_not_before = now + retry_delay
+                snapshot.save(
+                    update_fields=["cleanup_not_before", "updated_at"]
+                )
                 continue
             try:
                 source, tombstone = _validated_cleanup_paths(snapshot)
             except SnapshotError as exc:
-                snapshot.cleanup_state = SourceSnapshot.CleanupState.FAILED
-                snapshot.cleanup_not_before = now + retry_delay
+                snapshot.cleanup_state = (
+                    SourceSnapshot.CleanupState.QUARANTINED
+                )
+                snapshot.cleanup_not_before = None
                 snapshot.cleanup_error_code = exc.reason_code
                 snapshot.evidence = {
                     **(
@@ -278,7 +298,7 @@ def reclaim_snapshot_cleanup_intents(*, now=None):
                         else {}
                     ),
                     "workspace_cleanup": {
-                        "status": "failed",
+                        "status": "quarantined",
                         "reason_code": exc.reason_code,
                     },
                 }
@@ -307,6 +327,7 @@ def reclaim_snapshot_cleanup_intents(*, now=None):
                     "updated_at",
                 ]
             )
+            attempted += 1
         try:
             if source.is_symlink():
                 source.unlink()
