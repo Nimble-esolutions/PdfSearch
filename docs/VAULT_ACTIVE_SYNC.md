@@ -147,13 +147,16 @@ Reusing a key for another actor or state version fails closed.
 The operator interface distinguishes three retry modes. A sync job resumes a
 verified snapshot checkpoint only when the finalized workspace, trusted
 control-plane evidence, immutable configuration sidecar, and completed snapshot
-step agree on snapshot identity, digest, epoch, and the current safety-setting
-fingerprint. Legacy, missing, malformed, forged, or configuration-mismatched
-evidence fails closed to a fresh snapshot; there is no operator override.
-The small `snapshot-configuration.json` sidecar and the bounded
-`checkpoint_binding` at the start of authenticated `snapshot-evidence.json`
-must agree exactly. The remainder of the larger inventory payload is not
-reparsed merely to decide retry mode.
+step agree on deployment identity, snapshot identity, digest, epoch, and the
+current safety-setting fingerprint. Legacy, missing, malformed, forged, or
+configuration-mismatched evidence fails closed to a fresh snapshot; there is
+no operator override. Child evidence is opened relative to an already-opened,
+non-symlink workspace directory so a path replacement cannot redirect
+verification. The small `snapshot-configuration.json` sidecar and the
+`checkpoint_binding` in authenticated `snapshot-evidence.json` must agree
+exactly. Primary evidence is size-bounded, parsed as one complete JSON object,
+and required to use the canonical encoding produced by the snapshot writer;
+leading, trailing, or noncanonical bytes make the checkpoint ineligible.
 An ineligible workspace receives a durable cleanup intent and the worker
 creates a fresh snapshot. Reclamation runs only after the retry
 transaction commits, after a grace period and fenced-owner recheck, and within

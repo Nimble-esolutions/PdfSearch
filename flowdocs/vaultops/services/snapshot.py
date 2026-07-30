@@ -49,7 +49,7 @@ FAISS_RECONCILIATION_SCHEMA = 1
 PUBLICATION_MANIFEST_SCHEMA = 1
 SNAPSHOT_CONFIGURATION_SCHEMA = 1
 SNAPSHOT_CONFIGURATION_MAX_BYTES = 64 * 1024
-SNAPSHOT_PRIMARY_BINDING_MAX_BYTES = 64 * 1024
+SNAPSHOT_PRIMARY_EVIDENCE_MAX_BYTES = 64 * 1024 * 1024
 
 
 def snapshot_configuration_fingerprint():
@@ -111,25 +111,18 @@ def _configuration_fingerprint_valid(value):
     )
 
 
-def _stable_file_sha256(path, *, maximum_bytes=None):
+def _stable_file_sha256_at(directory_descriptor, name, *, maximum_bytes=None):
     descriptor = -1
     try:
-        before_path = os.stat(path, follow_symlinks=False)
-        if not stat.S_ISREG(before_path.st_mode) or before_path.st_nlink != 1:
-            return None
         descriptor = os.open(
-            path,
+            name,
             os.O_RDONLY
             | getattr(os, "O_NOFOLLOW", 0)
             | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=directory_descriptor,
         )
         before = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(before.st_mode)
-            or before.st_nlink != 1
-            or (before_path.st_dev, before_path.st_ino)
-            != (before.st_dev, before.st_ino)
-        ):
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
             return None
         if maximum_bytes is not None and before.st_size > maximum_bytes:
             return None
@@ -144,7 +137,6 @@ def _stable_file_sha256(path, *, maximum_bytes=None):
             if maximum_bytes is not None and size > maximum_bytes:
                 return None
         after = os.fstat(descriptor)
-        after_path = os.stat(path, follow_symlinks=False)
         if (
             before.st_dev,
             before.st_ino,
@@ -155,10 +147,7 @@ def _stable_file_sha256(path, *, maximum_bytes=None):
             after.st_ino,
             after.st_size,
             after.st_mtime_ns,
-        ) or (after.st_dev, after.st_ino) != (
-            after_path.st_dev,
-            after_path.st_ino,
-        ):
+        ) or not stat.S_ISREG(after.st_mode) or after.st_nlink != 1:
             return None
         return digest.hexdigest()
     except OSError:
@@ -168,29 +157,22 @@ def _stable_file_sha256(path, *, maximum_bytes=None):
             os.close(descriptor)
 
 
-def _read_regular_file_bounded(path, *, maximum_bytes, allow_truncated=False):
+def _read_regular_file_bounded_at(directory_descriptor, name, *, maximum_bytes):
     descriptor = -1
     try:
-        before_path = os.stat(path, follow_symlinks=False)
-        if not stat.S_ISREG(before_path.st_mode) or before_path.st_nlink != 1:
-            return None
         descriptor = os.open(
-            path,
+            name,
             os.O_RDONLY
             | getattr(os, "O_NOFOLLOW", 0)
             | getattr(os, "O_NONBLOCK", 0),
+            dir_fd=directory_descriptor,
         )
         opened = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or opened.st_nlink != 1
-            or (before_path.st_dev, before_path.st_ino)
-            != (opened.st_dev, opened.st_ino)
-        ):
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
             return None
         chunks = []
         size = 0
-        read_limit = maximum_bytes if allow_truncated else maximum_bytes + 1
+        read_limit = maximum_bytes + 1
         while size < read_limit:
             chunk = os.read(descriptor, min(64 * 1024, read_limit - size))
             if not chunk:
@@ -201,7 +183,6 @@ def _read_regular_file_bounded(path, *, maximum_bytes, allow_truncated=False):
         if len(raw) > maximum_bytes:
             return None
         after = os.fstat(descriptor)
-        after_path = os.stat(path, follow_symlinks=False)
         if (
             opened.st_dev,
             opened.st_ino,
@@ -212,10 +193,7 @@ def _read_regular_file_bounded(path, *, maximum_bytes, allow_truncated=False):
             after.st_ino,
             after.st_size,
             after.st_mtime_ns,
-        ) or (after.st_dev, after.st_ino) != (
-            after_path.st_dev,
-            after_path.st_ino,
-        ):
+        ) or not stat.S_ISREG(after.st_mode) or after.st_nlink != 1:
             return None
         return raw
     except OSError:
@@ -225,55 +203,74 @@ def _read_regular_file_bounded(path, *, maximum_bytes, allow_truncated=False):
             os.close(descriptor)
 
 
-def _primary_resume_binding(path):
-    raw = _read_regular_file_bounded(
-        path,
-        maximum_bytes=SNAPSHOT_PRIMARY_BINDING_MAX_BYTES,
-        allow_truncated=True,
+def _primary_resume_binding(directory_descriptor):
+    raw = _read_regular_file_bounded_at(
+        directory_descriptor,
+        "snapshot-evidence.json",
+        maximum_bytes=SNAPSHOT_PRIMARY_EVIDENCE_MAX_BYTES,
     )
     if raw is None:
         return None
     try:
-        text = raw.decode("utf-8")
-        marker = '"checkpoint_binding": '
-        start = text.index(marker) + len(marker)
-        value, _end = json.JSONDecoder().raw_decode(text[start:])
-    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        value = json.loads(raw.decode("utf-8"))
+        canonical = json.dumps(
+            value, sort_keys=True, indent=2, default=str
+        ).encode("utf-8")
+    except (UnicodeDecodeError, TypeError, ValueError, json.JSONDecodeError):
         return None
-    return value if isinstance(value, dict) else None
+    if raw != canonical or not isinstance(value, dict):
+        return None
+    binding = value.get("checkpoint_binding")
+    return binding if isinstance(binding, dict) else None
 
 
 def _snapshot_file_configuration(snapshot):
     workspace = Path(snapshot.workspace_path)
-    expected_workspace = (
-        Path(settings.VAULT_SNAPSHOT_ROOT).resolve()
-        / f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
-    )
+    snapshot_root = Path(settings.VAULT_SNAPSHOT_ROOT).resolve()
+    workspace_name = f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
+    expected_workspace = snapshot_root / workspace_name
     if (
         not snapshot.workspace_path
-        or workspace.is_symlink()
-        or not workspace.is_dir()
         or workspace.absolute() != expected_workspace
     ):
         return None
-    descriptor = -1
+    root_descriptor = -1
+    workspace_descriptor = -1
     try:
-        root = workspace.resolve(strict=True)
-        primary_path = root / "snapshot-evidence.json"
+        directory_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        root_descriptor = os.open(snapshot_root, directory_flags)
+        workspace_descriptor = os.open(
+            workspace_name,
+            directory_flags,
+            dir_fd=root_descriptor,
+        )
+        workspace_stat = os.fstat(workspace_descriptor)
+        if not stat.S_ISDIR(workspace_stat.st_mode):
+            return None
         expected_primary_digest = snapshot.evidence.get("evidence_sha256")
         if (
             not isinstance(expected_primary_digest, str)
             or not re.fullmatch(r"[0-9a-f]{64}", expected_primary_digest)
-            or _stable_file_sha256(primary_path) != expected_primary_digest
+            or _stable_file_sha256_at(
+                workspace_descriptor,
+                "snapshot-evidence.json",
+                maximum_bytes=SNAPSHOT_PRIMARY_EVIDENCE_MAX_BYTES,
+            )
+            != expected_primary_digest
         ):
             return None
-        database_path = root / "db.sqlite3"
         expected_database_digest = snapshot.evidence.get("database_sha256")
         if (
             not isinstance(expected_database_digest, str)
             or not re.fullmatch(r"[0-9a-f]{64}", expected_database_digest)
-            or _stable_file_sha256(
-                database_path,
+            or _stable_file_sha256_at(
+                workspace_descriptor,
+                "db.sqlite3",
                 maximum_bytes=MAX_DATABASE_BYTES,
             )
             != expected_database_digest
@@ -285,16 +282,17 @@ def _snapshot_file_configuration(snapshot):
         expected_binding = {
             "configuration_fingerprint": trusted_fingerprint,
             "database_sha256": expected_database_digest,
+            "deployment_id": snapshot.deployment_id,
             "included_epoch": snapshot.included_epoch,
             "initial_epoch": snapshot.initial_epoch,
             "snapshot_digest": snapshot.snapshot_digest,
             "snapshot_id": str(snapshot.public_id),
         }
-        if _primary_resume_binding(primary_path) != expected_binding:
+        if _primary_resume_binding(workspace_descriptor) != expected_binding:
             return None
-        evidence_path = root / "snapshot-configuration.json"
-        raw = _read_regular_file_bounded(
-            evidence_path,
+        raw = _read_regular_file_bounded_at(
+            workspace_descriptor,
+            "snapshot-configuration.json",
             maximum_bytes=SNAPSHOT_CONFIGURATION_MAX_BYTES,
         )
         if raw is None:
@@ -303,8 +301,10 @@ def _snapshot_file_configuration(snapshot):
     except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     finally:
-        if descriptor >= 0:
-            os.close(descriptor)
+        if workspace_descriptor >= 0:
+            os.close(workspace_descriptor)
+        if root_descriptor >= 0:
+            os.close(root_descriptor)
     if not isinstance(evidence, dict):
         return None
     return evidence
@@ -1694,6 +1694,7 @@ def create_consistent_snapshot(
         checkpoint_binding = {
             "configuration_fingerprint": configuration_fingerprint,
             "database_sha256": database_record["sha256"],
+            "deployment_id": source_deployment,
             "included_epoch": included_epoch,
             "initial_epoch": snapshot.initial_epoch,
             "snapshot_digest": snapshot_digest,

@@ -2184,6 +2184,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         evidence["checkpoint_binding"] = {
             "configuration_fingerprint": fingerprint,
             "database_sha256": database_digest,
+            "deployment_id": scheduled_snapshot.deployment_id,
             "included_epoch": scheduled_snapshot.included_epoch,
             "initial_epoch": scheduled_snapshot.initial_epoch,
             "snapshot_digest": scheduled_snapshot.snapshot_digest,
@@ -2191,7 +2192,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         }
         canonical_evidence_path = canonical_workspace / "snapshot-evidence.json"
         canonical_evidence_path.write_text(
-            json.dumps(evidence),
+            json.dumps(evidence, sort_keys=True, indent=2),
             encoding="utf-8",
         )
         (canonical_workspace / "snapshot-configuration.json").write_text(
