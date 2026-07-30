@@ -78,18 +78,26 @@ Every stored chunk and embedding must be complete, finite, non-zero, and
 dimensionally consistent. A coherent copied folder index is retained
 byte-for-byte only after its supported inner-product index type, dimensions,
 count, vector values, and deterministic vector order match the normalized
-frozen-database batches. A missing, unreadable, unsupported, reordered, or
+frozen-database batches byte-for-byte as canonical float32 values; a
+near-tolerance numeric match is not accepted. A missing, unreadable,
+unsupported, reordered, or
 stale folder index is atomically derived only under the incomplete snapshot
 workspace. Indexes for folders with no searchable rows are omitted from the
 candidate. SQL row and source-cell sizes are bounded before JSON parsing;
+copied index file size is bounded before FAISS loads it, and projected
 per-document chunks, dimensions, total vectors, and resident vector bytes are
-then accounted incrementally. Cancellation is checked around parsing,
+checked before allocation or index addition. Verification and rebuilding use
+separate passes so a copied index and its replacement are not resident
+together. Cancellation is checked around parsing,
 materialization, index addition, and writing. Cancellation or derivation
 failure leaves no published candidate and cannot modify source artifacts.
 
 Snapshot evidence, the immutable generation manifest, and the publication
 validation record bind each folder's copied or rebuilt disposition, vector
-count, dimensions, and digest. This evidence is used by the existing restore,
+count, dimensions, and digest. Source folder identifiers and digests are also
+bound so the removed set must be exactly the source set absent from the
+candidate; publication rechecks computed PDF, vector, and byte totals against
+configured limits. This evidence is used by the existing restore,
 activation, runtime, and certification gates; it does not weaken their
 independent count and digest checks.
 

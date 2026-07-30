@@ -766,6 +766,9 @@ for _code in {
 for _code in {
     "snapshot_faiss_rebuild_failed",
     "snapshot_faiss_rebuild_verification_failed",
+    "snapshot_faiss_index_missing",
+    "snapshot_faiss_index_unreadable",
+    "snapshot_faiss_count_mismatch",
 }:
     REASONS.setdefault(
         _code,
