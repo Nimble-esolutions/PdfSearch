@@ -74,9 +74,15 @@ if [ "$ACTION" != "cleanup" ]; then
 fi
 if [ "$ACTION" = "activate" ] || [ "$ACTION" = "evidence" ]; then
   export CERT_ACTIVATION_ENABLED=1
+  if [ "$MODE" = "fresh" ]; then
+    export CERT_INITIAL_ACTIVATION_ENABLED=1
+  else
+    export CERT_INITIAL_ACTIVATION_ENABLED=0
+  fi
 else
   # Never inherit an accidentally enabled activation posture into preflight.
   export CERT_ACTIVATION_ENABLED=0
+  export CERT_INITIAL_ACTIVATION_ENABLED=0
 fi
 
 export CERT_DEPLOYMENT_ID="recovery-cert-$CERT_RUN_ID"
@@ -202,9 +208,10 @@ for service_name in ("web", "maintenance"):
     if environment.get("CREATE_SUPERUSER") != "0":
         raise SystemExit(f"{service_name}: startup superuser creation must be disabled")
     expected_activation = os.environ["CERT_ACTIVATION_ENABLED"]
+    expected_initial = os.environ["CERT_INITIAL_ACTIVATION_ENABLED"]
     if environment.get("STAGING_RUNTIME_ACTIVATION_ENABLED") != expected_activation:
         raise SystemExit(f"{service_name}: unexpected activation phase")
-    if environment.get("STAGING_INITIAL_ACTIVATION_ENABLED") != expected_activation:
+    if environment.get("STAGING_INITIAL_ACTIVATION_ENABLED") != expected_initial:
         raise SystemExit(f"{service_name}: unexpected initial-activation phase")
 ports = services["web"].get("ports", [])
 if len(ports) != 1 or ports[0].get("host_ip") != "127.0.0.1":
@@ -358,16 +365,41 @@ if not valid_intent:
 PY
   render_and_assert_model
   write_evidence
+  python3 - "$EVIDENCE_DIR/livez.txt" "$EVIDENCE_DIR/readyz.txt" \
+    "$CERT_GENERATION_ID" "$CERT_MANIFEST_DIGEST" <<'PY'
+import json, pathlib, sys
+live = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+ready = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+if live.get("status") != "ok":
+    raise SystemExit("livez evidence is not healthy")
+if (
+    ready.get("status") != "ready"
+    or ready.get("runtime_generation_id") != sys.argv[3]
+    or ready.get("runtime_manifest_digest") != sys.argv[4]
+):
+    raise SystemExit("readyz runtime identity does not match acceptance")
+PY
   "${COMPOSE[@]}" exec -T web python manage.py verify_activation_runtime \
     --intent-id "$CERT_ACTIVATION_INTENT_ID" \
     >"$EVIDENCE_DIR/activation-runtime.txt"
   "${COMPOSE[@]}" exec -T \
     -e CERT_EXPECTED_GENERATION_ID="$CERT_GENERATION_ID" \
     -e CERT_EXPECTED_MANIFEST_DIGEST="$CERT_MANIFEST_DIGEST" \
+    -e CERT_EXPECTED_INTENT_ID="$CERT_ACTIVATION_INTENT_ID" \
+    -e CERT_EXPECTED_MODE="$MODE" \
     web python manage.py shell -c '
 import json, os
 from django.conf import settings
-from vaultops.runtime_control import read_runtime_pointer, runtime_control_paths
+from vaultops.models import (
+    ActivationIntent,
+    ArtifactGeneration,
+    RuntimePointerObservation,
+)
+from vaultops.runtime_control import (
+    read_runtime_pointer,
+    read_signed_document,
+    runtime_control_paths,
+)
 p = runtime_control_paths(settings.DATA_CONTROL_ROOT)
 active = read_runtime_pointer(
     p["active"],
@@ -377,10 +409,46 @@ active = read_runtime_pointer(
 )
 assert active.generation_id == os.environ["CERT_EXPECTED_GENERATION_ID"]
 assert active.manifest_digest == os.environ["CERT_EXPECTED_MANIFEST_DIGEST"]
+intent = ActivationIntent.objects.get(
+    public_id=os.environ["CERT_EXPECTED_INTENT_ID"]
+)
+assert intent.state == ActivationIntent.State.COMMITTED
+assert intent.target_generation_id == active.generation_id
+assert intent.manifest_digest == active.manifest_digest
+assert intent.checkpoint.get("protocol_state") == "committed"
+result = read_signed_document(
+    p["results"] / f"{intent.public_id}.json",
+    signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+    expected_kind="activation_result",
+    deployment_id=settings.ENV_IDENTITY.deployment_id,
+)
+assert result.get("status") == "committed"
+assert result.get("intent_digest") == intent.intent_digest
+assert result.get("active_generation_id") == active.generation_id
+assert result.get("active_manifest_digest") == active.manifest_digest
+assert result.get("active_pointer_digest") == active.pointer_digest
+generation = ArtifactGeneration.objects.get(
+    deployment_id=settings.ENV_IDENTITY.deployment_id,
+    generation_id=active.generation_id,
+)
+assert generation.runtime_state == ArtifactGeneration.RuntimeState.ACTIVE
+observation = RuntimePointerObservation.objects.filter(
+    deployment_id=settings.ENV_IDENTITY.deployment_id,
+    active_generation_id=active.generation_id,
+).latest("observed_at")
+assert observation.status == "committed"
+assert observation.pointer_digest == active.pointer_digest
+if os.environ["CERT_EXPECTED_MODE"] == "fresh":
+    assert result.get("previous_generation_id", "") == ""
+    assert not p["previous"].exists()
 print(json.dumps({
     "generation_id": active.generation_id,
     "manifest_digest": active.manifest_digest,
     "pointer_digest": active.pointer_digest,
+    "intent_state": intent.state,
+    "result_status": result["status"],
+    "runtime_state": generation.runtime_state,
+    "observation_status": observation.status,
 }, sort_keys=True))
 ' >"$EVIDENCE_DIR/active-pointer.json"
   printf 'generation_id=%s\nmanifest_digest=%s\nactivation_intent_id=%s\noperator_accepted=yes\n' \

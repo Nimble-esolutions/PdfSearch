@@ -28,7 +28,7 @@ class RecoveryCertificationContractTests(unittest.TestCase):
         self.assertEqual(
             COMPOSE.count(
                 "STAGING_INITIAL_ACTIVATION_ENABLED: "
-                "${CERT_ACTIVATION_ENABLED:-0}"
+                "${CERT_INITIAL_ACTIVATION_ENABLED:-0}"
             ),
             2,
         )
@@ -41,10 +41,23 @@ class RecoveryCertificationContractTests(unittest.TestCase):
             self.assertIn(f': "${{{name}:?', RUNNER)
         self.assertIn('export CERT_ACTIVATION_ENABLED=1', RUNNER)
         self.assertIn('export CERT_ACTIVATION_ENABLED=0', RUNNER)
+        self.assertIn('export CERT_INITIAL_ACTIVATION_ENABLED=1', RUNNER)
+        self.assertIn('export CERT_INITIAL_ACTIVATION_ENABLED=0', RUNNER)
         self.assertIn(
             '[ "$ACTION" = "activate" ] || [ "$ACTION" = "evidence" ]',
             RUNNER,
         )
+
+    def test_evidence_requires_runtime_and_control_projection_identity(self):
+        for assertion in (
+            'ready.get("runtime_generation_id") != sys.argv[3]',
+            'intent.state == ActivationIntent.State.COMMITTED',
+            'result.get("status") == "committed"',
+            "generation.runtime_state == ArtifactGeneration.RuntimeState.ACTIVE",
+            'observation.status == "committed"',
+            'assert not p["previous"].exists()',
+        ):
+            self.assertIn(assertion, RUNNER)
 
     def test_shared_sqlite_roles_start_serially(self):
         redis = '"${COMPOSE[@]}" up -d --wait redis'
