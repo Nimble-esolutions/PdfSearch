@@ -908,10 +908,6 @@ class SnapshotServiceTests(ActiveSyncTestCase):
             snapshot_service.snapshot_configuration_fingerprint()
         )
         self.assertEqual(
-            evidence["configuration_fingerprint"],
-            expected_fingerprint,
-        )
-        self.assertEqual(
             json.loads(
                 (workspace / "snapshot-configuration.json").read_text()
             ),

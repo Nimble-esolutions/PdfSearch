@@ -1544,7 +1544,6 @@ def create_consistent_snapshot(
             "faiss_reconciliation": faiss_reconciliation,
             "files": canonical_files,
             "inventory": inventory,
-            "configuration_fingerprint": configuration_fingerprint,
             "duration_seconds": round(time.monotonic() - started, 3),
         }
         evidence_path = incomplete / "snapshot-evidence.json"
