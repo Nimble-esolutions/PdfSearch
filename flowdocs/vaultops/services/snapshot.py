@@ -11,6 +11,10 @@ from django.conf import settings
 from django.utils import timezone
 
 from core.management.commands.inventory_artifacts import build_manifest
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
 from vaultops.models import SourceSnapshot, VaultJobStep
 from vaultops.services.mutations import (
     ConsistentSnapshotUnproven,
@@ -227,10 +231,46 @@ def _validate_faiss_coherence(database_path, faiss_root):
         raise SnapshotError("snapshot_faiss_validation_unavailable") from exc
     connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
     try:
+        columns = {
+            row[1]
+            for row in connection.execute('PRAGMA table_info("core_pdffile")')
+        }
+        lifecycle_clause = (
+            "AND lifecycle IN ('uploaded', 'processing', 'ready') "
+            if "lifecycle" in columns
+            else ""
+        )
         rows = connection.execute(
             "SELECT folder_id, page_chunks, chunk_embeddings "
-            "FROM core_pdffile WHERE folder_id IS NOT NULL ORDER BY id"
+            "FROM core_pdffile "
+            "WHERE folder_id IS NOT NULL "
+            f"{lifecycle_clause}ORDER BY id"
         ).fetchall()
+        unavailable_attestation = (
+            build_unavailable_attestation(
+                (
+                {
+                    "id": row[0],
+                    "lifecycle": row[1],
+                    "storage_key_status": storage_key_evidence(row[2])["status"],
+                    "storage_key_token_sha256": storage_key_evidence(row[2])[
+                        "token_sha256"
+                    ],
+                    "expected_sha256": row[3],
+                    "expected_size": row[4],
+                    "prior_lifecycle": row[5],
+                }
+                for row in connection.execute(
+                    "SELECT id, lifecycle, file, media_expected_sha256, "
+                    "media_expected_size, media_prior_lifecycle "
+                    "FROM core_pdffile "
+                    "WHERE lifecycle = 'unavailable' ORDER BY id"
+                )
+                )
+            )
+            if "lifecycle" in columns
+            else build_unavailable_attestation(())
+        )
     except sqlite3.Error as exc:
         raise SnapshotError("snapshot_faiss_metadata_unavailable") from exc
     finally:
@@ -284,6 +324,7 @@ def _validate_faiss_coherence(database_path, faiss_root):
             "dimensions": dimensions[folder_id],
             "sha256": _sha256_file(path),
         }
+    evidence["unavailable_documents"] = unavailable_attestation
     return evidence
 
 

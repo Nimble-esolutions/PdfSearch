@@ -12,6 +12,7 @@ from vaultops.services.runtime_verification import (
 )
 from vaultops.runtime_verification_contract import (
     write_runtime_verification_failure,
+    write_runtime_verification_success,
 )
 
 
@@ -54,4 +55,12 @@ class Command(BaseCommand):
                     "Activation runtime verified: "
                     f"{evidence['generation_id']}"
                 )
+            )
+        success_path = os.environ.get(
+            "ACTIVATION_VERIFICATION_SUCCESS_PATH", ""
+        )
+        if success_path:
+            write_runtime_verification_success(
+                success_path,
+                evidence["unavailable_documents"],
             )

@@ -44,8 +44,19 @@ def seed_pdf_media_report(database_path: str | Path, media_root: str | Path) -> 
         ).fetchone()
         if not table:
             return {"pdf_rows": 0, "missing_media": []}
-        rows = connection.execute('SELECT id, file FROM "core_pdffile" ORDER BY id').fetchall()
-        for pdf_id, stored_path in rows:
+        columns = {
+            row[1]
+            for row in connection.execute('PRAGMA table_info("core_pdffile")')
+        }
+        lifecycle_column = (
+            ", lifecycle" if "lifecycle" in columns else ", NULL AS lifecycle"
+        )
+        rows = connection.execute(
+            f'SELECT id, file{lifecycle_column} FROM "core_pdffile" ORDER BY id'
+        ).fetchall()
+        for pdf_id, stored_path, lifecycle in rows:
+            if lifecycle == "unavailable":
+                continue
             resolved = _safe_media_path(media, stored_path)
             if resolved is None or not resolved.is_file():
                 missing.append({"db_id": pdf_id, "path": stored_path})

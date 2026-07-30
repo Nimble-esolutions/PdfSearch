@@ -47,7 +47,9 @@ from vaultops.runtime_control import (
 )
 from vaultops.runtime_verification_contract import (
     write_runtime_verification_failure,
+    write_runtime_verification_success,
 )
+from core.media_quarantine import build_unavailable_attestation
 from vaultops.services.activation import (
     ActivationCoordinatorError,
     prepare_previous_runtime_rollback,
@@ -1231,11 +1233,22 @@ class SupervisorProtocolTests(SimpleTestCase):
         )
 
     def _supervisor(self, role, run_command=None, maintenance=None):
+        def successful_command(*_args, **kwargs):
+            success_path = kwargs.get("env", {}).get(
+                "ACTIVATION_VERIFICATION_SUCCESS_PATH"
+            )
+            if success_path:
+                write_runtime_verification_success(
+                    success_path,
+                    build_unavailable_attestation(()),
+                )
+            return SimpleNamespace(returncode=0)
+
         supervisor = RuntimeSupervisor(
             role,
             environment=self.environment,
             run_command=run_command
-            or (lambda *args, **kwargs: SimpleNamespace(returncode=0)),
+            or successful_command,
             urlopen=self._urlopen,
             sleep=(
                 (lambda seconds: maintenance.maintenance_tick())
@@ -1639,13 +1652,21 @@ class SupervisorProtocolTests(SimpleTestCase):
         maintenance = self._quiesce()
         reconciliation_calls = {"count": 0}
 
-        def run_command(command, **_kwargs):
+        def run_command(command, **kwargs):
             if "reconcile_activation_result" in command:
                 reconciliation_calls["count"] += 1
                 return SimpleNamespace(
                     returncode=1
                     if reconciliation_calls["count"] == 1
                     else 0
+                )
+            success_path = kwargs["env"].get(
+                "ACTIVATION_VERIFICATION_SUCCESS_PATH"
+            )
+            if success_path:
+                write_runtime_verification_success(
+                    success_path,
+                    build_unavailable_attestation(()),
                 )
             return SimpleNamespace(returncode=0)
 

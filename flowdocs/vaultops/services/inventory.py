@@ -8,6 +8,10 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    validate_unavailable_attestation,
+)
 from core.artifact_vault import object_metadata_value
 from core.namespace import KeyBuilder
 from vaultops.models import (
@@ -178,6 +182,17 @@ def _validate_manifest(manifest, profile, generation_id, manifest_digest):
         )
     ):
         raise InventoryError("generation_manifest_identity_mismatch")
+    try:
+        manifest["unavailable_documents"] = validate_unavailable_attestation(
+            manifest.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
+        )
+    except ValueError as exc:
+        raise InventoryError(
+            "generation_manifest_unavailable_attestation_invalid"
+        ) from exc
     files = manifest.get("files")
     if not isinstance(files, list) or not files:
         raise InventoryError("generation_manifest_files_missing")
@@ -362,7 +377,14 @@ def project_verified_generation(profile, verified):
     return projection, generation
 
 
-def list_generation_ids(vault, profile, *, max_pages=100):
+def list_generation_ids(
+    vault,
+    profile,
+    *,
+    max_pages=100,
+    max_items=None,
+    include_status=False,
+):
     """Paginate dataset-scoped manifest keys without synchronous HEAD calls."""
     prefix = f"{KeyBuilder(profile.dataset_id).prefix()}/generations/"
     ids = []
@@ -380,8 +402,19 @@ def list_generation_ids(vault, profile, *, max_pages=100):
             generation_id = keysafe_generation_id(profile, key)
             if generation_id:
                 ids.append(generation_id)
+        unique_ids = sorted(set(ids), reverse=True)
+        if max_items is not None and (
+            len(unique_ids) > max_items
+            or (len(unique_ids) >= max_items and response.get("IsTruncated"))
+        ):
+            bounded = unique_ids[:max_items]
+            if include_status:
+                return bounded, False
+            raise InventoryError("generation_listing_item_limit")
         if not response.get("IsTruncated"):
-            return sorted(set(ids), reverse=True)
+            if include_status:
+                return unique_ids, True
+            return unique_ids
         token = response.get("NextContinuationToken")
         if not token:
             raise InventoryError("generation_listing_cursor_missing")

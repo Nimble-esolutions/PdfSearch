@@ -28,6 +28,7 @@ from .models import (
     MaintenanceJob,
     MaintenancePlan,
     PDFFile,
+    SEARCHABLE_PDF_LIFECYCLES,
 )
 from .worker_readiness import maintenance_worker_capability
 
@@ -228,7 +229,7 @@ def normalize_selection(data) -> dict:
 
 
 def _selection_query(selection: dict):
-    query = PDFFile.objects.all()
+    query = PDFFile.objects.filter(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
     folder_ids = selection["folder_ids"]
     pdf_ids = selection["pdf_ids"]
     if folder_ids and pdf_ids:

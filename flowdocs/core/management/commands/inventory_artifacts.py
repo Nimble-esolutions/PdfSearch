@@ -368,9 +368,9 @@ def build_manifest(
         }
     )
     missing_rows = sum(not item["exists"] for item in pdf_rows)
-    quarantined_missing_rows = sum(
+    unavailable_missing_rows = sum(
         not item["exists"]
-        and item["metadata"].get("lifecycle") in {"archived", "deprecated"}
+        and item["metadata"].get("lifecycle") == "unavailable"
         for item in pdf_rows
     )
     manifest = {
@@ -417,7 +417,7 @@ def build_manifest(
             "pdf_rows": len(pdf_rows),
             "pdf_rows_with_existing_files": len(pdf_rows) - missing_rows,
             "pdf_rows_missing_files": missing_rows,
-            "pdf_rows_quarantined_missing_files": quarantined_missing_rows,
+            "pdf_rows_unavailable_missing_files": unavailable_missing_rows,
             "pdf_storage_files": len(pdf_files),
             "faiss_files": len(faiss_files),
             "chroma_files": len(chroma_inventory["files"]),

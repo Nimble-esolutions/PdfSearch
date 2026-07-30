@@ -24,6 +24,15 @@ async function switchLanguage(page: Page, language: 'en' | 'mr') {
   await expect(page.locator('html')).toHaveAttribute('lang', language);
 }
 
+async function expectNoSeriousAxeViolations(page: Page) {
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(
+    results.violations.filter(
+      violation => violation.impact === 'critical' || violation.impact === 'serious',
+    ),
+  ).toEqual([]);
+}
+
 test.describe('Operations Cockpit', () => {
   test('prioritizes work and separates local maintenance from Vault authority', async ({ page }) => {
     await login(page);
@@ -59,21 +68,74 @@ test.describe('Operations Cockpit', () => {
     }));
     expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
 
-    const results = await new AxeBuilder({ page }).analyze();
-    expect(
-      results.violations.filter(
-        violation => violation.impact === 'critical' || violation.impact === 'serious',
-      ),
-    ).toEqual([]);
+    await expectNoSeriousAxeViolations(page);
+
+    await page.goto('/dashboard/?readiness=unavailable');
+    await page.getByRole('link', { name: /Codex Smoke Category Renamed/ }).first().click();
+    await expect(page.getByText('Document file is unavailable')).toBeVisible();
+    const editKeywords = page.getByRole('button', { name: 'Edit Keywords' });
+    await editKeywords.hover();
+    await expectNoSeriousAxeViolations(page);
+    await editKeywords.focus();
+    await expectNoSeriousAxeViolations(page);
+    await expect(page.getByText('document_media_unavailable')).toBeHidden();
+    const technical = page.getByText('Technical details').first();
+    await technical.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('document_media_unavailable')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('document_media_unavailable')).toBeHidden();
+
+    const bindRecovery = page.getByText('Bind recovery evidence').first();
+    await bindRecovery.click();
+    const bindingForm = page.locator('form[action$="/recovery-evidence/"]');
+    await bindingForm.evaluate((form: HTMLFormElement) => {
+      form.noValidate = true;
+    });
+    await bindingForm.locator('input[name="expected_sha256"]').fill('not-a-digest');
+    await bindingForm.locator('input[name="expected_size"]').fill('19');
+    await bindingForm.locator('input[name="case_reference"]').fill('SAFE-RECOVERY');
+    await bindingForm.locator('input[name="confirmation"]').fill('BIND RECOVERY EVIDENCE');
+    await Promise.all([
+      page.waitForURL('**/dashboard/folder/**'),
+      bindingForm.locator('button[type="submit"]').click(),
+    ]);
+    await expect(page.getByText('Review the highlighted fields.').last()).toBeVisible();
+    await expect(page.locator('a[href^="#expected_sha256_"]').last()).toBeVisible();
+    await expect(page.locator('a[href^="#binding_reason_"]').last()).toBeVisible();
+    const bindingAfterRedirect = page.locator('form[action$="/recovery-evidence/"]');
+    await expect(bindingAfterRedirect.locator('input[name="case_reference"]')).toHaveValue(
+      'SAFE-RECOVERY',
+    );
+    await expect(bindingAfterRedirect.locator('input[name="expected_sha256"]')).toBeFocused();
+    await expect(page.getByText('Restore is unavailable until approved').first()).toBeVisible();
+
+    const quarantine = page.getByText('Mark unavailable').first();
+    await quarantine.hover();
+    await expectNoSeriousAxeViolations(page);
+    await quarantine.focus();
+    await expectNoSeriousAxeViolations(page);
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel(/Expected digest/).first()).toBeVisible();
+    await expectNoSeriousAxeViolations(page);
+    await expect(page.locator('input[name="confirmation"]').first()).toHaveAttribute('lang', 'en');
+    await expect(page.locator('input[name="confirmation"]').first()).toHaveAttribute('dir', 'ltr');
+
+    await page.setViewportSize({ width: 320, height: 720 });
+    const quarantineDimensions = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(quarantineDimensions.scroll).toBeLessThanOrEqual(quarantineDimensions.client + 1);
+    await expectNoSeriousAxeViolations(page);
+
     await switchLanguage(page, 'mr');
     await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
+    await expect(page.getByText('दस्तऐवज संचिका उपलब्ध नाही')).toBeVisible();
+    await expect(page.getByText('अपेक्षित संचिका आकार (बाइटमध्ये)').first()).toHaveCount(1);
     await expectNoVisibleMachineTokens(page);
 
-    const marathiResults = await new AxeBuilder({ page }).analyze();
-    expect(
-      marathiResults.violations.filter(
-        violation => violation.impact === 'critical' || violation.impact === 'serious',
-      ),
-    ).toEqual([]);
+    await expectNoSeriousAxeViolations(page);
   });
+
 });
