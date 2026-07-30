@@ -815,7 +815,7 @@ msgstr "APP_ENV"
 
 #: core/templates/dashboard_operations.html:23
 msgid "Dataset"
-msgstr "डेटासेट"
+msgstr "माहिती संच"
 
 #: core/templates/dashboard_operations.html:26
 msgid "Authoritative"
@@ -1864,7 +1864,7 @@ msgstr "पुष्टीकरण वाक्यांश"
 
 #: core/templates/vaultops/workbench.html:252
 msgid "Credentials"
-msgstr "क्रेडेन्शियल्स"
+msgstr "प्रवेश-ओळखी"
 
 #: core/templates/vaultops/workbench.html:35
 msgid "Critical job"
@@ -4037,3 +4037,143 @@ msgstr "कार्यपीठाचा पुरावा बदलला आ
 
 msgid "Worker unavailable"
 msgstr "कार्यकर्ता उपलब्ध नाही"
+
+# Authored Vault profile and integrity guidance. Keep machine identifiers in
+# technical evidence; these strings are the operator-facing Marathi contract.
+msgid "Profile key"
+msgstr "संयोजना कळ"
+
+msgid "Display name"
+msgstr "दर्शनी नाव"
+
+msgid "S3 endpoint origin"
+msgstr "S3 अंतिमबिंदूचा मूळ पत्ता"
+
+msgid "Bucket"
+msgstr "साठवण कप्पा"
+
+msgid "Region"
+msgstr "प्रदेश"
+
+msgid "Production source identity"
+msgstr "उत्पादन स्रोताची ओळख"
+
+msgid "Approved credential alias"
+msgstr "मान्यताप्राप्त प्रवेश-ओळख उपनाव"
+
+msgid "This field is required."
+msgstr "हे क्षेत्र आवश्यक आहे."
+
+msgid "Use letters, numbers, dots, underscores, or hyphens."
+msgstr "अक्षरे, अंक, पूर्णविराम, अधोरेषा किंवा जोडचिन्हे वापरा."
+
+msgid "Loaded automatically from this deployment. Connection secrets remain on the server."
+msgstr "या तैनातीमधून आपोआप लोड केले आहे. जोडणीची गुपिते सर्व्हरवरच राहतात."
+
+msgid "Required fields are marked by the browser. If saving fails, the fields that need attention remain highlighted."
+msgstr "आवश्यक क्षेत्रे ब्राउझरमध्ये चिन्हांकित आहेत. जतन अयशस्वी झाल्यास दुरुस्ती आवश्यक असलेली क्षेत्रे ठळक राहतात."
+
+msgid "Deployed Vault configuration needs attention"
+msgstr "तैनात केलेल्या व्हॉल्ट संयोजनेची तपासणी आवश्यक आहे"
+
+msgid "The server could not construct a complete Vault profile from its environment."
+msgstr "सर्व्हरला त्याच्या पर्यावरणातून संपूर्ण व्हॉल्ट संयोजना तयार करता आली नाही."
+
+msgid "Remote probe, inventory, and restore controls remain unavailable."
+msgstr "दूरस्थ तपासणी, सूची आणि पुनर्स्थापना नियंत्रणे अनुपलब्ध राहतील."
+
+msgid "Review deployed Vault settings"
+msgstr "तैनात केलेल्या व्हॉल्ट मांडणीचे पुनरावलोकन करा"
+
+msgid "Vault registration evidence does not match"
+msgstr "व्हॉल्ट नोंदणीचा पुरावा जुळत नाही"
+
+msgid "The stored registration checksum is missing or does not match its content."
+msgstr "साठवलेली नोंदणी पडताळणी-बेरीज उपलब्ध नाही किंवा ती मजकुराशी जुळत नाही."
+
+msgid "The published dataset identity cannot be trusted yet."
+msgstr "प्रकाशित माहिती संचाच्या ओळखीवर अद्याप विश्वास ठेवता येत नाही."
+
+msgid "Republish the dataset registration"
+msgstr "माहिती संचाची नोंदणी पुन्हा प्रकाशित करा"
+
+msgid "Vault registration belongs to a different source"
+msgstr "व्हॉल्ट नोंदणी वेगळ्या स्रोताची आहे"
+
+msgid "The registration does not match this profile's dataset or production source identity."
+msgstr "नोंदणी या संयोजनेच्या माहिती संचाशी किंवा उत्पादन स्रोताच्या ओळखीशी जुळत नाही."
+
+msgid "Authoritative inventory verification remains blocked."
+msgstr "अधिकृत सूचीची पडताळणी अवरोधित राहील."
+
+msgid "Review dataset and source identity"
+msgstr "माहिती संच आणि स्रोत ओळखीचे पुनरावलोकन करा"
+
+msgid "Vault registration format is unsupported"
+msgstr "व्हॉल्ट नोंदणीचे स्वरूप समर्थित नाही"
+
+msgid "The registration declares a manifest format range this release cannot verify."
+msgstr "नोंदणीने जाहीर केलेल्या प्रकटन स्वरूपाच्या श्रेणीची या आवृत्तीला पडताळणी करता येत नाही."
+
+msgid "Review release compatibility"
+msgstr "आवृत्ती सुसंगततेचे पुनरावलोकन करा"
+
+msgid "The authoritative Vault pointer is invalid"
+msgstr "अधिकृत व्हॉल्ट निर्देशांक अवैध आहे"
+
+msgid "The current pointer is missing required generation or checksum evidence."
+msgstr "सध्याच्या निर्देशांकात आवश्यक निर्मिती संच किंवा पडताळणी-बेरीज पुरावा उपलब्ध नाही."
+
+msgid "No generation can be treated as authoritative."
+msgstr "कोणताही निर्मिती संच अधिकृत मानता येणार नाही."
+
+msgid "Review the published pointer"
+msgstr "प्रकाशित निर्देशांकाचे पुनरावलोकन करा"
+
+msgid "The authoritative pointer targets another dataset"
+msgstr "अधिकृत निर्देशांक दुसऱ्या माहिती संचाकडे निर्देश करतो"
+
+msgid "The pointer's manifest location does not match this approved dataset."
+msgstr "निर्देशांकातील प्रकटनाचे स्थान या मान्यताप्राप्त माहिती संचाशी जुळत नाही."
+
+msgid "Restore and authority decisions remain blocked."
+msgstr "पुनर्स्थापना आणि अधिकृततेचे निर्णय अवरोधित राहतील."
+
+msgid "Review dataset publication"
+msgstr "माहिती संच प्रकाशनाचे पुनरावलोकन करा"
+
+msgid "The authoritative manifest checksum does not match"
+msgstr "अधिकृत प्रकटनाची पडताळणी-बेरीज जुळत नाही"
+
+msgid "The pointer and stored generation manifest disagree about content identity."
+msgstr "निर्देशांक आणि साठवलेले निर्मिती संच प्रकटन आशयाच्या ओळखीबाबत जुळत नाहीत."
+
+msgid "The generation cannot be verified or restored."
+msgstr "निर्मिती संचाची पडताळणी किंवा पुनर्स्थापना करता येणार नाही."
+
+msgid "Republish the generation manifest"
+msgstr "निर्मिती संच प्रकटन पुन्हा प्रकाशित करा"
+
+msgid "The published generation identity does not match"
+msgstr "प्रकाशित निर्मिती संचाची ओळख जुळत नाही"
+
+msgid "The manifest does not match the selected generation, dataset, or production source."
+msgstr "प्रकटन निवडलेल्या निर्मिती संचाशी, माहिती संचाशी किंवा उत्पादन स्रोताशी जुळत नाही."
+
+msgid "The generation cannot become authoritative."
+msgstr "निर्मिती संच अधिकृत होऊ शकत नाही."
+
+msgid "Review generation publication"
+msgstr "निर्मिती संच प्रकाशनाचे पुनरावलोकन करा"
+
+msgid "A published generation object failed checksum verification"
+msgstr "प्रकाशित निर्मिती संच घटकाची पडताळणी-बेरीज तपासणी अयशस्वी झाली"
+
+msgid "At least one stored object does not match the checksum declared by the manifest."
+msgstr "किमान एक साठवलेला घटक प्रकटनाने जाहीर केलेल्या पडताळणी-बेरीजेशी जुळत नाही."
+
+msgid "The generation cannot be trusted or restored."
+msgstr "निर्मिती संचावर विश्वास ठेवता किंवा तो पुनर्स्थापित करता येणार नाही."
+
+msgid "Review generation integrity"
+msgstr "निर्मिती संचाच्या अखंडतेचे पुनरावलोकन करा"

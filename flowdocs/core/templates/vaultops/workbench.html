@@ -683,6 +683,9 @@
             <div><dt>{% trans "Credentials" %}</dt><dd>{{ profile.credential_alias }}</dd></div>
             <div><dt>{% trans "Locked" %}</dt><dd>{{ profile.environment_locked|yesno:_("Yes,No") }}</dd></div>
           </dl>
+          {% if profile.environment_locked %}
+          <p class="vault-note">{% trans "Loaded automatically from this deployment. Connection secrets remain on the server." %}</p>
+          {% endif %}
           <form method="post" action="{% url 'vaultops:profile_probe' profile.key %}">
             {% csrf_token %}
             <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:probe:{{ forloop.counter }}">
@@ -704,6 +707,7 @@
       <form method="post" action="{% url 'vaultops:profile_configure' %}" class="vault-form">
         {% csrf_token %}
         <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:configure">
+        <p class="vault-field-help">{% trans "Required fields are marked by the browser. If saving fails, the fields that need attention remain highlighted." %}</p>
         <label>{% trans "Profile key" %}<input name="key" value="{{ profile_form.values.key }}" required{% if profile_form.errors.key %} aria-invalid="true" aria-describedby="profile-key-error"{% endif %}>{% if profile_form.errors.key %}<span id="profile-key-error" class="vault-field-error">{{ profile_form.errors.key }}</span>{% endif %}</label>
         <label>{% trans "Display name" %}<input name="display_name" value="{{ profile_form.values.display_name }}" required{% if profile_form.errors.display_name %} aria-invalid="true" aria-describedby="profile-name-error"{% endif %}>{% if profile_form.errors.display_name %}<span id="profile-name-error" class="vault-field-error">{{ profile_form.errors.display_name }}</span>{% endif %}</label>
         <label>{% trans "S3 endpoint origin" %}<input name="endpoint_origin" type="url" value="{{ profile_form.values.endpoint_origin }}" required{% if profile_form.errors.endpoint_origin %} aria-invalid="true" aria-describedby="profile-endpoint-error"{% endif %}>{% if profile_form.errors.endpoint_origin %}<span id="profile-endpoint-error" class="vault-field-error">{{ profile_form.errors.endpoint_origin }}</span>{% endif %}</label>

@@ -13,6 +13,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone, translation
 
+from core.artifact_vault import ArtifactVaultConfigurationError
 from core.lease import acquire_lease, release_lease
 from core.models import ArtifactGeneration as LegacyGeneration
 from core.models import CustomUser, Folder, MaintenanceAuditEvent, MaintenanceJob
@@ -22,6 +23,7 @@ from core.maintenance_plans import (
     _serialize_local_job_payload,
     create_plan,
 )
+from core.operator_presentation import present_reason
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -710,6 +712,47 @@ class VaultWorkbenchTests(TestCase):
         self.assertContains(rendered, 'name="key" value="" required aria-invalid="true"', html=False)
         self.assertContains(rendered, "This field is required.")
         self.assertContains(rendered, "Vault profile fields need attention")
+        self.assertContains(
+            rendered,
+            "One or more required profile values are missing or invalid.",
+        )
+
+    @patch(
+        "vaultops.services.profiles.ensure_environment_profile",
+        side_effect=ArtifactVaultConfigurationError("incomplete"),
+    )
+    def test_invalid_deployed_profile_renders_bounded_guidance(
+        self, ensure_profile
+    ):
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "configuration"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "Deployed Vault configuration needs attention"
+        )
+        self.assertContains(
+            response,
+            "The server could not construct a complete Vault profile from its environment.",
+        )
+        self.assertContains(
+            response, "vault_environment_configuration_invalid"
+        )
+        ensure_profile.assert_called_once()
+
+    def test_registration_integrity_failure_has_authored_guidance(self):
+        presentation = present_reason("registration_digest_mismatch")
+
+        self.assertTrue(presentation["known"])
+        self.assertEqual(
+            presentation["title"],
+            "Vault registration evidence does not match",
+        )
+        self.assertEqual(
+            presentation["action_label"],
+            "Republish the dataset registration",
+        )
 
     @override_settings(
         VAULT_DEFAULT_PROFILE="environment-ready",
@@ -834,6 +877,29 @@ class VaultWorkbenchTests(TestCase):
         )
         self.assertContains(retention, "निर्मिती संचाची निवृत्ती")
         self.assertContains(retention, "कचरा संकलन योजना")
+
+    @override_settings(VAULT_UI_PROFILE_CONFIGURATION_ENABLED=True)
+    def test_marathi_profile_form_uses_literal_labels_and_errors(self):
+        original_language = translation.get_language()
+        self.addCleanup(translation.activate, original_language)
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
+        response = self.client.post(
+            reverse("vaultops:profile_configure"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "key": "",
+                "display_name": "",
+            },
+        )
+        self.assertEqual(response.status_code, 303)
+
+        rendered = self.client.get(
+            reverse("operations_panel"), {"section": "configuration"}
+        )
+        self.assertContains(rendered, "संयोजना कळ")
+        self.assertContains(rendered, "माहिती संच")
+        self.assertContains(rendered, "प्रवेश-ओळखी")
+        self.assertContains(rendered, "हे क्षेत्र आवश्यक आहे.")
 
     def test_state_api_is_redacted_and_uses_contract_envelope(self):
         lease = acquire_lease(
