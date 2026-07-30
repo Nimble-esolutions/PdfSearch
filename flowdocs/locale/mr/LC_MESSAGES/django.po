@@ -4445,3 +4445,60 @@ msgstr "ही नोंद जतन करून शोधातून वग�
 
 msgid "Document recovery evidence bound"
 msgstr "दस्तऐवज पुनर्प्राप्तीचा पुरावा जोडला"
+# Snapshot-only FAISS reconciliation operator guidance.
+msgid "Stored search evidence is incomplete"
+msgstr "साठवलेला शोध पुरावा अपूर्ण आहे"
+
+msgid "One or more searchable documents do not contain complete, valid stored embeddings."
+msgstr "शोधता येणाऱ्या एक किंवा अधिक दस्तऐवजांमध्ये पूर्ण आणि वैध साठवलेली एम्बेडिंग्ज नाहीत."
+
+msgid "The candidate snapshot was not published."
+msgstr "उमेदवार स्नॅपशॉट प्रकाशित झाला नाही."
+
+msgid "Review document index readiness"
+msgstr "दस्तऐवज अनुक्रमणिका तयारी तपासा"
+
+msgid "Candidate search index could not be prepared"
+msgstr "उमेदवार शोध अनुक्रमणिका तयार करता आली नाही"
+
+msgid "The isolated snapshot could not derive and verify its search index."
+msgstr "विलग स्नॅपशॉटला त्याची शोध अनुक्रमणिका तयार करून पडताळता आली नाही."
+
+msgid "The live source remains unchanged and no candidate was published."
+msgstr "कार्यरत स्रोत बदललेला नाही आणि कोणताही उमेदवार प्रकाशित झालेला नाही."
+
+msgid "Review the failed sync job"
+msgstr "अयशस्वी समक्रमण काम तपासा"
+
+msgid "Snapshot search index exceeds safe limits"
+msgstr "स्नॅपशॉट शोध अनुक्रमणिका सुरक्षित मर्यादेपेक्षा मोठी आहे"
+
+msgid "The stored embeddings exceed the configured candidate rebuild bound."
+msgstr "साठवलेली एम्बेडिंग्ज निश्चित केलेल्या उमेदवार पुनर्बांधणी मर्यादेपेक्षा जास्त आहेत."
+
+msgid "The candidate snapshot was stopped before publication."
+msgstr "उमेदवार स्नॅपशॉट प्रकाशनापूर्वी थांबवण्यात आला."
+
+msgid "Review snapshot safety limits"
+msgstr "स्नॅपशॉट सुरक्षितता मर्यादा तपासा"
+
+msgid "Snapshot search evidence does not match"
+msgstr "स्नॅपशॉट शोध पुरावा जुळत नाही"
+
+msgid "The candidate index evidence does not match the verified snapshot inventory."
+msgstr "उमेदवार अनुक्रमणिका पुरावा पडताळलेल्या स्नॅपशॉट सूचीशी जुळत नाही."
+
+msgid "Publication remains blocked."
+msgstr "प्रकाशन अवरोधित राहील."
+
+msgid "Review snapshot evidence"
+msgstr "स्नॅपशॉट पुरावा तपासा"
+
+msgid "Unavailable-document evidence needs review"
+msgstr "अनुपलब्ध दस्तऐवजांचा पुरावा तपासणे आवश्यक आहे"
+
+msgid "The activation candidate's unavailable-document evidence is invalid or changed during verification."
+msgstr "सक्रियकरण उमेदवाराचा अनुपलब्ध दस्तऐवज पुरावा अवैध आहे किंवा पडताळणीदरम्यान बदलला आहे."
+
+msgid "Runtime activation remains blocked."
+msgstr "कार्यरत आवृत्तीचे सक्रियकरण अवरोधित राहील."

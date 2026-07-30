@@ -747,6 +747,82 @@ for _code in {
         ),
     )
 
+for _code in {
+    "snapshot_searchable_embeddings_invalid",
+    "snapshot_embedding_dimensions_inconsistent",
+}:
+    REASONS.setdefault(
+        _code,
+        _authored(
+            "Stored search evidence is incomplete",
+            "One or more searchable documents do not contain complete, valid stored embeddings.",
+            "The candidate snapshot was not published.",
+            "Review document index readiness",
+            "maintenance",
+            "danger",
+        ),
+    )
+
+for _code in {
+    "snapshot_faiss_rebuild_failed",
+    "snapshot_faiss_rebuild_verification_failed",
+}:
+    REASONS.setdefault(
+        _code,
+        _authored(
+            "Candidate search index could not be prepared",
+            "The isolated snapshot could not derive and verify its search index.",
+            "The live source remains unchanged and no candidate was published.",
+            "Review the failed sync job",
+            "jobs",
+            "danger",
+        ),
+    )
+
+REASONS.setdefault(
+    "snapshot_faiss_rebuild_vector_limit_exceeded",
+    _authored(
+        "Snapshot search index exceeds safe limits",
+        "The stored embeddings exceed the configured candidate rebuild bound.",
+        "The candidate snapshot was stopped before publication.",
+        "Review snapshot safety limits",
+        "configuration",
+        "danger",
+    ),
+)
+REASONS.setdefault(
+    "snapshot_faiss_rebuild_byte_limit_exceeded",
+    REASONS["snapshot_faiss_rebuild_vector_limit_exceeded"],
+)
+
+REASONS.setdefault(
+    "snapshot_faiss_reconciliation_invalid",
+    _authored(
+        "Snapshot search evidence does not match",
+        "The candidate index evidence does not match the verified snapshot inventory.",
+        "Publication remains blocked.",
+        "Review snapshot evidence",
+        "jobs",
+        "danger",
+    ),
+)
+
+for _code in {
+    "activation_unavailable_attestation_changed",
+    "activation_unavailable_attestation_invalid",
+}:
+    REASONS.setdefault(
+        _code,
+        _authored(
+            "Unavailable-document evidence needs review",
+            "The activation candidate's unavailable-document evidence is invalid or changed during verification.",
+            "Runtime activation remains blocked.",
+            "Review activation evidence",
+            "activation",
+            "danger",
+        ),
+    )
+
 
 # Stable reasons emitted directly by Dashboard, maintenance, and Workbench UI
 # producers. Keep this inventory explicit: adding a producer reason must add
