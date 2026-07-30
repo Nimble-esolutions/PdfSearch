@@ -99,8 +99,8 @@ test.describe('Operations Cockpit', () => {
 
     await switchLanguage(page, 'mr');
     await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
-    await expect(page.getByText('दस्तऐवज फाइल उपलब्ध नाही')).toBeVisible();
-    await expect(page.getByText('अपेक्षित फाइल आकार (बाइटमध्ये)').first()).toHaveCount(1);
+    await expect(page.getByText('दस्तऐवज संचिका उपलब्ध नाही')).toBeVisible();
+    await expect(page.getByText('अपेक्षित संचिका आकार (बाइटमध्ये)').first()).toHaveCount(1);
     await expectNoVisibleMachineTokens(page);
 
     const marathiResults = await new AxeBuilder({ page }).analyze();
