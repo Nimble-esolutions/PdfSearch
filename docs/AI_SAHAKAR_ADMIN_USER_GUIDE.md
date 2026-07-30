@@ -155,3 +155,17 @@ AI imagery described in the historical SRS.
 See the [operator workflow diagram](diagrams/admin-operator-workflow.mmd) and
 the [active UI contract](design/AI_SAHAKAR_UI_CONTRACT.md) for the protected
 visual and interaction rules.
+## When a document file is unavailable
+
+Use **Mark unavailable** only after confirming that the preserved document row
+does not currently have its approved source file. Expand the action, type
+`MARK UNAVAILABLE`, and confirm. The record, identifier, metadata, and
+maintenance history remain preserved, but the document is excluded from search,
+index work, and runtime readiness.
+
+Recover the verified file to its approved storage location before choosing
+**Restore availability**. The application refuses restoration while the file
+is absent. After restoration, validate the document and use the bounded
+Documents & Search reindex workflow. Do not delete the row merely to clear a
+readiness warning, and do not use a similarly named file unless its identity
+and provenance are verified.

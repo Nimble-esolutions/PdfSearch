@@ -185,6 +185,12 @@ semantic accuracy rather than accepting a catalog that only compiles. The
 operator-language CI gate inventories the complete registry and rejects a
 missing, fuzzy, empty, or unchanged-English Marathi entry.
 
+Unavailable document media is an explicit, reversible operator state. The
+interface must preserve the document identity and history, explain exclusion
+from search/index/runtime readiness, require typed confirmation before marking
+the file unavailable, and refuse restoration until configured storage can
+verify the file. It must never infer or apply this state automatically.
+
 Motion is utility only. Shared motion tokens are micro-interactions around
 120–160ms and surface/state transitions around 180–240ms, using opacity and
 transform rather than layout dimensions. `prefers-reduced-motion`, Save-Data,
