@@ -17,9 +17,12 @@ digest, source backup references, recovery-point age, maintenance window, and
 the unique certification run ID. Never put credentials or document contents in
 the evidence directory.
 
-The drill requires an existing Docker network that reaches the approved Vault.
-That network must not provide public ingress. The application is exposed only
-on an unused `127.0.0.1` port; its other network is Docker-internal.
+The drill requires an existing, dedicated Docker bridge network that reaches
+only the approved Vault and the disposable certification services. Do not mark
+this Vault bridge as Docker-internal: an internal-only network prevents Docker
+from publishing the required loopback health port. The network must not provide
+public ingress. The application is exposed only on an unused `127.0.0.1` port;
+its other network remains Docker-internal.
 
 ## Fresh-volume drill
 

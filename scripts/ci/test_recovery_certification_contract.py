@@ -72,6 +72,16 @@ class RecoveryCertificationContractTests(unittest.TestCase):
         )
         self.assertNotIn("app_exec web python - <<'PY'", RUNNER)
 
+    def test_project_and_vault_network_posture_fail_closed(self):
+        self.assertIn(
+            'model.get("name") != sys.argv[1]',
+            RUNNER,
+        )
+        self.assertIn(
+            "Vault network must be dedicated but non-internal",
+            RUNNER,
+        )
+
     def test_cleanup_requires_a_bound_structured_marker(self):
         self.assertIn('marker="$EVIDENCE_DIR/certification-passed.json"', RUNNER)
         self.assertIn('"evidence_sha256": digests', RUNNER)
