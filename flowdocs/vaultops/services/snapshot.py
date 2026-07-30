@@ -7,6 +7,7 @@ import stat
 import time
 from pathlib import Path
 
+import numpy as np
 from django.conf import settings
 from django.utils import timezone
 
@@ -328,6 +329,245 @@ def _validate_faiss_coherence(database_path, faiss_root):
     return evidence
 
 
+def _searchable_embedding_matrices(
+    database_path,
+    *,
+    cancellation_check,
+):
+    """Strictly derive runtime-order matrices from the frozen database."""
+    max_vectors = settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS
+    max_dimensions = settings.VAULT_SNAPSHOT_FAISS_MAX_DIMENSIONS
+    max_bytes = settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES
+    connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
+    try:
+        columns = {
+            row[1]
+            for row in connection.execute('PRAGMA table_info("core_pdffile")')
+        }
+        lifecycle_clause = (
+            "AND lifecycle IN ('uploaded', 'processing', 'ready') "
+            if "lifecycle" in columns
+            else ""
+        )
+        rows = connection.execute(
+            "SELECT id, folder_id, page_chunks, chunk_embeddings "
+            "FROM core_pdffile "
+            "WHERE folder_id IS NOT NULL "
+            f"{lifecycle_clause}"
+            "ORDER BY folder_id, id"
+        )
+        grouped = {}
+        vector_total = 0
+        vector_bytes = 0
+        row_total = 0
+        for pdf_id, folder_id, chunks_raw, embeddings_raw in rows:
+            if cancellation_check():
+                raise SnapshotCancelled("snapshot_cancelled")
+            row_total += 1
+            try:
+                chunks = json.loads(chunks_raw)
+                embeddings = json.loads(embeddings_raw)
+            except (TypeError, ValueError) as exc:
+                raise SnapshotError(
+                    "snapshot_searchable_embeddings_invalid"
+                ) from exc
+            if (
+                not isinstance(chunks, list)
+                or not isinstance(embeddings, list)
+                or not chunks
+                or len(chunks) != len(embeddings)
+            ):
+                raise SnapshotError("snapshot_searchable_embeddings_invalid")
+            folder = grouped.setdefault(
+                int(folder_id),
+                {"vectors": [], "pdf_count": 0, "dimension": None},
+            )
+            folder["pdf_count"] += 1
+            for chunk, embedding in zip(chunks, embeddings):
+                if cancellation_check():
+                    raise SnapshotCancelled("snapshot_cancelled")
+                if (
+                    not isinstance(chunk, str)
+                    or not chunk.strip()
+                    or not isinstance(embedding, list)
+                    or not embedding
+                ):
+                    raise SnapshotError(
+                        "snapshot_searchable_embeddings_invalid"
+                    )
+                try:
+                    vector = np.asarray(embedding, dtype=np.float32)
+                except (TypeError, ValueError) as exc:
+                    raise SnapshotError(
+                        "snapshot_searchable_embeddings_invalid"
+                    ) from exc
+                if (
+                    vector.ndim != 1
+                    or vector.size > max_dimensions
+                    or not np.isfinite(vector).all()
+                ):
+                    raise SnapshotError(
+                        "snapshot_searchable_embeddings_invalid"
+                    )
+                norm = np.linalg.norm(vector)
+                if not norm:
+                    raise SnapshotError(
+                        "snapshot_searchable_embeddings_invalid"
+                    )
+                dimension = int(vector.shape[0])
+                if (
+                    folder["dimension"] is not None
+                    and folder["dimension"] != dimension
+                ):
+                    raise SnapshotError(
+                        "snapshot_embedding_dimensions_inconsistent"
+                    )
+                folder["dimension"] = dimension
+                folder["vectors"].append(vector / norm)
+                vector_total += 1
+                vector_bytes += int(vector.nbytes)
+                if vector_total > max_vectors:
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_vector_limit_exceeded"
+                    )
+                if vector_bytes > max_bytes:
+                    raise SnapshotError(
+                        "snapshot_faiss_rebuild_byte_limit_exceeded"
+                    )
+    except sqlite3.Error as exc:
+        raise SnapshotError("snapshot_faiss_metadata_unavailable") from exc
+    finally:
+        connection.close()
+
+    matrices = {}
+    for folder_id, value in grouped.items():
+        matrices[folder_id] = {
+            "matrix": np.vstack(value["vectors"]).astype(np.float32),
+            "pdf_count": value["pdf_count"],
+            "dimension": value["dimension"],
+        }
+    return matrices, {
+        "pdf_count": row_total,
+        "vector_count": vector_total,
+        "vector_bytes": vector_bytes,
+    }
+
+
+def _reconcile_candidate_faiss(
+    database_path,
+    faiss_root,
+    *,
+    cancellation_check,
+):
+    """Keep coherent indexes and derive stale ones only in the snapshot."""
+    try:
+        import faiss
+    except ImportError as exc:
+        raise SnapshotError("snapshot_faiss_validation_unavailable") from exc
+
+    faiss_root.mkdir(parents=True, exist_ok=True)
+    matrices, totals = _searchable_embedding_matrices(
+        database_path,
+        cancellation_check=cancellation_check,
+    )
+    folders = {}
+    expected_names = {
+        f"folder_{folder_id}.index" for folder_id in matrices
+    }
+    for candidate in sorted(faiss_root.glob("folder_*.index")):
+        if candidate.name not in expected_names:
+            candidate.unlink()
+            folders[candidate.stem.removeprefix("folder_")] = {
+                "disposition": "removed",
+                "vector_count": 0,
+            }
+
+    for folder_id, value in sorted(matrices.items()):
+        if cancellation_check():
+            raise SnapshotCancelled("snapshot_cancelled")
+        path = faiss_root / f"folder_{folder_id}.index"
+        matrix = value["matrix"]
+        previous = {}
+        coherent = False
+        if path.is_file() and not path.is_symlink():
+            previous["sha256"] = _sha256_file(path)
+            try:
+                existing = faiss.read_index(str(path))
+            except Exception:
+                previous["readable"] = False
+            else:
+                previous.update(
+                    {
+                        "readable": True,
+                        "vector_count": int(existing.ntotal),
+                        "dimensions": int(existing.d),
+                    }
+                )
+                coherent = (
+                    int(existing.ntotal) == int(matrix.shape[0])
+                    and int(existing.d) == int(matrix.shape[1])
+                )
+        if coherent:
+            folders[str(folder_id)] = {
+                "disposition": "copied",
+                "pdf_count": value["pdf_count"],
+                "vector_count": int(matrix.shape[0]),
+                "dimensions": int(matrix.shape[1]),
+                "sha256": previous["sha256"],
+            }
+            continue
+
+        index = faiss.IndexFlatIP(int(matrix.shape[1]))
+        index.add(matrix)
+        temporary = path.with_name(
+            f".{path.name}.{secrets.token_hex(6)}.partial"
+        )
+        try:
+            faiss.write_index(index, str(temporary))
+            with temporary.open("rb") as stream:
+                os.fsync(stream.fileno())
+            written = faiss.read_index(str(temporary))
+            if (
+                int(written.ntotal) != int(matrix.shape[0])
+                or int(written.d) != int(matrix.shape[1])
+            ):
+                raise SnapshotError("snapshot_faiss_rebuild_verification_failed")
+            os.replace(temporary, path)
+        except SnapshotError:
+            raise
+        except Exception as exc:
+            raise SnapshotError("snapshot_faiss_rebuild_failed") from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+        folders[str(folder_id)] = {
+            "disposition": "rebuilt",
+            "pdf_count": value["pdf_count"],
+            "vector_count": int(matrix.shape[0]),
+            "dimensions": int(matrix.shape[1]),
+            "sha256": _sha256_file(path),
+            "previous": previous,
+        }
+    return {
+        "schema": 1,
+        "source": "stored_embeddings",
+        **totals,
+        "folders": folders,
+    }
+
+
+def _workspace_tree_records(category, root):
+    records = {}
+    for relative, path in _safe_files(root):
+        key = f"{category}/{relative.as_posix()}"
+        records[key] = {
+            "size_bytes": path.stat().st_size,
+            "sha256": _sha256_file(path),
+            "category": category,
+            "relative_path": relative.as_posix(),
+        }
+    return records
+
+
 def _canonical_digest(records):
     canonical = [
         {
@@ -468,7 +708,25 @@ def create_consistent_snapshot(
             snapshot.initial_epoch,
             source_deployment=source_deployment,
         )
-        _assert_source_trees_stable(roots, records)
+        source_records = dict(records)
+        _assert_source_trees_stable(roots, source_records)
+        faiss_reconciliation = _reconcile_candidate_faiss(
+            incomplete / "db.sqlite3",
+            incomplete / "faiss_indexes",
+            cancellation_check=cancellation_check,
+        )
+        _assert_source_trees_stable(roots, source_records)
+        records = {
+            key: value
+            for key, value in records.items()
+            if value["category"] != "faiss_indexes"
+        }
+        records.update(
+            _workspace_tree_records(
+                "faiss_indexes",
+                incomplete / "faiss_indexes",
+            )
+        )
         snapshot_digest, canonical_files = _canonical_digest(records)
         inventory = build_manifest(
             incomplete,
@@ -492,6 +750,7 @@ def create_consistent_snapshot(
             "index_writers_drained": True,
             "database": database_record,
             "faiss": faiss_evidence,
+            "faiss_reconciliation": faiss_reconciliation,
             "files": canonical_files,
             "inventory": inventory,
             "duration_seconds": round(time.monotonic() - started, 3),
@@ -516,6 +775,7 @@ def create_consistent_snapshot(
             "database_sha256": database_record["sha256"],
             "journal_change_count": len(changes),
             "index_writers_drained": True,
+            "faiss_reconciliation": faiss_reconciliation,
         }
         snapshot.finalized_at = timezone.now()
         snapshot.save(

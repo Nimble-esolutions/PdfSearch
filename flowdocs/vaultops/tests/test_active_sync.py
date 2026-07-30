@@ -811,6 +811,256 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         self.temporary.cleanup()
         super().tearDown()
 
+    def _add_lifecycle_columns(self):
+        connection = sqlite3.connect(self.database)
+        for definition in (
+            "lifecycle TEXT",
+            "media_expected_sha256 TEXT",
+            "media_expected_size INTEGER",
+            "media_prior_lifecycle TEXT",
+        ):
+            connection.execute(
+                f"ALTER TABLE core_pdffile ADD COLUMN {definition}"
+            )
+        connection.commit()
+        connection.close()
+
+    def _insert_pdf(
+        self,
+        *,
+        pdf_id,
+        folder_id,
+        lifecycle,
+        chunks,
+        embeddings,
+        file_name="pdfs/example.pdf",
+    ):
+        connection = sqlite3.connect(self.database)
+        connection.execute(
+            "INSERT INTO core_pdffile "
+            "(id, folder_id, file, lifecycle, page_chunks, chunk_embeddings, "
+            "media_expected_sha256, media_expected_size, media_prior_lifecycle) "
+            "VALUES (?, ?, ?, ?, ?, ?, '', NULL, ?)",
+            (
+                pdf_id,
+                folder_id,
+                file_name,
+                lifecycle,
+                json.dumps(chunks),
+                json.dumps(embeddings),
+                "uploaded" if lifecycle == "unavailable" else "",
+            ),
+        )
+        connection.commit()
+        connection.close()
+
+    def _snapshot(self, **kwargs):
+        return create_consistent_snapshot(
+            self.make_job(),
+            source_roots={
+                "media": self.data / "media",
+                "pdf_cache": self.data / "pdf_cache",
+                "faiss_indexes": self.data / "faiss_indexes",
+                "chroma_db": self.data / "chroma_db",
+                "staticfiles": self.data / "staticfiles",
+            },
+            database_path=self.database,
+            snapshot_root=self.control / "snapshots",
+            **kwargs,
+        )
+
+    def test_healthy_faiss_is_copied_without_rewrite(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one", "two"],
+            embeddings=[[1.0, 0.0], [0.0, 2.0]],
+        )
+        source_path = self.data / "faiss_indexes/folder_7.index"
+        index = core_utils.faiss.IndexFlatIP(2)
+        index.add(core_utils.np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype="float32"))
+        core_utils.faiss.write_index(index, str(source_path))
+        source_bytes = source_path.read_bytes()
+        database_bytes = self.database.read_bytes()
+
+        snapshot = self._snapshot()
+
+        workspace = Path(snapshot.workspace_path)
+        self.assertEqual(
+            (workspace / "faiss_indexes/folder_7.index").read_bytes(),
+            source_bytes,
+        )
+        self.assertEqual(source_path.read_bytes(), source_bytes)
+        self.assertEqual(self.database.read_bytes(), database_bytes)
+        evidence = json.loads(
+            (workspace / "snapshot-evidence.json").read_text()
+        )
+        folder = evidence["faiss_reconciliation"]["folders"]["7"]
+        self.assertEqual(folder["disposition"], "copied")
+        self.assertEqual(folder["vector_count"], 2)
+
+    def test_stale_unavailable_vectors_are_rebuilt_only_in_snapshot(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one", "two"],
+            embeddings=[[1.0, 0.0], [0.0, 2.0]],
+        )
+        self._insert_pdf(
+            pdf_id=2,
+            folder_id=7,
+            lifecycle="unavailable",
+            chunks=["removed"],
+            embeddings=[[1.0, 1.0]],
+            file_name="pdfs/missing.pdf",
+        )
+        source_path = self.data / "faiss_indexes/folder_7.index"
+        stale = core_utils.faiss.IndexFlatIP(2)
+        stale.add(
+            core_utils.np.asarray(
+                [[1.0, 0.0], [0.0, 1.0], [0.707, 0.707]],
+                dtype="float32",
+            )
+        )
+        core_utils.faiss.write_index(stale, str(source_path))
+        source_bytes = source_path.read_bytes()
+        database_bytes = self.database.read_bytes()
+
+        with patch(
+            "core.utils.create_embeddings_for_texts",
+            side_effect=AssertionError("external embeddings are forbidden"),
+        ):
+            snapshot = self._snapshot()
+
+        workspace = Path(snapshot.workspace_path)
+        rebuilt_path = workspace / "faiss_indexes/folder_7.index"
+        rebuilt = core_utils.faiss.read_index(str(rebuilt_path))
+        self.assertEqual(int(rebuilt.ntotal), 2)
+        self.assertEqual(int(rebuilt.d), 2)
+        self.assertEqual(source_path.read_bytes(), source_bytes)
+        self.assertEqual(self.database.read_bytes(), database_bytes)
+        evidence = json.loads(
+            (workspace / "snapshot-evidence.json").read_text()
+        )
+        folder = evidence["faiss_reconciliation"]["folders"]["7"]
+        self.assertEqual(folder["disposition"], "rebuilt")
+        self.assertEqual(folder["previous"]["vector_count"], 3)
+        self.assertEqual(folder["vector_count"], 2)
+        self.assertEqual(
+            folder["sha256"],
+            hashlib.sha256(rebuilt_path.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            snapshot.evidence["faiss_reconciliation"]["folders"]["7"][
+                "disposition"
+            ],
+            "rebuilt",
+        )
+
+    def test_corrupt_searchable_embeddings_fail_without_source_writes(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[float("nan"), 0.0]],
+        )
+        database_bytes = self.database.read_bytes()
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_searchable_embeddings_invalid",
+        ):
+            self._snapshot()
+
+        self.assertEqual(self.database.read_bytes(), database_bytes)
+        failed = SourceSnapshot.objects.latest("created_at")
+        self.assertEqual(failed.state, SourceSnapshot.State.FAILED)
+        self.assertEqual(
+            failed.safe_error_code,
+            "snapshot_searchable_embeddings_invalid",
+        )
+
+    @override_settings(VAULT_SNAPSHOT_FAISS_MAX_VECTORS=1)
+    def test_candidate_rebuild_vector_bound_fails_closed(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one", "two"],
+            embeddings=[[1.0, 0.0], [0.0, 1.0]],
+        )
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_faiss_rebuild_vector_limit_exceeded",
+        ):
+            self._snapshot()
+
+    def test_candidate_rebuild_cancellation_removes_partial_file(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[1.0, 0.0]],
+        )
+        candidate_root = self.control / "candidate-faiss"
+        candidate_root.mkdir(parents=True)
+
+        with self.assertRaisesRegex(SnapshotError, "snapshot_cancelled"):
+            snapshot_service._reconcile_candidate_faiss(
+                self.database,
+                candidate_root,
+                cancellation_check=lambda: True,
+            )
+
+        self.assertEqual(list(candidate_root.glob("*.partial")), [])
+
+    def test_candidate_rebuild_write_failure_never_changes_source(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[1.0, 0.0]],
+        )
+        source_path = self.data / "faiss_indexes/folder_7.index"
+        stale = core_utils.faiss.IndexFlatIP(2)
+        stale.add(
+            core_utils.np.asarray(
+                [[1.0, 0.0], [0.0, 1.0]],
+                dtype="float32",
+            )
+        )
+        core_utils.faiss.write_index(stale, str(source_path))
+        source_bytes = source_path.read_bytes()
+
+        with patch.object(
+            core_utils.faiss,
+            "write_index",
+            side_effect=RuntimeError("worker stopped"),
+        ):
+            with self.assertRaisesRegex(
+                SnapshotError,
+                "snapshot_faiss_rebuild_failed",
+            ):
+                self._snapshot()
+
+        self.assertEqual(source_path.read_bytes(), source_bytes)
+        failed = SourceSnapshot.objects.latest("created_at")
+        self.assertEqual(failed.state, SourceSnapshot.State.FAILED)
+        incomplete = Path(failed.workspace_path)
+        self.assertEqual(list(incomplete.rglob("*.partial")), [])
+
     def test_snapshot_is_reconciled_frozen_and_evidenced(self):
         job = self.make_job()
         snapshot = create_consistent_snapshot(
@@ -1223,6 +1473,55 @@ class CandidatePublicationTests(ActiveSyncTestCase):
     def test_publication_is_idempotent_candidate_and_never_moves_pointer(
         self, *_mocks
     ):
+        faiss_path = self.workspace / "faiss_indexes/folder_7.index"
+        faiss_path.parent.mkdir()
+        index = core_utils.faiss.IndexFlatIP(2)
+        index.add(
+            core_utils.np.asarray(
+                [[1.0, 0.0], [0.0, 1.0]],
+                dtype="float32",
+            )
+        )
+        core_utils.faiss.write_index(index, str(faiss_path))
+        faiss_digest = hashlib.sha256(faiss_path.read_bytes()).hexdigest()
+        evidence_path = self.workspace / "snapshot-evidence.json"
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence["files"].append(
+            {
+                "path": "faiss_indexes/folder_7.index",
+                "size_bytes": faiss_path.stat().st_size,
+                "sha256": faiss_digest,
+            }
+        )
+        evidence["inventory"]["faiss"] = {
+            "files": [
+                {
+                    "path": "faiss_indexes/folder_7.index",
+                    "size_bytes": faiss_path.stat().st_size,
+                    "sha256": faiss_digest,
+                    "faiss": {
+                        "loadable": True,
+                        "vector_count": 2,
+                        "dimensions": 2,
+                    },
+                }
+            ]
+        }
+        evidence["faiss_reconciliation"] = {
+            "schema": 1,
+            "source": "stored_embeddings",
+            "pdf_count": 1,
+            "vector_count": 2,
+            "folders": {
+                "7": {
+                    "disposition": "rebuilt",
+                    "vector_count": 2,
+                    "dimensions": 2,
+                    "sha256": faiss_digest,
+                }
+            },
+        }
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
         candidate = publish_snapshot_candidate(
             snapshot=self.snapshot,
             profile=self.profile,
@@ -1246,6 +1545,10 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             candidate.manifest["unavailable_documents"],
             build_unavailable_attestation(()),
         )
+        self.assertEqual(
+            candidate.manifest["faiss_reconciliation"],
+            evidence["faiss_reconciliation"],
+        )
         publication_validations = ArtifactValidation.objects.filter(
             generation=candidate,
             validation_type="publication",
@@ -1255,6 +1558,8 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             all(
                 validation.evidence["unavailable_documents"]
                 == candidate.manifest["unavailable_documents"]
+                and validation.evidence["faiss_reconciliation"]
+                == candidate.manifest["faiss_reconciliation"]
                 for validation in publication_validations
             )
         )

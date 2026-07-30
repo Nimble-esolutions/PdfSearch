@@ -384,6 +384,53 @@ def _validate_snapshot_media_evidence(evidence):
         raise PublicationError("snapshot_media_missing")
 
 
+def _validate_faiss_reconciliation_evidence(evidence):
+    reconciliation = evidence.get("faiss_reconciliation")
+    if reconciliation in (None, {}):
+        return {}
+    inventory = evidence.get("inventory", {})
+    files = inventory.get("faiss", {}).get("files", [])
+    folders = reconciliation.get("folders")
+    if (
+        reconciliation.get("schema") != 1
+        or reconciliation.get("source") != "stored_embeddings"
+        or not isinstance(folders, dict)
+        or not isinstance(files, list)
+    ):
+        raise PublicationError("snapshot_faiss_reconciliation_invalid")
+    indexed = {
+        item.get("path"): item
+        for item in files
+        if isinstance(item, dict)
+    }
+    vector_total = 0
+    for folder_id, record in folders.items():
+        if not isinstance(record, dict):
+            raise PublicationError("snapshot_faiss_reconciliation_invalid")
+        disposition = record.get("disposition")
+        if disposition == "removed":
+            if record.get("vector_count") != 0:
+                raise PublicationError(
+                    "snapshot_faiss_reconciliation_invalid"
+                )
+            continue
+        item = indexed.get(f"faiss_indexes/folder_{folder_id}.index")
+        metadata = item.get("faiss", {}) if isinstance(item, dict) else {}
+        if (
+            disposition not in {"copied", "rebuilt"}
+            or not isinstance(item, dict)
+            or item.get("sha256") != record.get("sha256")
+            or metadata.get("loadable") is not True
+            or metadata.get("vector_count") != record.get("vector_count")
+            or metadata.get("dimensions") != record.get("dimensions")
+        ):
+            raise PublicationError("snapshot_faiss_reconciliation_invalid")
+        vector_total += record["vector_count"]
+    if vector_total != reconciliation.get("vector_count"):
+        raise PublicationError("snapshot_faiss_reconciliation_invalid")
+    return reconciliation
+
+
 def _manifest_key_for_generation(dataset_id, generation_id):
     return KeyBuilder(dataset_id).generation_manifest(generation_id)
 
@@ -441,6 +488,7 @@ def publish_snapshot_candidate(
 
     evidence, files = _load_snapshot_files(snapshot)
     _validate_snapshot_media_evidence(evidence)
+    faiss_reconciliation = _validate_faiss_reconciliation_evidence(evidence)
     capabilities = probe_capabilities(
         vault, deployment_id=identity.deployment_id
     )
@@ -585,6 +633,7 @@ def publish_snapshot_candidate(
                 "model": settings.OPENAI_EMBED_MODEL,
             },
             "faiss": inventory.get("faiss", {}),
+            "faiss_reconciliation": faiss_reconciliation,
             "pdf_storage": inventory.get("pdf_storage", {}),
             "chroma": inventory.get("chroma", {}),
             "static": inventory.get("static", {}),
@@ -630,6 +679,7 @@ def publish_snapshot_candidate(
                 "writer_epoch": writer["writer_epoch"],
                 "snapshot_digest": snapshot.snapshot_digest,
                 "unavailable_documents": unavailable_documents,
+                "faiss_reconciliation": faiss_reconciliation,
             },
             expires_at=timezone.now()
             + timezone.timedelta(
