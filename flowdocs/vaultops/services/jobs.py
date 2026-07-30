@@ -1,12 +1,13 @@
 import hashlib
 import hmac
 import secrets
+import time
 from datetime import timedelta
 
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.utils import timezone
 
-from vaultops.models import VaultJob
+from vaultops.models import SourceSnapshot, VaultJob, VaultJobRetryRequest
 from vaultops.services.audit import append_event
 from vaultops.services.lifecycle import (
     CONTROL_DB,
@@ -393,9 +394,31 @@ def recover_stale_jobs(*, stale_seconds, now=None):
     return recovered
 
 
-def requeue_job(job_public_id):
+def _requeue_job_once(
+    job_public_id,
+    *,
+    expected_state_version,
+    idempotency_key,
+    actor_id=None,
+    actor_name="",
+):
+    """Requeue exactly once for one locked state and idempotency key."""
     with transaction.atomic(using=CONTROL_DB):
         job = VaultJob.objects.select_for_update().get(public_id=job_public_id)
+        receipt = (
+            VaultJobRetryRequest.objects.select_for_update()
+            .filter(job=job, idempotency_key=idempotency_key)
+            .first()
+        )
+        if receipt is not None:
+            if (
+                receipt.requested_state_version != expected_state_version
+                or receipt.actor_id != actor_id
+            ):
+                raise LifecycleConflict("idempotency_conflict")
+            return job, receipt, False
+        if job.state_version != expected_state_version:
+            raise LifecycleConflict("stale_state")
         _guard_transition(
             job.status,
             VaultJob.Status.QUEUED,
@@ -403,10 +426,41 @@ def requeue_job(job_public_id):
             "job_not_retryable",
         )
         previous = job.status
+        finalized_snapshot = (
+            job.operation == "sync_publish"
+            and SourceSnapshot.objects.select_for_update()
+            .filter(job=job, state=SourceSnapshot.State.FINALIZED)
+            .exists()
+        )
+        retry_mode = (
+            VaultJobRetryRequest.Mode.CHECKPOINT_RESUME
+            if finalized_snapshot
+            else VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
+            if job.operation == "sync_publish"
+            else VaultJobRetryRequest.Mode.OPERATION_RETRY
+        )
+        cleanup_intents = 0
+        if retry_mode == VaultJobRetryRequest.Mode.FRESH_SNAPSHOT:
+            from vaultops.services.snapshot import (
+                reclaim_snapshot_cleanup_intents_safely,
+                stage_snapshot_cleanup,
+            )
+
+            cleanup_intents = stage_snapshot_cleanup(
+                job, reason="retry_preparation"
+            )
+            transaction.on_commit(
+                reclaim_snapshot_cleanup_intents_safely,
+                using=CONTROL_DB,
+                robust=True,
+            )
         job.status = VaultJob.Status.QUEUED
         job.retry_count += 1
         job.safe_error_code = ""
         job.heartbeat_at = None
+        job.claim_token_hash = ""
+        job.claimed_by = ""
+        job.fencing_epoch += 1
         job.state_version += 1
         job.save(
             update_fields=[
@@ -414,18 +468,63 @@ def requeue_job(job_public_id):
                 "retry_count",
                 "safe_error_code",
                 "heartbeat_at",
+                "claim_token_hash",
+                "claimed_by",
+                "fencing_epoch",
                 "state_version",
                 "updated_at",
             ]
+        )
+        receipt = VaultJobRetryRequest.objects.create(
+            job=job,
+            idempotency_key=idempotency_key,
+            requested_state_version=expected_state_version,
+            resulting_state_version=job.state_version,
+            resulting_retry_count=job.retry_count,
+            mode=retry_mode,
+            actor_id=actor_id,
+            actor_name=actor_name,
         )
         append_event(
             action="job_requeued",
             result="succeeded",
             correlation_id=job.correlation_id,
-            actor_id=job.requested_by_id,
-            actor_name=job.requested_by_name,
+            actor_id=actor_id,
+            actor_name=actor_name,
             job_public_id=job.public_id,
             before_state={"job_state": previous},
-            after_state={"job_state": job.status},
+            after_state={
+                "job_state": job.status,
+                "state_version": job.state_version,
+                "retry_count": job.retry_count,
+            },
+            evidence={
+                "retry_mode": retry_mode,
+                "snapshot_cleanup_intents": cleanup_intents,
+            },
         )
-        return job
+        return job, receipt, True
+
+
+def requeue_job(
+    job_public_id,
+    *,
+    expected_state_version,
+    idempotency_key,
+    actor_id=None,
+    actor_name="",
+):
+    """Serialize duplicate retry submissions, including SQLite contention."""
+    for attempt in range(5):
+        try:
+            return _requeue_job_once(
+                job_public_id,
+                expected_state_version=expected_state_version,
+                idempotency_key=idempotency_key,
+                actor_id=actor_id,
+                actor_name=actor_name,
+            )
+        except OperationalError as exc:
+            if "locked" not in str(exc).casefold() or attempt == 4:
+                raise
+            time.sleep(0.02 * (attempt + 1))

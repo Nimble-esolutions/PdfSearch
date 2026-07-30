@@ -695,8 +695,21 @@ def _workspace_records(profile, dataset_id, limit=25):
 
 
 def _job_records(profile, dataset_id, limit=50):
-    return [
-        {
+    records = []
+    for job in VaultJob.objects.filter(
+        profile=profile, dataset_id=dataset_id
+    ).order_by("-created_at")[:limit]:
+        finalized_snapshot = job.source_snapshots.filter(
+            state="finalized"
+        ).exists()
+        retry_mode = (
+            "checkpoint_resume"
+            if job.operation == "sync_publish" and finalized_snapshot
+            else "fresh_snapshot"
+            if job.operation == "sync_publish"
+            else "operation_retry"
+        )
+        records.append({
             "public_id": str(job.public_id),
             "operation": job.operation,
             "phase": job.phase,
@@ -712,11 +725,31 @@ def _job_records(profile, dataset_id, limit=50):
             in (
                 {VaultJob.Status.QUEUED} | ACTIVE_JOB_STATES
             ),
-        }
-        for job in VaultJob.objects.filter(
-            profile=profile, dataset_id=dataset_id
-        ).order_by("-created_at")[:limit]
-    ]
+            "retry_mode": (
+                retry_mode
+            ),
+            "retry_action_label": (
+                gettext("Resume verified upload checkpoint")
+                if retry_mode == "checkpoint_resume"
+                else gettext("Create a fresh snapshot and retry")
+                if retry_mode == "fresh_snapshot"
+                else gettext("Retry this operation")
+            ),
+            "retry_guidance": (
+                gettext(
+                    "Verified uploaded objects will be checked and reused."
+                )
+                if retry_mode == "checkpoint_resume"
+                else gettext(
+                    "The failed snapshot workspace is scheduled for safe removal; the retry creates a new isolated snapshot."
+                )
+                if retry_mode == "fresh_snapshot"
+                else gettext(
+                    "The worker will reuse progress only when this operation has verified durable evidence."
+                )
+            ),
+        })
+    return records
 
 
 def _audit_records(limit=50):

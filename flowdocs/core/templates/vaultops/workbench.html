@@ -639,11 +639,12 @@
             <button class="vault-button vault-button--secondary" type="submit">{% trans "Request cancellation" %}</button>
           </form>
           {% elif job.status == "retryable_failed" or job.status == "stale" %}
+          <p class="vault-note">{{ job.retry_guidance }}</p>
           <form method="post" action="{% url 'vaultops:job_retry' job.public_id %}">
             {% csrf_token %}
             <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:retry:{{ forloop.counter }}">
             <input type="hidden" name="job_state_version" value="{{ job.state_version }}">
-            <button class="vault-button vault-button--secondary" type="submit">{% trans "Retry from checkpoint" %}</button>
+            <button class="vault-button vault-button--secondary" type="submit">{{ job.retry_action_label }}</button>
           </form>
           {% endif %}
         </article>

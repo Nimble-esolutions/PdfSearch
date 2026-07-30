@@ -1,6 +1,7 @@
 import gc
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -11,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from core.management.commands.inventory_artifacts import build_manifest
@@ -18,7 +20,12 @@ from core.media_quarantine import (
     build_unavailable_attestation,
     storage_key_evidence,
 )
-from vaultops.models import SourceSnapshot, VaultJobStep
+from vaultops.models import (
+    SourceMutationState,
+    SourceSnapshot,
+    VaultJob,
+    VaultJobStep,
+)
 from vaultops.services.mutations import (
     ConsistentSnapshotUnproven,
     assert_barrier_owner,
@@ -28,6 +35,8 @@ from vaultops.services.mutations import (
     release_barrier,
     request_barrier,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SnapshotError(RuntimeError):
@@ -40,6 +49,379 @@ class SnapshotError(RuntimeError):
 
 class SnapshotCancelled(SnapshotError):
     reason_code = "snapshot_cancelled"
+
+
+class SnapshotCleanupBoundExceeded(SnapshotError):
+    def __init__(self, reason_code, *, consumed_bytes):
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+        self.consumed_bytes = consumed_bytes
+
+
+def stage_snapshot_cleanup(job, *, reason, now=None):
+    """Record cleanup intent without touching the filesystem."""
+    now = now or timezone.now()
+    grace = int(
+        getattr(settings, "VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS", 120)
+    )
+    count = 0
+    snapshots = (
+        SourceSnapshot.objects.select_for_update()
+        .filter(job=job)
+        .exclude(state=SourceSnapshot.State.FINALIZED)
+        .order_by("created_at")
+    )
+    for snapshot in snapshots:
+        if not snapshot.workspace_path:
+            continue
+        if snapshot.cleanup_state in {
+            SourceSnapshot.CleanupState.PENDING,
+            SourceSnapshot.CleanupState.RECLAIMING,
+        }:
+            continue
+        hard_kill = snapshot.state in {
+            SourceSnapshot.State.COPYING,
+            SourceSnapshot.State.BARRIER,
+        }
+        snapshot.cleanup_state = SourceSnapshot.CleanupState.PENDING
+        if not snapshot.cleanup_path:
+            snapshot.cleanup_path = snapshot.workspace_path
+        snapshot.cleanup_not_before = now + timezone.timedelta(
+            seconds=grace if hard_kill else 0
+        )
+        snapshot.cleanup_error_code = ""
+        snapshot.evidence = {
+            **(snapshot.evidence if isinstance(snapshot.evidence, dict) else {}),
+            "workspace_cleanup": {
+                "status": "pending",
+                "reason": reason,
+            },
+        }
+        snapshot.save(
+            update_fields=[
+                "cleanup_state",
+                "cleanup_path",
+                "cleanup_not_before",
+                "cleanup_error_code",
+                "evidence",
+                "updated_at",
+            ]
+        )
+        count += 1
+    return count
+
+
+def _validated_cleanup_paths(snapshot):
+    root = Path(settings.VAULT_SNAPSHOT_ROOT).resolve()
+    source = root / f".{snapshot.public_id}.incomplete"
+    tombstone = root / f".{snapshot.public_id}.cleanup"
+    recorded = Path(snapshot.cleanup_path).absolute()
+    if (
+        recorded not in {source, tombstone}
+        or recorded.parent.resolve() != root
+    ):
+        raise SnapshotError("snapshot_cleanup_path_invalid")
+    return source, tombstone
+
+
+def _remove_cleanup_tree_bounded(path, *, deadline, maximum_bytes):
+    """Remove a tree incrementally without crossing configured work bounds."""
+    total = 0
+    if path.is_symlink():
+        path.unlink()
+        return total
+    stack = [(path, False)]
+    while stack:
+        if time.monotonic() > deadline:
+            raise SnapshotCleanupBoundExceeded(
+                "snapshot_cleanup_time_limit_exceeded",
+                consumed_bytes=total,
+            )
+        item, expanded = stack.pop()
+        if item.is_symlink():
+            item.unlink()
+            continue
+        if not item.is_dir():
+            value = os.stat(item, follow_symlinks=False)
+            if total + value.st_size > maximum_bytes:
+                raise SnapshotCleanupBoundExceeded(
+                    "snapshot_cleanup_byte_limit_exceeded",
+                    consumed_bytes=total,
+                )
+            item.unlink()
+            total += value.st_size
+            continue
+        if expanded:
+            item.rmdir()
+            continue
+        stack.append((item, True))
+        children = []
+        with os.scandir(item) as entries:
+            for entry in entries:
+                if time.monotonic() > deadline:
+                    raise SnapshotCleanupBoundExceeded(
+                        "snapshot_cleanup_time_limit_exceeded",
+                        consumed_bytes=total,
+                    )
+                children.append(Path(entry.path))
+        for child in sorted(children, reverse=True):
+            stack.append((child, False))
+    return total
+
+
+def _cleanup_owner_is_quiesced(snapshot, *, now):
+    job = snapshot.job
+    grace = timezone.timedelta(
+        seconds=int(
+            getattr(settings, "VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS", 120)
+        )
+    )
+    if (
+        job.status
+        in {
+            VaultJob.Status.CLAIMED,
+            VaultJob.Status.RUNNING,
+            VaultJob.Status.WAITING,
+            VaultJob.Status.CANCELLING,
+        }
+        or job.claim_token_hash
+        or (
+            job.heartbeat_at is not None
+            and job.heartbeat_at > now - grace
+        )
+    ):
+        return False
+    state = (
+        SourceMutationState.objects.select_for_update()
+        .filter(
+            deployment_id=snapshot.deployment_id,
+            barrier_owner_job=job.public_id,
+        )
+        .first()
+    )
+    if state is not None:
+        if state.active_mutations:
+            return False
+        state.barrier_state = SourceMutationState.BarrierState.OPEN
+        state.barrier_owner_job = None
+        state.barrier_requested_at = None
+        state.barrier_activated_at = None
+        state.save(
+            update_fields=[
+                "barrier_state",
+                "barrier_owner_job",
+                "barrier_requested_at",
+                "barrier_activated_at",
+                "updated_at",
+            ]
+        )
+    return True
+
+
+def reclaim_snapshot_cleanup_intents(*, now=None):
+    """Reclaim only due, recorded workspaces within bounded work limits."""
+    now = now or timezone.now()
+    maximum_items = int(
+        getattr(settings, "VAULT_SNAPSHOT_CLEANUP_MAX_ITEMS", 8)
+    )
+    maximum_scan_items = max(
+        maximum_items,
+        int(
+            getattr(
+                settings, "VAULT_SNAPSHOT_CLEANUP_MAX_SCAN_ITEMS", 64
+            )
+        ),
+    )
+    remaining_bytes = int(
+        getattr(settings, "VAULT_SNAPSHOT_CLEANUP_MAX_BYTES", 536_870_912)
+    )
+    deadline = time.monotonic() + int(
+        getattr(settings, "VAULT_SNAPSHOT_CLEANUP_MAX_SECONDS", 5)
+    )
+    retry_delay = timezone.timedelta(
+        seconds=int(
+            getattr(settings, "VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS", 120)
+        )
+    )
+    candidate_ids = list(
+        SourceSnapshot.objects.filter(
+            cleanup_state__in={
+                SourceSnapshot.CleanupState.PENDING,
+                SourceSnapshot.CleanupState.RECLAIMING,
+                SourceSnapshot.CleanupState.FAILED,
+            },
+            cleanup_not_before__lte=now,
+        )
+        .order_by("cleanup_not_before", "created_at")
+        .values_list("pk", flat=True)[:maximum_scan_items]
+    )
+    reclaimed = 0
+    attempted = 0
+    for snapshot_id in candidate_ids:
+        if (
+            attempted >= maximum_items
+            or time.monotonic() > deadline
+            or remaining_bytes < 0
+        ):
+            break
+        with transaction.atomic(using="control"):
+            snapshot = (
+                SourceSnapshot.objects.select_for_update()
+                .select_related("job")
+                .get(pk=snapshot_id)
+            )
+            if (
+                snapshot.cleanup_state
+                not in {
+                    SourceSnapshot.CleanupState.PENDING,
+                    SourceSnapshot.CleanupState.RECLAIMING,
+                    SourceSnapshot.CleanupState.FAILED,
+                }
+                or snapshot.cleanup_not_before > now
+            ):
+                continue
+            if not _cleanup_owner_is_quiesced(snapshot, now=now):
+                snapshot.cleanup_not_before = now + retry_delay
+                snapshot.save(
+                    update_fields=["cleanup_not_before", "updated_at"]
+                )
+                continue
+            try:
+                source, tombstone = _validated_cleanup_paths(snapshot)
+            except SnapshotError as exc:
+                snapshot.cleanup_state = (
+                    SourceSnapshot.CleanupState.QUARANTINED
+                )
+                snapshot.cleanup_not_before = None
+                snapshot.cleanup_error_code = exc.reason_code
+                snapshot.evidence = {
+                    **(
+                        snapshot.evidence
+                        if isinstance(snapshot.evidence, dict)
+                        else {}
+                    ),
+                    "workspace_cleanup": {
+                        "status": "quarantined",
+                        "reason_code": exc.reason_code,
+                    },
+                }
+                snapshot.save(
+                    update_fields=[
+                        "cleanup_state",
+                        "cleanup_not_before",
+                        "cleanup_error_code",
+                        "evidence",
+                        "updated_at",
+                    ]
+                )
+                continue
+            snapshot.cleanup_state = SourceSnapshot.CleanupState.RECLAIMING
+            snapshot.cleanup_path = str(tombstone)
+            snapshot.cleanup_not_before = now + retry_delay
+            snapshot.cleanup_attempts += 1
+            snapshot.cleanup_error_code = ""
+            snapshot.save(
+                update_fields=[
+                    "cleanup_state",
+                    "cleanup_path",
+                    "cleanup_not_before",
+                    "cleanup_attempts",
+                    "cleanup_error_code",
+                    "updated_at",
+                ]
+            )
+            attempted += 1
+        try:
+            if source.is_symlink():
+                source.unlink()
+            elif source.exists():
+                if tombstone.exists():
+                    raise SnapshotError("snapshot_cleanup_collision")
+                os.replace(source, tombstone)
+            if tombstone.is_symlink():
+                tombstone.unlink()
+                consumed = 0
+            elif tombstone.exists():
+                consumed = _remove_cleanup_tree_bounded(
+                    tombstone,
+                    deadline=deadline,
+                    maximum_bytes=remaining_bytes,
+                )
+            else:
+                consumed = 0
+        except Exception as exc:
+            remaining_bytes -= int(getattr(exc, "consumed_bytes", 0))
+            reason_code = getattr(
+                exc, "reason_code", "snapshot_workspace_cleanup_failed"
+            )
+            with transaction.atomic(using="control"):
+                snapshot = SourceSnapshot.objects.select_for_update().get(
+                    pk=snapshot_id
+                )
+                snapshot.cleanup_state = SourceSnapshot.CleanupState.FAILED
+                snapshot.cleanup_not_before = now + retry_delay
+                snapshot.cleanup_error_code = reason_code
+                snapshot.evidence = {
+                    **(
+                        snapshot.evidence
+                        if isinstance(snapshot.evidence, dict)
+                        else {}
+                    ),
+                    "workspace_cleanup": {
+                        "status": "failed",
+                        "reason_code": reason_code,
+                    },
+                }
+                snapshot.save(
+                    update_fields=[
+                        "cleanup_state",
+                        "cleanup_not_before",
+                        "cleanup_error_code",
+                        "evidence",
+                        "updated_at",
+                    ]
+                )
+            continue
+        remaining_bytes -= consumed
+        with transaction.atomic(using="control"):
+            snapshot = SourceSnapshot.objects.select_for_update().get(
+                pk=snapshot_id
+            )
+            snapshot.cleanup_state = SourceSnapshot.CleanupState.COMPLETED
+            snapshot.cleanup_error_code = ""
+            snapshot.workspace_path = ""
+            snapshot.evidence = {
+                **(
+                    snapshot.evidence
+                    if isinstance(snapshot.evidence, dict)
+                    else {}
+                ),
+                "workspace_cleanup": {
+                    "status": "completed",
+                    "bytes": consumed,
+                },
+            }
+            snapshot.save(
+                update_fields=[
+                    "cleanup_state",
+                    "cleanup_error_code",
+                    "workspace_path",
+                    "evidence",
+                    "updated_at",
+                ]
+            )
+        reclaimed += 1
+    return reclaimed
+
+
+def reclaim_snapshot_cleanup_intents_safely():
+    try:
+        reclaim_snapshot_cleanup_intents()
+    except Exception:
+        # Retry acceptance is already durable. Cleanup retains its own state
+        # and must never turn a committed 202 response into a 503.
+        return 0
+    return 1
 
 
 def _sha256_file(path):
@@ -759,6 +1141,78 @@ def _source_roots():
     }
 
 
+def _record_cleanup_staging_failure(snapshot):
+    """Retain a DB-owned recovery intent when normal staging fails."""
+    try:
+        now = timezone.now()
+        retry_delay = timezone.timedelta(
+            seconds=int(
+                getattr(
+                    settings, "VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS", 120
+                )
+            )
+        )
+        with transaction.atomic(using="control"):
+            locked = SourceSnapshot.objects.select_for_update().get(
+                pk=snapshot.pk
+            )
+            locked.cleanup_state = SourceSnapshot.CleanupState.FAILED
+            locked.cleanup_path = locked.workspace_path
+            locked.cleanup_not_before = now + retry_delay
+            locked.cleanup_error_code = "snapshot_cleanup_staging_failed"
+            locked.evidence = {
+                **(
+                    locked.evidence
+                    if isinstance(locked.evidence, dict)
+                    else {}
+                ),
+                "workspace_cleanup": {
+                    "status": "failed",
+                    "reason_code": "snapshot_cleanup_staging_failed",
+                },
+            }
+            locked.save(
+                update_fields=[
+                    "cleanup_state",
+                    "cleanup_path",
+                    "cleanup_not_before",
+                    "cleanup_error_code",
+                    "evidence",
+                    "updated_at",
+                ]
+            )
+    except Exception:
+        logger.exception(
+            "snapshot cleanup staging evidence could not be persisted",
+            extra={"snapshot_id": str(snapshot.public_id)},
+        )
+
+
+def _record_barrier_release_failure(snapshot):
+    try:
+        with transaction.atomic(using="control"):
+            locked = SourceSnapshot.objects.select_for_update().get(
+                pk=snapshot.pk
+            )
+            locked.evidence = {
+                **(
+                    locked.evidence
+                    if isinstance(locked.evidence, dict)
+                    else {}
+                ),
+                "barrier_release": {
+                    "status": "failed",
+                    "reason_code": "snapshot_barrier_release_failed",
+                },
+            }
+            locked.save(update_fields=["evidence", "updated_at"])
+    except Exception:
+        logger.exception(
+            "snapshot barrier release evidence could not be persisted",
+            extra={"snapshot_id": str(snapshot.public_id)},
+        )
+
+
 def create_consistent_snapshot(
     job,
     *,
@@ -793,6 +1247,7 @@ def create_consistent_snapshot(
     step.started_at = step.started_at or timezone.now()
     step.save(update_fields=["status", "started_at", "updated_at"])
     barrier_acquired = False
+    primary_exception = None
     started = time.monotonic()
     try:
         records = {}
@@ -976,15 +1431,21 @@ def create_consistent_snapshot(
         )
         return snapshot
     except Exception as exc:
-        snapshot.state = SourceSnapshot.State.FAILED
-        snapshot.safe_error_code = getattr(
+        primary_exception = exc
+        primary_reason = getattr(
             exc, "reason_code", "consistent_snapshot_unproven"
         )
+        snapshot.state = SourceSnapshot.State.FAILED
+        snapshot.safe_error_code = primary_reason
         snapshot.save(
-            update_fields=["state", "safe_error_code", "updated_at"]
+            update_fields=[
+                "state",
+                "safe_error_code",
+                "updated_at",
+            ]
         )
         step.status = VaultJobStep.Status.FAILED
-        step.checkpoint = {"safe_error_code": snapshot.safe_error_code}
+        step.checkpoint = {"safe_error_code": primary_reason}
         step.finished_at = timezone.now()
         step.save(
             update_fields=[
@@ -994,13 +1455,38 @@ def create_consistent_snapshot(
                 "updated_at",
             ]
         )
+        try:
+            with transaction.atomic(using="control"):
+                locked_snapshot = (
+                    SourceSnapshot.objects.select_for_update().get(
+                        pk=snapshot.pk
+                    )
+                )
+                stage_snapshot_cleanup(
+                    locked_snapshot.job,
+                    reason="snapshot_failed",
+                )
+                transaction.on_commit(
+                    reclaim_snapshot_cleanup_intents_safely,
+                    using="control",
+                    robust=True,
+                )
+        except Exception:
+            # The primary snapshot failure is already durable. Cleanup
+            # bookkeeping is independent and must never replace it.
+            _record_cleanup_staging_failure(snapshot)
         if isinstance(exc, (SnapshotError, ConsistentSnapshotUnproven)):
             raise
         raise SnapshotError("consistent_snapshot_unproven") from exc
     finally:
         if barrier_acquired:
-            release_barrier(
-                owner_job_id=job.public_id,
-                source_deployment=source_deployment,
-                tolerate_lost=True,
-            )
+            try:
+                release_barrier(
+                    owner_job_id=job.public_id,
+                    source_deployment=source_deployment,
+                    tolerate_lost=True,
+                )
+            except Exception:
+                if primary_exception is None:
+                    raise
+                _record_barrier_release_failure(snapshot)

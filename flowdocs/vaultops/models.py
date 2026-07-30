@@ -371,6 +371,37 @@ class VaultJobStep(TimeStampedModel):
         ordering = ["created_at"]
 
 
+class VaultJobRetryRequest(TimeStampedModel):
+    """Durable idempotency receipt for one operator retry request."""
+
+    class Mode(models.TextChoices):
+        FRESH_SNAPSHOT = "fresh_snapshot", "Fresh snapshot"
+        CHECKPOINT_RESUME = "checkpoint_resume", "Checkpoint resume"
+        OPERATION_RETRY = "operation_retry", "Operation retry"
+
+    job = models.ForeignKey(
+        VaultJob,
+        on_delete=models.PROTECT,
+        related_name="retry_requests",
+    )
+    idempotency_key = models.CharField(max_length=160)
+    requested_state_version = models.PositiveBigIntegerField()
+    resulting_state_version = models.PositiveBigIntegerField()
+    resulting_retry_count = models.PositiveIntegerField()
+    mode = models.CharField(max_length=24, choices=Mode.choices)
+    actor_id = models.PositiveBigIntegerField(null=True, blank=True)
+    actor_name = models.CharField(max_length=150, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "idempotency_key"],
+                name="vaultops_unique_job_retry_request",
+            ),
+        ]
+        ordering = ["created_at"]
+
+
 class SourceMutationState(TimeStampedModel):
     class BarrierState(models.TextChoices):
         OPEN = "open", "Open"
@@ -420,6 +451,14 @@ class SourceSnapshot(TimeStampedModel):
         FINALIZED = "finalized", "Finalized"
         FAILED = "failed", "Failed"
 
+    class CleanupState(models.TextChoices):
+        NONE = "none", "No cleanup"
+        PENDING = "pending", "Cleanup pending"
+        RECLAIMING = "reclaiming", "Cleanup in progress"
+        COMPLETED = "completed", "Cleanup completed"
+        FAILED = "failed", "Cleanup failed"
+        QUARANTINED = "quarantined", "Cleanup quarantined"
+
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     job = models.ForeignKey(
         VaultJob,
@@ -439,6 +478,15 @@ class SourceSnapshot(TimeStampedModel):
     evidence = models.JSONField(default=dict, blank=True)
     safe_error_code = models.CharField(max_length=80, blank=True, default="")
     finalized_at = models.DateTimeField(null=True, blank=True)
+    cleanup_state = models.CharField(
+        max_length=16, choices=CleanupState.choices, default=CleanupState.NONE
+    )
+    cleanup_path = models.CharField(max_length=1000, blank=True, default="")
+    cleanup_not_before = models.DateTimeField(null=True, blank=True)
+    cleanup_attempts = models.PositiveIntegerField(default=0)
+    cleanup_error_code = models.CharField(
+        max_length=80, blank=True, default=""
+    )
 
     class Meta:
         ordering = ["-created_at"]
