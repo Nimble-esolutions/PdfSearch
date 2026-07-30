@@ -76,11 +76,16 @@ tree and never calls an embedding provider. Searchable rows are read from the
 frozen SQLite snapshot in deterministic folder, document, and chunk order.
 Every stored chunk and embedding must be complete, finite, non-zero, and
 dimensionally consistent. A coherent copied folder index is retained
-byte-for-byte; a missing, unreadable, or stale folder index is atomically
-derived only under the incomplete snapshot workspace. Indexes for folders with
-no searchable rows are omitted from the candidate. Vector and dimension caps
-bound memory and work. Cancellation or derivation failure leaves no published
-candidate and cannot modify source artifacts.
+byte-for-byte only after its supported inner-product index type, dimensions,
+count, vector values, and deterministic vector order match the normalized
+frozen-database batches. A missing, unreadable, unsupported, reordered, or
+stale folder index is atomically derived only under the incomplete snapshot
+workspace. Indexes for folders with no searchable rows are omitted from the
+candidate. SQL row and source-cell sizes are bounded before JSON parsing;
+per-document chunks, dimensions, total vectors, and resident vector bytes are
+then accounted incrementally. Cancellation is checked around parsing,
+materialization, index addition, and writing. Cancellation or derivation
+failure leaves no published candidate and cannot modify source artifacts.
 
 Snapshot evidence, the immutable generation manifest, and the publication
 validation record bind each folder's copied or rebuilt disposition, vector
@@ -139,6 +144,10 @@ VAULT_SNAPSHOT_ROOT=/app/data-control/snapshots
 VAULT_SNAPSHOT_FAISS_MAX_VECTORS=1000000
 VAULT_SNAPSHOT_FAISS_MAX_DIMENSIONS=4096
 VAULT_SNAPSHOT_FAISS_MAX_BYTES=536870912
+VAULT_SNAPSHOT_FAISS_MAX_SOURCE_BYTES=1073741824
+VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES=67108864
+VAULT_SNAPSHOT_FAISS_MAX_PDFS=100000
+VAULT_SNAPSHOT_FAISS_MAX_CHUNKS_PER_PDF=100000
 ```
 
 Production publication additionally requires the existing authoritative

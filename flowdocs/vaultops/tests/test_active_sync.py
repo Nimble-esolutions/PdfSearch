@@ -5,6 +5,7 @@ import os
 import sqlite3
 import tempfile
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -63,6 +64,7 @@ from vaultops.services.publication import (
     publish_snapshot_candidate,
 )
 from vaultops.services.snapshot import SnapshotError, create_consistent_snapshot
+from vaultops.services import publication as publication_service
 from vaultops.services import snapshot as snapshot_service
 from vaultops.services.sync import (
     SyncPolicyError,
@@ -901,6 +903,76 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         self.assertEqual(folder["disposition"], "copied")
         self.assertEqual(folder["vector_count"], 2)
 
+    def test_same_shape_wrong_faiss_values_are_rebuilt(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one", "two"],
+            embeddings=[[1.0, 0.0], [0.0, 2.0]],
+        )
+        source_path = self.data / "faiss_indexes/folder_7.index"
+        wrong = core_utils.faiss.IndexFlatIP(2)
+        wrong.add(
+            core_utils.np.asarray(
+                [[0.5, 0.5], [0.25, 0.75]],
+                dtype="float32",
+            )
+        )
+        core_utils.faiss.write_index(wrong, str(source_path))
+        source_bytes = source_path.read_bytes()
+
+        snapshot = self._snapshot()
+
+        evidence = json.loads(
+            (
+                Path(snapshot.workspace_path) / "snapshot-evidence.json"
+            ).read_text()
+        )
+        self.assertEqual(
+            evidence["faiss_reconciliation"]["folders"]["7"]["disposition"],
+            "rebuilt",
+        )
+        self.assertEqual(source_path.read_bytes(), source_bytes)
+
+    def test_same_shape_reordered_faiss_values_are_rebuilt(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one", "two"],
+            embeddings=[[1.0, 0.0], [0.0, 2.0]],
+        )
+        source_path = self.data / "faiss_indexes/folder_7.index"
+        reordered = core_utils.faiss.IndexFlatIP(2)
+        reordered.add(
+            core_utils.np.asarray(
+                [[0.0, 1.0], [1.0, 0.0]],
+                dtype="float32",
+            )
+        )
+        core_utils.faiss.write_index(reordered, str(source_path))
+
+        snapshot = self._snapshot()
+
+        candidate = core_utils.faiss.read_index(
+            str(
+                Path(snapshot.workspace_path)
+                / "faiss_indexes/folder_7.index"
+            )
+        )
+        self.assertTrue(
+            core_utils.np.allclose(
+                candidate.reconstruct_n(0, 2),
+                core_utils.np.asarray(
+                    [[1.0, 0.0], [0.0, 1.0]],
+                    dtype="float32",
+                ),
+            )
+        )
+
     def test_stale_unavailable_vectors_are_rebuilt_only_in_snapshot(self):
         self._add_lifecycle_columns()
         self._insert_pdf(
@@ -986,6 +1058,76 @@ class SnapshotServiceTests(ActiveSyncTestCase):
             "snapshot_searchable_embeddings_invalid",
         )
 
+    def test_huge_finite_embeddings_normalize_without_overflow(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[1e308, -1e308]],
+        )
+
+        snapshot = self._snapshot()
+
+        candidate = core_utils.faiss.read_index(
+            str(
+                Path(snapshot.workspace_path)
+                / "faiss_indexes/folder_7.index"
+            )
+        )
+        vector = candidate.reconstruct_n(0, 1)
+        self.assertTrue(core_utils.np.isfinite(vector).all())
+        self.assertGreater(float(core_utils.np.linalg.norm(vector)), 0)
+
+    def test_zero_searchable_folder_index_is_removed_only_from_candidate(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="unavailable",
+            chunks=["removed"],
+            embeddings=[[1.0, 0.0]],
+            file_name="pdfs/missing.pdf",
+        )
+        source_path = self.data / "faiss_indexes/folder_7.index"
+        stale = core_utils.faiss.IndexFlatIP(2)
+        stale.add(
+            core_utils.np.asarray([[1.0, 0.0]], dtype="float32")
+        )
+        core_utils.faiss.write_index(stale, str(source_path))
+        source_bytes = source_path.read_bytes()
+
+        snapshot = self._snapshot()
+
+        workspace = Path(snapshot.workspace_path)
+        self.assertFalse(
+            (workspace / "faiss_indexes/folder_7.index").exists()
+        )
+        self.assertEqual(source_path.read_bytes(), source_bytes)
+        evidence = json.loads(
+            (workspace / "snapshot-evidence.json").read_text()
+        )
+        self.assertEqual(
+            evidence["faiss_reconciliation"]["folders"]["7"],
+            {
+                "disposition": "removed",
+                "pdf_count": 0,
+                "vector_count": 0,
+            },
+        )
+        self.assertEqual(evidence["inventory"]["faiss"]["files"], [])
+        self.assertNotIn(
+            "faiss_indexes/folder_7.index",
+            {item["path"] for item in evidence["files"]},
+        )
+        self.assertEqual(
+            publication_service._validate_faiss_reconciliation_evidence(
+                evidence
+            ),
+            evidence["faiss_reconciliation"],
+        )
+
     @override_settings(VAULT_SNAPSHOT_FAISS_MAX_VECTORS=1)
     def test_candidate_rebuild_vector_bound_fails_closed(self):
         self._add_lifecycle_columns()
@@ -1000,6 +1142,46 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         with self.assertRaisesRegex(
             SnapshotError,
             "snapshot_faiss_rebuild_vector_limit_exceeded",
+        ):
+            self._snapshot()
+
+    @override_settings(VAULT_SNAPSHOT_FAISS_MAX_PDFS=0)
+    def test_candidate_rebuild_row_bound_precedes_json_parse(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[1.0, 0.0]],
+        )
+
+        with patch(
+            "vaultops.services.snapshot.json.loads",
+            side_effect=AssertionError("JSON must not be parsed"),
+        ), self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_faiss_rebuild_pdf_limit_exceeded",
+        ):
+            self._snapshot()
+
+    @override_settings(VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES=2)
+    def test_candidate_rebuild_cell_bound_precedes_json_parse(self):
+        self._add_lifecycle_columns()
+        self._insert_pdf(
+            pdf_id=1,
+            folder_id=7,
+            lifecycle="ready",
+            chunks=["one"],
+            embeddings=[[1.0, 0.0]],
+        )
+
+        with patch(
+            "vaultops.services.snapshot.json.loads",
+            side_effect=AssertionError("JSON must not be parsed"),
+        ), self.assertRaisesRegex(
+            SnapshotError,
+            "snapshot_faiss_rebuild_cell_limit_exceeded",
         ):
             self._snapshot()
 
@@ -1363,6 +1545,80 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         self.assertEqual(self.client.put_count, before)
         self.assertFalse(ArtifactValidation.objects.exists())
 
+    def test_reconciliation_evidence_requires_exact_inventory_bijection(self):
+        digest = "a" * 64
+        valid = {
+            "inventory": {
+                "faiss": {
+                    "files": [
+                        {
+                            "path": "faiss_indexes/folder_7.index",
+                            "sha256": digest,
+                            "faiss": {
+                                "loadable": True,
+                                "vector_count": 2,
+                                "dimensions": 2,
+                            },
+                        }
+                    ]
+                }
+            },
+            "faiss_reconciliation": {
+                "schema": 1,
+                "source": "stored_embeddings",
+                "pdf_count": 1,
+                "vector_count": 2,
+                "vector_bytes": 16,
+                "source_json_bytes": 40,
+                "folders": {
+                    "7": {
+                        "disposition": "rebuilt",
+                        "pdf_count": 1,
+                        "vector_count": 2,
+                        "dimensions": 2,
+                        "sha256": digest,
+                    }
+                },
+            },
+        }
+        self.assertEqual(
+            publication_service._validate_faiss_reconciliation_evidence(
+                valid
+            ),
+            valid["faiss_reconciliation"],
+        )
+
+        duplicate = deepcopy(valid)
+        duplicate["inventory"]["faiss"]["files"].append(
+            deepcopy(duplicate["inventory"]["faiss"]["files"][0])
+        )
+        missing = deepcopy(valid)
+        missing["inventory"]["faiss"]["files"] = []
+        arbitrary_removal = deepcopy(valid)
+        arbitrary_removal["faiss_reconciliation"]["folders"] = {
+            "folder-seven": {
+                "disposition": "removed",
+                "pdf_count": 0,
+                "vector_count": 0,
+            }
+        }
+        wrong_totals = deepcopy(valid)
+        wrong_totals["faiss_reconciliation"]["vector_bytes"] = 8
+
+        for label, evidence in (
+            ("duplicate", duplicate),
+            ("missing", missing),
+            ("arbitrary_removal", arbitrary_removal),
+            ("wrong_totals", wrong_totals),
+        ):
+            with self.subTest(label=label), self.assertRaisesRegex(
+                PublicationError,
+                "snapshot_faiss_reconciliation_invalid",
+            ):
+                publication_service._validate_faiss_reconciliation_evidence(
+                    evidence
+                )
+
     @override_settings(
         VAULT_SYNC_MODE="continuous_coalesced",
         VAULT_SYNC_PROMOTION_MODE="manual",
@@ -1512,9 +1768,12 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             "source": "stored_embeddings",
             "pdf_count": 1,
             "vector_count": 2,
+            "vector_bytes": 16,
+            "source_json_bytes": 64,
             "folders": {
                 "7": {
                     "disposition": "rebuilt",
+                    "pdf_count": 1,
                     "vector_count": 2,
                     "dimensions": 2,
                     "sha256": faiss_digest,
