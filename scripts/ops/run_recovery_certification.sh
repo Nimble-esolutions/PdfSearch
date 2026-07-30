@@ -189,7 +189,7 @@ copy_quiesced_volume() {
 render_and_assert_model() {
   rendered="$("${COMPOSE[@]}" config --format json)"
   RENDERED_CONFIG="$rendered" \
-  python3 - "$CERT_DATA_VOLUME" "$CERT_CONTROL_VOLUME" \
+  python3 - "$PROJECT" "$CERT_DATA_VOLUME" "$CERT_CONTROL_VOLUME" \
     "$CERT_EMPTY_LEGACY_VOLUME" "$CERT_REDIS_VOLUME" \
     "$CERT_INTERNAL_NETWORK" "$CERT_VAULT_NETWORK" <<'PY'
 import json, os, sys
@@ -199,18 +199,20 @@ expected = {
     "/mnt/legacy": "cert_empty_legacy",
 }
 model = json.loads(os.environ["RENDERED_CONFIG"])
+if model.get("name") != sys.argv[1]:
+    raise SystemExit("certification Compose project identity is invalid")
 expected_resources = {
-    "cert_data": sys.argv[1],
-    "cert_control": sys.argv[2],
-    "cert_empty_legacy": sys.argv[3],
-    "cert_redis": sys.argv[4],
+    "cert_data": sys.argv[2],
+    "cert_control": sys.argv[3],
+    "cert_empty_legacy": sys.argv[4],
+    "cert_redis": sys.argv[5],
 }
 for key, name in expected_resources.items():
     if model["volumes"][key].get("name") != name:
         raise SystemExit(f"{key}: unexpected external volume name")
 expected_networks = {
-    "cert_internal": sys.argv[5],
-    "cert_vault": sys.argv[6],
+    "cert_internal": sys.argv[6],
+    "cert_vault": sys.argv[7],
 }
 for key, name in expected_networks.items():
     if model["networks"][key].get("name") != name:
@@ -516,6 +518,10 @@ PY
 fi
 
 docker network inspect "$CERT_VAULT_NETWORK" >/dev/null
+if [ "$(docker network inspect -f '{{.Internal}}' "$CERT_VAULT_NETWORK")" != "false" ]; then
+  echo "Vault network must be dedicated but non-internal so localhost publication works" >&2
+  exit 1
+fi
 for volume in "$CERT_DATA_VOLUME" "$CERT_CONTROL_VOLUME" \
   "$CERT_REDIS_VOLUME" "$CERT_EMPTY_LEGACY_VOLUME"; do
   create_volume "$volume"
