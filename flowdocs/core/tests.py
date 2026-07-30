@@ -2750,7 +2750,7 @@ class UnavailableAttestationTests(SimpleTestCase):
         for changed in (
             {**valid, "id": True},
             {**valid, "expected_size": True},
-            {**valid, "expected_sha256": ""},
+            {**valid, "expected_sha256": "", "expected_size": 1},
             {**valid, "prior_lifecycle": "unavailable"},
         ):
             with self.assertRaises(ValueError):

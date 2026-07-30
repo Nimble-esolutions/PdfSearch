@@ -25,7 +25,10 @@ from core.candidate_maintenance import (
 )
 from core.artifact_cleanup import capacity_report
 from core.emergency_recovery import RecoverySetError, verify_set
-from core.media_quarantine import validate_unavailable_attestation
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    validate_unavailable_attestation,
+)
 from core.rehearsal import RehearsalError, rehearse_migrations
 from vaultops.models import (
     ArtifactGeneration,
@@ -558,7 +561,10 @@ def import_maintenance_candidate(
                 parent,
                 post_records,
                 post_bytes,
-                validation["media"]["unavailable"],
+                validation["media"].get(
+                    "unavailable",
+                    build_unavailable_attestation(()),
+                ),
             )
             manifest = post_manifest
             manifest_digest = post_digest

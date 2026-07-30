@@ -483,6 +483,25 @@ def validate_candidate(workspace: Path) -> dict:
                 "WHERE lifecycle != 'unavailable'"
             )
         )
+        pdf_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(core_pdffile)")
+        }
+        expected_sha_column = (
+            "media_expected_sha256"
+            if "media_expected_sha256" in pdf_columns
+            else "''"
+        )
+        expected_size_column = (
+            "media_expected_size"
+            if "media_expected_size" in pdf_columns
+            else "NULL"
+        )
+        prior_lifecycle_column = (
+            "media_prior_lifecycle"
+            if "media_prior_lifecycle" in pdf_columns
+            else "''"
+        )
         unavailable_attestation = build_unavailable_attestation(
             (
                 {
@@ -497,10 +516,10 @@ def validate_candidate(workspace: Path) -> dict:
                     "prior_lifecycle": row[5],
                 }
                 for row in connection.execute(
-                    "SELECT id, lifecycle, file, media_expected_sha256, "
-                    "media_expected_size, media_prior_lifecycle "
-                    "FROM core_pdffile "
-                    "WHERE lifecycle = 'unavailable' ORDER BY id"
+                    f"SELECT id, lifecycle, file, {expected_sha_column}, "
+                    f"{expected_size_column}, {prior_lifecycle_column} "
+                    "FROM core_pdffile WHERE lifecycle = 'unavailable' "
+                    "ORDER BY id"
                 )
             )
         )

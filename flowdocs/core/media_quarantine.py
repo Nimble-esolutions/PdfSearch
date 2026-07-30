@@ -78,12 +78,20 @@ def build_unavailable_attestation(records, *, id_limit=20) -> dict:
                     )
                 )
             )
-            or not expected_sha256
-            or not isinstance(expected_size, int)
-            or isinstance(expected_size, bool)
-            or expected_size < 0
-            or expected_size > MAX_EXPECTED_SIZE
-            or prior_lifecycle not in PRIOR_LIFECYCLES
+            or not (
+                (
+                    expected_sha256
+                    and isinstance(expected_size, int)
+                    and not isinstance(expected_size, bool)
+                    and 0 <= expected_size <= MAX_EXPECTED_SIZE
+                    and prior_lifecycle in PRIOR_LIFECYCLES
+                )
+                or (
+                    not expected_sha256
+                    and expected_size is None
+                    and not prior_lifecycle
+                )
+            )
         ):
             raise ValueError("unavailable attestation record is invalid")
         canonical = (

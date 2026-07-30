@@ -11,7 +11,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.artifact_vault import ArtifactVault, object_metadata_value
-from core.media_quarantine import validate_unavailable_attestation
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    validate_unavailable_attestation,
+)
 from core.global_writer import (
     acquire_global_writer,
     release_global_writer,
@@ -436,7 +439,10 @@ def publish_snapshot_candidate(
         )
         inventory = evidence.get("inventory", {})
         unavailable_documents = validate_unavailable_attestation(
-            evidence.get("faiss", {}).get("unavailable_documents")
+            evidence.get("faiss", {}).get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
         )
         manifest = {
             "release_id": generation_id,
