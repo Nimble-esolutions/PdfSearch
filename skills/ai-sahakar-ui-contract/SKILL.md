@@ -34,7 +34,13 @@ documentation.
    Marathi-script transliteration when a specialist product or infrastructure
    term would be inaccurate as a literal Marathi word; never force a misleading
    literal solely to avoid transliteration. Ordinary interface copy must not
-   fall back to Latin-script English. Run the registry-wide catalog parity gate.
+   fall back to Latin-script English. Obvious operator terms use established
+   Marathi: `उपलब्ध नाही` (unavailable), `इशारा` (warning), `अयशस्वी`
+   (failed), `सक्रिय` (active), `मागील` (previous), `कारण` (reason),
+   `कृती` (action), `परिणाम` (result), `शोध तयारी` (search readiness),
+   and `तांत्रिक तपशील` (technical details). Translate and review the complete
+   sentence; do not implement this as blind token substitution. Run the
+   registry-wide catalog parity gate.
    Scan visible text and accessibility output for machine tokens, then expand
    Technical details and verify the exact bounded code is copyable, LTR, and
    redacted.
@@ -74,6 +80,9 @@ documentation.
   explanations. Reviewed forms include `ऑपरेटर`, `प्रोफाइल`, `रनटाइम`,
   `व्हॉल्ट`, `रोलबॅक`, `रायटर लीज`, `एम्बेडिंग`, `मॅनिफेस्ट`,
   `चेकपॉइंट`, and `जीसी`.
+- Do not transliterate obvious ordinary labels merely because their source
+  string is English. Use the reviewed literal Marathi vocabulary from the
+  contract, while preserving specialist terms and immutable evidence as above.
 
 ## Minimum review commands
 

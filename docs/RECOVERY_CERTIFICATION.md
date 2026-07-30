@@ -43,6 +43,13 @@ initial-activation gate. The latter is still rejected unless the disposable
 target has no active or previous runtime pointer and no generation projected as
 active.
 
+The signed activation contract also requires the approved bilingual smoke-query
+file at `ACTIVATION_SMOKE_QUERIES_FILE` (by default,
+`/app/data-control/config/activation-smoke-queries.json`). The file belongs to
+the shared control volume, not the image or evidence directory. Create it only
+after `fresh start`, as the unprivileged `appuser`; a root-owned file can be
+unreadable to the web or maintenance process even when the JSON is valid.
+
 Then run:
 
 ```bash
@@ -59,6 +66,57 @@ Compose model and stops if the mounts, networks, image identity, or localhost
 binding differ from the certification contract. Redis, web, and maintenance
 start sequentially so the two application roles cannot race SQLite migrations.
 Runtime activation remains disabled throughout this pre-restore phase.
+
+Before `fresh activate`, install the operator-approved queries through the
+running web container while retaining the same exported certification
+variables:
+
+```bash
+docker compose \
+  -p "recovery-cert-$CERT_RUN_ID" \
+  -f docker-compose.yml \
+  -f docker-compose.recovery-cert.yml \
+  exec -T --user appuser web sh -c '
+    set -eu
+    umask 077
+    mkdir -p /app/data-control/config
+    cat > /app/data-control/config/activation-smoke-queries.json
+  ' <<'JSON'
+{
+  "queries": [
+    {
+      "locale": "en",
+      "query": "operator-approved English recovery query",
+      "expect_references": true
+    },
+    {
+      "locale": "mr",
+      "query": "ऑपरेटरने मंजूर केलेला मराठी पुनर्प्राप्ती प्रश्न",
+      "expect_references": true
+    }
+  ]
+}
+JSON
+```
+
+Replace the example query text with reviewed questions that are expected to
+return references from the selected dataset. Do not use `allow_empty` for
+acceptance. Confirm both process roles can read the same file as `appuser`:
+
+```bash
+for service in web maintenance; do
+  docker compose \
+    -p "recovery-cert-$CERT_RUN_ID" \
+    -f docker-compose.yml \
+    -f docker-compose.recovery-cert.yml \
+    exec -T --user appuser "$service" \
+    test -r /app/data-control/config/activation-smoke-queries.json
+done
+```
+
+Stop if either check fails. Do not repair this by making the file
+world-writable, copying it into the image, or recording its contents as
+certification evidence.
 
 Use the localhost Workbench as an authorized superadmin:
 

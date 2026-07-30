@@ -1,7 +1,7 @@
 Status: Active, constrained
 Audience: Recovery, Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-29
+Last verified: 2026-07-30
 Canonical source: docs/RUSTFS_RECOVERY_VAULT.md
 Supersedes: Earlier claims that S3 restore or scheduled backup is automatic
 
@@ -13,7 +13,8 @@ The vault is a working set of storage, publication, and restore primitives, but
 the deployed application is **not yet a hands-off backup and disaster-recovery
 system**.
 
-Verified against disposable MinIO services through 2026-07-29:
+Verified against disposable MinIO services and CI certification targets through
+2026-07-30:
 
 - checksum-verified object put/get and immutable-key validation work;
 - S3 conditional create/replace and concurrent CAS fencing work;
@@ -30,6 +31,10 @@ Verified against disposable MinIO services through 2026-07-29:
 - the production web and maintenance services receive the same
   lifecycle-critical environment contract, and durable mutation epochs drive
   coalesced scheduled publication.
+
+These are implementation and CI results. They are not a record that production
+RustFS passed a capability probe, that an operator accepted a production
+recovery drill, or that a live production volume was restored.
 
 Still environment-dependent:
 
@@ -111,14 +116,16 @@ A normal Dokploy deploy recreates containers while retaining the named
 
 1. validates and prepares the existing directories;
 2. runs SQLite integrity checks;
-3. writes a local SQLite startup snapshot under `BACKUP_DIR`;
-4. applies migrations;
-5. reconciles an incomplete activation journal;
-6. starts the application.
+3. applies migrations;
+4. reconciles an incomplete activation journal;
+5. starts the application.
 
-It does not compare the volume with the vault, publish accumulated changes, or
-restore a newer generation. Local startup snapshots are on the same volume and
-do not protect against volume or host loss.
+Current entrypoints do not create the retired flat
+`db_backup_YYYY-MM-DD_HHMMSS.sqlite3` file on every start. Older copies may
+still occupy the same volume and require the bounded, separately confirmed
+cleanup described in `RECOVERY_CERTIFICATION.md`. Startup does not compare the
+volume with the vault, publish accumulated changes, or restore a newer
+generation.
 
 For an accumulated volume, record:
 

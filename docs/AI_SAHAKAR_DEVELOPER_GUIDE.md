@@ -78,6 +78,26 @@ or property-lease vocabulary. Latin-script English is reserved for exact
 technical evidence such as codes, API fields, UUIDs, hashes, filenames, and
 paths. Do not translate those identifiers.
 
+For obvious operator language, literal Marathi is mandatory rather than a
+Latin-script fallback or unnecessary phonetic spelling:
+
+| English operator term | Required Marathi copy |
+| --- | --- |
+| unavailable | उपलब्ध नाही |
+| warning | इशारा |
+| failed | अयशस्वी |
+| active | सक्रिय |
+| previous | मागील |
+| reason | कारण |
+| action | कृती |
+| result | परिणाम |
+| observed | निरीक्षण केले |
+| search readiness | शोध तयारी |
+| technical details | तांत्रिक तपशील |
+
+Translate the complete sentence and review its grammar. Do not perform blind
+word replacement, and do not translate immutable codes or identifiers.
+
 ## Operations information architecture
 
 Keep the two operator journeys distinct even though they share the existing
