@@ -89,6 +89,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
         configuration_bytes=None,
         primary_bytes=None,
         primary_suffix=b"",
+        primary_replace=None,
         primary_binding_overrides=None,
         database_posture="valid",
         rebind_primary_digest=False,
@@ -148,6 +149,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
                     "snapshot_digest": snapshot.snapshot_digest,
                     "configuration_fingerprint": fingerprint,
                     "database": {"sha256": database_digest},
+                    "duration_seconds": 1.0,
                 },
                 sort_keys=True,
                 indent=2,
@@ -205,6 +207,9 @@ class SyncRetryHardeningTests(TransactionTestCase):
             )
         if primary_suffix:
             primary_path.write_bytes(primary_path.read_bytes() + primary_suffix)
+        if primary_replace:
+            old, new = primary_replace
+            primary_path.write_bytes(primary_path.read_bytes().replace(old, new))
         if rebind_primary_digest:
             snapshot.evidence = {
                 **snapshot.evidence,
@@ -335,6 +340,41 @@ class SyncRetryHardeningTests(TransactionTestCase):
             self.assertTrue(finalized_snapshot_resume_eligible(snapshot))
         self.assertTrue(swapped)
 
+    def test_primary_child_swap_cannot_mix_digest_and_binding(self):
+        job = self._job()
+        snapshot, workspace = self._finalized_snapshot(
+            job,
+            primary_binding_overrides={"deployment_id": "wrong-deployment"},
+            rebind_primary_digest=True,
+        )
+        primary = workspace / "snapshot-evidence.json"
+        retained = workspace / "snapshot-evidence.retained.json"
+        replacement_payload = json.loads(primary.read_text(encoding="utf-8"))
+        replacement_payload["checkpoint_binding"]["deployment_id"] = (
+            snapshot.deployment_id
+        )
+        replacement = json.dumps(
+            replacement_payload, sort_keys=True, indent=2
+        ).encode("utf-8")
+        original_open = os.open
+        swapped = False
+
+        def replace_primary_after_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            descriptor = original_open(path, flags, *args, **kwargs)
+            if not swapped and path == primary.name:
+                primary.rename(retained)
+                primary.write_bytes(replacement)
+                swapped = True
+            return descriptor
+
+        with patch(
+            "vaultops.services.snapshot.os.open",
+            side_effect=replace_primary_after_open,
+        ):
+            self.assertFalse(finalized_snapshot_resume_eligible(snapshot))
+        self.assertTrue(swapped)
+
     @override_settings(ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=1)
     def test_changed_custody_cap_forces_fresh_snapshot_retry(self):
         job = self._job()
@@ -383,6 +423,13 @@ class SyncRetryHardeningTests(TransactionTestCase):
             },
             "trailing_primary": {
                 "primary_suffix": b"\n{}",
+                "rebind_primary_digest": True,
+            },
+            "non_json_constant": {
+                "primary_replace": (
+                    b'"duration_seconds": 1.0',
+                    b'"duration_seconds": NaN',
+                ),
                 "rebind_primary_digest": True,
             },
             "wrong_deployment": {

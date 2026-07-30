@@ -155,8 +155,10 @@ non-symlink workspace directory so a path replacement cannot redirect
 verification. The small `snapshot-configuration.json` sidecar and the
 `checkpoint_binding` in authenticated `snapshot-evidence.json` must agree
 exactly. Primary evidence is size-bounded, parsed as one complete JSON object,
-and required to use the canonical encoding produced by the snapshot writer;
-leading, trailing, or noncanonical bytes make the checkpoint ineligible.
+and required to use the canonical encoding produced by the snapshot writer.
+Its digest and semantic binding are both derived from that same anchored read;
+leading, trailing, non-JSON numeric constants, or noncanonical bytes make the
+checkpoint ineligible.
 An ineligible workspace receives a durable cleanup intent and the worker
 creates a fresh snapshot. Reclamation runs only after the retry
 transaction commits, after a grace period and fenced-owner recheck, and within

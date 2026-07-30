@@ -203,18 +203,22 @@ def _read_regular_file_bounded_at(directory_descriptor, name, *, maximum_bytes):
             os.close(descriptor)
 
 
-def _primary_resume_binding(directory_descriptor):
-    raw = _read_regular_file_bounded_at(
-        directory_descriptor,
-        "snapshot-evidence.json",
-        maximum_bytes=SNAPSHOT_PRIMARY_EVIDENCE_MAX_BYTES,
-    )
-    if raw is None:
-        return None
+def _reject_non_json_constant(value):
+    raise ValueError(f"non-JSON numeric constant: {value}")
+
+
+def _primary_resume_binding(raw):
     try:
-        value = json.loads(raw.decode("utf-8"))
+        value = json.loads(
+            raw.decode("utf-8"),
+            parse_constant=_reject_non_json_constant,
+        )
         canonical = json.dumps(
-            value, sort_keys=True, indent=2, default=str
+            value,
+            sort_keys=True,
+            indent=2,
+            default=str,
+            allow_nan=False,
         ).encode("utf-8")
     except (UnicodeDecodeError, TypeError, ValueError, json.JSONDecodeError):
         return None
@@ -253,15 +257,16 @@ def _snapshot_file_configuration(snapshot):
         if not stat.S_ISDIR(workspace_stat.st_mode):
             return None
         expected_primary_digest = snapshot.evidence.get("evidence_sha256")
+        primary_raw = _read_regular_file_bounded_at(
+            workspace_descriptor,
+            "snapshot-evidence.json",
+            maximum_bytes=SNAPSHOT_PRIMARY_EVIDENCE_MAX_BYTES,
+        )
         if (
             not isinstance(expected_primary_digest, str)
             or not re.fullmatch(r"[0-9a-f]{64}", expected_primary_digest)
-            or _stable_file_sha256_at(
-                workspace_descriptor,
-                "snapshot-evidence.json",
-                maximum_bytes=SNAPSHOT_PRIMARY_EVIDENCE_MAX_BYTES,
-            )
-            != expected_primary_digest
+            or primary_raw is None
+            or hashlib.sha256(primary_raw).hexdigest() != expected_primary_digest
         ):
             return None
         expected_database_digest = snapshot.evidence.get("database_sha256")
@@ -288,7 +293,7 @@ def _snapshot_file_configuration(snapshot):
             "snapshot_digest": snapshot.snapshot_digest,
             "snapshot_id": str(snapshot.public_id),
         }
-        if _primary_resume_binding(workspace_descriptor) != expected_binding:
+        if _primary_resume_binding(primary_raw) != expected_binding:
             return None
         raw = _read_regular_file_bounded_at(
             workspace_descriptor,
