@@ -435,7 +435,7 @@ def bind_unavailable_recovery_evidence(
             ]
         )
         _audit(
-            event_type="media_recovery_evidence_bound",
+            event_type="media_evidence_bound",
             actor=requested_by,
             payload={
                 "pdf_id": current.pk,

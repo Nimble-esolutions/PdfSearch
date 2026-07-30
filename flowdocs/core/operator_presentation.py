@@ -1324,6 +1324,7 @@ LABELS = {
     "present": "Present",
     "absent": "Not present",
     "media_unavailable": "Document media marked unavailable",
+    "media_evidence_bound": "Document recovery evidence bound",
     "media_restored": "Document media restored",
     "completed": "Completed",
     "skipped": "Skipped",

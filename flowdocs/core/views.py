@@ -945,7 +945,7 @@ def mark_pdf_unavailable_view(request, pdf_id):
         messages.error(
             request,
             gettext(
-                "Provide the expected SHA-256, byte size, reason, and case reference before marking this file unavailable."
+                "This record was not changed. Confirm a definite absence, reason, and case reference; exact recovery evidence may be left blank."
             ),
         )
         return safe_referer_redirect(request)

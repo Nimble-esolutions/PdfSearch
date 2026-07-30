@@ -926,7 +926,7 @@ msgstr "कीवर्ड संपादित करा"
 
 #: core/templates/dashboard_pdfs.html:22
 msgid "Back to Dashboard"
-msgstr "नियंत्रण फलकवर परत"
+msgstr "नियंत्रण फलकावर परत"
 
 #: core/templates/dashboard_pdfs.html:27
 msgid "Category manifest"
@@ -2407,7 +2407,7 @@ msgid ""
 "active runtime is its verified local-maintenance child. Vault authority is "
 "not changed."
 msgstr ""
-"सक्रिय कार्यरत प्रणाली ही मागील स्वाक्षरीत कार्यरत प्रणालीचा सत्यापित स्थानिक-देखभाल वारस असेल तरच ही "
+"सक्रिय कार्यरत प्रणाली ही मागील स्वाक्षरीत कार्यरत प्रणालीची सत्यापित स्थानिक-देखभाल उत्तराधिकारी असेल तरच ही "
 "कृती ती मागील कार्यरत प्रणाली जाणीवपूर्वक पुनर्स्थापित करते. व्हॉल्ट अधिकार बदलत नाही."
 
 #: core/templates/vaultops/workbench.html
@@ -2668,13 +2668,13 @@ msgid "Remote inventory and restore work remain unavailable."
 msgstr "दूरस्थ सूची आणि पुनर्स्थापना कार्य उपलब्ध राहणार नाही."
 
 msgid "Review profile configuration"
-msgstr "रूपरेषा संरचनेचा आढावा घ्या"
+msgstr "रूपरेषेच्या संरचनेचा आढावा घ्या"
 
 msgid "Local development posture"
 msgstr "स्थानिक विकास स्थिती"
 
 msgid "Controlled runtime posture"
-msgstr "नियंत्रित कार्यरत प्रणाली स्थिती"
+msgstr "नियंत्रित कार्यरत प्रणालीची स्थिती"
 
 msgid ""
 "Remote publication and production activation stay disabled or explicitly "
@@ -2892,7 +2892,7 @@ msgid "The signed runtime pointers did not pass verification."
 msgstr "स्वाक्षरीत कार्यरत प्रणाली निर्देशक पडताळणीत उत्तीर्ण झाले नाहीत."
 
 msgid "Rollback generation is not projected"
-msgstr "मागील आवृत्ती पुनर्स्थापनाचा निर्मिती संच सत्यापित नोंदीत नाही"
+msgstr "मागील आवृत्ती पुनर्स्थापनेसाठीचा निर्मिती संच सत्यापित नोंदीत नाही"
 
 msgid ""
 "The previous runtime is not present in the verified generation projection."
@@ -2905,7 +2905,7 @@ msgid "The active runtime is not eligible for this rollback"
 msgstr "सक्रिय कार्यरत प्रणाली या मागील आवृत्ती पुनर्स्थापनासाठी पात्र नाही"
 
 msgid "Only a verified local-maintenance child can use this rollback control."
-msgstr "फक्त सत्यापित स्थानिक-देखभाल वारस हा मागील आवृत्ती पुनर्स्थापनेचे नियंत्रण वापरू शकतो."
+msgstr "फक्त सत्यापित स्थानिक-देखभाल उत्तराधिकारी प्रणालीच मागील आवृत्ती पुनर्स्थापनेचे नियंत्रण वापरू शकते."
 
 msgid "Rollback lineage could not be verified"
 msgstr "मागील आवृत्ती पुनर्स्थापनाची वंशसाखळी पडताळता आली नाही"
@@ -3212,7 +3212,7 @@ msgid "Inventory verification"
 msgstr "सूचीची पडताळणी"
 
 msgid "Read-only profile probe"
-msgstr "केवळ-वाचन रूपरेषा तपासणी"
+msgstr "केवळ-वाचन रूपरेषेची तपासणी"
 
 msgid "Active synchronization"
 msgstr "सक्रिय समक्रमण"
@@ -3280,7 +3280,7 @@ msgid "Correct the highlighted fields"
 msgstr "ठळक केलेली क्षेत्रे दुरुस्त करा"
 
 msgid "Browser profile configuration is disabled"
-msgstr "ब्राउझरमधील रूपरेषा संरचना बंद आहे"
+msgstr "ब्राउझरमधून रूपरेषा संरचित करण्याची सुविधा बंद आहे"
 
 msgid ""
 "This environment accepts Vault profiles only from deployed configuration."
@@ -3634,7 +3634,7 @@ msgid "Prepare and review a new plan"
 msgstr "नवीन योजना तयार करून तिचे पुनरावलोकन करा"
 
 msgid "Profile probe completed"
-msgstr "रूपरेषा तपासणी पूर्ण झाली"
+msgstr "रूपरेषेची तपासणी पूर्ण झाली"
 
 msgid "Protected and eligible local artifacts could not be inventoried safely."
 msgstr ""
@@ -3747,7 +3747,7 @@ msgid "Review rollback jobs"
 msgstr "मागील आवृत्ती पुनर्स्थापनेच्या कामांचे पुनरावलोकन करा"
 
 msgid "Review runtime configuration"
-msgstr "कार्यरत प्रणाली संरचनेचे पुनरावलोकन करा"
+msgstr "कार्यरत प्रणालीच्या संरचनेचे पुनरावलोकन करा"
 
 msgid "Review service health"
 msgstr "सेवेच्या आरोग्यस्थितीचे पुनरावलोकन करा"
@@ -3780,7 +3780,7 @@ msgid "Setup required"
 msgstr "मांडणी आवश्यक आहे"
 
 msgid "Source or runtime evidence changed after the plan was prepared."
-msgstr "योजना तयार झाल्यानंतर स्रोत किंवा कार्यरत प्रणाली पुरावा बदलला."
+msgstr "योजना तयार झाल्यानंतर स्रोत किंवा कार्यरत प्रणालीचा पुरावा बदलला."
 
 msgid "Synchronization is queued"
 msgstr "समक्रमण रांगेत आहे"
@@ -4192,7 +4192,7 @@ msgid "An activated document path is unsafe"
 msgstr "सक्रिय करण्याच्या उमेदवारातील दस्तऐवज मार्ग असुरक्षित आहे"
 
 msgid "A document path leaves the approved runtime media location or cannot be resolved safely."
-msgstr "दस्तऐवज मार्ग मंजूर कार्यरत प्रणाली मीडिया ठिकाणाबाहेर जातो किंवा सुरक्षितपणे निश्चित करता येत नाही."
+msgstr "दस्तऐवज मार्ग मंजूर कार्यरत प्रणालीच्या संचिका-स्थानाबाहेर जातो किंवा सुरक्षितपणे निश्चित करता येत नाही."
 
 msgid "Review candidate document storage"
 msgstr "उमेदवाराचे दस्तऐवज संचयन तपासा"
@@ -4237,7 +4237,7 @@ msgid "Candidate runtime verification did not complete"
 msgstr "उमेदवार कार्यरत प्रणालीची पडताळणी पूर्ण झाली नाही"
 
 msgid "A bounded runtime check failed without an approved more-specific reason."
-msgstr "अधिक नेमके मंजूर कारण नोंदले नसताना मर्यादित कार्यरत प्रणाली तपासणी अयशस्वी झाली."
+msgstr "अधिक नेमके मंजूर कारण नोंदले नसताना कार्यरत प्रणालीची मर्यादित तपासणी अयशस्वी झाली."
 
 msgid "Candidate runtime verification could not be classified"
 msgstr "उमेदवार कार्यरत प्रणाली पडताळणीचे वर्गीकरण करता आले नाही"
@@ -4353,8 +4353,8 @@ msgstr "अपेक्षित संचिका आकार (बाइट�
 msgid "Case reference"
 msgstr "प्रकरण संदर्भ"
 
-msgid "Provide the expected SHA-256, byte size, reason, and case reference before marking this file unavailable."
-msgstr "ही संचिका उपलब्ध नाही अशी नोंद करण्यापूर्वी अपेक्षित SHA-256, बाइटमधील आकार, कारण आणि प्रकरण संदर्भ द्या."
+msgid "This record was not changed. Confirm a definite absence, reason, and case reference; exact recovery evidence may be left blank."
+msgstr "ही नोंद बदललेली नाही. संचिका निश्चितपणे उपलब्ध नसल्याची पुष्टी, कारण आणि प्रकरण संदर्भ द्या; पुनर्प्राप्तीचा अचूक पुरावा रिकामा ठेवता येईल."
 
 msgid "This document was already marked unavailable; no state changed."
 msgstr "हा दस्तऐवज आधीच उपलब्ध नाही असा नोंदवला आहे; स्थितीत बदल झाला नाही."
@@ -4400,8 +4400,8 @@ msgstr "पुनर्प्राप्तीचा अचूक पुरा�
 msgid "Document “%(title)s” was restored to its preserved lifecycle and remains excluded from search."
 msgstr "“%(title)s” दस्तऐवज त्याच्या जतन केलेल्या जीवनचक्रात पुनर्स्थापित केला आहे आणि तो शोधातून वगळलेलाच राहील."
 
-msgid "Restore is unavailable until approved SHA-256 and byte-size evidence is bound."
-msgstr "मान्य SHA-256 आणि बाइट आकाराचा पुरावा जोडला जाईपर्यंत पुनर्स्थापना उपलब्ध नाही."
+msgid "Restore is unavailable until approved technical digest and byte-size evidence is bound."
+msgstr "मान्य तांत्रिक हॅश मूल्य आणि बाइट आकाराचा पुरावा जोडला जाईपर्यंत पुनर्स्थापना उपलब्ध नाही."
 
 msgid "Evidence binding reason"
 msgstr "पुरावा जोडण्याचे कारण"
@@ -4417,3 +4417,18 @@ msgstr "पुनर्प्राप्तीच्या पुराव्�
 
 msgid "Exact recovery evidence was already bound; no state changed."
 msgstr "पुनर्प्राप्तीचा अचूक पुरावा आधीच जोडला आहे; स्थितीत बदल झाला नाही."
+
+msgid "Use the exact approved custody digest and byte size. Do not guess."
+msgstr "मान्य अभिरक्षण पुराव्यातील अचूक हॅश मूल्य आणि बाइट आकार वापरा. अंदाज लावू नका."
+
+msgid "Expected digest"
+msgstr "अपेक्षित हॅश मूल्य"
+
+msgid "Enter this exact confirmation phrase:"
+msgstr "पुष्टीसाठी हा वाक्यांश अचूक नोंदवा:"
+
+msgid "Enter this exact confirmation phrase to preserve this record and exclude it from search:"
+msgstr "ही नोंद जतन करून शोधातून वगळण्यासाठी पुष्टीचा हा वाक्यांश अचूक नोंदवा:"
+
+msgid "Document recovery evidence bound"
+msgstr "दस्तऐवज पुनर्प्राप्तीचा पुरावा जोडला"

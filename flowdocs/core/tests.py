@@ -2476,12 +2476,15 @@ class DocumentLifecycleTests(TestCase):
             self.pdf.media_expected_sha256,
             hashlib.sha256(self.restored_bytes).hexdigest(),
         )
-        self.assertTrue(
-            MaintenanceAuditEvent.objects.filter(
-                event_type="media_recovery_evidence_bound",
-                payload__pdf_id=self.pdf.pk,
-                payload__binding_reason="source_recovery_case",
-            ).exists()
+        event = MaintenanceAuditEvent.objects.get(
+            event_type="media_evidence_bound",
+            payload__pdf_id=self.pdf.pk,
+            payload__binding_reason="source_recovery_case",
+        )
+        event.full_clean()
+        self.assertLessEqual(
+            len(event.event_type),
+            MaintenanceAuditEvent._meta.get_field("event_type").max_length,
         )
 
         second = self.bind_recovery_evidence(
@@ -2496,7 +2499,7 @@ class DocumentLifecycleTests(TestCase):
         )
         self.assertEqual(
             MaintenanceAuditEvent.objects.filter(
-                event_type="media_recovery_evidence_bound",
+                event_type="media_evidence_bound",
                 payload__pdf_id=self.pdf.pk,
             ).count(),
             1,
@@ -2766,7 +2769,11 @@ class DocumentLifecycleTests(TestCase):
         self.assertContains(response, "Bind recovery evidence")
         self.assertContains(
             response,
-            "Restore is unavailable until approved SHA-256 and byte-size evidence is bound.",
+            '<bdi lang="en" dir="ltr">BIND RECOVERY EVIDENCE</bdi>',
+        )
+        self.assertContains(
+            response,
+            "Restore is unavailable until approved technical digest and byte-size evidence is bound.",
         )
         self.assertContains(
             response,
@@ -2799,6 +2806,10 @@ class DocumentLifecycleTests(TestCase):
         self.assertContains(
             response,
             'name="case_reference" lang="en" dir="ltr"',
+        )
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">MARK UNAVAILABLE</bdi>',
         )
 
     def test_unavailable_file_is_not_served_to_public_or_ordinary_user(self):
@@ -2956,6 +2967,32 @@ class UnavailableAttestationTests(SimpleTestCase):
             )
         self.assertEqual(storage_key_status(" pdfs/one.pdf"), "unsafe")
         self.assertEqual(storage_key_status(r"pdfs\\one.pdf"), "unsafe")
+
+    def test_unknown_evidence_preserves_prior_lifecycle_and_binding_changes_digest(self):
+        storage = storage_key_evidence("pdfs/one.pdf")
+        unknown = {
+            "id": 1,
+            "lifecycle": "unavailable",
+            "storage_key_status": storage["status"],
+            "storage_key_token_sha256": storage["token_sha256"],
+            "expected_sha256": "",
+            "expected_size": None,
+            "prior_lifecycle": "uploaded",
+        }
+
+        before = build_unavailable_attestation((unknown,))
+        after = build_unavailable_attestation(
+            (
+                {
+                    **unknown,
+                    "expected_sha256": "a" * 64,
+                    "expected_size": 19,
+                },
+            )
+        )
+
+        self.assertEqual(before["count"], 1)
+        self.assertNotEqual(before["set_sha256"], after["set_sha256"])
 
 
 class UnavailableEvidenceMigrationTests(TransactionTestCase):

@@ -116,7 +116,7 @@ test.describe('Operations Cockpit', () => {
     await quarantine.focus();
     await expectNoSeriousAxeViolations(page);
     await page.keyboard.press('Enter');
-    await expect(page.getByLabel('Expected SHA-256').first()).toBeVisible();
+    await expect(page.getByLabel(/Expected digest/).first()).toBeVisible();
     await expectNoSeriousAxeViolations(page);
     await expect(page.locator('input[name="confirmation"]').first()).toHaveAttribute('lang', 'en');
     await expect(page.locator('input[name="confirmation"]').first()).toHaveAttribute('dir', 'ltr');

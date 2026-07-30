@@ -376,6 +376,7 @@ class MaintenanceAuditEvent(models.Model):
         ("purged", "Purged"),
         ("worker_died", "Worker died"),
         ("media_unavailable", "Media unavailable"),
+        ("media_evidence_bound", "Media recovery evidence bound"),
         ("media_restored", "Media restored"),
     )
 

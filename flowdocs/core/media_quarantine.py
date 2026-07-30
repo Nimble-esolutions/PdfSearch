@@ -89,7 +89,10 @@ def build_unavailable_attestation(records, *, id_limit=20) -> dict:
                 or (
                     not expected_sha256
                     and expected_size is None
-                    and not prior_lifecycle
+                    and (
+                        not prior_lifecycle
+                        or prior_lifecycle in PRIOR_LIFECYCLES
+                    )
                 )
             )
         ):
