@@ -9,7 +9,12 @@ from django.conf import settings
 from django.db import models as django_models
 from django.http import HttpResponse
 
-from .models import ArtifactGeneration, MaintenanceJob, PDFFile
+from .models import (
+    ArtifactGeneration,
+    MaintenanceJob,
+    PDFFile,
+    SEARCHABLE_PDF_LIFECYCLES,
+)
 from django.utils import timezone as django_timezone
 
 
@@ -47,8 +52,13 @@ def metrics_view(request):
         gauge("pdfsearch_current_generation_age_seconds", 0)
 
     try:
-        total_pdfs = PDFFile.objects.count()
-        indexed = PDFFile.objects.filter(indexed=True).count()
+        total_pdfs = PDFFile.objects.filter(
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES
+        ).count()
+        indexed = PDFFile.objects.filter(
+            indexed=True,
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        ).count()
         gauge("pdfsearch_data_pdf_count", total_pdfs)
         gauge("pdfsearch_data_indexed_pdf_count", indexed)
         gauge("pdfsearch_data_ready", 1 if total_pdfs == 0 or indexed > 0 else 0)

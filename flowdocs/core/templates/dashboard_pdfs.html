@@ -122,7 +122,9 @@
                 <td>{% if pdf.uploaded_by %}{{ pdf.uploaded_by.username }}{% else %}{% trans "Unknown" %}{% endif %}</td>
                 <td>{{ pdf.uploaded_at|date:"d M Y H:i" }}</td>
                 <td>
-                  {% if pdf.indexed %}
+                  {% if pdf.lifecycle == 'unavailable' %}
+                    <span class="badge text-bg-danger">{% trans "Unavailable" %}</span>
+                  {% elif pdf.indexed %}
                     <span class="badge text-bg-success">{% trans "Indexed" %}</span>
                   {% else %}
                     <span class="badge text-bg-warning">{% trans "Needs index" %}</span>
@@ -136,14 +138,21 @@
                   {% elif pdf.lifecycle == 'ready' %}
                     <span class="badge text-bg-success">{% trans "Ready" %}</span>
                   {% endif %}
+                  {% if pdf.lifecycle == 'unavailable' %}
+                    {% include "components/operator_evidence.html" with presentation=unavailable_presentation technical_code="document_media_unavailable" show_action=False only %}
+                  {% endif %}
                   {% if not pdf.uploaded_by %}
                     <span class="badge text-bg-light">{% trans "Owner review" %}</span>
                   {% endif %}
                 </td>
                 <td>
-                  <a href="{% url 'view_pdf' pdf.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
-                    {% trans "View" %}
-                  </a>
+                  {% if pdf.lifecycle == 'unavailable' %}
+                    <span class="text-muted">{% trans "File unavailable" %}</span>
+                  {% else %}
+                    <a href="{% url 'view_pdf' pdf.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
+                      {% trans "View" %}
+                    </a>
+                  {% endif %}
                 </td>
                 {% if role == 'admin' or role == 'superadmin' %}
                   <td>
@@ -168,7 +177,14 @@
                               aria-label="{% trans 'Rename PDF' %}: {{ pdf.title }}">
                         {% trans "Rename" %}
                       </button>
-                      {% if pdf.lifecycle != 'deprecated' and pdf.lifecycle != 'archived' %}
+                      {% if pdf.lifecycle == 'unavailable' %}
+                        <form method="post" action="{% url 'restore_pdf' pdf.id %}" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-outline-success btn-sm">
+                            {% trans "Restore availability" %}
+                          </button>
+                        </form>
+                      {% elif pdf.lifecycle != 'deprecated' and pdf.lifecycle != 'archived' %}
                         <form method="post" action="{% url 'deprecate_pdf' pdf.id %}" class="d-inline">
                           {% csrf_token %}
                           <button type="submit" class="btn btn-outline-secondary btn-sm"
@@ -183,6 +199,17 @@
                             {% trans "Archive" %}
                           </button>
                         </form>
+                        <details class="d-inline-block">
+                          <summary class="btn btn-outline-danger btn-sm">{% trans "Mark unavailable" %}</summary>
+                          <form method="post" action="{% url 'mark_pdf_unavailable' pdf.id %}" class="admin-confirm-form">
+                            {% csrf_token %}
+                            <label>
+                              {% trans "Type MARK UNAVAILABLE to preserve this record and exclude it from search." %}
+                              <input name="confirmation" autocomplete="off" required>
+                            </label>
+                            <button type="submit" class="btn btn-danger btn-sm">{% trans "Confirm unavailable media" %}</button>
+                          </form>
+                        </details>
                       {% else %}
                         <form method="post" action="{% url 'restore_pdf' pdf.id %}" class="d-inline">
                           {% csrf_token %}

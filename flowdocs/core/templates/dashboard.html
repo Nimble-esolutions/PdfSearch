@@ -120,6 +120,7 @@
             <option value="">{% trans "Any" %}</option>
             <option value="ready"{% if cockpit.filters.readiness == "ready" %} selected{% endif %}>{% trans "Ready" %}</option>
             <option value="needs_index"{% if cockpit.filters.readiness == "needs_index" %} selected{% endif %}>{% trans "Needs index" %}</option>
+            <option value="unavailable"{% if cockpit.filters.readiness == "unavailable" %} selected{% endif %}>{% trans "Unavailable media" %}</option>
           </select>
         </label>
         <label>{% trans "Provenance" %}

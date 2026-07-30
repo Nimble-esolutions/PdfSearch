@@ -4286,3 +4286,60 @@ msgstr "स्मोक-चाचणी प्रश्न फाइल सद�
 
 msgid "Correct the activation test queries"
 msgstr "सक्रियकरण चाचणीचे प्रश्न दुरुस्त करा"
+
+msgid "Document files are unavailable"
+msgstr "दस्तऐवज फाइल्स उपलब्ध नाहीत"
+
+msgid "These preserved records are excluded from search and index work."
+msgstr "या जतन केलेल्या नोंदी शोध आणि अनुक्रमण कामातून वगळल्या आहेत."
+
+msgid "Review unavailable documents"
+msgstr "उपलब्ध नसलेल्या दस्तऐवजांचा आढावा घ्या"
+
+msgid "Unavailable media"
+msgstr "दस्तऐवज फाइल उपलब्ध नाही"
+
+msgid "File unavailable"
+msgstr "फाइल उपलब्ध नाही"
+
+msgid "Restore availability"
+msgstr "उपलब्धता पुनर्स्थापित करा"
+
+msgid "Mark unavailable"
+msgstr "उपलब्ध नाही अशी नोंद करा"
+
+msgid "Type MARK UNAVAILABLE to preserve this record and exclude it from search."
+msgstr "ही नोंद जतन करून शोधातून वगळण्यासाठी MARK UNAVAILABLE टाइप करा."
+
+msgid "Confirm unavailable media"
+msgstr "फाइल उपलब्ध नसल्याची पुष्टी करा"
+
+msgid "Document file is unavailable"
+msgstr "दस्तऐवज फाइल उपलब्ध नाही"
+
+msgid "The preserved document record does not currently have verified source media."
+msgstr "जतन केलेल्या दस्तऐवज नोंदीसाठी सध्या पडताळलेली स्रोत फाइल उपलब्ध नाही."
+
+msgid "It is excluded from search, indexing, and runtime readiness until the file is restored."
+msgstr "फाइल पुनर्स्थापित होईपर्यंत ही नोंद शोध, अनुक्रमण आणि रनटाइम सज्जतेतून वगळली आहे."
+
+msgid "Restore verified document media"
+msgstr "पडताळलेली दस्तऐवज फाइल पुनर्स्थापित करा"
+
+msgid "Document media marked unavailable"
+msgstr "दस्तऐवज फाइल उपलब्ध नसल्याची नोंद केली"
+
+msgid "Document media restored"
+msgstr "दस्तऐवज फाइल पुनर्स्थापित केली"
+
+msgid "Type MARK UNAVAILABLE to confirm that this document file is unavailable."
+msgstr "ही दस्तऐवज फाइल उपलब्ध नसल्याची पुष्टी करण्यासाठी MARK UNAVAILABLE टाइप करा."
+
+msgid "The document is unavailable and excluded from search and index work."
+msgstr "दस्तऐवज उपलब्ध नाही आणि तो शोध व अनुक्रमण कामातून वगळला आहे."
+
+msgid "Restore the verified document file to its approved location before restoring availability."
+msgstr "उपलब्धता पुनर्स्थापित करण्यापूर्वी पडताळलेली दस्तऐवज फाइल तिच्या मंजूर ठिकाणी पुनर्स्थापित करा."
+
+msgid "Document “%(title)s” was restored and queued for index maintenance."
+msgstr "“%(title)s” दस्तऐवज पुनर्स्थापित केला आणि अनुक्रमणिका देखभालीसाठी रांगेत ठेवला."

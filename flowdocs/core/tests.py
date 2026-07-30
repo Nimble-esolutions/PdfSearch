@@ -27,7 +27,7 @@ from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
-from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, mark_pdf_unavailable, restore_pdf
 from .maintenance_plans import queue_plan
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat
 from .worker_readiness import heartbeat_path
@@ -755,6 +755,47 @@ class SearchAndAuthenticationTests(TestCase):
             self.assertEqual(public_pdf.status_code, 200)
             self.assertEqual(public_pdf["Content-Type"], "application/pdf")
 
+    def test_authenticated_scoped_search_excludes_unavailable_documents(self):
+        self.user.role = "user"
+        self.user.save(update_fields=["role"])
+        folder = Folder.objects.create(name="Unavailable rules", created_by=self.user)
+        available = PDFFile.objects.create(
+            title="Available rule",
+            file="pdfs/available-rule.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="ready",
+        )
+        unavailable = PDFFile.objects.create(
+            title="Unavailable rule",
+            file="pdfs/unavailable-rule.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="unavailable",
+        )
+        self.client.force_login(self.user)
+
+        with (
+            patch("core.views.is_general_query", return_value=False),
+            patch(
+                "core.views.detect_folder_by_keywords_multi",
+                return_value=[(folder, 0.9)],
+            ),
+            patch(
+                "core.views.search_pdfs_fast",
+                return_value=("", []),
+            ) as search_pdfs,
+        ):
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "rule"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        scoped = search_pdfs.call_args.kwargs["pdfs"]
+        self.assertEqual(list(scoped.values_list("pk", flat=True)), [available.pk])
+        self.assertFalse(scoped.filter(pk=unavailable.pk).exists())
+
     def test_root_head_request_is_successful(self):
         response = self.client.head("/")
 
@@ -992,6 +1033,37 @@ class DashboardTests(TestCase):
         self.assertContains(response, "Search readiness is unavailable")
         self.assertContains(response, "Verified runtime authority is required")
         self.assertNotContains(response, "Safety Gates")
+
+    def test_dashboard_readiness_excludes_preserved_unavailable_document(self):
+        folder = Folder.objects.create(name="Readiness", created_by=self.user)
+        PDFFile.objects.create(
+            title="Searchable",
+            file="pdfs/searchable.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="ready",
+            indexed=True,
+        )
+        PDFFile.objects.create(
+            title="Preserved unavailable",
+            file="pdfs/unavailable.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="unavailable",
+            indexed=False,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        cockpit = response.context["cockpit"]
+        self.assertEqual(cockpit["total_pdfs"], 2)
+        self.assertEqual(cockpit["indexed_pdfs"], 1)
+        self.assertEqual(cockpit["unavailable_pdfs"], 1)
+        self.assertEqual(cockpit["needs_index_pdfs"], 0)
+        category = list(cockpit["category_page"].object_list)[0]
+        self.assertEqual(category.pdf_count, 2)
+        self.assertEqual(category.index_debt, 0)
 
     def test_dashboard_renders_marathi_cockpit_labels(self):
         self.client.force_login(self.user)
@@ -1317,7 +1389,10 @@ class DashboardTests(TestCase):
         folder = Folder.objects.create(name="Documents", created_by=superadmin)
         pdf = PDFFile.objects.create(
             title="Stored artifacts",
-            file="pdfs/stored-artifacts.pdf",
+            file=SimpleUploadedFile(
+                "stored-artifacts.pdf",
+                b"%PDF-1.4 stored artifacts",
+            ),
             folder=folder,
             uploaded_by=superadmin,
             indexed=False,
@@ -2287,6 +2362,108 @@ class DocumentLifecycleTests(TestCase):
         self.pdf.refresh_from_db()
         self.assertEqual(self.pdf.lifecycle, "uploaded")
         self.assertFalse(self.pdf.indexed)
+
+    def test_mark_unavailable_preserves_row_artifacts_and_audits(self):
+        self.pdf.page_chunks = ["preserved"]
+        self.pdf.chunk_embeddings = [[1.0, 0.0]]
+        self.pdf.save(update_fields=["page_chunks", "chunk_embeddings"])
+
+        mark_pdf_unavailable(self.pdf, requested_by=self.admin)
+
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "unavailable")
+        self.assertFalse(self.pdf.indexed)
+        self.assertEqual(self.pdf.page_chunks, ["preserved"])
+        event = MaintenanceAuditEvent.objects.get(event_type="media_unavailable")
+        self.assertEqual(event.actor, self.admin)
+        self.assertEqual(event.payload["pdf_id"], self.pdf.pk)
+        self.assertEqual(event.payload["prior_lifecycle"], "uploaded")
+
+    def test_unavailable_document_is_excluded_from_index_matrix(self):
+        self.pdf.page_chunks = ["preserved"]
+        self.pdf.chunk_embeddings = [[1.0, 0.0]]
+        self.pdf.save(update_fields=["page_chunks", "chunk_embeddings"])
+        mark_pdf_unavailable(self.pdf, requested_by=self.admin)
+
+        chunks, embeddings = core_utils._folder_embedding_matrix(
+            self.folder,
+            PDFFile.objects.filter(folder=self.folder),
+        )
+
+        self.assertEqual(chunks, [])
+        self.assertEqual(embeddings.shape, (0, 0))
+
+    def test_unavailable_endpoint_requires_exact_confirmation(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("mark_pdf_unavailable", args=[self.pdf.pk]),
+            {"confirmation": "wrong"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self.assertFalse(
+            MaintenanceAuditEvent.objects.filter(
+                event_type="media_unavailable"
+            ).exists()
+        )
+
+    def test_unavailable_endpoint_preserves_identity(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("mark_pdf_unavailable", args=[self.pdf.pk]),
+            {"confirmation": "MARK UNAVAILABLE"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "unavailable")
+
+    def test_unavailable_restore_requires_media_then_is_reversible(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                mark_pdf_unavailable(self.pdf, requested_by=self.admin)
+                with self.assertRaisesRegex(
+                    SearchDataIntegrityError,
+                    "media must be restored",
+                ):
+                    restore_pdf(self.pdf, requested_by=self.admin)
+                self.pdf.refresh_from_db()
+                self.assertEqual(self.pdf.lifecycle, "unavailable")
+
+                target = Path(media_root) / self.pdf.file.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(b"%PDF-1.7 restored")
+                restore_pdf(self.pdf, requested_by=self.admin)
+
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self.assertTrue(
+            MaintenanceAuditEvent.objects.filter(
+                event_type="media_restored",
+                payload__pdf_id=self.pdf.pk,
+            ).exists()
+        )
+
+    def test_unavailable_dashboard_uses_human_guidance_and_collapsed_code(self):
+        mark_pdf_unavailable(self.pdf, requested_by=self.admin)
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("dashboard_folder", args=[self.folder.pk])
+        )
+
+        self.assertContains(response, "Document file is unavailable")
+        self.assertContains(response, "Technical details")
+        self.assertContains(response, "document_media_unavailable")
+        self.assertContains(response, "Restore availability")
+        self.assertNotContains(
+            response,
+            f'href="{reverse("view_pdf", args=[self.pdf.pk])}"',
+        )
 
     def test_deprecate_archived_raises(self):
         archive_pdf(self.pdf, requested_by=self.admin)

@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from .artifact_vault import ArtifactVault
 from .management.commands.inventory_artifacts import build_manifest
-from .models import ArtifactGeneration, ArtifactValidation, Folder, MaintenanceAuditEvent, MaintenanceJob, MaintenanceJobItem, PDFFile
+from .models import ArtifactGeneration, ArtifactValidation, Folder, MaintenanceAuditEvent, MaintenanceJob, MaintenanceJobItem, PDFFile, SEARCHABLE_PDF_LIFECYCLES
 from .utils import SearchDataIntegrityError, build_or_load_faiss_index_for_folder, precompute_pdf_embeddings
 from .namespace import KeyBuilder
 from .registration import RegistrationError
@@ -151,11 +151,47 @@ def archive_pdf(pdf, *, requested_by=None):
     return pdf
 
 
+def mark_pdf_unavailable(pdf, *, requested_by=None):
+    """Quarantine a row whose source media cannot currently be verified."""
+    if pdf.lifecycle == "unavailable":
+        return pdf
+    prior_lifecycle = pdf.lifecycle
+    pdf.lifecycle = "unavailable"
+    pdf.indexed = False
+    pdf.save(update_fields=["lifecycle", "indexed"])
+    _audit(
+        event_type="media_unavailable",
+        actor=requested_by,
+        payload={"pdf_id": pdf.pk, "prior_lifecycle": prior_lifecycle},
+    )
+    return pdf
+
+
 def restore_pdf(pdf, *, requested_by=None):
     """Restore a deprecated or archived PDF to uploaded state, requeuing reindex."""
+    prior_lifecycle = pdf.lifecycle
+    if prior_lifecycle == "unavailable":
+        try:
+            media_exists = bool(
+                pdf.file
+                and pdf.file.name
+                and pdf.file.storage.exists(pdf.file.name)
+            )
+        except (OSError, ValueError):
+            media_exists = False
+        if not media_exists:
+            raise SearchDataIntegrityError(
+                "Document media must be restored before availability can be restored"
+            )
     pdf.lifecycle = "uploaded"
     pdf.indexed = False
     pdf.save(update_fields=["lifecycle", "indexed"])
+    if prior_lifecycle == "unavailable":
+        _audit(
+            event_type="media_restored",
+            actor=requested_by,
+            payload={"pdf_id": pdf.pk},
+        )
     return pdf
 
 
@@ -741,11 +777,18 @@ def _bytes_sha256(payload: bytes):
 
 def _repair_folder(folder):
     eligible = [
-        pdf.pk for pdf in PDFFile.objects.filter(folder=folder)
+        pdf.pk
+        for pdf in PDFFile.objects.filter(
+            folder=folder,
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        )
         if isinstance(pdf.page_chunks, list)
         and isinstance(pdf.chunk_embeddings, list)
         and bool(pdf.page_chunks)
         and len(pdf.page_chunks) == len(pdf.chunk_embeddings)
+        and pdf.file
+        and pdf.file.name
+        and pdf.file.storage.exists(pdf.file.name)
     ]
     if not eligible:
         raise SearchDataIntegrityError("No stored chunks or embeddings are available")

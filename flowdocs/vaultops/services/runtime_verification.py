@@ -75,7 +75,7 @@ def verify_activation_runtime(intent_id):
         or user.role != "superadmin"
     ):
         raise RuntimeControlError("activation_recovery_superadmin_unproven")
-    for pdf in PDFFile.objects.all().iterator():
+    for pdf in PDFFile.objects.exclude(lifecycle="unavailable").iterator():
         try:
             path = Path(pdf.file.path).resolve()
             path.relative_to(Path(settings.MEDIA_ROOT).resolve())
@@ -148,7 +148,7 @@ def verify_activation_runtime(intent_id):
         "database": "ok",
         "migrations": "ok",
         "recovery_superadmin": "ok",
-        "pdfs": PDFFile.objects.count(),
+        "pdfs": PDFFile.objects.exclude(lifecycle="unavailable").count(),
         "faiss": "ok",
         "queries": query_results,
         "executed_locales": sorted(

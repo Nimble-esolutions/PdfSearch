@@ -24,7 +24,7 @@ from indic_transliteration import sanscript as sc
 from indic_transliteration.sanscript import transliterate
 from langdetect import detect, DetectorFactory, LangDetectException
 
-from .models import Folder, PDFFile
+from .models import Folder, PDFFile, SEARCHABLE_PDF_LIFECYCLES
 
 # Optional FAISS
 try:
@@ -192,7 +192,13 @@ def _folder_embedding_matrix(
     chunk_embeddings: list[np.ndarray] = []
     expected_dimensions = None
 
-    pdf_queryset = pdfs if pdfs is not None else PDFFile.objects.filter(folder=folder)
+    pdf_queryset = (
+        pdfs
+        if pdfs is not None
+        else PDFFile.objects.filter(folder=folder)
+    ).filter(
+        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+    )
     for pdf in pdf_queryset.order_by("pk"):
         try:
             p_chunks = _json_list(getattr(pdf, "page_chunks", []), "page_chunks", pdf)
@@ -510,7 +516,13 @@ def search_pdfs_fast(
     """
     # 1. quick guard
     restricted_scope = pdfs is not None
-    pdfs = pdfs if restricted_scope else PDFFile.objects.filter(folder=folder)
+    pdfs = (
+        pdfs
+        if restricted_scope
+        else PDFFile.objects.filter(folder=folder)
+    ).filter(
+        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+    )
     if not pdfs.exists():
         return "", []
 

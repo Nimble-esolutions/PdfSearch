@@ -37,6 +37,9 @@ class Folder(models.Model):
         return self.name
 
 
+SEARCHABLE_PDF_LIFECYCLES = ("uploaded", "processing", "ready")
+
+
 # ---------------- PDF File ----------------
 class PDFFile(models.Model):
     title = models.CharField(max_length=200)
@@ -83,6 +86,7 @@ class PDFFile(models.Model):
             ("ready", "Ready"),
             ("deprecated", "Deprecated"),
             ("archived", "Archived"),
+            ("unavailable", "Unavailable"),
         ),
         default="uploaded",
         help_text="Document lifecycle state for search and visibility control",
@@ -365,6 +369,8 @@ class MaintenanceAuditEvent(models.Model):
         ("rolled_back", "Rolled back"),
         ("purged", "Purged"),
         ("worker_died", "Worker died"),
+        ("media_unavailable", "Media unavailable"),
+        ("media_restored", "Media restored"),
     )
 
     job = models.ForeignKey(

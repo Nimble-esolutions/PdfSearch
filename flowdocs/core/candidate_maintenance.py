@@ -384,7 +384,7 @@ def _embedding_validation(database: Path) -> dict:
     try:
         rows = connection.execute(
             "SELECT id, folder_id, page_chunks, chunk_embeddings FROM core_pdffile "
-            "WHERE lifecycle != 'archived'",
+            "WHERE lifecycle IN ('uploaded', 'processing', 'ready')",
         )
         dimensions = set()
         vectors = 0
@@ -476,7 +476,8 @@ def validate_candidate(workspace: Path) -> dict:
         media_rows = list(
             connection.execute(
                 "SELECT id, file FROM core_pdffile "
-                "WHERE file IS NOT NULL AND file != ''"
+                "WHERE lifecycle != 'unavailable' "
+                "AND file IS NOT NULL AND file != ''"
             )
         )
     finally:

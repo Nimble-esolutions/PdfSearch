@@ -227,9 +227,20 @@ def _validate_faiss_coherence(database_path, faiss_root):
         raise SnapshotError("snapshot_faiss_validation_unavailable") from exc
     connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
     try:
+        columns = {
+            row[1]
+            for row in connection.execute('PRAGMA table_info("core_pdffile")')
+        }
+        lifecycle_clause = (
+            "AND lifecycle IN ('uploaded', 'processing', 'ready') "
+            if "lifecycle" in columns
+            else ""
+        )
         rows = connection.execute(
             "SELECT folder_id, page_chunks, chunk_embeddings "
-            "FROM core_pdffile WHERE folder_id IS NOT NULL ORDER BY id"
+            "FROM core_pdffile "
+            "WHERE folder_id IS NOT NULL "
+            f"{lifecycle_clause}ORDER BY id"
         ).fetchall()
     except sqlite3.Error as exc:
         raise SnapshotError("snapshot_faiss_metadata_unavailable") from exc

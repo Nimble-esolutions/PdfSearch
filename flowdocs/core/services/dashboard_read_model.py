@@ -6,7 +6,13 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
 
-from core.models import CustomUser, Folder, MaintenanceJob, PDFFile
+from core.models import (
+    CustomUser,
+    Folder,
+    MaintenanceJob,
+    PDFFile,
+    SEARCHABLE_PDF_LIFECYCLES,
+)
 from core.maintenance_plans import LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS
 from core.operator_presentation import decorate_dashboard_state
 
@@ -45,7 +51,7 @@ def normalize_dashboard_filters(data):
     provenance = data.get("provenance", "")
     occupancy = data.get("occupancy", "")
     ordering = data.get("ordering", "name")
-    if readiness not in {"", "ready", "needs_index"}:
+    if readiness not in {"", "ready", "needs_index", "unavailable"}:
         readiness = ""
     if provenance not in {"", "complete", "unknown"}:
         provenance = ""
@@ -71,7 +77,12 @@ def _category_queryset(user, filters):
     folders = _visible_folders(user).annotate(
         pdf_count=Count("files", distinct=True),
         indexed_count=Count(
-            "files", filter=Q(files__indexed=True), distinct=True
+            "files",
+            filter=Q(
+                files__indexed=True,
+                files__lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+            ),
+            distinct=True,
         ),
         unknown_uploader_count=Count(
             "files",
@@ -81,7 +92,12 @@ def _category_queryset(user, filters):
         latest_upload=Max("files__uploaded_at"),
     ).annotate(
         index_debt=Count(
-            "files", filter=Q(files__indexed=False), distinct=True
+            "files",
+            filter=Q(
+                files__indexed=False,
+                files__lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+            ),
+            distinct=True,
         )
     )
     if filters.query:
@@ -90,6 +106,8 @@ def _category_queryset(user, filters):
         folders = folders.filter(pdf_count__gt=0, index_debt=0)
     elif filters.readiness == "needs_index":
         folders = folders.filter(index_debt__gt=0)
+    elif filters.readiness == "unavailable":
+        folders = folders.filter(files__lifecycle="unavailable").distinct()
     if filters.provenance == "complete":
         folders = folders.filter(unknown_uploader_count=0)
     elif filters.provenance == "unknown":
@@ -108,7 +126,13 @@ def _category_queryset(user, filters):
 
 
 def _attention_items(
-    *, needs_index, unknown_uploaders, empty_folders, jobs, failed_job_count
+    *,
+    needs_index,
+    unavailable_media,
+    unknown_uploaders,
+    empty_folders,
+    jobs,
+    failed_job_count,
 ):
     items = []
     if failed_job_count:
@@ -132,6 +156,18 @@ def _attention_items(
             ),
             "action_label": gettext("Maintain Documents & Indexes"),
             "action_url": f"{reverse('operations_panel')}?section=maintenance",
+        })
+    if unavailable_media:
+        items.append({
+            "severity": "warning",
+            "reason_code": "document_media_unavailable",
+            "count": unavailable_media,
+            "title": gettext("Document files are unavailable"),
+            "detail": gettext(
+                "These preserved records are excluded from search and index work."
+            ),
+            "action_label": gettext("Review unavailable documents"),
+            "action_url": f"{reverse('dashboard')}?readiness=unavailable",
         })
     if unknown_uploaders:
         items.append({
@@ -175,11 +211,24 @@ def build_dashboard_state(*, user, data):
     pdfs = _visible_pdfs(user).select_related("folder", "uploaded_by")
     totals = pdfs.aggregate(
         total=Count("pk"),
-        indexed=Count("pk", filter=Q(indexed=True)),
+        searchable=Count(
+            "pk",
+            filter=Q(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES),
+        ),
+        indexed=Count(
+            "pk",
+            filter=Q(
+                indexed=True,
+                lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+            ),
+        ),
+        unavailable=Count("pk", filter=Q(lifecycle="unavailable")),
         unknown_uploaders=Count("pk", filter=Q(uploaded_by__isnull=True)),
     )
     total_pdfs = totals["total"] or 0
+    searchable_pdfs = totals["searchable"] or 0
     indexed_pdfs = totals["indexed"] or 0
+    unavailable_pdfs = totals["unavailable"] or 0
     unknown_uploaders = totals["unknown_uploaders"] or 0
 
     all_folders = _visible_folders(user)
@@ -217,10 +266,11 @@ def build_dashboard_state(*, user, data):
         jobs = []
         failed_job_count = 0
         vault_posture = None
-    local_index_debt = max(total_pdfs - indexed_pdfs, 0)
+    local_index_debt = max(searchable_pdfs - indexed_pdfs, 0)
     needs_index = local_index_debt if search_available else 0
     attention = _attention_items(
         needs_index=needs_index,
+        unavailable_media=unavailable_pdfs,
         unknown_uploaders=unknown_uploaders,
         empty_folders=empty_folders,
         jobs=jobs,
@@ -264,6 +314,7 @@ def build_dashboard_state(*, user, data):
         "empty_folders": empty_folders,
         "total_pdfs": total_pdfs,
         "indexed_pdfs": indexed_pdfs,
+        "unavailable_pdfs": unavailable_pdfs,
         "needs_index_pdfs": needs_index,
         "search_available": search_available,
         "unknown_uploaders": unknown_uploaders,
