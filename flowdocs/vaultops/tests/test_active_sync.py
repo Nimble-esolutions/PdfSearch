@@ -49,6 +49,7 @@ from vaultops.models import (
     SyncPolicy,
     VaultConnectionProfile,
     VaultJob,
+    VaultJobStep,
 )
 from vaultops.services.mutations import (
     BarrierOwnershipLost,
@@ -2166,8 +2167,52 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
         evidence["snapshot_id"] = str(scheduled_snapshot.public_id)
         evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+        fingerprint = snapshot_service.snapshot_configuration_fingerprint()
+        canonical_workspace = (
+            self.workspace
+            / (
+                f"{scheduled_snapshot.public_id}-"
+                f"{scheduled_snapshot.snapshot_digest[:12]}"
+            )
+        )
+        canonical_workspace.mkdir()
+        (canonical_workspace / "db.sqlite3").write_bytes(
+            (self.workspace / "db.sqlite3").read_bytes()
+        )
+        evidence["configuration_fingerprint"] = fingerprint
+        (canonical_workspace / "snapshot-evidence.json").write_text(
+            json.dumps(evidence),
+            encoding="utf-8",
+        )
+        (canonical_workspace / "snapshot-configuration.json").write_text(
+            json.dumps(fingerprint, sort_keys=True),
+            encoding="utf-8",
+        )
+        scheduled_snapshot.workspace_path = str(canonical_workspace)
+        scheduled_snapshot.evidence = {
+            "snapshot_schema": 1,
+            "evidence_path": "snapshot-evidence.json",
+            "configuration_path": "snapshot-configuration.json",
+            "configuration_fingerprint": fingerprint,
+        }
+        scheduled_snapshot.save(
+            update_fields=["workspace_path", "evidence", "updated_at"]
+        )
+        VaultJobStep.objects.create(
+            job=first,
+            phase="snapshot",
+            status=VaultJobStep.Status.COMPLETED,
+            checkpoint={
+                "snapshot_id": str(scheduled_snapshot.public_id),
+                "snapshot_digest": scheduled_snapshot.snapshot_digest,
+                "included_epoch": scheduled_snapshot.included_epoch,
+                "configuration_fingerprint_sha256": fingerprint["sha256"],
+            },
+            finished_at=timezone.now(),
+        )
         claimed, token = claim_job(first.public_id, worker_id="test-worker")
-        completed = execute_claimed_job(claimed, token, vault=self.vault)
+        with override_settings(VAULT_SNAPSHOT_ROOT=self.workspace):
+            completed = execute_claimed_job(claimed, token, vault=self.vault)
 
         self.assertEqual(
             completed.status,
