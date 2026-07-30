@@ -658,6 +658,18 @@ class RehearsalTests(SimpleTestCase):
                 (workspace / "rehearsal" / "db.sqlite3").resolve()
             ),
         )
+        self.assertEqual(
+            run.call_args.kwargs["env"][
+                "STAGING_RUNTIME_ACTIVATION_ENABLED"
+            ],
+            "0",
+        )
+        self.assertEqual(
+            run.call_args.kwargs["env"][
+                "STAGING_INITIAL_ACTIVATION_ENABLED"
+            ],
+            "0",
+        )
         self.assertEqual(run.call_args.kwargs["stderr"], -3)
 
     def test_rehearsal_maps_timeout_to_typed_error(self):
