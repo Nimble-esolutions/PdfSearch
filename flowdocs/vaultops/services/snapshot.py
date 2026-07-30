@@ -620,16 +620,12 @@ def _validate_faiss_coherence(database_path, faiss_root):
             row[1]
             for row in connection.execute('PRAGMA table_info("core_pdffile")')
         }
-        lifecycle_clause = (
-            "AND lifecycle IN ('uploaded', 'processing', 'ready') "
-            if "lifecycle" in columns
-            else ""
-        )
+        searchable_clause = _searchable_sql_contract(connection)
         rows = connection.execute(
             "SELECT folder_id, page_chunks, chunk_embeddings "
             "FROM core_pdffile "
             "WHERE folder_id IS NOT NULL "
-            f"{lifecycle_clause}ORDER BY id"
+            f"{searchable_clause}ORDER BY id"
         ).fetchall()
         unavailable_attestation = (
             build_unavailable_attestation(
@@ -718,12 +714,14 @@ def _searchable_sql_contract(connection):
         row[1]
         for row in connection.execute('PRAGMA table_info("core_pdffile")')
     }
-    lifecycle_clause = (
-        "AND lifecycle IN ('uploaded', 'processing', 'ready') "
-        if "lifecycle" in columns
-        else ""
-    )
-    return lifecycle_clause
+    clauses = []
+    if "lifecycle" in columns:
+        clauses.append(
+            "lifecycle IN ('uploaded', 'processing', 'ready')"
+        )
+    if "indexed" in columns:
+        clauses.append("indexed = 1")
+    return "".join(f"AND {clause} " for clause in clauses)
 
 
 def _preflight_searchable_embeddings(connection, lifecycle_clause):
