@@ -1334,7 +1334,7 @@ class SupervisorProtocolTests(SimpleTestCase):
     def test_initial_pre_pointer_validation_failure_releases_maintenance(self):
         self._replace_with_initial_intent()
         maintenance = self._quiesce()
-        (self.target_runtime / "runtime-evidence.json").unlink()
+        self.target_runtime.chmod(0o750)
         web = self._supervisor("web", maintenance=maintenance)
 
         web.web_tick()
@@ -1345,7 +1345,7 @@ class SupervisorProtocolTests(SimpleTestCase):
         self.assertEqual(self._result()["status"], "failed")
         self.assertEqual(
             self._result()["safe_error_code"],
-            "control_document_missing",
+            "runtime_workspace_mutable",
         )
         self.assertEqual(maintenance.paused_for_intent, "")
 
