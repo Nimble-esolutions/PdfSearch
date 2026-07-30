@@ -51,13 +51,27 @@ class RecoveryCertificationContractTests(unittest.TestCase):
     def test_evidence_requires_runtime_and_control_projection_identity(self):
         for assertion in (
             'ready.get("runtime_generation_id") != sys.argv[3]',
-            'intent.state == ActivationIntent.State.COMMITTED',
-            'result.get("status") == "committed"',
-            "generation.runtime_state == ArtifactGeneration.RuntimeState.ACTIVE",
-            'observation.status == "committed"',
-            'assert not p["previous"].exists()',
+            "verify_recovery_certification",
+            "--generation-id",
+            "--manifest-digest",
+            "--require-initial",
+            "initial-runtime-authority.json",
         ):
             self.assertIn(assertion, RUNNER)
+
+    def test_management_commands_are_forced_to_appuser(self):
+        self.assertIn(
+            '"${COMPOSE[@]}" exec -T --user appuser "$service" "$@"',
+            RUNNER,
+        )
+        self.assertEqual(RUNNER.count('"${COMPOSE[@]}" exec'), 1)
+        self.assertIn('test "$(id -u)" = "1000"', RUNNER)
+
+    def test_cleanup_requires_a_bound_structured_marker(self):
+        self.assertIn('marker="$EVIDENCE_DIR/certification-passed.json"', RUNNER)
+        self.assertIn('"evidence_sha256": digests', RUNNER)
+        self.assertIn("Certification evidence changed:", RUNNER)
+        self.assertNotIn('touch "$EVIDENCE_DIR/certification-passed"', RUNNER)
 
     def test_shared_sqlite_roles_start_serially(self):
         redis = '"${COMPOSE[@]}" up -d --wait redis'
