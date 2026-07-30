@@ -426,28 +426,40 @@ def _requeue_job_once(
             "job_not_retryable",
         )
         previous = job.status
-        finalized_snapshot = (
-            job.operation == "sync_publish"
-            and SourceSnapshot.objects.select_for_update()
-            .filter(job=job, state=SourceSnapshot.State.FINALIZED)
-            .exists()
-        )
+        resumable_snapshot = None
+        if job.operation == "sync_publish":
+            from vaultops.services.snapshot import eligible_finalized_snapshot
+
+            resumable_snapshot = eligible_finalized_snapshot(
+                job,
+                queryset=SourceSnapshot.objects.select_for_update().filter(
+                    job=job,
+                    state=SourceSnapshot.State.FINALIZED,
+                ),
+            )
         retry_mode = (
             VaultJobRetryRequest.Mode.CHECKPOINT_RESUME
-            if finalized_snapshot
+            if resumable_snapshot is not None
             else VaultJobRetryRequest.Mode.FRESH_SNAPSHOT
             if job.operation == "sync_publish"
             else VaultJobRetryRequest.Mode.OPERATION_RETRY
         )
         cleanup_intents = 0
-        if retry_mode == VaultJobRetryRequest.Mode.FRESH_SNAPSHOT:
+        if job.operation == "sync_publish":
             from vaultops.services.snapshot import (
                 reclaim_snapshot_cleanup_intents_safely,
                 stage_snapshot_cleanup,
             )
 
             cleanup_intents = stage_snapshot_cleanup(
-                job, reason="retry_preparation"
+                job,
+                reason="retry_preparation",
+                include_finalized=True,
+                exclude_snapshot_id=(
+                    resumable_snapshot.pk
+                    if resumable_snapshot is not None
+                    else None
+                ),
             )
             transaction.on_commit(
                 reclaim_snapshot_cleanup_intents_safely,

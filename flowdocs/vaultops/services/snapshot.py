@@ -15,7 +15,12 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from core.management.commands.inventory_artifacts import build_manifest
+from core.management.commands.inventory_artifacts import (
+    DEFAULT_MAX_PDF_ROWS,
+    INVENTORY_SCHEMA,
+    MANIFEST_VERSION,
+    build_manifest,
+)
 from core.media_quarantine import (
     build_unavailable_attestation,
     storage_key_evidence,
@@ -38,6 +43,162 @@ from vaultops.services.mutations import (
 
 logger = logging.getLogger(__name__)
 
+SNAPSHOT_SCHEMA = 1
+FAISS_RECONCILIATION_SCHEMA = 1
+PUBLICATION_MANIFEST_SCHEMA = 1
+SNAPSHOT_CONFIGURATION_SCHEMA = 1
+SNAPSHOT_CONFIGURATION_MAX_BYTES = 64 * 1024
+
+
+def snapshot_configuration_fingerprint():
+    """Return bounded non-secret inputs that determine snapshot safety."""
+    values = {
+        "artifact_inventory_max_media_file_bytes": int(
+            settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES
+        ),
+        "artifact_inventory_max_pdf_rows": int(
+            getattr(
+                settings,
+                "ARTIFACT_INVENTORY_MAX_PDF_ROWS",
+                DEFAULT_MAX_PDF_ROWS,
+            )
+        ),
+        "faiss_max_bytes": int(settings.VAULT_SNAPSHOT_FAISS_MAX_BYTES),
+        "faiss_max_chunks_per_pdf": int(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_CHUNKS_PER_PDF
+        ),
+        "faiss_max_dimensions": int(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_DIMENSIONS
+        ),
+        "faiss_max_pdf_json_bytes": int(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES
+        ),
+        "faiss_max_pdfs": int(settings.VAULT_SNAPSHOT_FAISS_MAX_PDFS),
+        "faiss_max_source_bytes": int(
+            settings.VAULT_SNAPSHOT_FAISS_MAX_SOURCE_BYTES
+        ),
+        "faiss_max_vectors": int(settings.VAULT_SNAPSHOT_FAISS_MAX_VECTORS),
+        "inventory_schema": INVENTORY_SCHEMA,
+        "inventory_manifest_version": MANIFEST_VERSION,
+        "openai_embed_model": str(settings.OPENAI_EMBED_MODEL),
+        "pdf_chunk_overlap": int(settings.PDF_CHUNK_OVERLAP),
+        "pdf_chunk_size": int(settings.PDF_CHUNK_SIZE),
+        "publication_manifest_schema": PUBLICATION_MANIFEST_SCHEMA,
+        "snapshot_faiss_reconciliation_schema": FAISS_RECONCILIATION_SCHEMA,
+        "snapshot_schema": SNAPSHOT_SCHEMA,
+    }
+    canonical = json.dumps(
+        {"schema": SNAPSHOT_CONFIGURATION_SCHEMA, "values": values},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "schema": SNAPSHOT_CONFIGURATION_SCHEMA,
+        "values": values,
+        "sha256": hashlib.sha256(canonical).hexdigest(),
+    }
+
+
+def _configuration_fingerprint_valid(value):
+    current = snapshot_configuration_fingerprint()
+    return (
+        isinstance(value, dict)
+        and set(value) == {"schema", "values", "sha256"}
+        and value == current
+    )
+
+
+def _snapshot_file_configuration(snapshot):
+    workspace = Path(snapshot.workspace_path)
+    expected_workspace = (
+        Path(settings.VAULT_SNAPSHOT_ROOT).resolve()
+        / f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
+    )
+    if (
+        not snapshot.workspace_path
+        or workspace.is_symlink()
+        or not workspace.is_dir()
+        or workspace.absolute() != expected_workspace
+    ):
+        return None
+    descriptor = -1
+    try:
+        root = workspace.resolve(strict=True)
+        evidence_path = root / "snapshot-configuration.json"
+        if evidence_path.is_symlink():
+            return None
+        resolved = evidence_path.resolve(strict=True)
+        resolved.relative_to(root)
+        descriptor = os.open(
+            resolved,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
+            return None
+        raw = os.read(descriptor, SNAPSHOT_CONFIGURATION_MAX_BYTES + 1)
+        if len(raw) > SNAPSHOT_CONFIGURATION_MAX_BYTES:
+            return None
+        evidence = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if not isinstance(evidence, dict):
+        return None
+    return evidence
+
+
+def finalized_snapshot_resume_eligible(snapshot):
+    """Require exact trusted/file configuration and durable snapshot proof."""
+    if (
+        snapshot.state != SourceSnapshot.State.FINALIZED
+        or snapshot.cleanup_state != SourceSnapshot.CleanupState.NONE
+        or snapshot.finalized_at is None
+        or snapshot.included_epoch < snapshot.initial_epoch
+        or not re.fullmatch(r"[0-9a-f]{64}", snapshot.snapshot_digest or "")
+        or not isinstance(snapshot.evidence, dict)
+        or snapshot.evidence.get("evidence_path") != "snapshot-evidence.json"
+        or snapshot.evidence.get("configuration_path")
+        != "snapshot-configuration.json"
+    ):
+        return False
+    trusted = (
+        snapshot.evidence.get("configuration_fingerprint")
+        if isinstance(snapshot.evidence, dict)
+        else None
+    )
+    if not _configuration_fingerprint_valid(trusted):
+        return False
+    if _snapshot_file_configuration(snapshot) != trusted:
+        return False
+    step = snapshot.job.steps.filter(phase="snapshot").first()
+    checkpoint = step.checkpoint if step and isinstance(step.checkpoint, dict) else {}
+    return bool(
+        step
+        and step.status == VaultJobStep.Status.COMPLETED
+        and checkpoint
+        == {
+            "snapshot_id": str(snapshot.public_id),
+            "snapshot_digest": snapshot.snapshot_digest,
+            "included_epoch": snapshot.included_epoch,
+            "configuration_fingerprint_sha256": trusted["sha256"],
+        }
+    )
+
+
+def eligible_finalized_snapshot(job, *, queryset=None):
+    snapshots = queryset
+    if snapshots is None:
+        snapshots = SourceSnapshot.objects.filter(
+            job=job, state=SourceSnapshot.State.FINALIZED
+        )
+    for snapshot in snapshots.order_by("-finalized_at", "-created_at"):
+        if finalized_snapshot_resume_eligible(snapshot):
+            return snapshot
+    return None
+
 
 class SnapshotError(RuntimeError):
     reason_code = "consistent_snapshot_unproven"
@@ -58,19 +219,26 @@ class SnapshotCleanupBoundExceeded(SnapshotError):
         self.consumed_bytes = consumed_bytes
 
 
-def stage_snapshot_cleanup(job, *, reason, now=None):
+def stage_snapshot_cleanup(
+    job,
+    *,
+    reason,
+    now=None,
+    include_finalized=False,
+    exclude_snapshot_id=None,
+):
     """Record cleanup intent without touching the filesystem."""
     now = now or timezone.now()
     grace = int(
         getattr(settings, "VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS", 120)
     )
     count = 0
-    snapshots = (
-        SourceSnapshot.objects.select_for_update()
-        .filter(job=job)
-        .exclude(state=SourceSnapshot.State.FINALIZED)
-        .order_by("created_at")
-    )
+    snapshots = SourceSnapshot.objects.select_for_update().filter(job=job)
+    if not include_finalized:
+        snapshots = snapshots.exclude(state=SourceSnapshot.State.FINALIZED)
+    if exclude_snapshot_id is not None:
+        snapshots = snapshots.exclude(pk=exclude_snapshot_id)
+    snapshots = snapshots.order_by("created_at")
     for snapshot in snapshots:
         if not snapshot.workspace_path:
             continue
@@ -113,7 +281,12 @@ def stage_snapshot_cleanup(job, *, reason, now=None):
 
 def _validated_cleanup_paths(snapshot):
     root = Path(settings.VAULT_SNAPSHOT_ROOT).resolve()
-    source = root / f".{snapshot.public_id}.incomplete"
+    source = (
+        root / f"{snapshot.public_id}-{snapshot.snapshot_digest[:12]}"
+        if snapshot.state == SourceSnapshot.State.FINALIZED
+        and re.fullmatch(r"[0-9a-f]{64}", snapshot.snapshot_digest or "")
+        else root / f".{snapshot.public_id}.incomplete"
+    )
     tombstone = root / f".{snapshot.public_id}.cleanup"
     recorded = Path(snapshot.cleanup_path).absolute()
     if (
@@ -1085,7 +1258,7 @@ def _reconcile_candidate_faiss(
         ).encode()
     ).hexdigest()
     return {
-        "schema": 1,
+        "schema": FAISS_RECONCILIATION_SCHEMA,
         "source": "stored_embeddings",
         "source_folders": source_folders,
         "source_folders_digest": source_digest,
@@ -1357,8 +1530,9 @@ def create_consistent_snapshot(
             incomplete / "db.sqlite3",
             incomplete / "faiss_indexes",
         )
+        configuration_fingerprint = snapshot_configuration_fingerprint()
         evidence = {
-            "snapshot_schema": 1,
+            "snapshot_schema": SNAPSHOT_SCHEMA,
             "snapshot_id": str(snapshot.public_id),
             "deployment_id": source_deployment,
             "initial_epoch": snapshot.initial_epoch,
@@ -1370,11 +1544,20 @@ def create_consistent_snapshot(
             "faiss_reconciliation": faiss_reconciliation,
             "files": canonical_files,
             "inventory": inventory,
+            "configuration_fingerprint": configuration_fingerprint,
             "duration_seconds": round(time.monotonic() - started, 3),
         }
         evidence_path = incomplete / "snapshot-evidence.json"
         evidence_path.write_text(
             json.dumps(evidence, sort_keys=True, indent=2, default=str),
+            encoding="utf-8",
+        )
+        (incomplete / "snapshot-configuration.json").write_text(
+            json.dumps(
+                configuration_fingerprint,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
             encoding="utf-8",
         )
         final_path = root / f"{snapshot.public_id}-{snapshot_digest[:12]}"
@@ -1387,12 +1570,14 @@ def create_consistent_snapshot(
         snapshot.file_count = len(canonical_files)
         snapshot.byte_count = sum(item["size_bytes"] for item in canonical_files)
         snapshot.evidence = {
-            "snapshot_schema": 1,
+            "snapshot_schema": SNAPSHOT_SCHEMA,
             "evidence_path": "snapshot-evidence.json",
+            "configuration_path": "snapshot-configuration.json",
             "database_sha256": database_record["sha256"],
             "journal_change_count": len(changes),
             "index_writers_drained": True,
             "faiss_reconciliation": faiss_reconciliation,
+            "configuration_fingerprint": configuration_fingerprint,
         }
         snapshot.finalized_at = timezone.now()
         snapshot.save(
@@ -1413,6 +1598,9 @@ def create_consistent_snapshot(
             "snapshot_id": str(snapshot.public_id),
             "snapshot_digest": snapshot_digest,
             "included_epoch": included_epoch,
+            "configuration_fingerprint_sha256": configuration_fingerprint[
+                "sha256"
+            ],
         }
         step.completed_objects = snapshot.file_count
         step.completed_bytes = snapshot.byte_count
