@@ -174,12 +174,13 @@ class OperatorLanguageValidatorTests(unittest.TestCase):
             required["Retry from checkpoint"],
             "चेकपॉइंटपासून पुन्हा प्रयत्न करा",
         )
-        self.assertIn(
-            "दस्तऐवज संचिका",
+        self.assertEqual(
             required[
                 "A document recorded in the candidate database is not "
                 "present in its approved media location."
             ],
+            "उमेदवार डेटाबेसमध्ये नोंदलेला दस्तऐवज त्याच्या मंजूर "
+            "संचिका-स्थानावर उपलब्ध नाही.",
         )
 
     def test_catalog_rejects_changed_reviewed_marathi_translation(self):

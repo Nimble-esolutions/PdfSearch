@@ -77,7 +77,7 @@ REQUIRED_MARATHI_TRANSLATIONS = {
     ),
     "Retry from checkpoint": "चेकपॉइंटपासून पुन्हा प्रयत्न करा",
     "Resume verified upload checkpoint": (
-        "पडताळलेला अपलोड चेकपॉइंट पुढे सुरू करा"
+        "पडताळलेल्या अपलोडच्या चेकपॉइंटपासून पुढे सुरू करा"
     ),
     "No failed snapshot checkpoint is reused and authority remains unchanged.": (
         "अयशस्वी स्नॅपशॉटचा कोणताही चेकपॉइंट पुन्हा वापरला जाणार नाही "
@@ -122,8 +122,8 @@ REQUIRED_MARATHI_TRANSLATIONS = {
         "पडताळणी-बेरीजेशी जुळत नाही."
     ),
     "A document recorded in the candidate database is not present in its approved media location.": (
-        "उमेदवार डेटाबेसमध्ये नोंदलेली दस्तऐवज संचिका तिच्या मंजूर "
-        "संचिका-ठिकाणी उपलब्ध नाही."
+        "उमेदवार डेटाबेसमध्ये नोंदलेला दस्तऐवज त्याच्या मंजूर "
+        "संचिका-स्थानावर उपलब्ध नाही."
     ),
 }
 

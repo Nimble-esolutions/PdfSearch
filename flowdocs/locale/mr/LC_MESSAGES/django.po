@@ -2156,7 +2156,7 @@ msgid "Retry from checkpoint"
 msgstr "चेकपॉइंटपासून पुन्हा प्रयत्न करा"
 
 msgid "Resume verified upload checkpoint"
-msgstr "पडताळलेला अपलोड चेकपॉइंट पुढे सुरू करा"
+msgstr "पडताळलेल्या अपलोडच्या चेकपॉइंटपासून पुढे सुरू करा"
 
 msgid "Create a fresh snapshot and retry"
 msgstr "नवीन स्नॅपशॉट तयार करून पुन्हा प्रयत्न करा"
@@ -4261,7 +4261,7 @@ msgid "An activated document file is missing"
 msgstr "सक्रिय करण्याच्या उमेदवारातील दस्तऐवज संचिका उपलब्ध नाही"
 
 msgid "A document recorded in the candidate database is not present in its approved media location."
-msgstr "उमेदवार डेटाबेसमध्ये नोंदलेली दस्तऐवज संचिका तिच्या मंजूर संचिका-ठिकाणी उपलब्ध नाही."
+msgstr "उमेदवार डेटाबेसमध्ये नोंदलेला दस्तऐवज त्याच्या मंजूर संचिका-स्थानावर उपलब्ध नाही."
 
 msgid "The candidate cannot become the active runtime."
 msgstr "हा उमेदवार सक्रिय कार्यरत प्रणाली होऊ शकत नाही."
