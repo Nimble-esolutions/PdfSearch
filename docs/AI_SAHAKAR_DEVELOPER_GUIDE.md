@@ -186,6 +186,22 @@ also requires a fresh maintenance-worker heartbeat. This prevents a startup
 cycle in which the worker waits for web readiness while web readiness waits for
 the worker.
 
+### Activation verifier failure evidence
+
+The PID-1 supervisor continues to discard management-command stdout and stderr.
+`verify_activation_runtime` reports failures through a transient, mode-`0600`
+JSON record whose path is supplied only in the child environment. The record
+contains schema version `1` and one reviewed reason from
+`SAFE_RUNTIME_VERIFICATION_REASONS`; it never contains exception messages,
+paths, document names, command output, or credentials.
+
+The supervisor removes stale evidence before execution, accepts only the exact
+schema and allowlist, and deletes the record after reading it. Missing,
+oversized, malformed, or unapproved evidence resolves to
+`activation_runtime_command_failed`. Add a new verifier reason only by updating
+the cross-process allowlist, operator presentation, English/Marathi copy, and
+the supervisor and catalog-parity tests together.
+
 ## Verification
 
 Run the smallest applicable checks first:

@@ -1,8 +1,17 @@
 import json
+import os
+
 from django.core.management.base import BaseCommand, CommandError
+
+from core.utils import SearchDataIntegrityError
+from vaultops.runtime_control import RuntimeControlError
+from vaultops.services.snapshot import SnapshotError
 from vaultops.services.runtime_verification import (
     RUNTIME_VERIFICATION_ERRORS,
     verify_activation_runtime,
+)
+from vaultops.runtime_verification_contract import (
+    write_runtime_verification_failure,
 )
 
 
@@ -18,9 +27,24 @@ class Command(BaseCommand):
         try:
             evidence = verify_activation_runtime(intent_id)
         except RUNTIME_VERIFICATION_ERRORS as exc:
-            reason_code = getattr(
-                exc, "reason_code", "activation_runtime_smoke_failed"
+            if isinstance(exc, RuntimeControlError):
+                reason_code = getattr(
+                    exc, "reason_code", "activation_runtime_smoke_failed"
+                )
+            elif isinstance(exc, SnapshotError):
+                reason_code = "activation_runtime_faiss_invalid"
+            elif isinstance(exc, SearchDataIntegrityError):
+                reason_code = "activation_search_probe_failed"
+            else:
+                reason_code = "activation_runtime_smoke_failed"
+            failure_path = os.environ.get(
+                "ACTIVATION_VERIFICATION_FAILURE_PATH", ""
             )
+            if failure_path:
+                write_runtime_verification_failure(
+                    failure_path,
+                    reason_code,
+                )
             raise CommandError(reason_code) from exc
         if options["json"]:
             self.stdout.write(json.dumps(evidence, sort_keys=True))

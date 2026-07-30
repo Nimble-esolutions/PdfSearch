@@ -20,6 +20,18 @@ UNKNOWN_REASON = {
 }
 
 
+def _authored(title, detail, consequence, action_label, section, severity):
+    """Mark registry copy for catalog extraction while deferring translation."""
+    return (
+        gettext_noop(title),
+        gettext_noop(detail),
+        gettext_noop(consequence),
+        gettext_noop(action_label),
+        section,
+        severity,
+    )
+
+
 REASONS = {
     "operations_ready": (
         "Operations are ready",
@@ -413,6 +425,102 @@ REASONS = {
         "jobs",
         "danger",
     ),
+    "activation_pdf_missing": _authored(
+        "An activated document file is missing",
+        "A document recorded in the candidate database is not present in its approved media location.",
+        "The candidate cannot become the active runtime.",
+        "Restore the missing document",
+        "restore",
+        "danger",
+    ),
+    "activation_pdf_path_invalid": _authored(
+        "An activated document path is unsafe",
+        "A document path leaves the approved runtime media location or cannot be resolved safely.",
+        "The candidate cannot become the active runtime.",
+        "Review candidate document storage",
+        "restore",
+        "danger",
+    ),
+    "activation_runtime_database_invalid": _authored(
+        "The candidate database did not pass verification",
+        "Database integrity or relationship checks failed in the candidate runtime.",
+        "The candidate cannot become the active runtime.",
+        "Review the candidate database",
+        "restore",
+        "danger",
+    ),
+    "activation_runtime_faiss_invalid": _authored(
+        "The candidate search index did not pass verification",
+        "The candidate's FAISS index is missing, unreadable, or inconsistent with its stored embeddings.",
+        "The candidate cannot become the active runtime.",
+        "Rebuild the candidate search index",
+        "maintenance",
+        "danger",
+    ),
+    "activation_runtime_identity_mismatch": _authored(
+        "The candidate runtime identity does not match",
+        "The signed activation intent, active pointer, and running process do not identify the same generation.",
+        "Activation cannot be trusted or completed.",
+        "Review activation evidence",
+        "jobs",
+        "danger",
+    ),
+    "activation_runtime_migrations_pending": _authored(
+        "The candidate database needs an application update",
+        "Required database migrations have not been applied to the candidate runtime.",
+        "The candidate cannot become the active runtime.",
+        "Apply and verify candidate migrations",
+        "restore",
+        "warning",
+    ),
+    "activation_runtime_smoke_failed": _authored(
+        "Candidate runtime verification did not complete",
+        "A bounded runtime check failed without an approved more-specific reason.",
+        "The candidate cannot become the active runtime.",
+        "Review activation evidence",
+        "jobs",
+        "danger",
+    ),
+    "activation_runtime_command_failed": _authored(
+        "Candidate runtime verification could not be classified",
+        "The isolated verification command failed without valid bounded failure evidence.",
+        "The candidate cannot become the active runtime.",
+        "Review activation evidence",
+        "jobs",
+        "danger",
+    ),
+    "activation_search_probe_failed": _authored(
+        "The candidate search probe failed",
+        "A reviewed smoke query did not produce trustworthy search evidence.",
+        "The candidate cannot become the active runtime.",
+        "Review search and index evidence",
+        "maintenance",
+        "danger",
+    ),
+    "activation_smoke_folder_missing": _authored(
+        "The activation test category is unavailable",
+        "A required smoke query has no approved document category to search.",
+        "Runtime search verification cannot complete.",
+        "Configure the activation test category",
+        "configuration",
+        "warning",
+    ),
+    "activation_smoke_queries_changed": _authored(
+        "The activation test queries changed",
+        "The current smoke-query file does not match the digest approved in the signed activation intent.",
+        "Runtime search verification cannot continue.",
+        "Review and reschedule activation",
+        "jobs",
+        "danger",
+    ),
+    "activation_smoke_queries_invalid": _authored(
+        "The activation test queries are invalid",
+        "The smoke-query file is malformed or contains an unsupported language or query record.",
+        "Runtime search verification cannot complete.",
+        "Correct the activation test queries",
+        "configuration",
+        "warning",
+    ),
     "lease_observation_failed": (
         "Writer lease observation is unavailable",
         "The current writer lease could not be observed safely.",
@@ -590,18 +698,6 @@ REASONS = {
         "info",
     ),
 }
-
-
-def _authored(title, detail, consequence, action_label, section, severity):
-    """Mark registry copy for catalog extraction while deferring translation."""
-    return (
-        gettext_noop(title),
-        gettext_noop(detail),
-        gettext_noop(consequence),
-        gettext_noop(action_label),
-        section,
-        severity,
-    )
 
 
 for _code in {

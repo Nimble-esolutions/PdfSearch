@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import subprocess
 import tempfile
 import time
 import uuid
@@ -43,6 +44,9 @@ from vaultops.runtime_control import (
     runtime_control_paths,
     sign_document,
     validate_runtime_workspace,
+)
+from vaultops.runtime_verification_contract import (
+    write_runtime_verification_failure,
 )
 from vaultops.services.activation import (
     ActivationCoordinatorError,
@@ -1467,6 +1471,94 @@ class SupervisorProtocolTests(SimpleTestCase):
             CURRENT_GENERATION,
         )
 
+    def test_runtime_verification_propagates_allowlisted_reason_only(self):
+        captured = {}
+
+        def run_command(_command, **kwargs):
+            captured.update(kwargs)
+            write_runtime_verification_failure(
+                kwargs["env"]["ACTIVATION_VERIFICATION_FAILURE_PATH"],
+                "activation_pdf_missing",
+            )
+            return SimpleNamespace(returncode=1)
+
+        supervisor = self._supervisor("web", run_command=run_command)
+
+        with self.assertRaisesRegex(
+            SupervisorError,
+            "activation_pdf_missing",
+        ):
+            supervisor._run_manage(
+                ["verify_activation_runtime", "--intent-id", "bounded"],
+                timeout=3,
+            )
+
+        self.assertIs(captured["stdout"], subprocess.DEVNULL)
+        self.assertIs(captured["stderr"], subprocess.DEVNULL)
+        self.assertFalse(
+            Path(
+                captured["env"][
+                    "ACTIVATION_VERIFICATION_FAILURE_PATH"
+                ]
+            ).exists()
+        )
+
+    def test_runtime_verification_rejects_unapproved_failure_evidence(self):
+        def run_command(_command, **kwargs):
+            failure_path = Path(
+                kwargs["env"]["ACTIVATION_VERIFICATION_FAILURE_PATH"]
+            )
+            failure_path.parent.mkdir(parents=True, exist_ok=True)
+            failure_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "reason_code": "secret_exception_detail",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=1)
+
+        supervisor = self._supervisor("web", run_command=run_command)
+
+        with self.assertRaisesRegex(
+            SupervisorError,
+            "activation_runtime_command_failed",
+        ):
+            supervisor._run_manage(
+                ["verify_activation_runtime", "--intent-id", "bounded"],
+                timeout=3,
+            )
+
+    def test_runtime_verification_rejects_non_string_reason(self):
+        def run_command(_command, **kwargs):
+            failure_path = Path(
+                kwargs["env"]["ACTIVATION_VERIFICATION_FAILURE_PATH"]
+            )
+            failure_path.parent.mkdir(parents=True, exist_ok=True)
+            failure_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "reason_code": ["activation_pdf_missing"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=1)
+
+        supervisor = self._supervisor("web", run_command=run_command)
+
+        with self.assertRaisesRegex(
+            SupervisorError,
+            "activation_runtime_command_failed",
+        ):
+            supervisor._run_manage(
+                ["verify_activation_runtime", "--intent-id", "bounded"],
+                timeout=3,
+            )
+
     def test_initial_cutover_resumes_from_owned_target_pointer(self):
         self._replace_with_initial_intent()
         maintenance = self._quiesce()
@@ -2172,3 +2264,33 @@ class ActivationRuntimeVerificationTests(TestCase):
                     "verify_activation_runtime",
                     intent_id=self.intent_id,
                 )
+
+    def test_management_command_writes_bounded_failure_evidence(self):
+        failure_path = self.root / "activation-failure.json"
+        with (
+            self.settings(RUNTIME_MANIFEST_DIGEST="f" * 64),
+            patch.dict(
+                os.environ,
+                {
+                    "ACTIVATION_VERIFICATION_FAILURE_PATH": str(
+                        failure_path
+                    )
+                },
+            ),
+            self.assertRaisesRegex(
+                CommandError,
+                "activation_runtime_identity_mismatch",
+            ),
+        ):
+            call_command(
+                "verify_activation_runtime",
+                intent_id=self.intent_id,
+            )
+
+        self.assertEqual(
+            json.loads(failure_path.read_text(encoding="utf-8")),
+            {
+                "schema_version": 1,
+                "reason_code": "activation_runtime_identity_mismatch",
+            },
+        )

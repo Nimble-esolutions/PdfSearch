@@ -30,6 +30,10 @@ from vaultops.runtime_control import (
     sign_document,
     validate_runtime_workspace,
 )
+from vaultops.runtime_verification_contract import (
+    GENERIC_RUNTIME_VERIFICATION_REASON,
+    read_runtime_verification_failure,
+)
 
 
 class SupervisorError(RuntimeError):
@@ -475,6 +479,15 @@ class RuntimeSupervisor:
 
     def _run_manage(self, arguments, *, timeout):
         process_environment = self._resolved_process_environment()
+        failure_path = None
+        if arguments and arguments[0] == "verify_activation_runtime":
+            failure_path = self.paths["activation_dir"] / (
+                f".runtime-verification-{os.getpid()}.json"
+            )
+            failure_path.unlink(missing_ok=True)
+            process_environment[
+                "ACTIVATION_VERIFICATION_FAILURE_PATH"
+            ] = str(failure_path)
         result = self.run_command(
             [sys.executable, "manage.py", *arguments],
             cwd=Path(__file__).resolve().parent,
@@ -485,7 +498,12 @@ class RuntimeSupervisor:
             check=False,
         )
         if result.returncode != 0:
-            raise SupervisorError("activation_runtime_command_failed")
+            reason_code = GENERIC_RUNTIME_VERIFICATION_REASON
+            if failure_path is not None:
+                reason_code = read_runtime_verification_failure(failure_path)
+            raise SupervisorError(reason_code)
+        if failure_path is not None:
+            failure_path.unlink(missing_ok=True)
 
     def _reconcile_result_best_effort(self, intent):
         try:

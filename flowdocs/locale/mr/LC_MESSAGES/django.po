@@ -4175,3 +4175,114 @@ msgstr "निर्मिती संचावर विश्वास ठे
 
 msgid "Review generation integrity"
 msgstr "निर्मिती संचाच्या अखंडतेचे पुनरावलोकन करा"
+
+msgid "An activated document file is missing"
+msgstr "सक्रिय करण्याच्या उमेदवारातील दस्तऐवज फाइल उपलब्ध नाही"
+
+msgid "A document recorded in the candidate database is not present in its approved media location."
+msgstr "उमेदवार डेटाबेसमध्ये नोंदलेला दस्तऐवज त्याच्या मंजूर मीडिया ठिकाणी उपलब्ध नाही."
+
+msgid "The candidate cannot become the active runtime."
+msgstr "हा उमेदवार सक्रिय रनटाइम होऊ शकत नाही."
+
+msgid "Restore the missing document"
+msgstr "उपलब्ध नसलेला दस्तऐवज पुनर्स्थापित करा"
+
+msgid "An activated document path is unsafe"
+msgstr "सक्रिय करण्याच्या उमेदवारातील दस्तऐवज मार्ग असुरक्षित आहे"
+
+msgid "A document path leaves the approved runtime media location or cannot be resolved safely."
+msgstr "दस्तऐवज मार्ग मंजूर रनटाइम मीडिया ठिकाणाबाहेर जातो किंवा सुरक्षितपणे निश्चित करता येत नाही."
+
+msgid "Review candidate document storage"
+msgstr "उमेदवाराचे दस्तऐवज संचयन तपासा"
+
+msgid "The candidate database did not pass verification"
+msgstr "उमेदवार डेटाबेस पडताळणीत उत्तीर्ण झाला नाही"
+
+msgid "Database integrity or relationship checks failed in the candidate runtime."
+msgstr "उमेदवार रनटाइममधील डेटाबेस अखंडता किंवा संबंध तपासण्या अयशस्वी झाल्या."
+
+msgid "Review the candidate database"
+msgstr "उमेदवार डेटाबेस तपासा"
+
+msgid "The candidate search index did not pass verification"
+msgstr "उमेदवार शोध निर्देशांक पडताळणीत उत्तीर्ण झाला नाही"
+
+msgid "The candidate's FAISS index is missing, unreadable, or inconsistent with its stored embeddings."
+msgstr "उमेदवाराचा FAISS निर्देशांक उपलब्ध नाही, वाचता येत नाही किंवा साठवलेल्या एम्बेडिंगशी सुसंगत नाही."
+
+msgid "Rebuild the candidate search index"
+msgstr "उमेदवार शोध निर्देशांक पुन्हा तयार करा"
+
+msgid "The candidate runtime identity does not match"
+msgstr "उमेदवार रनटाइमची ओळख जुळत नाही"
+
+msgid "The signed activation intent, active pointer, and running process do not identify the same generation."
+msgstr "स्वाक्षरी केलेला सक्रियकरण हेतू, सक्रिय सूचक आणि चालू प्रक्रिया एकाच पिढीची ओळख दर्शवत नाहीत."
+
+msgid "Activation cannot be trusted or completed."
+msgstr "सक्रियकरण विश्वसनीय मानता किंवा पूर्ण करता येत नाही."
+
+msgid "The candidate database needs an application update"
+msgstr "उमेदवार डेटाबेसला अनुप्रयोग अद्यतन आवश्यक आहे"
+
+msgid "Required database migrations have not been applied to the candidate runtime."
+msgstr "आवश्यक डेटाबेस स्थलांतरे उमेदवार रनटाइमवर लागू केलेली नाहीत."
+
+msgid "Apply and verify candidate migrations"
+msgstr "उमेदवार स्थलांतरे लागू करून पडताळा"
+
+msgid "Candidate runtime verification did not complete"
+msgstr "उमेदवार रनटाइमची पडताळणी पूर्ण झाली नाही"
+
+msgid "A bounded runtime check failed without an approved more-specific reason."
+msgstr "अधिक नेमके मंजूर कारण नोंदले नसताना मर्यादित रनटाइम तपासणी अयशस्वी झाली."
+
+msgid "Candidate runtime verification could not be classified"
+msgstr "उमेदवार रनटाइम पडताळणीचे वर्गीकरण करता आले नाही"
+
+msgid "The isolated verification command failed without valid bounded failure evidence."
+msgstr "वैध आणि मर्यादित अपयश पुरावा न देता स्वतंत्र पडताळणी आदेश अयशस्वी झाला."
+
+msgid "The candidate search probe failed"
+msgstr "उमेदवार शोध चाचणी अयशस्वी झाली"
+
+msgid "A reviewed smoke query did not produce trustworthy search evidence."
+msgstr "तपासलेल्या स्मोक-चाचणी प्रश्नातून विश्वसनीय शोध पुरावा मिळाला नाही."
+
+msgid "Review search and index evidence"
+msgstr "शोध आणि निर्देशांक पुरावा तपासा"
+
+msgid "The activation test category is unavailable"
+msgstr "सक्रियकरण चाचणीचा विभाग उपलब्ध नाही"
+
+msgid "A required smoke query has no approved document category to search."
+msgstr "आवश्यक स्मोक-चाचणी प्रश्नासाठी शोधण्याचा मंजूर दस्तऐवज विभाग उपलब्ध नाही."
+
+msgid "Runtime search verification cannot complete."
+msgstr "रनटाइम शोध पडताळणी पूर्ण होऊ शकत नाही."
+
+msgid "Configure the activation test category"
+msgstr "सक्रियकरण चाचणीच्या विभागाची संरचना करा"
+
+msgid "The activation test queries changed"
+msgstr "सक्रियकरण चाचणीचे प्रश्न बदलले आहेत"
+
+msgid "The current smoke-query file does not match the digest approved in the signed activation intent."
+msgstr "सध्याची स्मोक-चाचणी प्रश्न फाइल स्वाक्षरी केलेल्या सक्रियकरण हेतूमध्ये मंजूर केलेल्या डायजेस्टशी जुळत नाही."
+
+msgid "Runtime search verification cannot continue."
+msgstr "रनटाइम शोध पडताळणी पुढे सुरू राहू शकत नाही."
+
+msgid "Review and reschedule activation"
+msgstr "सक्रियकरण तपासून पुन्हा नियोजित करा"
+
+msgid "The activation test queries are invalid"
+msgstr "सक्रियकरण चाचणीचे प्रश्न अवैध आहेत"
+
+msgid "The smoke-query file is malformed or contains an unsupported language or query record."
+msgstr "स्मोक-चाचणी प्रश्न फाइल सदोष आहे किंवा त्यात असमर्थित भाषा अथवा प्रश्न नोंद आहे."
+
+msgid "Correct the activation test queries"
+msgstr "सक्रियकरण चाचणीचे प्रश्न दुरुस्त करा"

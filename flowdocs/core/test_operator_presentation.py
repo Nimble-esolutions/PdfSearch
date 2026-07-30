@@ -13,6 +13,9 @@ from core.operator_presentation import (
     label_for,
     present_reason,
 )
+from vaultops.runtime_verification_contract import (
+    SAFE_RUNTIME_VERIFICATION_REASONS,
+)
 
 
 class OperatorPresentationTests(SimpleTestCase):
@@ -82,6 +85,40 @@ class OperatorPresentationTests(SimpleTestCase):
             "Vault storage is ready for its first generation",
         )
         self.assertEqual(first_generation["severity"], "info")
+
+    def test_activation_runtime_reasons_have_authored_copy(self):
+        reason_codes = SAFE_RUNTIME_VERIFICATION_REASONS | {
+            "activation_runtime_command_failed"
+        }
+        english = {
+            reason_code: present_reason(reason_code)
+            for reason_code in reason_codes
+        }
+        for reason_code in sorted(reason_codes):
+            with self.subTest(reason_code=reason_code):
+                presentation = english[reason_code]
+                self.assertTrue(presentation["known"])
+                self.assertNotEqual(
+                    presentation["title"],
+                    UNKNOWN_REASON["title"],
+                )
+        with translation.override("mr"):
+            for reason_code in sorted(reason_codes):
+                marathi = present_reason(reason_code)
+                for field in (
+                    "title",
+                    "detail",
+                    "consequence",
+                    "action_label",
+                ):
+                    with self.subTest(
+                        reason_code=reason_code,
+                        field=field,
+                    ):
+                        self.assertNotEqual(
+                            marathi[field],
+                            english[reason_code][field],
+                        )
 
     def test_cold_start_maintenance_reasons_have_bootstrap_guidance(self):
         pointer = present_reason("maintenance_source_pointer_unverified")
