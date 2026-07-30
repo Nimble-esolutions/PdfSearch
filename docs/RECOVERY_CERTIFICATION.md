@@ -41,7 +41,8 @@ never enable the startup bootstrap switch.
 The activation phase enables both ordinary staging activation and the narrower
 initial-activation gate. The latter is still rejected unless the disposable
 target has no active or previous runtime pointer and no generation projected as
-active.
+active. Accumulated-volume drills never enable the initial-activation gate;
+they must retain and verify their existing signed runtime authority.
 
 The signed activation contract also requires the approved bilingual smoke-query
 file at `ACTIVATION_SMOKE_QUERIES_FILE` (by default,
@@ -182,6 +183,10 @@ evidence is bounded to resource identities, service health, endpoint results,
 SQLite integrity/foreign-key status, and artifact inventory. Add the signed
 activation result, generation/manifest identities, bilingual search result,
 and operator decision to the approved incident or release record.
+The evidence phase also verifies the signed committed result, committed intent,
+active generation projection, runtime observation, and exact `/readyz`
+generation and manifest. Fresh drills additionally require that no fabricated
+previous-runtime pointer exists.
 
 Failed targets are retained automatically. After successful evidence review:
 
