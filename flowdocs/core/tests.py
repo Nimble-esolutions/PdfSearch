@@ -32,11 +32,12 @@ from django.utils import translation
 from flowdocs import settings as project_settings
 
 from .forms import UploadForm
+from .configuration_registry import build_configuration_groups
 from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
-from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, bind_unavailable_recovery_evidence, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, bind_unavailable_recovery_evidence, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf, _verified_local_media_evidence
 from .media_quarantine import (
     MediaFileUnsafeError,
     build_unauthorized_missing_attestation,
@@ -164,6 +165,70 @@ class EnvironmentContractTests(SimpleTestCase):
         )
         self.assertEqual(settings.MAX_FILE_SIZE_MB, Decimal("10"))
         self.assertEqual(settings.MAX_FILE_SIZE, 10 * 1024 * 1024)
+
+    def test_configuration_registry_reports_custody_cap_source_and_value(self):
+        with patch.dict(
+            os.environ,
+            {"ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES": "33554432"},
+        ):
+            groups = build_configuration_groups(settings)
+
+        rows = {
+            row["key"]: row
+            for group in groups
+            for row in group["rows"]
+        }
+        custody = rows["ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES"]
+        self.assertEqual(custody["value"], "33554432")
+        self.assertEqual(custody["source"], "environment")
+        self.assertFalse(custody["secret"])
+
+    def test_config_inspect_reports_effective_custody_cap(self):
+        from core.management.commands.config_inspect import Command
+
+        command = Command()
+        observed = {}
+        command._section = lambda _name: None
+        command._kv = lambda key, value: observed.__setitem__(key, value)
+
+        with patch(
+            "core.management.commands.config_inspect.EnvironmentIdentity.from_env"
+        ) as identity_from_env, patch(
+            "core.management.commands.config_inspect.SideEffectPolicy.from_identity"
+        ) as policy_from_identity:
+            identity = SimpleNamespace(
+                app_env=SimpleNamespace(value="development"),
+                deployment_id="local",
+                instance_id="local",
+                replica_id="local",
+                dataset_id="local",
+                data_mode=SimpleNamespace(value="local"),
+                data_pinned_generation="",
+                app_image_digest="",
+                app_release_version="",
+                backup_role=SimpleNamespace(value="disabled"),
+                backup_sync_mode=SimpleNamespace(value="manual"),
+                external_side_effects=SimpleNamespace(value="disabled"),
+                nonprod_data_policy="synthetic",
+                validate=lambda: [],
+            )
+            identity_from_env.return_value = identity
+            policy_from_identity.return_value = SimpleNamespace(
+                email_enabled=False,
+                email_backend="disabled",
+                payment_enabled=False,
+                webhook_enabled=False,
+                sms_enabled=False,
+                analytics_enabled=False,
+                indexers_allowed=False,
+                notification_enabled=False,
+            )
+            command.handle()
+
+        self.assertEqual(
+            observed["ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES"],
+            str(settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES),
+        )
 
     def test_positive_int_reader_accepts_env_override(self):
         with patch.dict(os.environ, {"PDF_CHUNK_SIZE": "2048"}):
@@ -3388,6 +3453,10 @@ class UnavailableAttestationTests(SimpleTestCase):
             os.truncate(oversized, (64 * 1024 * 1024) + 1)
 
             with (
+                patch(
+                    "core.media_quarantine.storage_key_evidence",
+                    return_value={"status": "present"},
+                ),
                 patch("core.media_quarantine.hashlib.sha256") as sha256,
                 patch("core.media_quarantine.os.read") as read,
                 self.assertRaises(MediaFileUnsafeError),
@@ -3398,7 +3467,35 @@ class UnavailableAttestationTests(SimpleTestCase):
                     maximum_bytes=64 * 1024 * 1024,
                 )
 
-            self.assertNotIn((), [entry.args for entry in sha256.call_args_list])
+            sha256.assert_not_called()
+            read.assert_not_called()
+
+    def test_recovery_media_rejects_over_inventory_cap_before_hash_or_read(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = root / "pdfs"
+            media.mkdir()
+            oversized = media / "oversized.pdf"
+            oversized.touch()
+            os.truncate(oversized, (64 * 1024 * 1024) + 1)
+            pdf = SimpleNamespace(
+                file=SimpleNamespace(name="pdfs/oversized.pdf")
+            )
+
+            with (
+                override_settings(
+                    MEDIA_ROOT=root,
+                    ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=64
+                    * 1024
+                    * 1024,
+                ),
+                patch("core.maintenance.hashlib.sha256") as sha256,
+                patch("core.maintenance.os.read") as read,
+                self.assertRaises(core_utils.SearchDataIntegrityError),
+            ):
+                _verified_local_media_evidence(pdf)
+
+            sha256.assert_not_called()
             read.assert_not_called()
 
 
