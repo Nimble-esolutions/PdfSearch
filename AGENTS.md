@@ -116,8 +116,11 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   restore, activation, retention, and profile setup under advanced Vault &
   Recovery disclosure. Never imply that local validation or index repair
   requires a remote profile. In Marathi, use the reviewed specialist terms
-  `ऑपरेटर`, `प्रोफाइल`, `रनटाइम`, `व्हॉल्ट`, and `रोलबॅक`; pair them with
-  ordinary Marathi explanations of meaning, consequence, and action.
+  contextual literal terms `परिचालक`, `जोडणी रूपरेषा`,
+  `कार्यरत प्रणाली`, and `मागील आवृत्ती पुनर्स्थापना`; keep the specialist
+  product name `व्हॉल्ट`. Use `संचिका` for ordinary file/media copy. Review
+  complete sentences and older related catalog entries; preserve immutable
+  codes and identifiers as English/LTR evidence.
 
 ## Local Validation
 

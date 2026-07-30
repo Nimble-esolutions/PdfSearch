@@ -544,6 +544,42 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         finally:
             check.close()
 
+    def test_snapshot_attests_unknown_evidence_with_preserved_lifecycle(self):
+        connection = sqlite3.connect(self.database)
+        for definition in (
+            "lifecycle TEXT",
+            "media_expected_sha256 TEXT",
+            "media_expected_size INTEGER",
+            "media_prior_lifecycle TEXT",
+        ):
+            connection.execute(f"ALTER TABLE core_pdffile ADD COLUMN {definition}")
+        connection.execute(
+            "INSERT INTO core_pdffile "
+            "(id, file, lifecycle, media_expected_sha256, "
+            "media_expected_size, media_prior_lifecycle) "
+            "VALUES (1, 'pdfs/missing.pdf', 'unavailable', '', NULL, 'uploaded')"
+        )
+        connection.commit()
+        connection.close()
+
+        snapshot = create_consistent_snapshot(
+            self.make_job(),
+            source_roots={
+                "media": self.data / "media",
+                "pdf_cache": self.data / "pdf_cache",
+                "faiss_indexes": self.data / "faiss_indexes",
+                "chroma_db": self.data / "chroma_db",
+                "staticfiles": self.data / "staticfiles",
+            },
+            database_path=self.database,
+            snapshot_root=self.control / "snapshots",
+        )
+
+        evidence = json.loads(
+            (Path(snapshot.workspace_path) / "snapshot-evidence.json").read_text()
+        )
+        self.assertEqual(evidence["faiss"]["unavailable_documents"]["count"], 1)
+
     def test_untracked_source_mutation_fails_before_finalization(self):
         job = self.make_job()
         reconcile = snapshot_service._reconcile_tree

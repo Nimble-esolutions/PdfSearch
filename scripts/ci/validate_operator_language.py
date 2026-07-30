@@ -36,6 +36,46 @@ RAW_ERROR_SUMMARY = re.compile(
     r"{%\s*include\b[^%]*\btechnical_code\s*=\s*[^%\s]*error_summary\b[^%]*%})"
 )
 PRESENTATION_FIELDS = {"title", "detail", "consequence", "action_label"}
+MALFORMED_MARATHI_TOKENS = (
+    "प्रोसंचिका",
+    "संचिका्स",
+    "रोलबॅक",
+    "परिचालकला",
+    "परिचालकने",
+    "परिचालकची",
+    "प्रवेश-प्रमाणचा",
+    "रूपरेषाचा",
+    "रूपरेषाची",
+    "रूपरेषामध्ये",
+    "रूपरेषामधील",
+    "रूपरेषाने",
+    "रूपरेषाला",
+    "कार्यरत प्रणालीची तयारी",
+    "सक्रिय कार्यरत प्रणाली बदललेला",
+    "सध्याचा कार्यरत प्रणाली",
+    "हा कार्यरत प्रणाली",
+    "कार्यरत प्रणाली सज्जतेतून",
+    "अचूक सारांश",
+    "ताबा-पुरावा",
+    "नियंत्रण फलकवर",
+    "रूपरेषा संरचनेचा",
+    "रूपरेषा तपासणी",
+    "कार्यरत प्रणाली पुरावा",
+    "कार्यरत प्रणाली मीडिया",
+    "पुनर्स्थापनाचा निर्मिती संच",
+)
+REQUIRED_MARATHI_TRANSLATIONS = {
+    "Review runtime evidence": "कार्यरत प्रणालीच्या पुराव्याचा आढावा घ्या",
+    "Candidate runtime verification could not be classified": (
+        "उमेदवाराच्या कार्यरत प्रणालीच्या पडताळणीचे वर्गीकरण करता आले नाही"
+    ),
+    "Runtime search verification cannot complete.": (
+        "कार्यरत प्रणालीतील शोध पडताळणी पूर्ण होऊ शकत नाही."
+    ),
+    "Runtime search verification cannot continue.": (
+        "कार्यरत प्रणालीतील शोध पडताळणी पुढे सुरू राहू शकत नाही."
+    ),
+}
 
 
 def _literal(node: ast.AST) -> str | None:
@@ -148,6 +188,20 @@ def catalog_violations(
 ) -> list[str]:
     entries = catalog_entries(catalog_path)
     errors: list[str] = []
+    catalog_text = catalog_path.read_text(encoding="utf-8")
+    for token in MALFORMED_MARATHI_TOKENS:
+        if token in catalog_text:
+            errors.append(
+                f"{catalog_path.relative_to(display_root)}: "
+                f"malformed or unreviewed Marathi token: {token!r}"
+            )
+    for message, expected in REQUIRED_MARATHI_TRANSLATIONS.items():
+        translated, _fuzzy = entries.get(message, ("", False))
+        if translated != expected:
+            errors.append(
+                f"{catalog_path.relative_to(display_root)}: "
+                f"reviewed Marathi translation mismatch: {message!r}"
+            )
     for message in sorted(registry_messages(registry_path)):
         translated, fuzzy = entries.get(message, ("", False))
         if not translated:

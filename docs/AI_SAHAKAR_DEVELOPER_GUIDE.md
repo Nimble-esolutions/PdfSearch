@@ -53,15 +53,15 @@ Marathi terminology follows a reviewed glossary:
 
 | English concept | Required Marathi rendering |
 | --- | --- |
-| Dashboard | डॅशबोर्ड |
+| Dashboard | नियंत्रण फलक |
 | Workbench | कार्यपटल |
-| operator | ऑपरेटर |
+| operator | परिचालक |
 | Vault | व्हॉल्ट |
-| runtime | रनटाइम |
-| profile | प्रोफाइल |
-| rollback | रोलबॅक |
+| runtime | कार्यरत प्रणाली |
+| profile | रूपरेषा |
+| rollback | मागील आवृत्ती पुनर्स्थापना |
 | writer lease | रायटर लीज |
-| credentials | क्रेडेन्शियल्स |
+| credentials | प्रवेश-प्रमाण / प्रमाणीकरण माहिती |
 | embedding | एम्बेडिंग |
 | manifest | मॅनिफेस्ट |
 | checkpoint | चेकपॉइंट |
@@ -70,11 +70,13 @@ Marathi terminology follows a reviewed glossary:
 | generation | निर्मिती संच |
 | reindex | पुनःअनुक्रमण |
 
-Use an established literal Marathi term where it stays precise. Use the
-glossary's Marathi-script transliteration for specialist terms whose literal
-rendering changes the technical meaning, and explain the operational effect in
-ordinary Marathi. Do not force misleading literal forms such as physical-vault
-or property-lease vocabulary. Latin-script English is reserved for exact
+Use an established literal Marathi term wherever it stays precise, including
+ordinary file/media language (`संचिका`), runtime posture
+(`कार्यरत प्रणाली`), connection profiles (`जोडणी रूपरेषा`), operators
+(`परिचालक`), and rollback actions (`मागील आवृत्ती पुनर्स्थापित करा`). Retain
+a reviewed Marathi-script product term only when a literal rendering would
+change a specialist identity, such as Vault, manifest, embedding, or database.
+Latin-script English is reserved for exact
 technical evidence such as codes, API fields, UUIDs, hashes, filenames, and
 paths. Do not translate those identifiers.
 
@@ -95,8 +97,9 @@ Latin-script fallback or unnecessary phonetic spelling:
 | search readiness | शोध तयारी |
 | technical details | तांत्रिक तपशील |
 
-Translate the complete sentence and review its grammar. Do not perform blind
-word replacement, and do not translate immutable codes or identifiers.
+Translate the complete sentence and review its grammar, including older catalog
+entries touched by the same concept. Do not perform blind word replacement,
+and do not translate immutable codes or identifiers.
 
 ## Operations information architecture
 
@@ -244,3 +247,44 @@ index gates. It is not a substitute for browser interaction checks.
 - [ ] Relevant tests and `git diff --check` pass.
 - [ ] Documentation updated for user-visible behavior.
 - [ ] Changes are committed logically and the PR targets `dev`.
+## Unavailable document-media contract
+
+`PDFFile.lifecycle="unavailable"` is the non-destructive quarantine for a
+preserved row whose source file cannot currently be verified. Only an explicit
+admin POST with the exact `MARK UNAVAILABLE` confirmation may enter the state.
+The request must also provide an expected SHA-256, byte size, allowlisted
+human-readable reason code, and an alphanumeric bounded case reference. This
+prevents raw custody paths from entering the model, audit, or interface. Inside
+one transaction the row is locked, its prior lifecycle
+and bounded evidence are persisted, `indexed=False` is set, and a
+`media_unavailable` event is appended. Repeated requests report a no-op and do
+not create duplicate transition events. Storage keys, absolute paths, and
+document content never enter audit or interface evidence.
+
+All search querysets, FAISS construction, stored-index repair, maintenance
+selection, candidate embedding/media validation, runtime activation file
+verification, and readiness denominators must exclude unavailable rows.
+Dashboard inventory continues to show the preserved row and its human operator
+guidance; the stable code is available only in collapsed technical details.
+
+Restoration opens the configured local-storage object without following a final
+symlink, proves it is a regular file, hashes it while checking stable inode,
+size, and modification evidence, and compares exact SHA-256 and byte size. It
+then returns the row to `media_prior_lifecycle` and records bounded verification
+evidence in `media_restored`. Legacy unavailable rows without durable expected
+evidence remain safely unavailable. Candidate, snapshot, and activation
+evidence include a deterministic unavailable-set attestation: total count,
+bounded sorted IDs, truncation, and a digest over the complete canonical
+ID/lifecycle/storage-key-status tuples. Do not use
+`reconcile_media_pdfs` to remap a dangling row: that command only imports media
+paths that have no database row.
+
+Verification:
+
+```sh
+python manage.py test core.tests.DocumentLifecycleTests \
+  core.tests_candidate_cleanup.CandidateWorkspaceTests \
+  core.tests_maintenance_contract.MaintenancePlanningTests
+python manage.py makemigrations --check --dry-run
+python ../scripts/ci/validate_operator_language.py
+```

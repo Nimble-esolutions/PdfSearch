@@ -17,7 +17,8 @@ request. Their presence does not prove that media or indexes are restorable.
 | Bad signed runtime activation | Existing signed runtime rollback | Active and previous runtime remain protected |
 | Application SQLite damage or bad migration | `emergency_db prepare`, validate, then approved isolated recovery | Never copy directly over a live database |
 | Control SQLite damage | Prepare the same recovery set and validate `control.sqlite3` | Control history may be newer than the database-only point |
-| Missing/misnamed PDF media | `reconcile_media_pdfs` | Media reconciliation is not database disaster recovery |
+| Media file without a database row | `reconcile_media_pdfs` | Imports orphan media; it does not repair an existing dangling row |
+| Database row whose PDF media is missing | Explicit **Mark unavailable** action, then recover the exact verified file | Preserves identity and history; never remap or delete automatically |
 | Missing/corrupt FAISS with valid stored embeddings | Repair Stored Indexes | No external embedding calls |
 | Missing chunks or embeddings | Reindex Needed/Selected | Creates local derived change; publish a new Vault candidate |
 | Complete dataset recovery | Verified Vault restore and signed activation | Canonical route for database, media, indexes, and manifests |
@@ -86,3 +87,28 @@ approved reconciliation; validation never migrates it, overwrites it, or opens
 the configured live Django database aliases. Rebuild indexes through the local
 Documents & Indexes workflow and use the existing signed runtime
 activation/rollback workflow for any eventual cutover.
+
+## Unavailable document media
+
+When a database row references media that cannot be verified, an administrator
+may enter the expected SHA-256 and byte size from approved custody evidence,
+choose a controlled reason, record a bounded case reference, and explicitly
+type `MARK UNAVAILABLE` on
+the document page. This is a
+non-destructive quarantine: the row ID, metadata, stored derived evidence, and
+maintenance history remain intact, while the document is excluded from search,
+index repair, readiness counts, candidate media requirements, and activation
+file checks. The action is audited and is never applied automatically.
+
+Restore availability only after the exact verified file has been returned to
+the row's approved storage path. The restore action rejects symlinks and
+non-regular or changing files, verifies the complete SHA-256 and byte size,
+keeps the row unavailable on any mismatch, and returns a verified row to its
+preserved prior lifecycle. It records a second bounded audit event when
+successful. Validation and bounded reindexing must follow.
+Hard deletion remains a separate irreversible retention decision.
+
+`reconcile_media_pdfs` scans files already present under `MEDIA_ROOT` and
+creates rows for paths not represented in the database. It does not discover
+missing bytes, rewrite an existing row's path, or prove that a renamed file is
+the same document.

@@ -336,6 +336,37 @@ class CandidateWorkspaceTests(SimpleTestCase):
         self.assertEqual(result["embeddings"]["dimensions"], [2])
         self.assertEqual(result["faiss"]["7"]["vectors"], 1)
 
+    def test_candidate_validation_preserves_unavailable_row_without_media(self):
+        workspace = self.control / "unavailable-media-workspace"
+        workspace.mkdir()
+        (workspace / "media").mkdir()
+        (workspace / "faiss_indexes").mkdir()
+        workspace_db = workspace / "db.sqlite3"
+        workspace_db.write_bytes(self.database.read_bytes())
+        connection = sqlite3.connect(workspace_db)
+        for definition in (
+            "media_expected_sha256 TEXT",
+            "media_expected_size INTEGER",
+            "media_prior_lifecycle TEXT",
+        ):
+            connection.execute(f"ALTER TABLE core_pdffile ADD COLUMN {definition}")
+        connection.execute(
+            "UPDATE core_pdffile SET lifecycle='unavailable', "
+            "media_expected_sha256='', media_expected_size=NULL, "
+            "media_prior_lifecycle='uploaded' WHERE id=1"
+        )
+        connection.commit()
+        connection.close()
+        (workspace / WORKSPACE_MANIFEST).write_text(
+            json.dumps({"affected_folder_ids": []})
+        )
+
+        result = validate_candidate(workspace)
+
+        self.assertEqual(result["media"]["missing"], 0)
+        self.assertEqual(result["embeddings"]["vectors"], 0)
+        self.assertEqual(result["media"]["unavailable"]["count"], 1)
+
     def test_candidate_validation_rejects_faiss_vector_count_mismatch(self):
         import faiss
 

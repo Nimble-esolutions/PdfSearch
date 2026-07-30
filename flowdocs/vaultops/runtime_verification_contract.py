@@ -7,6 +7,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from core.media_quarantine import validate_unavailable_attestation
+
 
 SAFE_RUNTIME_VERIFICATION_REASONS = frozenset(
     {
@@ -22,11 +24,14 @@ SAFE_RUNTIME_VERIFICATION_REASONS = frozenset(
         "activation_smoke_folder_missing",
         "activation_smoke_queries_changed",
         "activation_smoke_queries_invalid",
+        "activation_unavailable_attestation_changed",
+        "activation_unavailable_attestation_invalid",
     }
 )
 
 GENERIC_RUNTIME_VERIFICATION_REASON = "activation_runtime_command_failed"
 MAX_FAILURE_EVIDENCE_BYTES = 256
+MAX_SUCCESS_EVIDENCE_BYTES = 2048
 
 
 def safe_runtime_verification_reason(reason_code):
@@ -85,5 +90,58 @@ def read_runtime_verification_failure(path):
         return safe_runtime_verification_reason(value.get("reason_code"))
     except (OSError, UnicodeDecodeError, ValueError):
         return GENERIC_RUNTIME_VERIFICATION_REASON
+    finally:
+        target.unlink(missing_ok=True)
+
+
+def write_runtime_verification_success(path, unavailable_documents):
+    """Atomically publish bounded runtime-produced unavailable-media evidence."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(
+        {
+            "schema_version": 1,
+            "unavailable_documents": validate_unavailable_attestation(
+                unavailable_documents
+            ),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if len(payload) > MAX_SUCCESS_EVIDENCE_BYTES:
+        raise ValueError("runtime verification evidence exceeds its bound")
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        dir=target.parent,
+        prefix=f".{target.name}.",
+    )
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(file_descriptor, 0o600)
+        with os.fdopen(file_descriptor, "wb") as handle:
+            file_descriptor = -1
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    finally:
+        if file_descriptor >= 0:
+            os.close(file_descriptor)
+        temporary.unlink(missing_ok=True)
+
+
+def read_runtime_verification_success(path):
+    """Consume one strict runtime-produced success record."""
+    target = Path(path)
+    try:
+        if not target.is_file() or target.stat().st_size > MAX_SUCCESS_EVIDENCE_BYTES:
+            raise ValueError("runtime verification evidence is missing or oversized")
+        value = json.loads(target.read_text(encoding="utf-8"))
+        if (
+            not isinstance(value, dict)
+            or set(value) != {"schema_version", "unavailable_documents"}
+            or value.get("schema_version") != 1
+        ):
+            raise ValueError("runtime verification evidence is invalid")
+        return validate_unavailable_attestation(value["unavailable_documents"])
     finally:
         target.unlink(missing_ok=True)

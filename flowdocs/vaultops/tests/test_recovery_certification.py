@@ -9,6 +9,10 @@ from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -179,6 +183,7 @@ class RecoveryCertificationTests(TestCase):
                 "manifest_digest": TARGET_DIGEST,
                 "executed_locales": ["en", "mr"],
                 "queries": [],
+                "unavailable_documents": build_unavailable_attestation(()),
             },
         )
         self.runtime_patch.start()
@@ -213,6 +218,97 @@ class RecoveryCertificationTests(TestCase):
         self.assertEqual(evidence["activation_result"], "committed")
         self.assertEqual(evidence["control_projection"], "committed")
         self.assertEqual(evidence["runtime"]["executed_locales"], ["en", "mr"])
+
+    def test_accepts_unknown_evidence_attestation_across_signed_runtime(self):
+        storage = storage_key_evidence("pdfs/unavailable.pdf")
+        unknown = build_unavailable_attestation(
+            (
+                {
+                    "id": 1,
+                    "lifecycle": "unavailable",
+                    "storage_key_status": storage["status"],
+                    "storage_key_token_sha256": storage["token_sha256"],
+                    "expected_sha256": "",
+                    "expected_size": None,
+                    "prior_lifecycle": "uploaded",
+                },
+            )
+        )
+        intent_payload = {
+            key: value
+            for key, value in self.intent_document.items()
+            if key not in {"document_digest", "signature"}
+        }
+        intent_payload["unavailable_documents"] = unknown
+        self.intent_document = sign_document(intent_payload, SIGNING_KEY)
+        atomic_write_json(
+            self.paths["intents"] / f"{self.intent_id}.json",
+            self.intent_document,
+        )
+        self.pointer_document = build_runtime_pointer(
+            deployment_id=DEPLOYMENT_ID,
+            generation_id=TARGET_GENERATION,
+            manifest_digest=TARGET_DIGEST,
+            runtime_path=self.runtime,
+            intent_digest=self.intent_document["document_digest"],
+            state_version=1,
+            signing_key=SIGNING_KEY,
+        )
+        atomic_write_json(self.paths["active"], self.pointer_document)
+        self.readiness = {
+            **self.readiness,
+            "unavailable_documents": unknown,
+        }
+        result_payload = {
+            "schema_version": 1,
+            "kind": "activation_result",
+            "deployment_id": DEPLOYMENT_ID,
+            "intent_id": self.intent_id,
+            "intent_digest": self.intent_document["document_digest"],
+            "status": "committed",
+            "active_generation_id": TARGET_GENERATION,
+            "active_manifest_digest": TARGET_DIGEST,
+            "previous_generation_id": "",
+            "active_pointer_digest": self.pointer_document["document_digest"],
+            "readiness_evidence": self.readiness,
+            "process_identity": self.process_identity,
+            "safe_error_code": "",
+            "observed_at_unix": int(timezone.now().timestamp()),
+        }
+        self.result_document = sign_document(result_payload, SIGNING_KEY)
+        atomic_write_json(
+            self.paths["results"] / f"{self.intent_id}.json",
+            self.result_document,
+        )
+        self.intent.intent_digest = self.intent_document["document_digest"]
+        self.intent.checkpoint = {
+            **self.intent.checkpoint,
+            "active_pointer_digest": self.pointer_document["document_digest"],
+        }
+        self.intent.save(update_fields=["intent_digest", "checkpoint", "updated_at"])
+        self.observation.pointer_digest = self.pointer_document["document_digest"]
+        self.observation.readiness_evidence = self.readiness
+        self.observation.save(
+            update_fields=["pointer_digest", "readiness_evidence"]
+        )
+        self.runtime_patch.stop()
+        try:
+            with patch(
+                "vaultops.services.certification.verify_activation_runtime",
+                return_value={
+                    "schema_version": 1,
+                    "generation_id": TARGET_GENERATION,
+                    "manifest_digest": TARGET_DIGEST,
+                    "executed_locales": ["en", "mr"],
+                    "queries": [],
+                    "unavailable_documents": unknown,
+                },
+            ):
+                evidence = self.verify()
+        finally:
+            self.runtime_patch.start()
+
+        self.assertEqual(evidence["runtime"]["unavailable_documents"], unknown)
 
     def test_management_command_emits_bounded_json(self):
         output = io.StringIO()
@@ -280,10 +376,39 @@ class RecoveryCertificationTests(TestCase):
     def test_rejects_incomplete_bilingual_runtime_smoke(self):
         with patch(
             "vaultops.services.certification.verify_activation_runtime",
-            return_value={"executed_locales": ["en"]},
+            return_value={
+                "executed_locales": ["en"],
+                "unavailable_documents": build_unavailable_attestation(()),
+            },
         ):
             self.assert_reason(
                 "recovery_certification_bilingual_smoke_incomplete"
+            )
+
+    def test_missing_legacy_intent_rejects_nonempty_runtime_attestation(self):
+        storage = storage_key_evidence("pdfs/unavailable.pdf")
+        actual = build_unavailable_attestation(
+            (
+                {
+                    "id": 1,
+                    "lifecycle": "unavailable",
+                    "storage_key_status": storage["status"],
+                    "storage_key_token_sha256": storage["token_sha256"],
+                    "expected_sha256": "a" * 64,
+                    "expected_size": 10,
+                    "prior_lifecycle": "uploaded",
+                },
+            )
+        )
+        with patch(
+            "vaultops.services.certification.verify_activation_runtime",
+            return_value={
+                "executed_locales": ["en", "mr"],
+                "unavailable_documents": actual,
+            },
+        ):
+            self.assert_reason(
+                "recovery_certification_runtime_attestation_mismatch"
             )
 
     def test_command_fails_closed_with_stable_reason(self):

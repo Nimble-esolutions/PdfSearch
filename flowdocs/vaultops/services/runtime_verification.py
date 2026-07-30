@@ -9,6 +9,11 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
 from core.models import Folder, PDFFile
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+    validate_unavailable_attestation,
+)
 from core.utils import SearchDataIntegrityError, search_pdfs_fast
 from vaultops.runtime_control import (
     RuntimeControlError,
@@ -75,7 +80,56 @@ def verify_activation_runtime(intent_id):
         or user.role != "superadmin"
     ):
         raise RuntimeControlError("activation_recovery_superadmin_unproven")
-    for pdf in PDFFile.objects.all().iterator():
+    unavailable_records = (
+        {
+            "id": pdf_id,
+            "lifecycle": lifecycle,
+            "storage_key_status": storage_key_evidence(file_name)["status"],
+            "storage_key_token_sha256": storage_key_evidence(file_name)[
+                "token_sha256"
+            ],
+            "expected_sha256": expected_sha256,
+            "expected_size": expected_size,
+            "prior_lifecycle": prior_lifecycle,
+        }
+        for (
+            pdf_id,
+            lifecycle,
+            file_name,
+            expected_sha256,
+            expected_size,
+            prior_lifecycle,
+        ) in (
+        PDFFile.objects.filter(lifecycle="unavailable")
+        .order_by("pk")
+        .values_list(
+            "pk",
+            "lifecycle",
+            "file",
+            "media_expected_sha256",
+            "media_expected_size",
+            "media_prior_lifecycle",
+        )
+        .iterator()
+        )
+    )
+    actual_unavailable = build_unavailable_attestation(unavailable_records)
+    try:
+        expected_unavailable = validate_unavailable_attestation(
+            intent.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
+        )
+    except ValueError as exc:
+        raise RuntimeControlError(
+            "activation_unavailable_attestation_invalid"
+        ) from exc
+    if actual_unavailable != expected_unavailable:
+        raise RuntimeControlError(
+            "activation_unavailable_attestation_changed"
+        )
+    for pdf in PDFFile.objects.exclude(lifecycle="unavailable").iterator():
         try:
             path = Path(pdf.file.path).resolve()
             path.relative_to(Path(settings.MEDIA_ROOT).resolve())
@@ -148,7 +202,8 @@ def verify_activation_runtime(intent_id):
         "database": "ok",
         "migrations": "ok",
         "recovery_superadmin": "ok",
-        "pdfs": PDFFile.objects.count(),
+        "pdfs": PDFFile.objects.exclude(lifecycle="unavailable").count(),
+        "unavailable_documents": actual_unavailable,
         "faiss": "ok",
         "queries": query_results,
         "executed_locales": sorted(

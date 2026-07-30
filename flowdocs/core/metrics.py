@@ -9,7 +9,12 @@ from django.conf import settings
 from django.db import models as django_models
 from django.http import HttpResponse
 
-from .models import ArtifactGeneration, MaintenanceJob, PDFFile
+from .models import (
+    ArtifactGeneration,
+    MaintenanceJob,
+    PDFFile,
+    SEARCHABLE_PDF_LIFECYCLES,
+)
 from django.utils import timezone as django_timezone
 
 
@@ -48,10 +53,22 @@ def metrics_view(request):
 
     try:
         total_pdfs = PDFFile.objects.count()
-        indexed = PDFFile.objects.filter(indexed=True).count()
+        searchable_pdfs = PDFFile.objects.filter(
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES
+        ).count()
+        unavailable = PDFFile.objects.filter(lifecycle="unavailable").count()
+        indexed = PDFFile.objects.filter(
+            indexed=True,
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        ).count()
         gauge("pdfsearch_data_pdf_count", total_pdfs)
+        gauge("pdfsearch_data_searchable_pdf_count", searchable_pdfs)
+        gauge("pdfsearch_data_unavailable_pdf_count", unavailable)
         gauge("pdfsearch_data_indexed_pdf_count", indexed)
-        gauge("pdfsearch_data_ready", 1 if total_pdfs == 0 or indexed > 0 else 0)
+        gauge(
+            "pdfsearch_data_ready",
+            1 if searchable_pdfs == 0 or indexed > 0 else 0,
+        )
     except Exception:
         gauge("pdfsearch_data_ready", 0)
 

@@ -155,3 +155,23 @@ AI imagery described in the historical SRS.
 See the [operator workflow diagram](diagrams/admin-operator-workflow.mmd) and
 the [active UI contract](design/AI_SAHAKAR_UI_CONTRACT.md) for the protected
 visual and interaction rules.
+## When a document file is unavailable
+
+Use **Mark unavailable** only after confirming that the preserved document row
+does not currently have its approved source file. Expand the action, type
+the expected SHA-256 and byte size from approved custody evidence, choose a
+human-readable reason, add a bounded case reference, type `MARK UNAVAILABLE`,
+and confirm. The record,
+identifier, metadata, expected-media evidence, prior lifecycle, and
+maintenance history remain preserved, but the document is excluded from search,
+index work, and runtime readiness.
+
+Recover the verified file to its approved storage location before choosing
+**Restore availability**. The application refuses restoration unless the path
+is a regular non-symlink file, remains stable while read, and exactly matches
+the recorded SHA-256 and byte size. A restored document returns to its prior
+lifecycle; it is not automatically made searchable. After restoration, validate
+the document and use the bounded
+Documents & Search reindex workflow. Do not delete the row merely to clear a
+readiness warning, and do not use a similarly named file unless its identity
+and provenance are verified.

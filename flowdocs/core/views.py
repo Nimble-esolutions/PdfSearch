@@ -3,6 +3,7 @@ import functools
 import hashlib
 import logging
 import os
+import re
 import uuid
 import time
 from functools import wraps
@@ -57,15 +58,19 @@ from django.urls import reverse
 from django.utils.translation import gettext
 from django.utils import timezone
 
-from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent, SiteSetting, SiteSetting
+from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent, SEARCHABLE_PDF_LIFECYCLES, SiteSetting
 from .configuration_registry import build_configuration_groups
 from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultConfigurationError
 from .metrics import metrics_view
 from .maintenance import (
+    MEDIA_QUARANTINE_REASONS,
     archive_pdf,
+    bind_unavailable_recovery_evidence,
     deprecate_pdf,
+    mark_pdf_unavailable,
     queue_job,
     restore_pdf,
+    restore_unavailable_pdf,
 )
 from .maintenance_plans import (
     LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS,
@@ -153,7 +158,7 @@ def can_access_pdf(user, pdf):
 def visible_pdfs(user, queryset=None, *, public=False):
     queryset = queryset if queryset is not None else PDFFile.objects.all()
     if public:
-        queryset = queryset.exclude(lifecycle__in=("deprecated", "archived"))
+        queryset = queryset.filter(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
     if public:
         return queryset.filter(
             folder__in=searchable_folders(user, public=True),
@@ -182,7 +187,19 @@ def searchable_folders(user, *, public=False):
 def admin_cockpit_context(user, category_query=""):
     folders = searchable_folders(user).annotate(
         pdf_count=Count("files", distinct=True),
-        indexed_count=Count("files", filter=Q(files__indexed=True), distinct=True),
+        searchable_count=Count(
+            "files",
+            filter=Q(files__lifecycle__in=SEARCHABLE_PDF_LIFECYCLES),
+            distinct=True,
+        ),
+        indexed_count=Count(
+            "files",
+            filter=Q(
+                files__indexed=True,
+                files__lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+            ),
+            distinct=True,
+        ),
         unknown_uploader_count=Count(
             "files",
             filter=Q(files__uploaded_by__isnull=True),
@@ -194,14 +211,21 @@ def admin_cockpit_context(user, category_query=""):
         folders = folders.filter(name__icontains=category_query)
     pdfs = visible_pdfs(user).select_related("folder", "uploaded_by")
     total_pdfs = pdfs.count()
-    indexed_pdfs = pdfs.filter(indexed=True).count()
+    searchable_pdfs = pdfs.filter(
+        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES
+    ).count()
+    indexed_pdfs = pdfs.filter(
+        indexed=True,
+        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+    ).count()
     unknown_uploaders = pdfs.filter(uploaded_by__isnull=True).count()
     folder_count = folders.count()
     folders_with_pdfs = folders.filter(files__isnull=False).distinct().count()
     recent_pdfs = list(pdfs.order_by("-uploaded_at")[:5])
     index_debt_folders = [
         folder for folder in folders
-        if folder.pdf_count and folder.indexed_count < folder.pdf_count
+        if folder.searchable_count
+        and folder.indexed_count < folder.searchable_count
     ][:4]
     owner_review_folders = [
         folder for folder in folders
@@ -216,8 +240,9 @@ def admin_cockpit_context(user, category_query=""):
         "folders_with_pdfs": folders_with_pdfs,
         "empty_folders": max(folder_count - folders_with_pdfs, 0),
         "total_pdfs": total_pdfs,
+        "searchable_pdfs": searchable_pdfs,
         "indexed_pdfs": indexed_pdfs,
-        "needs_index_pdfs": max(total_pdfs - indexed_pdfs, 0),
+        "needs_index_pdfs": max(searchable_pdfs - indexed_pdfs, 0),
         "unknown_uploaders": unknown_uploaders,
         "recent_pdfs": recent_pdfs,
         "index_debt_folders": index_debt_folders,
@@ -237,12 +262,19 @@ def folder_cockpit_context(user, folder):
         PDFFile.objects.filter(folder=folder),
     ).select_related("uploaded_by", "folder").order_by("-uploaded_at")
     total_pdfs = pdfs.count()
-    indexed_pdfs = pdfs.filter(indexed=True).count()
+    searchable_pdfs = pdfs.filter(
+        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES
+    ).count()
+    indexed_pdfs = pdfs.filter(
+        indexed=True,
+        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+    ).count()
     unknown_uploaders = pdfs.filter(uploaded_by__isnull=True).count()
     stats = {
         "total_pdfs": total_pdfs,
+        "searchable_pdfs": searchable_pdfs,
         "indexed_pdfs": indexed_pdfs,
-        "needs_index_pdfs": max(total_pdfs - indexed_pdfs, 0),
+        "needs_index_pdfs": max(searchable_pdfs - indexed_pdfs, 0),
         "unknown_uploaders": unknown_uploaders,
         "latest_upload": pdfs.aggregate(latest=Max("uploaded_at"))["latest"],
     }
@@ -262,19 +294,37 @@ def _pdf_has_stored_search_artifacts(pdf):
 
 
 def _repair_folder_index_from_stored_artifacts(folder):
-    pdfs = list(PDFFile.objects.filter(folder=folder).order_by("pk"))
+    pdfs = list(
+        PDFFile.objects.filter(
+            folder=folder,
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        ).order_by("pk")
+    )
     eligible_ids = [
-        pdf.pk for pdf in pdfs if _pdf_has_stored_search_artifacts(pdf)
+        pdf.pk
+        for pdf in pdfs
+        if _pdf_has_stored_search_artifacts(pdf)
+        and pdf.file
+        and pdf.file.name
+        and pdf.file.storage.exists(pdf.file.name)
     ]
     if not eligible_ids:
-        return 0, PDFFile.objects.filter(folder=folder, indexed=False).count()
+        return 0, PDFFile.objects.filter(
+            folder=folder,
+            indexed=False,
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        ).count()
 
     index, _, _ = build_or_load_faiss_index_for_folder(folder, force_rebuild=True)
     if index is None:
         raise SearchDataIntegrityError("No searchable artifacts were available for this category")
 
     repaired = PDFFile.objects.filter(pk__in=eligible_ids).update(indexed=True)
-    remaining = PDFFile.objects.filter(folder=folder, indexed=False).count()
+    remaining = PDFFile.objects.filter(
+        folder=folder,
+        indexed=False,
+        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+    ).count()
     return repaired, remaining
 
 
@@ -417,6 +467,8 @@ def view_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
     if not can_access_pdf(request.user, pdf):
         return HttpResponseForbidden("You do not have permission to view this PDF.")
+    if pdf.lifecycle == "unavailable":
+        raise Http404("PDF file is unavailable")
     if not pdf.file:
         raise Http404("PDF file is unavailable")
     try:
@@ -438,6 +490,7 @@ def public_view_pdf(request, pdf_id):
     pdf = get_object_or_404(
         PDFFile.objects.filter(
             pk=pdf_id,
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
             folder__in=searchable_folders(request.user, public=True),
         )
     )
@@ -827,11 +880,211 @@ def archive_pdf_view(request, pdf_id):
 
 @admin_required
 @require_POST
+def mark_pdf_unavailable_view(request, pdf_id):
+    """Explicitly quarantine a document row while preserving its identity."""
+    pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    values = {
+        "expected_sha256": request.POST.get("expected_sha256", "").strip().lower(),
+        "expected_size": request.POST.get("expected_size", "").strip(),
+        "reason": request.POST.get("reason", "").strip(),
+        "case_reference": request.POST.get("case_reference", "").strip(),
+    }
+    errors = {}
+    has_digest = bool(values["expected_sha256"])
+    has_size = bool(values["expected_size"])
+    if has_digest or has_size:
+        if not re.fullmatch(r"[0-9a-f]{64}", values["expected_sha256"]):
+            errors["expected_sha256"] = gettext(
+                "Enter the complete 64-character technical digest, or leave both evidence fields blank."
+            )
+        try:
+            parsed_size = int(values["expected_size"])
+            if parsed_size < 0 or parsed_size > 2**63 - 1:
+                raise ValueError
+        except ValueError:
+            errors["expected_size"] = gettext(
+                "Enter a valid non-negative byte size, or leave both evidence fields blank."
+            )
+    if values["reason"] not in MEDIA_QUARANTINE_REASONS:
+        errors["reason"] = gettext("Choose a verified reason.")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", values["case_reference"]):
+        errors["case_reference"] = gettext(
+            "Use 1–80 letters, numbers, periods, underscores, or hyphens."
+        )
+    if request.POST.get("confirmation", "").strip() != "MARK UNAVAILABLE":
+        errors["confirmation"] = gettext(
+            "Enter the exact confirmation phrase shown above."
+        )
+    if errors:
+        request.session["media_quarantine_form"] = {
+            "pdf_id": pdf.pk,
+            "values": values,
+            "errors": errors,
+        }
+        messages.error(request, gettext("Review the highlighted fields."))
+        return safe_referer_redirect(request)
+    try:
+        outcome = mark_pdf_unavailable(
+            pdf,
+            requested_by=request.user,
+            expected_sha256=request.POST.get("expected_sha256", ""),
+            expected_size=request.POST.get("expected_size", ""),
+            reason=request.POST.get("reason", ""),
+            case_reference=request.POST.get("case_reference", ""),
+        )
+    except SearchDataIntegrityError:
+        request.session["media_quarantine_form"] = {
+            "pdf_id": pdf.pk,
+            "values": values,
+            "errors": {
+                "general": gettext(
+                    "The document could not be marked unavailable from this evidence."
+                )
+            },
+        }
+        messages.error(
+            request,
+            gettext(
+                "This record was not changed. Confirm a definite absence, reason, and case reference; exact recovery evidence may be left blank."
+            ),
+        )
+        return safe_referer_redirect(request)
+    if not outcome.changed:
+        messages.info(
+            request,
+            gettext("This document was already marked unavailable; no state changed."),
+        )
+        return safe_referer_redirect(request)
+    messages.warning(
+        request,
+        gettext(
+            "The document is unavailable and excluded from search and index work."
+        ),
+    )
+    return safe_referer_redirect(request)
+
+
+@admin_required
+@require_POST
+def bind_pdf_recovery_evidence_view(request, pdf_id):
+    """Bind approved exact evidence to an unavailable record."""
+    pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    values = {
+        "expected_sha256": request.POST.get("expected_sha256", "").strip().lower(),
+        "expected_size": request.POST.get("expected_size", "").strip(),
+        "binding_reason": request.POST.get("binding_reason", "").strip(),
+        "case_reference": request.POST.get("case_reference", "").strip(),
+    }
+    errors = {}
+    if not re.fullmatch(r"[0-9a-f]{64}", values["expected_sha256"]):
+        errors["expected_sha256"] = gettext(
+            "Enter the complete 64-character technical digest."
+        )
+    try:
+        parsed_size = int(values["expected_size"])
+        if parsed_size < 0 or parsed_size > 2**63 - 1:
+            raise ValueError
+    except ValueError:
+        errors["expected_size"] = gettext("Enter a valid non-negative byte size.")
+    if values["binding_reason"] not in MEDIA_QUARANTINE_REASONS:
+        errors["binding_reason"] = gettext("Choose a verified reason.")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", values["case_reference"]):
+        errors["case_reference"] = gettext(
+            "Use 1–80 letters, numbers, periods, underscores, or hyphens."
+        )
+    if request.POST.get("confirmation", "").strip() != "BIND RECOVERY EVIDENCE":
+        errors["confirmation"] = gettext(
+            "Enter the exact confirmation phrase shown above."
+        )
+    if errors:
+        request.session["media_quarantine_form"] = {
+            "pdf_id": pdf.pk,
+            "mode": "bind",
+            "values": values,
+            "errors": errors,
+        }
+        messages.error(request, gettext("Review the highlighted fields."))
+        return safe_referer_redirect(request)
+    try:
+        outcome = bind_unavailable_recovery_evidence(
+            pdf,
+            requested_by=request.user,
+            expected_sha256=values["expected_sha256"],
+            expected_size=values["expected_size"],
+            binding_reason=values["binding_reason"],
+            case_reference=values["case_reference"],
+        )
+    except SearchDataIntegrityError:
+        request.session["media_quarantine_form"] = {
+            "pdf_id": pdf.pk,
+            "mode": "bind",
+            "values": values,
+            "errors": {
+                "general": gettext(
+                    "Exact recovery evidence could not be bound to this record."
+                )
+            },
+        }
+        messages.error(
+            request,
+            gettext("Review the recovery evidence and try again."),
+        )
+        return safe_referer_redirect(request)
+    if not outcome.changed:
+        messages.info(
+            request,
+            gettext("Exact recovery evidence was already bound; no state changed."),
+        )
+        return safe_referer_redirect(request)
+    messages.success(
+        request,
+        gettext(
+            "Exact recovery evidence was bound. Restoration can now verify the returned file."
+        ),
+    )
+    return safe_referer_redirect(request)
+
+
+@admin_required
+@require_POST
 def restore_pdf_view(request, pdf_id):
     """Restore a deprecated or archived PDF to uploaded state."""
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
-    restore_pdf(pdf, requested_by=request.user)
-    messages.success(request, f"Document '{pdf.title}' restored. It will be reindexed by the maintenance worker.")
+    try:
+        if pdf.lifecycle == "unavailable":
+            outcome = restore_unavailable_pdf(pdf, requested_by=request.user)
+        else:
+            outcome = restore_pdf(pdf, requested_by=request.user)
+    except SearchDataIntegrityError:
+        messages.error(
+            request,
+            gettext(
+                "Restore the verified document file to its approved location before restoring availability."
+            ),
+        )
+        return safe_referer_redirect(request)
+    if not outcome.changed:
+        messages.info(
+            request,
+            gettext("This document was already available; no state changed."),
+        )
+        return safe_referer_redirect(request)
+    if outcome.pdf.lifecycle in {"archived", "deprecated"}:
+        messages.success(
+            request,
+            gettext(
+                "Document “%(title)s” was restored to its preserved lifecycle and remains excluded from search."
+            )
+            % {"title": pdf.title},
+        )
+    else:
+        messages.success(
+            request,
+            gettext(
+                "Document “%(title)s” was restored and queued for index maintenance."
+            )
+            % {"title": pdf.title},
+        )
     return safe_referer_redirect(request)
 
 
@@ -945,6 +1198,13 @@ def dashboard(request, folder_id=None):
                             "form": form,
                             "role": role,
                             "owner_options": owner_options,
+                            "unavailable_presentation": present_reason(
+                                "document_media_unavailable"
+                            ),
+                            "media_quarantine_form": request.session.pop(
+                                "media_quarantine_form",
+                                None,
+                            ),
                             "breadcrumb_items": [
                                 {"label": gettext("Dashboard"), "url": reverse("dashboard")},
                                 {"label": folder.name, "url": None},
@@ -969,6 +1229,13 @@ def dashboard(request, folder_id=None):
                 "form": form,
                 "role": role,
                 "owner_options": owner_options,
+                "unavailable_presentation": present_reason(
+                    "document_media_unavailable"
+                ),
+                "media_quarantine_form": request.session.pop(
+                    "media_quarantine_form",
+                    None,
+                ),
                 "breadcrumb_items": [
                     {"label": gettext("Dashboard"), "url": reverse("dashboard")},
                     {"label": folder.name, "url": None},
@@ -1398,8 +1665,13 @@ def search_query(request):
                 },
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
-                "indexed_count": PDFFile.objects.filter(lifecycle__in=("ready", "processing")).count(),
-                "total_count": PDFFile.objects.count(),
+                "indexed_count": PDFFile.objects.filter(
+                    indexed=True,
+                    lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+                ).count(),
+                "total_count": PDFFile.objects.filter(
+                    lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+                ).count(),
             },
         )
 
@@ -1499,7 +1771,10 @@ def search_query(request):
                             if is_admin_user(request.user)
                             else visible_pdfs(
                                 request.user,
-                                PDFFile.objects.filter(folder=folder),
+                                PDFFile.objects.filter(
+                                    folder=folder,
+                                    lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+                                ),
                                 public=public_search,
                             )
                         )

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import sqlite3
@@ -16,7 +17,15 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command, CommandError
 from django.contrib.staticfiles import finders
-from django.test import Client, SimpleTestCase, TestCase, override_settings
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import (
+    Client,
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+)
 from django.urls import reverse
 from django.utils import translation
 
@@ -27,7 +36,8 @@ from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
-from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, restore_pdf
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, bind_unavailable_recovery_evidence, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf
+from .media_quarantine import build_unavailable_attestation, storage_key_evidence, storage_key_status, validate_unavailable_attestation
 from .maintenance_plans import queue_plan
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat
 from .worker_readiness import heartbeat_path
@@ -755,6 +765,47 @@ class SearchAndAuthenticationTests(TestCase):
             self.assertEqual(public_pdf.status_code, 200)
             self.assertEqual(public_pdf["Content-Type"], "application/pdf")
 
+    def test_authenticated_scoped_search_excludes_unavailable_documents(self):
+        self.user.role = "user"
+        self.user.save(update_fields=["role"])
+        folder = Folder.objects.create(name="Unavailable rules", created_by=self.user)
+        available = PDFFile.objects.create(
+            title="Available rule",
+            file="pdfs/available-rule.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="ready",
+        )
+        unavailable = PDFFile.objects.create(
+            title="Unavailable rule",
+            file="pdfs/unavailable-rule.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="unavailable",
+        )
+        self.client.force_login(self.user)
+
+        with (
+            patch("core.views.is_general_query", return_value=False),
+            patch(
+                "core.views.detect_folder_by_keywords_multi",
+                return_value=[(folder, 0.9)],
+            ),
+            patch(
+                "core.views.search_pdfs_fast",
+                return_value=("", []),
+            ) as search_pdfs,
+        ):
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "rule"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        scoped = search_pdfs.call_args.kwargs["pdfs"]
+        self.assertEqual(list(scoped.values_list("pk", flat=True)), [available.pk])
+        self.assertFalse(scoped.filter(pk=unavailable.pk).exists())
+
     def test_root_head_request_is_successful(self):
         response = self.client.head("/")
 
@@ -992,6 +1043,37 @@ class DashboardTests(TestCase):
         self.assertContains(response, "Search readiness is unavailable")
         self.assertContains(response, "Verified runtime authority is required")
         self.assertNotContains(response, "Safety Gates")
+
+    def test_dashboard_readiness_excludes_preserved_unavailable_document(self):
+        folder = Folder.objects.create(name="Readiness", created_by=self.user)
+        PDFFile.objects.create(
+            title="Searchable",
+            file="pdfs/searchable.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="ready",
+            indexed=True,
+        )
+        PDFFile.objects.create(
+            title="Preserved unavailable",
+            file="pdfs/unavailable.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="unavailable",
+            indexed=False,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        cockpit = response.context["cockpit"]
+        self.assertEqual(cockpit["total_pdfs"], 2)
+        self.assertEqual(cockpit["indexed_pdfs"], 1)
+        self.assertEqual(cockpit["unavailable_pdfs"], 1)
+        self.assertEqual(cockpit["needs_index_pdfs"], 0)
+        category = list(cockpit["category_page"].object_list)[0]
+        self.assertEqual(category.pdf_count, 2)
+        self.assertEqual(category.index_debt, 0)
 
     def test_dashboard_renders_marathi_cockpit_labels(self):
         self.client.force_login(self.user)
@@ -1317,7 +1399,10 @@ class DashboardTests(TestCase):
         folder = Folder.objects.create(name="Documents", created_by=superadmin)
         pdf = PDFFile.objects.create(
             title="Stored artifacts",
-            file="pdfs/stored-artifacts.pdf",
+            file=SimpleUploadedFile(
+                "stored-artifacts.pdf",
+                b"%PDF-1.4 stored artifacts",
+            ),
             folder=folder,
             uploaded_by=superadmin,
             indexed=False,
@@ -2251,6 +2336,8 @@ class JobDrawerTests(TestCase):
 
 
 class DocumentLifecycleTests(TestCase):
+    restored_bytes = b"%PDF-1.7 restored"
+
     def setUp(self):
         self.admin = get_user_model().objects.create_user(
             username="lifecycle-admin",
@@ -2264,6 +2351,45 @@ class DocumentLifecycleTests(TestCase):
             folder=self.folder,
             uploaded_by=self.admin,
             indexed=True,
+        )
+
+    def mark_unavailable(self, **overrides):
+        evidence = {
+            "expected_sha256": hashlib.sha256(self.restored_bytes).hexdigest(),
+            "expected_size": len(self.restored_bytes),
+            "reason": "missing_after_inventory",
+            "case_reference": "CASE-123",
+        }
+        evidence.update(overrides)
+        return mark_pdf_unavailable(
+            self.pdf,
+            requested_by=self.admin,
+            **evidence,
+        )
+
+    def unavailable_post(self, **overrides):
+        data = {
+            "confirmation": "MARK UNAVAILABLE",
+            "expected_sha256": hashlib.sha256(self.restored_bytes).hexdigest(),
+            "expected_size": len(self.restored_bytes),
+            "reason": "missing_after_inventory",
+            "case_reference": "CASE-123",
+        }
+        data.update(overrides)
+        return data
+
+    def bind_recovery_evidence(self, **overrides):
+        evidence = {
+            "expected_sha256": hashlib.sha256(self.restored_bytes).hexdigest(),
+            "expected_size": len(self.restored_bytes),
+            "binding_reason": "source_recovery_case",
+            "case_reference": "RECOVERY-123",
+        }
+        evidence.update(overrides)
+        return bind_unavailable_recovery_evidence(
+            self.pdf,
+            requested_by=self.admin,
+            **evidence,
         )
 
     def test_default_lifecycle_is_uploaded(self):
@@ -2287,6 +2413,494 @@ class DocumentLifecycleTests(TestCase):
         self.pdf.refresh_from_db()
         self.assertEqual(self.pdf.lifecycle, "uploaded")
         self.assertFalse(self.pdf.indexed)
+
+    def test_mark_unavailable_preserves_row_artifacts_and_audits(self):
+        self.pdf.page_chunks = ["preserved"]
+        self.pdf.chunk_embeddings = [[1.0, 0.0]]
+        self.pdf.save(update_fields=["page_chunks", "chunk_embeddings"])
+
+        outcome = self.mark_unavailable()
+
+        self.pdf.refresh_from_db()
+        self.assertTrue(outcome.changed)
+        self.assertEqual(self.pdf.lifecycle, "unavailable")
+        self.assertFalse(self.pdf.indexed)
+        self.assertEqual(self.pdf.page_chunks, ["preserved"])
+        event = MaintenanceAuditEvent.objects.get(event_type="media_unavailable")
+        self.assertEqual(event.actor, self.admin)
+        self.assertEqual(event.payload["pdf_id"], self.pdf.pk)
+        self.assertEqual(event.payload["prior_lifecycle"], "uploaded")
+        self.assertEqual(event.payload["case_reference"], "CASE-123")
+        self.assertEqual(
+            self.pdf.media_expected_sha256,
+            hashlib.sha256(self.restored_bytes).hexdigest(),
+        )
+
+    def test_unavailable_transition_is_idempotent_and_audited_once(self):
+        first = self.mark_unavailable()
+        second = self.mark_unavailable()
+
+        self.assertTrue(first.changed)
+        self.assertFalse(second.changed)
+        self.assertEqual(
+            MaintenanceAuditEvent.objects.filter(
+                event_type="media_unavailable",
+                payload__pdf_id=self.pdf.pk,
+            ).count(),
+            1,
+        )
+
+    def test_unknown_recovery_evidence_quarantines_but_cannot_restore(self):
+        outcome = self.mark_unavailable(
+            expected_sha256="",
+            expected_size="",
+        )
+        self.assertTrue(outcome.changed)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.media_expected_sha256, "")
+        self.assertIsNone(self.pdf.media_expected_size)
+        with self.assertRaisesRegex(
+            SearchDataIntegrityError,
+            "does not have durable restoration evidence",
+        ):
+            restore_unavailable_pdf(self.pdf, requested_by=self.admin)
+
+    def test_exact_recovery_evidence_can_be_bound_once_and_is_audited(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        self.pdf.media_quarantine_reason = ""
+        self.pdf.save(update_fields=["media_quarantine_reason"])
+        outcome = self.bind_recovery_evidence()
+        self.assertTrue(outcome.changed)
+        self.pdf.refresh_from_db()
+        self.assertEqual(
+            self.pdf.media_expected_sha256,
+            hashlib.sha256(self.restored_bytes).hexdigest(),
+        )
+        event = MaintenanceAuditEvent.objects.get(
+            event_type="media_evidence_bound",
+            payload__pdf_id=self.pdf.pk,
+            payload__binding_reason="source_recovery_case",
+        )
+        event.full_clean()
+        self.assertLessEqual(
+            len(event.event_type),
+            MaintenanceAuditEvent._meta.get_field("event_type").max_length,
+        )
+
+        second = self.bind_recovery_evidence(
+            expected_sha256="f" * 64,
+            expected_size="7",
+        )
+        self.assertFalse(second.changed)
+        self.pdf.refresh_from_db()
+        self.assertEqual(
+            self.pdf.media_expected_sha256,
+            hashlib.sha256(self.restored_bytes).hexdigest(),
+        )
+        self.assertEqual(
+            MaintenanceAuditEvent.objects.filter(
+                event_type="media_evidence_bound",
+                payload__pdf_id=self.pdf.pk,
+            ).count(),
+            1,
+        )
+
+    def test_recovery_evidence_binding_rolls_back_when_audit_fails(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        with patch(
+            "core.maintenance._audit",
+            side_effect=RuntimeError("audit failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "audit failed"):
+                self.bind_recovery_evidence()
+
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.media_expected_sha256, "")
+        self.assertIsNone(self.pdf.media_expected_size)
+
+    def test_recovery_binding_service_error_is_visible_after_redirect(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        self.pdf.media_expected_sha256 = "f" * 64
+        self.pdf.save(update_fields=["media_expected_sha256"])
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("bind_pdf_recovery_evidence", args=[self.pdf.pk]),
+            {
+                "expected_sha256": hashlib.sha256(self.restored_bytes).hexdigest(),
+                "expected_size": len(self.restored_bytes),
+                "binding_reason": "source_recovery_case",
+                "case_reference": "SAFE-RECOVERY",
+                "confirmation": "BIND RECOVERY EVIDENCE",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+
+        self.assertContains(
+            response,
+            "Exact recovery evidence could not be bound to this record.",
+        )
+        self.assertContains(response, "<details class=\"d-inline-block\" open>")
+
+    def test_invalid_recovery_binding_survives_no_js_redirect_with_visible_errors(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        self.pdf.media_quarantine_reason = ""
+        self.pdf.save(update_fields=["media_quarantine_reason"])
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("bind_pdf_recovery_evidence", args=[self.pdf.pk]),
+            {
+                "expected_sha256": "not-a-digest",
+                "expected_size": "19",
+                "binding_reason": "",
+                "case_reference": "SAFE-RECOVERY",
+                "confirmation": "BIND RECOVERY EVIDENCE",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="#expected_sha256_')
+        self.assertContains(response, 'href="#binding_reason_')
+        self.assertContains(response, 'aria-invalid="true"')
+        self.assertContains(response, "autofocus")
+        self.assertContains(response, 'value="SAFE-RECOVERY"')
+        self.assertContains(response, "Restore is unavailable until approved")
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.media_expected_sha256, "")
+        self.assertIsNone(self.pdf.media_expected_size)
+
+    def test_invalid_recovery_binding_keeps_technical_tokens_isolated_in_marathi(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        self.client.force_login(self.admin)
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
+
+        response = self.client.post(
+            reverse("bind_pdf_recovery_evidence", args=[self.pdf.pk]),
+            {
+                "expected_sha256": "not-a-digest",
+                "expected_size": "19",
+                "binding_reason": "",
+                "case_reference": "SAFE-RECOVERY",
+                "confirmation": "wrong",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+
+        self.assertContains(response, "वर दाखवलेला पुष्टीचा वाक्यांश अचूक नोंदवा.")
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">SHA-256</bdi>',
+        )
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">BIND RECOVERY EVIDENCE</bdi>',
+        )
+
+    def test_unavailable_restore_preserves_archived_prior_lifecycle(self):
+        archive_pdf(self.pdf, requested_by=self.admin)
+        self.mark_unavailable()
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                target = Path(media_root) / self.pdf.file.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(self.restored_bytes)
+                restore_unavailable_pdf(self.pdf, requested_by=self.admin)
+
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "archived")
+
+    def test_unavailable_restore_rejects_different_bytes(self):
+        self.mark_unavailable()
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                target = Path(media_root) / self.pdf.file.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(b"different")
+                with self.assertRaisesRegex(
+                    SearchDataIntegrityError,
+                    "does not match",
+                ):
+                    restore_unavailable_pdf(self.pdf, requested_by=self.admin)
+
+    def test_healthy_media_cannot_be_marked_unavailable(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                target = Path(media_root) / self.pdf.file.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(b"healthy")
+                with self.assertRaisesRegex(
+                    SearchDataIntegrityError,
+                    "currently available",
+                ):
+                    self.mark_unavailable()
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+
+    def test_hardlinked_media_cannot_be_restored(self):
+        self.mark_unavailable()
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                target = Path(media_root) / self.pdf.file.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(self.restored_bytes)
+                os.link(target, target.with_name("second-link.pdf"))
+                with self.assertRaisesRegex(
+                    SearchDataIntegrityError,
+                    "stable regular file",
+                ):
+                    restore_unavailable_pdf(self.pdf, requested_by=self.admin)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "unavailable")
+
+    @patch("core.maintenance._audit", side_effect=RuntimeError("audit failed"))
+    def test_audit_failure_rolls_back_unavailable_transition(self, _audit):
+        with self.assertRaisesRegex(RuntimeError, "audit failed"):
+            self.mark_unavailable()
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self.assertEqual(self.pdf.media_expected_sha256, "")
+
+    def test_unavailable_document_is_excluded_from_index_matrix(self):
+        self.pdf.page_chunks = ["preserved"]
+        self.pdf.chunk_embeddings = [[1.0, 0.0]]
+        self.pdf.save(update_fields=["page_chunks", "chunk_embeddings"])
+        self.mark_unavailable()
+
+        chunks, embeddings = core_utils._folder_embedding_matrix(
+            self.folder,
+            PDFFile.objects.filter(folder=self.folder),
+        )
+
+        self.assertEqual(chunks, [])
+        self.assertEqual(embeddings.shape, (0, 0))
+
+    def test_unavailable_endpoint_requires_exact_confirmation(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("mark_pdf_unavailable", args=[self.pdf.pk]),
+            {"confirmation": "wrong"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self.assertFalse(
+            MaintenanceAuditEvent.objects.filter(
+                event_type="media_unavailable"
+            ).exists()
+        )
+
+    def test_invalid_unavailable_form_survives_no_js_redirect_with_linked_focus(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("mark_pdf_unavailable", args=[self.pdf.pk]),
+            {
+                **self.unavailable_post(),
+                "expected_sha256": "not-a-digest",
+                "case_reference": "SAFE-CASE",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="#expected_sha256_')
+        self.assertContains(response, 'aria-invalid="true"')
+        self.assertContains(response, "autofocus")
+        self.assertContains(response, 'value="SAFE-CASE"')
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self.assertFalse(
+            MaintenanceAuditEvent.objects.filter(
+                event_type="media_unavailable"
+            ).exists()
+        )
+
+    def test_invalid_unavailable_form_keeps_technical_tokens_isolated_in_marathi(self):
+        self.client.force_login(self.admin)
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
+        response = self.client.post(
+            reverse("mark_pdf_unavailable", args=[self.pdf.pk]),
+            {
+                **self.unavailable_post(),
+                "expected_sha256": "not-a-digest",
+                "confirmation": "wrong",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+
+        self.assertContains(response, "वर दाखवलेला पुष्टीचा वाक्यांश अचूक नोंदवा.")
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">SHA-256</bdi>',
+        )
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">MARK UNAVAILABLE</bdi>',
+        )
+
+    def test_unavailable_endpoint_preserves_identity(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("mark_pdf_unavailable", args=[self.pdf.pk]),
+            self.unavailable_post(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "unavailable")
+
+    def test_unavailable_restore_requires_media_then_is_reversible(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                self.mark_unavailable()
+                with self.assertRaisesRegex(
+                    SearchDataIntegrityError,
+                    "absent from approved local storage",
+                ):
+                    restore_unavailable_pdf(self.pdf, requested_by=self.admin)
+                self.pdf.refresh_from_db()
+                self.assertEqual(self.pdf.lifecycle, "unavailable")
+
+                target = Path(media_root) / self.pdf.file.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(self.restored_bytes)
+                outcome = restore_unavailable_pdf(self.pdf, requested_by=self.admin)
+                self.assertTrue(outcome.changed)
+
+        self.pdf.refresh_from_db()
+        self.assertEqual(self.pdf.lifecycle, "uploaded")
+        self.assertTrue(
+            MaintenanceAuditEvent.objects.filter(
+                event_type="media_restored",
+                payload__pdf_id=self.pdf.pk,
+            ).exists()
+        )
+
+    def test_unavailable_dashboard_uses_human_guidance_and_collapsed_code(self):
+        self.mark_unavailable()
+        PDFFile.objects.create(
+            title="Available companion",
+            file="pdfs/available-companion.pdf",
+            folder=self.folder,
+            uploaded_by=self.admin,
+        )
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("dashboard_folder", args=[self.folder.pk])
+        )
+
+        self.assertContains(response, "Document file is unavailable")
+        self.assertContains(response, "Technical details")
+        self.assertContains(response, "document_media_unavailable")
+        self.assertContains(response, "Restore availability")
+        self.assertContains(
+            response,
+            'name="confirmation" autocomplete="off" lang="en" dir="ltr"',
+        )
+        self.assertNotContains(
+            response,
+            f'href="{reverse("view_pdf", args=[self.pdf.pk])}"',
+        )
+
+    def test_unknown_recovery_evidence_disables_restore_and_offers_binding(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("dashboard_folder", args=[self.folder.pk])
+        )
+
+        self.assertContains(response, "Bind recovery evidence")
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">BIND RECOVERY EVIDENCE</bdi>',
+        )
+        self.assertContains(
+            response,
+            "Restore is unavailable until approved technical digest and byte-size evidence is bound.",
+        )
+        self.assertContains(
+            response,
+            '<button type="submit" class="btn btn-outline-success btn-sm" disabled',
+            html=False,
+        )
+
+    def test_unavailable_controls_have_authored_marathi_copy(self):
+        self.mark_unavailable()
+        PDFFile.objects.create(
+            title="Available companion",
+            file="pdfs/available-companion.pdf",
+            folder=self.folder,
+            uploaded_by=self.admin,
+        )
+        self.client.force_login(self.admin)
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
+
+        response = self.client.get(
+            reverse("dashboard_folder", args=[self.folder.pk])
+        )
+
+        self.assertContains(response, "दस्तऐवज संचिका उपलब्ध नाही")
+        self.assertContains(response, "अपेक्षित संचिका आकार (बाइटमध्ये)")
+        self.assertContains(response, 'lang="en" dir="ltr"')
+        self.assertContains(
+            response,
+            'name="expected_sha256" lang="en" dir="ltr"',
+        )
+        self.assertContains(
+            response,
+            'name="case_reference" lang="en" dir="ltr"',
+        )
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">MARK UNAVAILABLE</bdi>',
+        )
+
+    def test_unavailable_file_is_not_served_to_public_or_ordinary_user(self):
+        self.mark_unavailable()
+        ordinary = get_user_model().objects.create_user(
+            username="ordinary-media-user",
+            password="test-password",
+            role="user",
+        )
+        self.client.force_login(ordinary)
+        self.assertIn(
+            self.client.get(reverse("view_pdf", args=[self.pdf.pk])).status_code,
+            {403, 404},
+        )
+        self.client.logout()
+        self.assertEqual(
+            self.client.get(
+                reverse("public_view_pdf", args=[self.pdf.pk])
+            ).status_code,
+            404,
+        )
+
+    def test_ordinary_dashboard_gets_human_copy_without_technical_code(self):
+        self.mark_unavailable()
+        ordinary = get_user_model().objects.create_user(
+            username="ordinary-media-dashboard",
+            password="test-password",
+            role="user",
+        )
+        self.folder.created_by = ordinary
+        self.folder.save(update_fields=["created_by"])
+        self.client.force_login(ordinary)
+
+        response = self.client.get(
+            reverse("dashboard_folder", args=[self.folder.pk])
+        )
+
+        self.assertContains(response, "Document file is unavailable")
+        self.assertNotContains(response, "document_media_unavailable")
 
     def test_deprecate_archived_raises(self):
         archive_pdf(self.pdf, requested_by=self.admin)
@@ -2342,6 +2956,123 @@ class DocumentLifecycleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Deprecate")
         self.assertContains(response, "Archive")
+
+
+class UnavailableAttestationTests(SimpleTestCase):
+    def test_attestation_is_deterministic_bounded_and_secret_free(self):
+        records = [
+            {
+                "id": identifier,
+                "lifecycle": "unavailable",
+                "storage_key_status": storage["status"],
+                "storage_key_token_sha256": storage["token_sha256"],
+                "expected_sha256": hashlib.sha256(
+                    f"document-{identifier}".encode()
+                ).hexdigest(),
+                "expected_size": identifier,
+                "prior_lifecycle": "uploaded",
+            }
+            for identifier, storage in (
+                (1, storage_key_evidence("pdfs/one.pdf")),
+                (2, storage_key_evidence("../secret.pdf")),
+            )
+        ]
+
+        evidence = build_unavailable_attestation(records, id_limit=1)
+
+        self.assertEqual(evidence["count"], 2)
+        self.assertEqual(evidence["ids"], [1])
+        self.assertTrue(evidence["truncated"])
+        self.assertEqual(evidence["preview_limit"], 1)
+        self.assertRegex(evidence["set_sha256"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("storage", json.dumps(evidence))
+        self.assertEqual(storage_key_status("../secret.pdf"), "unsafe")
+
+    def test_attestation_rejects_coercion_missing_evidence_and_forged_preview(self):
+        storage = storage_key_evidence("pdfs/one.pdf")
+        valid = {
+            "id": 1,
+            "lifecycle": "unavailable",
+            "storage_key_status": storage["status"],
+            "storage_key_token_sha256": storage["token_sha256"],
+            "expected_sha256": "a" * 64,
+            "expected_size": 1,
+            "prior_lifecycle": "uploaded",
+        }
+        for changed in (
+            {**valid, "id": True},
+            {**valid, "expected_size": True},
+            {**valid, "expected_sha256": "", "expected_size": 1},
+            {**valid, "prior_lifecycle": "unavailable"},
+        ):
+            with self.assertRaises(ValueError):
+                build_unavailable_attestation((changed,))
+        with self.assertRaises(ValueError):
+            validate_unavailable_attestation(
+                {
+                    "count": 1,
+                    "ids": [1, 2],
+                    "truncated": False,
+                    "preview_limit": 20,
+                    "set_sha256": "a" * 64,
+                }
+            )
+        self.assertEqual(storage_key_status(" pdfs/one.pdf"), "unsafe")
+        self.assertEqual(storage_key_status(r"pdfs\\one.pdf"), "unsafe")
+
+    def test_unknown_evidence_preserves_prior_lifecycle_and_binding_changes_digest(self):
+        storage = storage_key_evidence("pdfs/one.pdf")
+        unknown = {
+            "id": 1,
+            "lifecycle": "unavailable",
+            "storage_key_status": storage["status"],
+            "storage_key_token_sha256": storage["token_sha256"],
+            "expected_sha256": "",
+            "expected_size": None,
+            "prior_lifecycle": "uploaded",
+        }
+
+        before = build_unavailable_attestation((unknown,))
+        after = build_unavailable_attestation(
+            (
+                {
+                    **unknown,
+                    "expected_sha256": "a" * 64,
+                    "expected_size": 19,
+                },
+            )
+        )
+
+        self.assertEqual(before["count"], 1)
+        self.assertNotEqual(before["set_sha256"], after["set_sha256"])
+
+
+class UnavailableEvidenceMigrationTests(TransactionTestCase):
+    migrate_from = ("core", "0023_unavailable_media_lifecycle")
+    migrate_to = ("core", "0024_pdffile_media_quarantine_evidence")
+
+    def test_upgrade_preserves_existing_unavailable_record(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        old_apps = executor.loader.project_state([self.migrate_from]).apps
+        old_pdf = old_apps.get_model("core", "PDFFile").objects.create(
+            title="Preserved unavailable record",
+            file="pdfs/preserved.pdf",
+            lifecycle="unavailable",
+            indexed=False,
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_to])
+        new_apps = executor.loader.project_state([self.migrate_to]).apps
+        upgraded = new_apps.get_model("core", "PDFFile").objects.get(
+            pk=old_pdf.pk
+        )
+
+        self.assertEqual(upgraded.lifecycle, "unavailable")
+        self.assertFalse(upgraded.indexed)
+        self.assertEqual(upgraded.media_prior_lifecycle, "")
+        self.assertEqual(upgraded.media_expected_sha256, "")
 
 
 class SeoAeoTests(TestCase):

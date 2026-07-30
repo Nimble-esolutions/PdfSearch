@@ -37,6 +37,9 @@ class Folder(models.Model):
         return self.name
 
 
+SEARCHABLE_PDF_LIFECYCLES = ("uploaded", "processing", "ready")
+
+
 # ---------------- PDF File ----------------
 class PDFFile(models.Model):
     title = models.CharField(max_length=200)
@@ -83,10 +86,17 @@ class PDFFile(models.Model):
             ("ready", "Ready"),
             ("deprecated", "Deprecated"),
             ("archived", "Archived"),
+            ("unavailable", "Unavailable"),
         ),
         default="uploaded",
         help_text="Document lifecycle state for search and visibility control",
     )
+    media_prior_lifecycle = models.CharField(max_length=20, blank=True, default="")
+    media_expected_sha256 = models.CharField(max_length=64, blank=True, default="")
+    media_expected_size = models.PositiveBigIntegerField(null=True, blank=True)
+    media_quarantine_reason = models.CharField(max_length=80, blank=True, default="")
+    media_case_reference = models.CharField(max_length=80, blank=True, default="")
+    media_observed_at = models.DateTimeField(null=True, blank=True)
     subject = models.CharField(
         max_length=50,
         blank=True,
@@ -365,6 +375,9 @@ class MaintenanceAuditEvent(models.Model):
         ("rolled_back", "Rolled back"),
         ("purged", "Purged"),
         ("worker_died", "Worker died"),
+        ("media_unavailable", "Media unavailable"),
+        ("media_evidence_bound", "Media recovery evidence bound"),
+        ("media_restored", "Media restored"),
     )
 
     job = models.ForeignKey(

@@ -8,6 +8,10 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from core.media_quarantine import (
+    build_unavailable_attestation,
+    validate_unavailable_attestation,
+)
 from core.artifact_vault import object_metadata_value
 from core.namespace import KeyBuilder
 from vaultops.models import (
@@ -178,6 +182,17 @@ def _validate_manifest(manifest, profile, generation_id, manifest_digest):
         )
     ):
         raise InventoryError("generation_manifest_identity_mismatch")
+    try:
+        manifest["unavailable_documents"] = validate_unavailable_attestation(
+            manifest.get(
+                "unavailable_documents",
+                build_unavailable_attestation(()),
+            )
+        )
+    except ValueError as exc:
+        raise InventoryError(
+            "generation_manifest_unavailable_attestation_invalid"
+        ) from exc
     files = manifest.get("files")
     if not isinstance(files, list) or not files:
         raise InventoryError("generation_manifest_files_missing")

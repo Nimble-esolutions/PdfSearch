@@ -22,6 +22,10 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .artifact_cleanup import capacity_report
+from .media_quarantine import (
+    build_unavailable_attestation,
+    storage_key_evidence,
+)
 from .models import MaintenanceAuditEvent, MaintenanceJob, PDFFile
 
 WORKSPACE_MANIFEST = "maintenance-candidate.json"
@@ -384,7 +388,7 @@ def _embedding_validation(database: Path) -> dict:
     try:
         rows = connection.execute(
             "SELECT id, folder_id, page_chunks, chunk_embeddings FROM core_pdffile "
-            "WHERE lifecycle != 'archived'",
+            "WHERE lifecycle IN ('uploaded', 'processing', 'ready')",
         )
         dimensions = set()
         vectors = 0
@@ -476,7 +480,47 @@ def validate_candidate(workspace: Path) -> dict:
         media_rows = list(
             connection.execute(
                 "SELECT id, file FROM core_pdffile "
-                "WHERE file IS NOT NULL AND file != ''"
+                "WHERE lifecycle != 'unavailable'"
+            )
+        )
+        pdf_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(core_pdffile)")
+        }
+        expected_sha_column = (
+            "media_expected_sha256"
+            if "media_expected_sha256" in pdf_columns
+            else "''"
+        )
+        expected_size_column = (
+            "media_expected_size"
+            if "media_expected_size" in pdf_columns
+            else "NULL"
+        )
+        prior_lifecycle_column = (
+            "media_prior_lifecycle"
+            if "media_prior_lifecycle" in pdf_columns
+            else "''"
+        )
+        unavailable_attestation = build_unavailable_attestation(
+            (
+                {
+                    "id": row[0],
+                    "lifecycle": row[1],
+                    "storage_key_status": storage_key_evidence(row[2])["status"],
+                    "storage_key_token_sha256": storage_key_evidence(row[2])[
+                        "token_sha256"
+                    ],
+                    "expected_sha256": row[3],
+                    "expected_size": row[4],
+                    "prior_lifecycle": row[5],
+                }
+                for row in connection.execute(
+                    f"SELECT id, lifecycle, file, {expected_sha_column}, "
+                    f"{expected_size_column}, {prior_lifecycle_column} "
+                    "FROM core_pdffile WHERE lifecycle = 'unavailable' "
+                    "ORDER BY id"
+                )
             )
         )
     finally:
@@ -569,7 +613,11 @@ def validate_candidate(workspace: Path) -> dict:
             )
     return {
         "sqlite": {"integrity": "ok", "foreign_key_violations": 0},
-        "media": {"referenced": len(media_rows), "missing": 0},
+        "media": {
+            "referenced": len(media_rows),
+            "missing": 0,
+            "unavailable": unavailable_attestation,
+        },
         "embeddings": embedding,
         "faiss": faiss_records,
         "affected_folder_ids": affected_folder_ids,
