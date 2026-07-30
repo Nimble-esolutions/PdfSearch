@@ -1,6 +1,6 @@
 # Plan 017 — Human-centred operator evidence
 
-**Status:** RECONCILE — implementation exists; Plans 018-021 close audited gaps
+**Status:** DONE — Plans 018–022 closed and verified the audited gaps
 **Boundary:** Dashboard and Vault Operations Workbench
 **Backend impact:** Additive presentation only; stable reason and state values unchanged
 
@@ -26,5 +26,6 @@ Plan 015 remains authoritative for readiness computation. This plan supersedes
 only its incomplete presentation-quality outcome. The 2026-07-28 completion
 audit found incomplete known-reason coverage, raw maintenance exception text
 entering expanded evidence, broad English fallback in Marathi, and incomplete
-rendered/accessibility enforcement. Do not mark this plan DONE until Plans
-018-021 pass and Plan 022 reconciles the stack.
+rendered/accessibility enforcement. Plans 018–021 subsequently closed those
+gaps, and Plan 022 reconciled the stack; the former completion condition is
+satisfied.

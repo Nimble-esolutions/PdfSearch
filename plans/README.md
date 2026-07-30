@@ -1,6 +1,6 @@
 # PdfSearch implementation roadmap
 
-Reviewed against commit `c545312` on 2026-07-29. These files are handoff
+Reviewed against commit `273e5a5` on 2026-07-30. These files are handoff
 contracts for future developers and AI agents. Read the selected plan fully,
 run its drift check, and stop when a stated assumption is false.
 
