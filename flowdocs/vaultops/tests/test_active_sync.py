@@ -24,12 +24,14 @@ from django.utils import timezone
 from core import utils as core_utils
 from core import candidate_maintenance
 from core.artifact_vault import ArtifactVault, VaultConfig
+from core.media_quarantine import build_unavailable_attestation
 from core.models import Folder
 from core.global_writer import GlobalWriterConflict, release_global_writer
 from core.registration import RegistrationError, get_authoritative_pointer
 from vaultops.middleware import MUTATING_VIEW_NAMES, SourceMutationBarrierMiddleware
 from vaultops.models import (
     ArtifactGeneration,
+    ArtifactValidation,
     MutationJournalEntry,
     SourceMutationState,
     SourceSnapshot,
@@ -671,6 +673,9 @@ class CandidatePublicationTests(ActiveSyncTestCase):
                 "database": {"migrations": {"latest": "0019_sitesetting"}},
                 "counts": {"pdf_rows": 0},
             },
+            "faiss": {
+                "unavailable_documents": build_unavailable_attestation(()),
+            },
         }
         (self.workspace / "snapshot-evidence.json").write_text(
             json.dumps(evidence), encoding="utf-8"
@@ -821,6 +826,22 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         )
         self.assertEqual(candidate.pk, candidate_again.pk)
         self.assertEqual(self.client.put_count, first_put_count)
+        self.assertEqual(
+            candidate.manifest["unavailable_documents"],
+            build_unavailable_attestation(()),
+        )
+        publication_validations = ArtifactValidation.objects.filter(
+            generation=candidate,
+            validation_type="publication",
+        )
+        self.assertTrue(publication_validations.exists())
+        self.assertTrue(
+            all(
+                validation.evidence["unavailable_documents"]
+                == candidate.manifest["unavailable_documents"]
+                for validation in publication_validations
+            )
+        )
         pointer_key = (
             f"datasets/{self.profile.dataset_id}/control/authoritative.json"
         )

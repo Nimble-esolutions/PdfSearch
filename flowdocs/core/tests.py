@@ -1626,6 +1626,124 @@ class ArtifactInventoryTests(TestCase):
         self.assertEqual(pdf['file_status'], 'missing')
         self.assertIsNone(pdf['sha256'])
 
+    def test_inventory_attests_complete_unavailable_set_with_bounded_ids(self):
+        root = Path(self.temp_dir.name) / 'unavailable-set'
+        root.mkdir()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.executescript(
+            'CREATE TABLE django_migrations (app varchar(255), name varchar(255));'
+            'CREATE TABLE core_pdffile ('
+            'id integer primary key, title varchar(200), file varchar(100), '
+            'lifecycle varchar(20), media_expected_sha256 varchar(64), '
+            'media_expected_size integer, media_prior_lifecycle varchar(20));'
+            "INSERT INTO django_migrations VALUES ('core', '0025_latest');"
+        )
+        connection.executemany(
+            'INSERT INTO core_pdffile VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (
+                (
+                    identifier,
+                    f'Unavailable {identifier}',
+                    (
+                        ''
+                        if identifier % 3 == 0
+                        else '../unsafe.pdf'
+                        if identifier % 3 == 1
+                        else f'pdfs/missing-{identifier}.pdf'
+                    ),
+                    'unavailable',
+                    '',
+                    None,
+                    'uploaded',
+                )
+                for identifier in range(1, 26)
+            ),
+        )
+        connection.commit()
+        connection.close()
+
+        first = build_manifest(root)
+        second = build_manifest(root)
+        evidence = first['unavailable_documents']
+
+        self.assertEqual(first, second)
+        self.assertEqual(evidence['count'], 25)
+        self.assertEqual(evidence['ids'], list(range(1, 21)))
+        self.assertTrue(evidence['truncated'])
+        self.assertRegex(evidence['set_sha256'], r'^[0-9a-f]{64}$')
+        self.assertEqual(
+            first['counts']['pdf_rows_unavailable_missing_files'],
+            25,
+        )
+
+    def test_release_rejects_missing_archived_deprecated_blank_null_and_unsafe_rows(self):
+        for identifier, lifecycle, value in (
+            (1, 'archived', 'pdfs/missing.pdf'),
+            (2, 'deprecated', ''),
+            (3, 'archived', None),
+            (4, 'deprecated', '../unsafe.pdf'),
+        ):
+            with self.subTest(lifecycle=lifecycle, value=value):
+                root = Path(self.temp_dir.name) / f'unauthorized-{identifier}'
+                root.mkdir()
+                connection = sqlite3.connect(root / 'db.sqlite3')
+                connection.executescript(
+                    'CREATE TABLE django_migrations '
+                    '(app varchar(255), name varchar(255));'
+                    'CREATE TABLE core_pdffile ('
+                    'id integer primary key, title varchar(200), '
+                    'file varchar(100), lifecycle varchar(20));'
+                    "INSERT INTO django_migrations VALUES "
+                    "('core', '0025_latest');"
+                )
+                connection.execute(
+                    'INSERT INTO core_pdffile VALUES (?, ?, ?, ?)',
+                    (identifier, 'Missing record', value, lifecycle),
+                )
+                connection.commit()
+                connection.close()
+                manifest = self._policy(
+                    build_manifest(root),
+                    preserved_target_only_rows=1,
+                )
+
+                report = validate_release(manifest, root)
+
+                self.assertFalse(report['ok'])
+                self.assertIn(
+                    'unauthorized-missing-pdf',
+                    {issue['kind'] for issue in report['issues']},
+                )
+
+    def test_release_rejects_unavailable_attestation_drift(self):
+        root = Path(self.temp_dir.name) / 'unavailable-drift'
+        root.mkdir()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.executescript(
+            'CREATE TABLE django_migrations (app varchar(255), name varchar(255));'
+            'CREATE TABLE core_pdffile ('
+            'id integer primary key, title varchar(200), file varchar(100), '
+            'lifecycle varchar(20));'
+            "INSERT INTO django_migrations VALUES ('core', '0025_latest');"
+            "INSERT INTO core_pdffile VALUES "
+            "(1, 'Unavailable', 'pdfs/missing.pdf', 'unavailable');"
+        )
+        connection.commit()
+        connection.close()
+        manifest = self._policy(
+            build_manifest(root),
+            preserved_target_only_rows=1,
+        )
+        manifest['unavailable_documents']['set_sha256'] = '0' * 64
+
+        report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn(
+            'unavailable-attestation-mismatch',
+            {issue['kind'] for issue in report['issues']},
+        )
+
     def test_comparison_classifies_hash_difference(self):
         source_root = self._root_with_pdf(b'one', Path(self.temp_dir.name) / 'source')
         target_root = self._root_with_pdf(b'two', Path(self.temp_dir.name) / 'target')

@@ -252,14 +252,24 @@ index gates. It is not a substitute for browser interaction checks.
 `PDFFile.lifecycle="unavailable"` is the non-destructive quarantine for a
 preserved row whose source file cannot currently be verified. Only an explicit
 admin POST with the exact `MARK UNAVAILABLE` confirmation may enter the state.
-The request must also provide an expected SHA-256, byte size, allowlisted
-human-readable reason code, and an alphanumeric bounded case reference. This
+When authoritative recovery evidence exists, the request binds the expected
+SHA-256 and byte size as a complete pair. A definitive absence may instead be
+recorded with both fields blank; restoration then remains disabled until the
+separate audited recovery-evidence action binds the complete pair. Every
+transition requires an allowlisted human-readable reason code and an
+alphanumeric bounded case reference. This
 prevents raw custody paths from entering the model, audit, or interface. Inside
 one transaction the row is locked, its prior lifecycle
 and bounded evidence are persisted, `indexed=False` is set, and a
 `media_unavailable` event is appended. Repeated requests report a no-op and do
 not create duplicate transition events. Storage keys, absolute paths, and
 document content never enter audit or interface evidence.
+
+`archived` and `deprecated` are ordinary product lifecycle states, not custody
+exceptions. Missing, blank, null, or unsafe media references in either state
+must fail inventory, candidate, runtime, and certification gates. Never edit
+SQLite lifecycle columns directly to bypass those gates; use the supported
+audited transition so history and recovery posture remain trustworthy.
 
 All search querysets, FAISS construction, stored-index repair, maintenance
 selection, candidate embedding/media validation, runtime activation file
@@ -275,7 +285,10 @@ evidence in `media_restored`. Legacy unavailable rows without durable expected
 evidence remain safely unavailable. Candidate, snapshot, and activation
 evidence include a deterministic unavailable-set attestation: total count,
 bounded sorted IDs, truncation, and a digest over the complete canonical
-ID/lifecycle/storage-key-status tuples. Do not use
+ID/lifecycle/storage-key-status/evidence tuples. Candidate validation compares
+the exact prepared attestation, immutable publication stores it in both the
+manifest and `ArtifactValidation`, and runtime activation, certification, and
+rollback compare the same value. Do not use
 `reconcile_media_pdfs` to remap a dangling row: that command only imports media
 paths that have no database row.
 

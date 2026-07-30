@@ -159,15 +159,23 @@ visual and interaction rules.
 
 Use **Mark unavailable** only after confirming that the preserved document row
 does not currently have its approved source file. Expand the action, type
-the expected SHA-256 and byte size from approved custody evidence, choose a
-human-readable reason, add a bounded case reference, type `MARK UNAVAILABLE`,
-and confirm. The record,
+the expected SHA-256 and byte size from approved custody evidence when they are
+known, choose a human-readable reason, add a bounded case reference, type
+`MARK UNAVAILABLE`, and confirm. If definitive absence is known before the
+exact evidence pair is available, leave both evidence fields blank. The record,
 identifier, metadata, expected-media evidence, prior lifecycle, and
 maintenance history remain preserved, but the document is excluded from search,
 index work, and runtime readiness.
 
+Archiving or deprecating a document does not authorize a missing file. Do not
+edit the database lifecycle directly. Only **Mark unavailable** creates the
+audited custody posture used by inventory, candidate, activation, rollback, and
+recovery checks.
+
 Recover the verified file to its approved storage location before choosing
-**Restore availability**. The application refuses restoration unless the path
+**Restore availability**. If exact evidence was not recorded during quarantine,
+first use **Bind recovery evidence** with approved custody evidence. The
+application refuses restoration unless the path
 is a regular non-symlink file, remains stable while read, and exactly matches
 the recorded SHA-256 and byte size. A restored document returns to its prior
 lifecycle; it is not automatically made searchable. After restoration, validate
