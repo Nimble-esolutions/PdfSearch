@@ -233,6 +233,7 @@ TOP_K_CHUNKS=5
 EMBEDDING_TTL=604800
 SEARCH_CACHE_TTL=600
 MAX_FILE_SIZE_MB=10
+ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=67108864
 ```
 
 Model, chunking, and cache changes can affect FAISS compatibility, answer
@@ -244,6 +245,12 @@ per configured MB, accepts positive fractional values, and is converted to
 bytes internally for Django. The old `MAX_FILE_SIZE` byte variable is accepted
 only as a deprecated compatibility fallback; conflicting values fail startup.
 Use the reviewed environment examples and remove the old key after migration.
+
+`ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES` is a separate positive byte limit
+for read-only inventory, candidate, activation, and recovery verification of
+canonical media already in custody. Its 64 MiB default accommodates reviewed
+legacy PDFs while keeping verification bounded. It does not change
+`MAX_FILE_SIZE_MB`, Django request limits, or the policy for new uploads.
 
 See [`ENVIRONMENT_CONFIGURATION_GUIDE.md`](ENVIRONMENT_CONFIGURATION_GUIDE.md)
 for the complete variable impact matrix and edge-case playbook.

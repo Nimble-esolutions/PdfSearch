@@ -137,7 +137,7 @@ def verify_activation_runtime(intent_id):
             verify_local_media_file(
                 settings.MEDIA_ROOT,
                 pdf.file.name,
-                maximum_bytes=int(settings.MAX_FILE_SIZE_MB) * 1024 * 1024,
+                maximum_bytes=settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES,
                 hash_content=False,
             )
         except MediaFileAbsentError as exc:

@@ -32,11 +32,12 @@ from django.utils import translation
 from flowdocs import settings as project_settings
 
 from .forms import UploadForm
+from .configuration_registry import build_configuration_groups
 from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
 from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
-from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, bind_unavailable_recovery_evidence, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf
+from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, bind_unavailable_recovery_evidence, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf, _verified_local_media_evidence
 from .media_quarantine import (
     MediaFileUnsafeError,
     build_unauthorized_missing_attestation,
@@ -157,6 +158,78 @@ class RedisConfigurationTests(SimpleTestCase):
 
 
 class EnvironmentContractTests(SimpleTestCase):
+    def test_custody_media_cap_defaults_above_unchanged_upload_limit(self):
+        self.assertEqual(
+            settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES,
+            64 * 1024 * 1024,
+        )
+        self.assertEqual(settings.MAX_FILE_SIZE_MB, Decimal("10"))
+        self.assertEqual(settings.MAX_FILE_SIZE, 10 * 1024 * 1024)
+
+    def test_configuration_registry_reports_custody_cap_source_and_value(self):
+        with patch.dict(
+            os.environ,
+            {"ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES": "33554432"},
+        ):
+            groups = build_configuration_groups(settings)
+
+        rows = {
+            row["key"]: row
+            for group in groups
+            for row in group["rows"]
+        }
+        custody = rows["ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES"]
+        self.assertEqual(custody["value"], "33554432")
+        self.assertEqual(custody["source"], "environment")
+        self.assertFalse(custody["secret"])
+
+    def test_config_inspect_reports_effective_custody_cap(self):
+        from core.management.commands.config_inspect import Command
+
+        command = Command()
+        observed = {}
+        command._section = lambda _name: None
+        command._kv = lambda key, value: observed.__setitem__(key, value)
+
+        with patch(
+            "core.management.commands.config_inspect.EnvironmentIdentity.from_env"
+        ) as identity_from_env, patch(
+            "core.management.commands.config_inspect.SideEffectPolicy.from_identity"
+        ) as policy_from_identity:
+            identity = SimpleNamespace(
+                app_env=SimpleNamespace(value="development"),
+                deployment_id="local",
+                instance_id="local",
+                replica_id="local",
+                dataset_id="local",
+                data_mode=SimpleNamespace(value="local"),
+                data_pinned_generation="",
+                app_image_digest="",
+                app_release_version="",
+                backup_role=SimpleNamespace(value="disabled"),
+                backup_sync_mode=SimpleNamespace(value="manual"),
+                external_side_effects=SimpleNamespace(value="disabled"),
+                nonprod_data_policy="synthetic",
+                validate=lambda: [],
+            )
+            identity_from_env.return_value = identity
+            policy_from_identity.return_value = SimpleNamespace(
+                email_enabled=False,
+                email_backend="disabled",
+                payment_enabled=False,
+                webhook_enabled=False,
+                sms_enabled=False,
+                analytics_enabled=False,
+                indexers_allowed=False,
+                notification_enabled=False,
+            )
+            command.handle()
+
+        self.assertEqual(
+            observed["ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES"],
+            str(settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES),
+        )
+
     def test_positive_int_reader_accepts_env_override(self):
         with patch.dict(os.environ, {"PDF_CHUNK_SIZE": "2048"}):
             self.assertEqual(
@@ -1647,6 +1720,69 @@ class ArtifactInventoryTests(TestCase):
         self.assertFalse(pdf['exists'])
         self.assertEqual(pdf['file_status'], 'unsafe-path')
         self.assertIsNone(pdf['sha256'])
+
+    def test_inventory_accepts_observed_legacy_media_size_under_custody_cap(self):
+        root = self._root_with_pdf()
+        observed_legacy_size = 23_617_612
+        digest = "a" * 64
+
+        with patch(
+            "core.management.commands.inventory_artifacts.verify_local_media_file",
+            return_value={"size": observed_legacy_size, "sha256": digest},
+        ) as verify:
+            pdf = build_manifest(root)["pdfs"][0]
+
+        self.assertTrue(pdf["exists"])
+        self.assertEqual(pdf["size_bytes"], observed_legacy_size)
+        self.assertEqual(pdf["sha256"], digest)
+        verify.assert_called_once_with(
+            root / "media",
+            "pdfs/document.pdf",
+            maximum_bytes=settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES,
+        )
+
+    @override_settings(ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=31_457_280)
+    def test_inventory_honors_explicit_custody_media_cap_override(self):
+        root = self._root_with_pdf()
+
+        with patch(
+            "core.management.commands.inventory_artifacts.verify_local_media_file",
+            return_value={"size": 17, "sha256": "b" * 64},
+        ) as verify:
+            build_manifest(root)
+
+        verify.assert_called_once_with(
+            root / "media",
+            "pdfs/document.pdf",
+            maximum_bytes=31_457_280,
+        )
+
+    def test_inventory_rejects_non_regular_media_entries(self):
+        root = self._root_with_pdf()
+        document = root / "media" / "pdfs" / "document.pdf"
+        document.unlink()
+        document.mkdir()
+
+        pdf = build_manifest(root)["pdfs"][0]
+
+        self.assertFalse(pdf["exists"])
+        self.assertEqual(pdf["file_status"], "unsafe-path")
+        self.assertIsNone(pdf["sha256"])
+
+    def test_inventory_rejects_parent_traversal_storage_key(self):
+        root = self._root_with_pdf()
+        connection = sqlite3.connect(root / "db.sqlite3")
+        connection.execute(
+            "UPDATE core_pdffile SET file = '../outside.pdf' WHERE id = 1"
+        )
+        connection.commit()
+        connection.close()
+
+        pdf = build_manifest(root)["pdfs"][0]
+
+        self.assertFalse(pdf["exists"])
+        self.assertEqual(pdf["file_status"], "unsafe-path")
+        self.assertIsNone(pdf["sha256"])
 
     @override_settings(ARTIFACT_INVENTORY_MAX_PDF_ROWS=1)
     def test_inventory_fails_stably_before_exceeding_configured_row_cap(self):
@@ -3306,6 +3442,61 @@ class UnavailableAttestationTests(SimpleTestCase):
                     "pdfs/one.pdf",
                     maximum_bytes=1024,
                 )
+
+    def test_descriptor_verification_rejects_oversize_before_hash_or_read(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = root / "pdfs"
+            media.mkdir()
+            oversized = media / "oversized.pdf"
+            oversized.touch()
+            os.truncate(oversized, (64 * 1024 * 1024) + 1)
+
+            with (
+                patch(
+                    "core.media_quarantine.storage_key_evidence",
+                    return_value={"status": "present"},
+                ),
+                patch("core.media_quarantine.hashlib.sha256") as sha256,
+                patch("core.media_quarantine.os.read") as read,
+                self.assertRaises(MediaFileUnsafeError),
+            ):
+                verify_local_media_file(
+                    root,
+                    "pdfs/oversized.pdf",
+                    maximum_bytes=64 * 1024 * 1024,
+                )
+
+            sha256.assert_not_called()
+            read.assert_not_called()
+
+    def test_recovery_media_rejects_over_inventory_cap_before_hash_or_read(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = root / "pdfs"
+            media.mkdir()
+            oversized = media / "oversized.pdf"
+            oversized.touch()
+            os.truncate(oversized, (64 * 1024 * 1024) + 1)
+            pdf = SimpleNamespace(
+                file=SimpleNamespace(name="pdfs/oversized.pdf")
+            )
+
+            with (
+                override_settings(
+                    MEDIA_ROOT=root,
+                    ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=64
+                    * 1024
+                    * 1024,
+                ),
+                patch("core.maintenance.hashlib.sha256") as sha256,
+                patch("core.maintenance.os.read") as read,
+                self.assertRaises(core_utils.SearchDataIntegrityError),
+            ):
+                _verified_local_media_evidence(pdf)
+
+            sha256.assert_not_called()
+            read.assert_not_called()
 
 
 class UnavailableEvidenceMigrationTests(TransactionTestCase):

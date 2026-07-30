@@ -340,6 +340,45 @@ class CandidateWorkspaceTests(SimpleTestCase):
         self.assertEqual(result["embeddings"]["dimensions"], [2])
         self.assertEqual(result["faiss"]["7"]["vectors"], 1)
 
+    @override_settings(
+        ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=64 * 1024 * 1024,
+    )
+    def test_candidate_validation_uses_custody_cap_for_legacy_media(self):
+        import faiss
+        import numpy as np
+
+        workspace = self.control / "legacy-media-workspace"
+        workspace.mkdir()
+        (workspace / "media" / "pdfs").mkdir(parents=True)
+        (workspace / "media" / "pdfs" / "one.pdf").write_bytes(b"%PDF-1.4")
+        (workspace / "faiss_indexes").mkdir()
+        (workspace / "db.sqlite3").write_bytes(self.database.read_bytes())
+        index = faiss.IndexFlatIP(2)
+        index.add(np.asarray([[1.0, 0.0]], dtype="float32"))
+        faiss.write_index(
+            index, str(workspace / "faiss_indexes" / "folder_7.index")
+        )
+        (workspace / WORKSPACE_MANIFEST).write_text(
+            json.dumps({"affected_folder_ids": [7]})
+        )
+
+        with patch(
+            "core.candidate_maintenance.verify_local_media_file",
+            return_value={
+                "size": 23_617_612,
+                "sha256": "a" * 64,
+            },
+        ) as verify:
+            result = validate_candidate(workspace)
+
+        self.assertEqual(result["media"]["missing"], 0)
+        verify.assert_called_once_with(
+            workspace / "media",
+            "pdfs/one.pdf",
+            maximum_bytes=64 * 1024 * 1024,
+            hash_content=False,
+        )
+
     def test_candidate_validation_preserves_unavailable_row_without_media(self):
         workspace = self.control / "unavailable-media-workspace"
         workspace.mkdir()

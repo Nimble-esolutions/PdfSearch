@@ -269,9 +269,7 @@ def _pdf_rows(database_path: Path, media_root: Path) -> tuple[list[dict[str, Any
                     verified = verify_local_media_file(
                         media_root,
                         path_value,
-                        maximum_bytes=int(settings.MAX_FILE_SIZE_MB)
-                        * 1024
-                        * 1024,
+                        maximum_bytes=settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES,
                     )
                 except MediaFileAbsentError:
                     pass

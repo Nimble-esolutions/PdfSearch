@@ -1772,6 +1772,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         key,
         file_status,
         exists=False,
+        size_bytes=None,
         unavailable_documents=None,
     ):
         evidence_path = self.workspace / "snapshot-evidence.json"
@@ -1781,6 +1782,7 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             "db_id": 1,
             "exists": exists,
             "file_status": file_status,
+            "size_bytes": size_bytes,
             "metadata": {
                 "lifecycle": lifecycle,
                 "storage_key_status": storage["status"],
@@ -1812,6 +1814,72 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             else build_unauthorized_missing_attestation(())
         )
         evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.validate_writer_for_publication",
+        side_effect=lambda *args, writer_record=None, **kwargs: writer_record,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    def test_publication_accepts_verified_legacy_media_within_custody_cap(
+        self, *_mocks
+    ):
+        media = self.workspace / "media" / "pdfs" / "legacy.pdf"
+        media.parent.mkdir(parents=True)
+        media.write_bytes(b"%PDF-1.7\ncanonical legacy fixture")
+        media_digest = hashlib.sha256(media.read_bytes()).hexdigest()
+        self._write_media_inventory(
+            lifecycle="ready",
+            key="pdfs/legacy.pdf",
+            file_status="verified",
+            exists=True,
+            size_bytes=media.stat().st_size,
+        )
+        evidence_path = self.workspace / "snapshot-evidence.json"
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence["files"].append(
+            {
+                "path": "media/pdfs/legacy.pdf",
+                "size_bytes": media.stat().st_size,
+                "sha256": media_digest,
+            }
+        )
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+        candidate = publish_snapshot_candidate(
+            snapshot=self.snapshot,
+            profile=self.profile,
+            job=self.job,
+            vault=self.vault,
+        )
+
+        self.assertEqual(
+            candidate.vault_state,
+            ArtifactGeneration.VaultState.CANDIDATE,
+        )
+        self.assertTrue(
+            ArtifactValidation.objects.filter(
+                generation=candidate,
+                validation_type="publication",
+            ).exists()
+        )
+        published_pdf = [
+            item
+            for item in self.client.objects.values()
+            if item["content_type"] == "application/pdf"
+        ]
+        self.assertEqual(len(published_pdf), 1)
+        self.assertEqual(published_pdf[0]["body"], media.read_bytes())
 
     def test_publication_rejects_every_non_unavailable_missing_posture_pre_upload(self):
         for label, lifecycle, key, file_status in (
