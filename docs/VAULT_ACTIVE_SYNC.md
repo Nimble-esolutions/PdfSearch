@@ -131,6 +131,26 @@ also include `Content-MD5`, so an object store rejects bytes that differ from
 the verified local snapshot. Manifest creation uses `If-None-Match: *` and a
 retry must reproduce the same canonical manifest bytes.
 
+The retry POST is also a control-plane transaction. It locks the job, checks
+the submitted state version, and records a durable idempotency receipt.
+Replaying the same key and request returns the original receipt; concurrent
+submissions increment the retry counter and append `job_requeued` exactly once.
+Reusing a key for another actor or state version fails closed.
+
+The operator interface distinguishes three retry modes. A job with a finalized
+snapshot resumes its verified object-upload checkpoint. A job that failed
+before snapshot finalization never calls that a checkpoint resume: its failed
+or hard-kill `.incomplete` workspace receives a durable cleanup intent and the
+worker creates a fresh snapshot. Reclamation runs only after the retry
+transaction commits, after a grace period and fenced-owner recheck, and within
+configured item, byte, and time bounds. Failed snapshot rows and cleanup
+evidence remain in the control database; partial files never become publishable.
+The reclaimer scans a separately bounded candidate window, backs off live
+owners, and quarantines invalid paths so an old blocked row cannot starve later
+eligible cleanup.
+Non-sync operations use neutral retry guidance unless that operation separately
+proves a reusable durable checkpoint.
+
 Writer ownership is renewable and fenced by epoch. Release re-reads the writer
 record, verifies the token hash and epoch, and expires it with `If-Match`.
 It cannot delete or release a successor.

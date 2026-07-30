@@ -307,7 +307,13 @@ class DurableJobOwnershipTests(ControlPlaneTestCase):
 
         recovered = recover_stale_jobs(stale_seconds=90)
         self.assertEqual(recovered, [job.public_id])
-        requeue_job(job.public_id)
+        requeue_job(
+            job.public_id,
+            expected_state_version=VaultJob.objects.get(
+                public_id=job.public_id
+            ).state_version,
+            idempotency_key="retry-stale-owner-0001",
+        )
         reclaimed, new_token = claim_job(job.public_id, worker_id="worker-new")
 
         self.assertGreater(reclaimed.fencing_epoch, claimed.fencing_epoch)
