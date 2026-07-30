@@ -4445,6 +4445,7 @@ msgstr "ही नोंद जतन करून शोधातून वग�
 
 msgid "Document recovery evidence bound"
 msgstr "दस्तऐवज पुनर्प्राप्तीचा पुरावा जोडला"
+
 # Snapshot-only FAISS reconciliation operator guidance.
 msgid "Stored search evidence is incomplete"
 msgstr "साठवलेला शोध पुरावा अपूर्ण आहे"
