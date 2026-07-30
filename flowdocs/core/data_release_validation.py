@@ -313,6 +313,20 @@ def validate_release(
     )
 
     actual_counts = actual.get("counts", {})
+    unquarantined_missing_rows = [
+        item
+        for item in actual.get("pdfs", [])
+        if not item.get("exists")
+        and item.get("metadata", {}).get("lifecycle")
+        not in {"archived", "deprecated"}
+    ]
+    if unquarantined_missing_rows:
+        issues.append(
+            _issue(
+                "unquarantined-missing-pdf",
+                count=len(unquarantined_missing_rows),
+            )
+        )
     expected_count_fields = {
         "pdf_rows": actual_counts.get("pdf_rows"),
         "pdf_storage_files": actual_counts.get("pdf_storage_files"),

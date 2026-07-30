@@ -259,6 +259,7 @@ def _pdf_rows(database_path: Path, media_root: Path) -> tuple[list[dict[str, Any
                 "metadata": {
                     "category": row["category"] if "category" in columns else None,
                     "subject": row["subject"] if "subject" in columns else None,
+                    "lifecycle": row["lifecycle"] if "lifecycle" in columns else None,
                     "indexed": bool(row["indexed"]) if "indexed" in columns else None,
                     "has_extracted_text": bool(row["extracted_text"]) if "extracted_text" in columns else False,
                     "has_text_content": bool(row["text_content"]) if "text_content" in columns else False,
@@ -367,6 +368,11 @@ def build_manifest(
         }
     )
     missing_rows = sum(not item["exists"] for item in pdf_rows)
+    quarantined_missing_rows = sum(
+        not item["exists"]
+        and item["metadata"].get("lifecycle") in {"archived", "deprecated"}
+        for item in pdf_rows
+    )
     manifest = {
         "manifest_version": MANIFEST_VERSION,
         "read_only": True,
@@ -411,6 +417,7 @@ def build_manifest(
             "pdf_rows": len(pdf_rows),
             "pdf_rows_with_existing_files": len(pdf_rows) - missing_rows,
             "pdf_rows_missing_files": missing_rows,
+            "pdf_rows_quarantined_missing_files": quarantined_missing_rows,
             "pdf_storage_files": len(pdf_files),
             "faiss_files": len(faiss_files),
             "chroma_files": len(chroma_inventory["files"]),

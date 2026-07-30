@@ -1661,12 +1661,12 @@ class ArtifactInventoryTests(TestCase):
             'CREATE TABLE core_pdffile ('
             'id integer primary key, title varchar(200), file varchar(100), '
             'extracted_text text, page_chunks text, chunk_embeddings text, '
-            'text_content text, indexed bool);'
+            'text_content text, indexed bool, lifecycle varchar(20));'
             "INSERT INTO django_migrations VALUES ('core', '0012_latest');"
             "INSERT INTO core_pdffile VALUES "
-            "(1, 'Preserved target row', 'pdfs/target-only.pdf', NULL, NULL, NULL, NULL, 0);"
+            "(1, 'Preserved target row', 'pdfs/target-only.pdf', NULL, NULL, NULL, NULL, 0, 'archived');"
             "INSERT INTO core_pdffile VALUES "
-            "(2, 'Present row', 'pdfs/present.pdf', NULL, NULL, NULL, NULL, 1);"
+            "(2, 'Present row', 'pdfs/present.pdf', NULL, NULL, NULL, NULL, 1, 'ready');"
         )
         connection.commit()
         connection.close()
@@ -1676,6 +1676,39 @@ class ArtifactInventoryTests(TestCase):
 
         self.assertTrue(report['ok'], report['issues'])
         self.assertEqual(report['checks']['counts']['pdf_rows'], 2)
+        self.assertEqual(
+            report['checks']['counts']['pdf_rows_quarantined_missing_files'],
+            1,
+        )
+
+    def test_release_validation_rejects_active_preserved_target_only_row(self):
+        root = Path(self.temp_dir.name) / 'active-target-only'
+        root.mkdir()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.executescript(
+            'CREATE TABLE django_migrations (app varchar(255), name varchar(255));'
+            'CREATE TABLE core_pdffile ('
+            'id integer primary key, title varchar(200), file varchar(100), '
+            'extracted_text text, page_chunks text, chunk_embeddings text, '
+            'text_content text, indexed bool, lifecycle varchar(20));'
+            "INSERT INTO django_migrations VALUES ('core', '0012_latest');"
+            "INSERT INTO core_pdffile VALUES "
+            "(1, 'Active missing row', 'pdfs/missing.pdf', NULL, NULL, NULL, NULL, 0, 'ready');"
+        )
+        connection.commit()
+        connection.close()
+        manifest = self._policy(
+            build_manifest(root),
+            preserved_target_only_rows=1,
+        )
+
+        report = validate_release(manifest, root)
+
+        self.assertFalse(report['ok'])
+        self.assertIn(
+            'unquarantined-missing-pdf',
+            {issue['kind'] for issue in report['issues']},
+        )
 
     def test_inventory_covers_configured_chroma_and_static_trees(self):
         root = self._root_with_pdf()

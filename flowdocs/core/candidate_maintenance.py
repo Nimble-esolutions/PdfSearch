@@ -384,7 +384,7 @@ def _embedding_validation(database: Path) -> dict:
     try:
         rows = connection.execute(
             "SELECT id, folder_id, page_chunks, chunk_embeddings FROM core_pdffile "
-            "WHERE lifecycle != 'archived'",
+            "WHERE lifecycle NOT IN ('archived', 'deprecated')",
         )
         dimensions = set()
         vectors = 0
@@ -475,7 +475,7 @@ def validate_candidate(workspace: Path) -> dict:
         foreign_keys = list(connection.execute("PRAGMA foreign_key_check"))
         media_rows = list(
             connection.execute(
-                "SELECT id, file FROM core_pdffile "
+                "SELECT id, file, lifecycle FROM core_pdffile "
                 "WHERE file IS NOT NULL AND file != ''"
             )
         )
@@ -487,16 +487,23 @@ def validate_candidate(workspace: Path) -> dict:
         raise CandidateMaintenanceError("candidate_foreign_keys_failed")
     media_root = (workspace / "media").resolve()
     missing_media = []
-    for pdf_id, value in media_rows:
+    quarantined_missing_media = []
+    for pdf_id, value, lifecycle in media_rows:
         media_path = workspace / "media" / value
         try:
             resolved_media = media_path.resolve(strict=True)
             resolved_media.relative_to(media_root)
         except (OSError, RuntimeError, ValueError):
-            missing_media.append(pdf_id)
+            if lifecycle in {"archived", "deprecated"}:
+                quarantined_missing_media.append(pdf_id)
+            else:
+                missing_media.append(pdf_id)
             continue
         if media_path.is_symlink() or not resolved_media.is_file():
-            missing_media.append(pdf_id)
+            if lifecycle in {"archived", "deprecated"}:
+                quarantined_missing_media.append(pdf_id)
+            else:
+                missing_media.append(pdf_id)
     if missing_media:
         raise CandidateMaintenanceError(
             "candidate_media_missing", str(len(missing_media))
@@ -569,7 +576,13 @@ def validate_candidate(workspace: Path) -> dict:
             )
     return {
         "sqlite": {"integrity": "ok", "foreign_key_violations": 0},
-        "media": {"referenced": len(media_rows), "missing": 0},
+        "media": {
+            "referenced": len(media_rows),
+            "missing": 0,
+            "quarantined_missing": len(quarantined_missing_media),
+            "quarantined_pdf_ids": quarantined_missing_media[:100],
+            "quarantined_pdf_ids_truncated": len(quarantined_missing_media) > 100,
+        },
         "embeddings": embedding,
         "faiss": faiss_records,
         "affected_folder_ids": affected_folder_ids,
@@ -708,6 +721,9 @@ def execute_candidate_job(job: MaintenanceJob) -> MaintenanceJob:
                 "workspace_id": workspace.name,
                 "state": "activation_ready",
                 "vault_generation_stale": True,
+                "quarantined_missing_media": validation["media"][
+                    "quarantined_missing"
+                ],
             },
         )
         return job

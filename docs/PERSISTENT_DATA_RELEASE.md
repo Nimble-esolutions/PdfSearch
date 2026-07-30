@@ -95,7 +95,9 @@ python flowdocs/manage.py inventory_artifacts \
 For a release that will be validated on a fresh instance, include an explicit
 count policy in the manifest. `preserved_target_only_rows` is the intentional
 number of database PDF rows whose file is not present in the custody set; it is
-not a permission to ignore arbitrary missing files:
+not a permission to ignore arbitrary missing files. Every such row must already
+be marked `archived` or `deprecated` in the reconciled database copy. Active
+rows with missing or unsafe media always fail release validation:
 
 ```bash
 python flowdocs/manage.py inventory_artifacts \
@@ -113,11 +115,12 @@ database SHA-256, hashes declared files, checks the migration leaf and applied
 set, validates PDF row paths and checksums, and loads FAISS indexes when the
 dependency and file format permit it to compare dimensions and vector counts
 against the database chunk metadata. It also compares every in-contract Chroma
-and static file. A missing policy, hash mismatch, unexpected missing PDF,
-unsafe path, failed SQLite check, or inconsistent FAISS metadata returns a
-non-zero exit status. The command never writes under `--data-root`, and must
-not be used to generate or package production data in Git, `init/`, or an image
-layer:
+and static file. Inventory evidence records lifecycle posture and the count of
+missing rows that are explicitly quarantined. A missing policy, hash mismatch,
+active missing PDF, unsafe path, failed SQLite check, or inconsistent FAISS
+metadata returns a non-zero exit status. The command never writes under
+`--data-root`, and must not be used to generate or package production data in
+Git, `init/`, or an image layer:
 
 ```bash
 python flowdocs/manage.py validate_data_release \

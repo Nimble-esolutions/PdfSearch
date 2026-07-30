@@ -53,6 +53,14 @@ and reconcile referenced media. A database-only workspace always reports that
 indexes require rebuilding. Do not activate it merely because SQLite integrity
 passes.
 
+If a referenced PDF cannot be recovered, do not delete its production record
+to make validation pass. Reconcile only in an isolated candidate copy by
+marking the record `archived` or `deprecated`, rebuilding affected search
+indexes, and publishing a new generation. Candidate evidence records a bounded
+list and count of these quarantined record IDs; the source generation, database,
+and media remain unchanged. An active record with missing media remains an
+activation blocker even when a count policy declares preserved rows.
+
 ### Validation and readiness
 
 `prepare` copies the verified databases into a new isolated workspace and
