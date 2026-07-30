@@ -66,6 +66,11 @@ class RecoveryCertificationContractTests(unittest.TestCase):
         )
         self.assertEqual(RUNNER.count('"${COMPOSE[@]}" exec'), 1)
         self.assertIn('test "$(id -u)" = "1000"', RUNNER)
+        self.assertIn(
+            "app_exec web python manage.py shell -c '",
+            RUNNER,
+        )
+        self.assertNotIn("app_exec web python - <<'PY'", RUNNER)
 
     def test_cleanup_requires_a_bound_structured_marker(self):
         self.assertIn('marker="$EVIDENCE_DIR/certification-passed.json"', RUNNER)
