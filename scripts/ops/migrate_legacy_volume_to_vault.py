@@ -463,6 +463,9 @@ def validate_manifest(
     manifest: Any,
     dataset_id: str,
     generation_id: str,
+    *,
+    allow_legacy_release_evidence: bool = False,
+    allow_legacy_database_binding: bool = False,
 ) -> dict[str, Any]:
     if not isinstance(manifest, dict):
         raise MigrationError("Manifest is not a JSON object")
@@ -472,11 +475,23 @@ def validate_manifest(
         raise MigrationError("Manifest dataset identity does not match")
     if not manifest.get("production_source_id"):
         raise MigrationError("Manifest production source identity is missing")
-    if not isinstance(manifest.get("app_release"), str) or not manifest["app_release"]:
+    if (
+        not allow_legacy_release_evidence
+        and (
+            not isinstance(manifest.get("app_release"), str)
+            or not manifest["app_release"]
+        )
+    ):
         raise MigrationError("Manifest application release evidence is missing")
     if (
-        not isinstance(manifest.get("image_digest"), str)
-        or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest["image_digest"])
+        not allow_legacy_release_evidence
+        and (
+            not isinstance(manifest.get("image_digest"), str)
+            or not re.fullmatch(
+                r"sha256:[0-9a-f]{64}",
+                manifest["image_digest"],
+            )
+        )
     ):
         raise MigrationError("Manifest image digest evidence is invalid")
     if manifest.get("release_id") != generation_id:
@@ -514,9 +529,20 @@ def validate_manifest(
         if artifact_type == "database":
             if database_entry is not None:
                 raise MigrationError("Manifest contains more than one database")
-            if path != "db.sqlite3" or key != object_key(
-                dataset_id, generation_id, path, digest
-            ):
+            canonical_database_key = object_key(
+                dataset_id,
+                generation_id,
+                path,
+                digest,
+            )
+            legacy_database_key = (
+                f"datasets/{dataset_id}/generations/"
+                f"{generation_id}/database.sqlite3"
+            )
+            allowed_database_keys = {canonical_database_key}
+            if allow_legacy_database_binding:
+                allowed_database_keys.add(legacy_database_key)
+            if path != "db.sqlite3" or key not in allowed_database_keys:
                 raise MigrationError("Manifest database binding is invalid")
             database_entry = entry
         elif key != object_key(dataset_id, generation_id, path, digest):
@@ -1394,7 +1420,13 @@ def verify_pointer_chain(
         pointed_manifest = json.loads(data)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise MigrationError("Authoritative pointer manifest is malformed") from exc
-    validate_manifest(pointed_manifest, dataset_id, pointer["generation_id"])
+    validate_manifest(
+        pointed_manifest,
+        dataset_id,
+        pointer["generation_id"],
+        allow_legacy_release_evidence=pointer.get("schema_version") is None,
+        allow_legacy_database_binding=pointer.get("schema_version") is None,
+    )
     return pointer, etag
 
 

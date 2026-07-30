@@ -433,6 +433,22 @@ class CandidatePublicationTests(unittest.TestCase):
                     for key in client.objects
                 )
             )
+            promote_args = migration_args(
+                None,
+                None,
+                promote_generation=repack_args.generation_id,
+            )
+            with mock.patch.object(migration, "s3_client", return_value=client):
+                promotion = migration.migrate(promote_args)
+            self.assertTrue(promotion["pointer_updated"])
+            promoted_pointer = json.loads(
+                client.objects[migration.pointer_key(args.dataset_id)]["body"]
+            )
+            self.assertEqual(promoted_pointer["schema_version"], 1)
+            self.assertEqual(
+                promoted_pointer["generation_id"],
+                repack_args.generation_id,
+            )
 
     def test_publication_requires_durable_checkpoint(self):
         with tempfile.TemporaryDirectory() as temp_dir:
