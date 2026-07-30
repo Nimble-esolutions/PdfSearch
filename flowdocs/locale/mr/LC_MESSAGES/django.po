@@ -2158,11 +2158,17 @@ msgstr "चेकपॉइंटपासून पुन्हा प्रय�
 msgid "Resume verified upload checkpoint"
 msgstr "पडताळलेल्या अपलोडच्या चेकपॉइंटपासून पुढे सुरू करा"
 
+msgid "Resume verified snapshot checkpoint"
+msgstr "सत्यापित क्षणचित्र तपासबिंदूपासून पुन्हा सुरू करा"
+
 msgid "Create a fresh snapshot and retry"
 msgstr "नवीन स्नॅपशॉट तयार करून पुन्हा प्रयत्न करा"
 
 msgid "Verified uploaded objects will be checked and reused."
 msgstr "पडताळलेल्या अपलोड वस्तू तपासून पुन्हा वापरल्या जातील."
+
+msgid "The verified snapshot matches current safety settings and will be reused."
+msgstr "सत्यापित क्षणचित्र सध्याच्या सुरक्षा संरचनेशी जुळते आणि पुन्हा वापरले जाईल."
 
 msgid "The failed snapshot workspace is scheduled for safe removal; the retry creates a new isolated snapshot."
 msgstr "अयशस्वी स्नॅपशॉट कार्यक्षेत्र सुरक्षितपणे काढण्यासाठी नियोजित केले आहे; पुन्हा प्रयत्नासाठी नवीन विलग स्नॅपशॉट तयार होईल."

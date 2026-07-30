@@ -903,6 +903,23 @@ class SnapshotServiceTests(ActiveSyncTestCase):
         evidence = json.loads(
             (workspace / "snapshot-evidence.json").read_text()
         )
+        expected_fingerprint = (
+            snapshot_service.snapshot_configuration_fingerprint()
+        )
+        self.assertEqual(
+            evidence["configuration_fingerprint"],
+            expected_fingerprint,
+        )
+        self.assertEqual(
+            json.loads(
+                (workspace / "snapshot-configuration.json").read_text()
+            ),
+            expected_fingerprint,
+        )
+        self.assertEqual(
+            snapshot.evidence["configuration_fingerprint"],
+            expected_fingerprint,
+        )
         folder = evidence["faiss_reconciliation"]["folders"]["7"]
         self.assertEqual(folder["disposition"], "copied")
         self.assertEqual(folder["vector_count"], 2)
