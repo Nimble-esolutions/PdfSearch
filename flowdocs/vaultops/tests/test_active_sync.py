@@ -2181,6 +2181,14 @@ class CandidatePublicationTests(ActiveSyncTestCase):
         (canonical_workspace / "db.sqlite3").write_bytes(database_payload)
         evidence["configuration_fingerprint"] = fingerprint
         evidence["database"] = {"sha256": database_digest}
+        evidence["checkpoint_binding"] = {
+            "configuration_fingerprint": fingerprint,
+            "database_sha256": database_digest,
+            "included_epoch": scheduled_snapshot.included_epoch,
+            "initial_epoch": scheduled_snapshot.initial_epoch,
+            "snapshot_digest": scheduled_snapshot.snapshot_digest,
+            "snapshot_id": str(scheduled_snapshot.public_id),
+        }
         canonical_evidence_path = canonical_workspace / "snapshot-evidence.json"
         canonical_evidence_path.write_text(
             json.dumps(evidence),

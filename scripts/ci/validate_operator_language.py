@@ -79,6 +79,15 @@ REQUIRED_MARATHI_TRANSLATIONS = {
     "Resume verified upload checkpoint": (
         "पडताळलेल्या अपलोडच्या तपासबिंदूपासून पुढे सुरू करा"
     ),
+    "Resume verified snapshot checkpoint": (
+        "सत्यापित क्षणचित्र तपासबिंदूपासून पुन्हा सुरू करा"
+    ),
+    "Create a fresh snapshot and retry": (
+        "नवीन क्षणचित्र तयार करून पुन्हा प्रयत्न करा"
+    ),
+    "The verified snapshot matches current safety settings and will be reused.": (
+        "सत्यापित क्षणचित्र सध्याच्या सुरक्षा संरचनेशी जुळते आणि पुन्हा वापरले जाईल."
+    ),
     "No failed snapshot checkpoint is reused and authority remains unchanged.": (
         "अयशस्वी क्षणचित्राचा कोणताही तपासबिंदू पुन्हा वापरला जाणार नाही "
         "आणि प्राधिकृत स्थिती बदलणार नाही."

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import tempfile
 import threading
 import uuid
@@ -87,6 +88,7 @@ class SyncRetryHardeningTests(TransactionTestCase):
         configuration_bytes=None,
         primary_bytes=None,
         database_posture="valid",
+        rebind_primary_digest=False,
     ):
         fingerprint = snapshot_configuration_fingerprint()
         trusted_fingerprint = (
@@ -130,6 +132,14 @@ class SyncRetryHardeningTests(TransactionTestCase):
         primary_path.write_text(
             json.dumps(
                 {
+                    "checkpoint_binding": {
+                        "configuration_fingerprint": fingerprint,
+                        "database_sha256": database_digest,
+                        "included_epoch": snapshot.included_epoch,
+                        "initial_epoch": snapshot.initial_epoch,
+                        "snapshot_digest": snapshot.snapshot_digest,
+                        "snapshot_id": str(snapshot.public_id),
+                    },
                     "snapshot_id": str(snapshot.public_id),
                     "snapshot_digest": snapshot.snapshot_digest,
                     "configuration_fingerprint": fingerprint,
@@ -160,6 +170,14 @@ class SyncRetryHardeningTests(TransactionTestCase):
             primary_path.write_text(
                 json.dumps(
                     {
+                        "checkpoint_binding": {
+                            "configuration_fingerprint": primary_fingerprint,
+                            "database_sha256": database_digest,
+                            "included_epoch": snapshot.included_epoch,
+                            "initial_epoch": snapshot.initial_epoch,
+                            "snapshot_digest": snapshot.snapshot_digest,
+                            "snapshot_id": str(snapshot.public_id),
+                        },
                         "snapshot_id": str(snapshot.public_id),
                         "snapshot_digest": snapshot.snapshot_digest,
                         "configuration_fingerprint": primary_fingerprint,
@@ -167,6 +185,14 @@ class SyncRetryHardeningTests(TransactionTestCase):
                 ),
                 encoding="utf-8",
             )
+        if rebind_primary_digest:
+            snapshot.evidence = {
+                **snapshot.evidence,
+                "evidence_sha256": hashlib.sha256(
+                    primary_path.read_bytes()
+                ).hexdigest(),
+            }
+            snapshot.save(update_fields=["evidence", "updated_at"])
         if database_posture == "missing":
             database_path.unlink()
         elif database_posture == "mutated":
@@ -176,6 +202,14 @@ class SyncRetryHardeningTests(TransactionTestCase):
             outside = self.root / f"outside-{snapshot.public_id}.sqlite3"
             outside.write_bytes(database_payload)
             database_path.symlink_to(outside)
+        elif database_posture == "internal_symlink":
+            database_path.unlink()
+            sibling = workspace / "sibling.sqlite3"
+            sibling.write_bytes(database_payload)
+            database_path.symlink_to(sibling.name)
+        elif database_posture == "fifo":
+            database_path.unlink()
+            os.mkfifo(database_path)
         elif database_posture == "directory":
             database_path.unlink()
             database_path.mkdir()
@@ -293,9 +327,13 @@ class SyncRetryHardeningTests(TransactionTestCase):
                 "primary_fingerprint": {
                     **snapshot_configuration_fingerprint(),
                     "sha256": "e" * 64,
-                }
+                },
+                "rebind_primary_digest": True,
             },
-            "malformed_primary": {"primary_bytes": b"{not-json"},
+            "malformed_primary": {
+                "primary_bytes": b"{not-json",
+                "rebind_primary_digest": True,
+            },
         }
         for name, fixture_options in cases.items():
             with self.subTest(name=name):
@@ -334,7 +372,14 @@ class SyncRetryHardeningTests(TransactionTestCase):
         )
 
     def test_missing_mutated_or_unsafe_snapshot_database_forces_fresh(self):
-        for posture in ("missing", "mutated", "symlink", "directory"):
+        for posture in (
+            "missing",
+            "mutated",
+            "symlink",
+            "internal_symlink",
+            "fifo",
+            "directory",
+        ):
             with self.subTest(posture=posture):
                 job = self._job()
                 self._finalized_snapshot(

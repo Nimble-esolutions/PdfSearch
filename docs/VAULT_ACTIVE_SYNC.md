@@ -150,9 +150,10 @@ control-plane evidence, immutable configuration sidecar, and completed snapshot
 step agree on snapshot identity, digest, epoch, and the current safety-setting
 fingerprint. Legacy, missing, malformed, forged, or configuration-mismatched
 evidence fails closed to a fresh snapshot; there is no operator override.
-The small `snapshot-configuration.json` sidecar is the sole workspace copy of
-this fingerprint; the larger inventory evidence is not a second compatibility
-authority.
+The small `snapshot-configuration.json` sidecar and the bounded
+`checkpoint_binding` at the start of authenticated `snapshot-evidence.json`
+must agree exactly. The remainder of the larger inventory payload is not
+reparsed merely to decide retry mode.
 An ineligible workspace receives a durable cleanup intent and the worker
 creates a fresh snapshot. Reclamation runs only after the retry
 transaction commits, after a grace period and fenced-owner recheck, and within

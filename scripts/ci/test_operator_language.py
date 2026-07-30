@@ -175,6 +175,10 @@ class OperatorLanguageValidatorTests(unittest.TestCase):
             "तपासबिंदूपासून पुन्हा प्रयत्न करा",
         )
         self.assertEqual(
+            required["Resume verified snapshot checkpoint"],
+            "सत्यापित क्षणचित्र तपासबिंदूपासून पुन्हा सुरू करा",
+        )
+        self.assertEqual(
             required[
                 "A document recorded in the candidate database is not "
                 "present in its approved media location."
