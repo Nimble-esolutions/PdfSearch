@@ -2644,7 +2644,7 @@ msgid "Signed rollback remains unavailable."
 msgstr "स्वाक्षरीत मागील आवृत्ती पुनर्स्थापना उपलब्ध राहणार नाही."
 
 msgid "Review runtime evidence"
-msgstr "कार्यरत प्रणाली पुराव्याचा आढावा घ्या"
+msgstr "कार्यरत प्रणालीच्या पुराव्याचा आढावा घ्या"
 
 msgid "A retention hold is active"
 msgstr "जतन होल्ड सक्रिय आहे"
@@ -4240,7 +4240,7 @@ msgid "A bounded runtime check failed without an approved more-specific reason."
 msgstr "अधिक नेमके मंजूर कारण नोंदले नसताना कार्यरत प्रणालीची मर्यादित तपासणी अयशस्वी झाली."
 
 msgid "Candidate runtime verification could not be classified"
-msgstr "उमेदवार कार्यरत प्रणाली पडताळणीचे वर्गीकरण करता आले नाही"
+msgstr "उमेदवाराच्या कार्यरत प्रणालीच्या पडताळणीचे वर्गीकरण करता आले नाही"
 
 msgid "The isolated verification command failed without valid bounded failure evidence."
 msgstr "वैध आणि मर्यादित अपयश पुरावा न देता स्वतंत्र पडताळणी आदेश अयशस्वी झाला."
@@ -4261,7 +4261,7 @@ msgid "A required smoke query has no approved document category to search."
 msgstr "आवश्यक स्मोक-चाचणी प्रश्नासाठी शोधण्याचा मंजूर दस्तऐवज विभाग उपलब्ध नाही."
 
 msgid "Runtime search verification cannot complete."
-msgstr "कार्यरत प्रणाली शोध पडताळणी पूर्ण होऊ शकत नाही."
+msgstr "कार्यरत प्रणालीतील शोध पडताळणी पूर्ण होऊ शकत नाही."
 
 msgid "Configure the activation test category"
 msgstr "सक्रियकरण चाचणीच्या विभागाची संरचना करा"
@@ -4273,7 +4273,7 @@ msgid "The current smoke-query file does not match the digest approved in the si
 msgstr "सध्याची स्मोक-चाचणी प्रश्न संचिका स्वाक्षरी केलेल्या सक्रियकरण हेतूमध्ये मंजूर केलेल्या डायजेस्टशी जुळत नाही."
 
 msgid "Runtime search verification cannot continue."
-msgstr "कार्यरत प्रणाली शोध पडताळणी पुढे सुरू राहू शकत नाही."
+msgstr "कार्यरत प्रणालीतील शोध पडताळणी पुढे सुरू राहू शकत नाही."
 
 msgid "Review and reschedule activation"
 msgstr "सक्रियकरण तपासून पुन्हा नियोजित करा"
@@ -4423,6 +4423,19 @@ msgstr "मान्य अभिरक्षण पुराव्याती�
 
 msgid "Expected digest"
 msgstr "अपेक्षित हॅश मूल्य"
+
+msgid "Enter the complete 64-character technical digest."
+msgstr "संपूर्ण ६४-अक्षरी तांत्रिक हॅश मूल्य नोंदवा."
+
+msgid ""
+"Enter the complete 64-character technical digest, or leave both evidence "
+"fields blank."
+msgstr ""
+"संपूर्ण ६४-अक्षरी तांत्रिक हॅश मूल्य नोंदवा किंवा पुराव्याची दोन्ही क्षेत्रे "
+"रिकामी ठेवा."
+
+msgid "Enter the exact confirmation phrase shown above."
+msgstr "वर दाखवलेला पुष्टीचा वाक्यांश अचूक नोंदवा."
 
 msgid "Enter this exact confirmation phrase:"
 msgstr "पुष्टीसाठी हा वाक्यांश अचूक नोंदवा:"

@@ -2573,6 +2573,34 @@ class DocumentLifecycleTests(TestCase):
         self.assertEqual(self.pdf.media_expected_sha256, "")
         self.assertIsNone(self.pdf.media_expected_size)
 
+    def test_invalid_recovery_binding_keeps_technical_tokens_isolated_in_marathi(self):
+        self.mark_unavailable(expected_sha256="", expected_size="")
+        self.client.force_login(self.admin)
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
+
+        response = self.client.post(
+            reverse("bind_pdf_recovery_evidence", args=[self.pdf.pk]),
+            {
+                "expected_sha256": "not-a-digest",
+                "expected_size": "19",
+                "binding_reason": "",
+                "case_reference": "SAFE-RECOVERY",
+                "confirmation": "wrong",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+
+        self.assertContains(response, "वर दाखवलेला पुष्टीचा वाक्यांश अचूक नोंदवा.")
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">SHA-256</bdi>',
+        )
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">BIND RECOVERY EVIDENCE</bdi>',
+        )
+
     def test_unavailable_restore_preserves_archived_prior_lifecycle(self):
         archive_pdf(self.pdf, requested_by=self.admin)
         self.mark_unavailable()
@@ -2690,6 +2718,30 @@ class DocumentLifecycleTests(TestCase):
             MaintenanceAuditEvent.objects.filter(
                 event_type="media_unavailable"
             ).exists()
+        )
+
+    def test_invalid_unavailable_form_keeps_technical_tokens_isolated_in_marathi(self):
+        self.client.force_login(self.admin)
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
+        response = self.client.post(
+            reverse("mark_pdf_unavailable", args=[self.pdf.pk]),
+            {
+                **self.unavailable_post(),
+                "expected_sha256": "not-a-digest",
+                "confirmation": "wrong",
+            },
+            follow=True,
+            HTTP_REFERER=reverse("dashboard_folder", args=[self.folder.pk]),
+        )
+
+        self.assertContains(response, "वर दाखवलेला पुष्टीचा वाक्यांश अचूक नोंदवा.")
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">SHA-256</bdi>',
+        )
+        self.assertContains(
+            response,
+            '<bdi lang="en" dir="ltr">MARK UNAVAILABLE</bdi>',
         )
 
     def test_unavailable_endpoint_preserves_identity(self):

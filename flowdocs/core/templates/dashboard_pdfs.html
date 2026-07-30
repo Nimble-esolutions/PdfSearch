@@ -199,7 +199,7 @@
                                   <strong>{% trans "Review the highlighted fields." %}</strong>
                                   {% if media_quarantine_form.errors.general %}<p>{{ media_quarantine_form.errors.general }}</p>{% endif %}
                                   <ul>
-                                    {% if media_quarantine_form.errors.expected_sha256 %}<li><a href="#expected_sha256_{{ pdf.id }}">{% trans "Expected SHA-256" %}: {{ media_quarantine_form.errors.expected_sha256 }}</a></li>{% endif %}
+                                    {% if media_quarantine_form.errors.expected_sha256 %}<li><a href="#expected_sha256_{{ pdf.id }}">{% trans "Expected digest" %} (<bdi lang="en" dir="ltr">SHA-256</bdi>): {{ media_quarantine_form.errors.expected_sha256 }}</a></li>{% endif %}
                                     {% if media_quarantine_form.errors.expected_size %}<li><a href="#expected_size_{{ pdf.id }}">{% trans "Expected file size in bytes" %}: {{ media_quarantine_form.errors.expected_size }}</a></li>{% endif %}
                                     {% if media_quarantine_form.errors.binding_reason %}<li><a href="#binding_reason_{{ pdf.id }}">{% trans "Evidence binding reason" %}: {{ media_quarantine_form.errors.binding_reason }}</a></li>{% endif %}
                                     {% if media_quarantine_form.errors.case_reference %}<li><a href="#case_reference_{{ pdf.id }}">{% trans "Case reference" %}: {{ media_quarantine_form.errors.case_reference }}</a></li>{% endif %}
@@ -255,7 +255,7 @@
                                   <p>{{ media_quarantine_form.errors.general }}</p>
                                 {% endif %}
                                 <ul>
-                                  {% if media_quarantine_form.errors.expected_sha256 %}<li><a href="#expected_sha256_{{ pdf.id }}">{% trans "Expected SHA-256" %}: {{ media_quarantine_form.errors.expected_sha256 }}</a></li>{% endif %}
+                                  {% if media_quarantine_form.errors.expected_sha256 %}<li><a href="#expected_sha256_{{ pdf.id }}">{% trans "Expected digest" %} (<bdi lang="en" dir="ltr">SHA-256</bdi>): {{ media_quarantine_form.errors.expected_sha256 }}</a></li>{% endif %}
                                   {% if media_quarantine_form.errors.expected_size %}<li><a href="#expected_size_{{ pdf.id }}">{% trans "Expected file size in bytes" %}: {{ media_quarantine_form.errors.expected_size }}</a></li>{% endif %}
                                   {% if media_quarantine_form.errors.reason %}<li><a href="#reason_{{ pdf.id }}">{% trans "Reason" %}: {{ media_quarantine_form.errors.reason }}</a></li>{% endif %}
                                   {% if media_quarantine_form.errors.case_reference %}<li><a href="#case_reference_{{ pdf.id }}">{% trans "Case reference" %}: {{ media_quarantine_form.errors.case_reference }}</a></li>{% endif %}

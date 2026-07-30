@@ -895,7 +895,7 @@ def mark_pdf_unavailable_view(request, pdf_id):
     if has_digest or has_size:
         if not re.fullmatch(r"[0-9a-f]{64}", values["expected_sha256"]):
             errors["expected_sha256"] = gettext(
-                "Enter the complete 64-character SHA-256, or leave both evidence fields blank."
+                "Enter the complete 64-character technical digest, or leave both evidence fields blank."
             )
         try:
             parsed_size = int(values["expected_size"])
@@ -913,7 +913,7 @@ def mark_pdf_unavailable_view(request, pdf_id):
         )
     if request.POST.get("confirmation", "").strip() != "MARK UNAVAILABLE":
         errors["confirmation"] = gettext(
-            "Type MARK UNAVAILABLE exactly as shown."
+            "Enter the exact confirmation phrase shown above."
         )
     if errors:
         request.session["media_quarantine_form"] = {
@@ -978,7 +978,7 @@ def bind_pdf_recovery_evidence_view(request, pdf_id):
     errors = {}
     if not re.fullmatch(r"[0-9a-f]{64}", values["expected_sha256"]):
         errors["expected_sha256"] = gettext(
-            "Enter the complete 64-character SHA-256."
+            "Enter the complete 64-character technical digest."
         )
     try:
         parsed_size = int(values["expected_size"])
@@ -994,7 +994,7 @@ def bind_pdf_recovery_evidence_view(request, pdf_id):
         )
     if request.POST.get("confirmation", "").strip() != "BIND RECOVERY EVIDENCE":
         errors["confirmation"] = gettext(
-            "Type BIND RECOVERY EVIDENCE exactly as shown."
+            "Enter the exact confirmation phrase shown above."
         )
     if errors:
         request.session["media_quarantine_form"] = {

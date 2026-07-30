@@ -64,6 +64,18 @@ MALFORMED_MARATHI_TOKENS = (
     "कार्यरत प्रणाली मीडिया",
     "पुनर्स्थापनाचा निर्मिती संच",
 )
+REQUIRED_MARATHI_TRANSLATIONS = {
+    "Review runtime evidence": "कार्यरत प्रणालीच्या पुराव्याचा आढावा घ्या",
+    "Candidate runtime verification could not be classified": (
+        "उमेदवाराच्या कार्यरत प्रणालीच्या पडताळणीचे वर्गीकरण करता आले नाही"
+    ),
+    "Runtime search verification cannot complete.": (
+        "कार्यरत प्रणालीतील शोध पडताळणी पूर्ण होऊ शकत नाही."
+    ),
+    "Runtime search verification cannot continue.": (
+        "कार्यरत प्रणालीतील शोध पडताळणी पुढे सुरू राहू शकत नाही."
+    ),
+}
 
 
 def _literal(node: ast.AST) -> str | None:
@@ -182,6 +194,13 @@ def catalog_violations(
             errors.append(
                 f"{catalog_path.relative_to(display_root)}: "
                 f"malformed or unreviewed Marathi token: {token!r}"
+            )
+    for message, expected in REQUIRED_MARATHI_TRANSLATIONS.items():
+        translated, _fuzzy = entries.get(message, ("", False))
+        if translated != expected:
+            errors.append(
+                f"{catalog_path.relative_to(display_root)}: "
+                f"reviewed Marathi translation mismatch: {message!r}"
             )
     for message in sorted(registry_messages(registry_path)):
         translated, fuzzy = entries.get(message, ("", False))
