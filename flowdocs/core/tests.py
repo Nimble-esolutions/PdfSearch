@@ -157,6 +157,14 @@ class RedisConfigurationTests(SimpleTestCase):
 
 
 class EnvironmentContractTests(SimpleTestCase):
+    def test_custody_media_cap_defaults_above_unchanged_upload_limit(self):
+        self.assertEqual(
+            settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES,
+            64 * 1024 * 1024,
+        )
+        self.assertEqual(settings.MAX_FILE_SIZE_MB, Decimal("10"))
+        self.assertEqual(settings.MAX_FILE_SIZE, 10 * 1024 * 1024)
+
     def test_positive_int_reader_accepts_env_override(self):
         with patch.dict(os.environ, {"PDF_CHUNK_SIZE": "2048"}):
             self.assertEqual(
@@ -1647,6 +1655,69 @@ class ArtifactInventoryTests(TestCase):
         self.assertFalse(pdf['exists'])
         self.assertEqual(pdf['file_status'], 'unsafe-path')
         self.assertIsNone(pdf['sha256'])
+
+    def test_inventory_accepts_observed_legacy_media_size_under_custody_cap(self):
+        root = self._root_with_pdf()
+        observed_legacy_size = 23_617_612
+        digest = "a" * 64
+
+        with patch(
+            "core.management.commands.inventory_artifacts.verify_local_media_file",
+            return_value={"size": observed_legacy_size, "sha256": digest},
+        ) as verify:
+            pdf = build_manifest(root)["pdfs"][0]
+
+        self.assertTrue(pdf["exists"])
+        self.assertEqual(pdf["size_bytes"], observed_legacy_size)
+        self.assertEqual(pdf["sha256"], digest)
+        verify.assert_called_once_with(
+            root / "media",
+            "pdfs/document.pdf",
+            maximum_bytes=settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES,
+        )
+
+    @override_settings(ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES=31_457_280)
+    def test_inventory_honors_explicit_custody_media_cap_override(self):
+        root = self._root_with_pdf()
+
+        with patch(
+            "core.management.commands.inventory_artifacts.verify_local_media_file",
+            return_value={"size": 17, "sha256": "b" * 64},
+        ) as verify:
+            build_manifest(root)
+
+        verify.assert_called_once_with(
+            root / "media",
+            "pdfs/document.pdf",
+            maximum_bytes=31_457_280,
+        )
+
+    def test_inventory_rejects_non_regular_media_entries(self):
+        root = self._root_with_pdf()
+        document = root / "media" / "pdfs" / "document.pdf"
+        document.unlink()
+        document.mkdir()
+
+        pdf = build_manifest(root)["pdfs"][0]
+
+        self.assertFalse(pdf["exists"])
+        self.assertEqual(pdf["file_status"], "unsafe-path")
+        self.assertIsNone(pdf["sha256"])
+
+    def test_inventory_rejects_parent_traversal_storage_key(self):
+        root = self._root_with_pdf()
+        connection = sqlite3.connect(root / "db.sqlite3")
+        connection.execute(
+            "UPDATE core_pdffile SET file = '../outside.pdf' WHERE id = 1"
+        )
+        connection.commit()
+        connection.close()
+
+        pdf = build_manifest(root)["pdfs"][0]
+
+        self.assertFalse(pdf["exists"])
+        self.assertEqual(pdf["file_status"], "unsafe-path")
+        self.assertIsNone(pdf["sha256"])
 
     @override_settings(ARTIFACT_INVENTORY_MAX_PDF_ROWS=1)
     def test_inventory_fails_stably_before_exceeding_configured_row_cap(self):
@@ -3306,6 +3377,29 @@ class UnavailableAttestationTests(SimpleTestCase):
                     "pdfs/one.pdf",
                     maximum_bytes=1024,
                 )
+
+    def test_descriptor_verification_rejects_oversize_before_hash_or_read(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = root / "pdfs"
+            media.mkdir()
+            oversized = media / "oversized.pdf"
+            oversized.touch()
+            os.truncate(oversized, (64 * 1024 * 1024) + 1)
+
+            with (
+                patch("core.media_quarantine.hashlib.sha256") as sha256,
+                patch("core.media_quarantine.os.read") as read,
+                self.assertRaises(MediaFileUnsafeError),
+            ):
+                verify_local_media_file(
+                    root,
+                    "pdfs/oversized.pdf",
+                    maximum_bytes=64 * 1024 * 1024,
+                )
+
+            self.assertNotIn((), [entry.args for entry in sha256.call_args_list])
+            read.assert_not_called()
 
 
 class UnavailableEvidenceMigrationTests(TransactionTestCase):

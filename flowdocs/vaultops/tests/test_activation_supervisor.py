@@ -2268,6 +2268,44 @@ class ActivationRuntimeVerificationTests(TestCase):
             output.getvalue(),
         )
 
+    def test_runtime_media_verification_uses_custody_cap(self):
+        operator = get_user_model().objects.get(username="recovery")
+        folder = Folder.objects.create(name="Custody cap", created_by=operator)
+        PDFFile.objects.create(
+            title="Legacy media",
+            file="pdfs/legacy.pdf",
+            folder=folder,
+            uploaded_by=operator,
+            lifecycle="ready",
+        )
+
+        with (
+            patch(
+                "vaultops.services.runtime_verification."
+                "_validate_faiss_coherence"
+            ),
+            patch(
+                "vaultops.services.runtime_verification."
+                "verify_local_media_file",
+                return_value={"size": 23_617_612, "sha256": None},
+            ) as verify,
+            patch(
+                "vaultops.services.runtime_verification.search_pdfs_fast",
+                return_value=("bounded answer", [{"source": "bounded"}]),
+            ),
+        ):
+            call_command(
+                "verify_activation_runtime",
+                intent_id=self.intent_id,
+            )
+
+        verify.assert_called_once_with(
+            settings.MEDIA_ROOT,
+            "pdfs/legacy.pdf",
+            maximum_bytes=settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES,
+            hash_content=False,
+        )
+
     def test_management_command_emits_bounded_bilingual_json(self):
         operator = get_user_model().objects.get(username="recovery")
         Folder.objects.create(name="Certification", created_by=operator)
