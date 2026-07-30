@@ -184,6 +184,10 @@ matches are suggestions, not approved translations. Reviewers must check
 semantic accuracy rather than accepting a catalog that only compiles. The
 operator-language CI gate inventories the complete registry and rejects a
 missing, fuzzy, empty, or unchanged-English Marathi entry.
+Reviewed legacy-catalog corrections for specialist terms and contextual
+file/media copy are exact-string contracts too. Pin corrected complete
+sentences in the validator so `मॅनिफेस्ट`, `जीसी`, `चेकपॉइंट`, and ordinary
+`संचिका` usage cannot silently regress to an older synonym or raw English.
 
 Unavailable document media is an explicit, reversible operator state. The
 interface must preserve the document identity and history, explain exclusion

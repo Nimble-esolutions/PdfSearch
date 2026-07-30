@@ -1,4 +1,4 @@
-Status: Completed
+Status: HISTORICAL — completed and superseded
 Completed: 2026-07-24
 Owner: FlowDocs maintainers
 Created: 2026-07-23
@@ -7,7 +7,9 @@ Created: 2026-07-23
 
 This document enumerated every incomplete work item identified in the
 2026-07-23 audit. All 6 items were completed and merged. The plan is retained
-as a historical record of the completion sprint.
+as a historical record of the completion sprint. It is superseded by
+`plans/README.md`; do not execute the preserved implementation checklists as
+current backlog.
 
 ## Universal Workflow (applies to every item below)
 
@@ -29,9 +31,7 @@ Branch naming convention: `<type>/<scope>` where type is
 
 **Branch:** `feat/generation-promotion-rollback`
 **Priority:** High
-**Status:** Partial — `ArtifactGeneration` model and `sync_active_generation` /
-`stage_generation` exist, but there is no promote-to-active, rollback-to-prior,
-or retention-policy mechanism. The cockpit only lists generations.
+**Status:** Completed — PR #42, merge `dcc8b44`.
 
 ### Commits
 
@@ -84,9 +84,7 @@ docker compose -f docker-compose.dev.yml exec -T web sh -lc \
 
 **Branch:** `feat/audit-validation-models`
 **Priority:** High
-**Status:** Plan only — neither model exists. `MaintenanceJob` tracks
-per-item results but there is no structured validation record or audit trail
-for who did what when.
+**Status:** Completed — PR #43, merge `10d9580`.
 
 ### Commits
 
@@ -137,9 +135,7 @@ docker compose -f docker-compose.dev.yml exec -T web sh -lc \
 
 **Branch:** `feat/bulk-filter-workspace`
 **Priority:** High
-**Status:** Partial — `bulk_maintenance` view accepts `folder_ids` but there
-is no filter UI to select by category, subject, indexed status, keyword, or
-date range. The operator must manually check folders.
+**Status:** Completed — PR #44, merge `1700078`.
 
 ### Commits
 
@@ -176,8 +172,7 @@ docker compose -f docker-compose.dev.yml exec -T web sh -lc \
 
 **Branch:** `feat/live-job-drawer`
 **Priority:** High
-**Status:** Plan only — the cockpit shows the last 8 jobs as a static list.
-There is no live progress, no auto-refresh, no per-item breakdown.
+**Status:** Completed — PR #45, merge `9aeb15e`.
 
 ### Commits
 
@@ -222,9 +217,7 @@ docker compose -f docker-compose.dev.yml exec -T web sh -lc \
 
 **Branch:** `feat/document-lifecycle`
 **Priority:** Medium
-**Status:** Gap — `PDFFile` has `indexed` (boolean) but no lifecycle state.
-There is no way to distinguish "uploaded but not processed", "processing",
-"processed", "deprecated", or "archived".
+**Status:** Completed — PR #46, merge `a8de9d2`.
 
 ### Commits
 
@@ -267,9 +260,7 @@ docker compose -f docker-compose.dev.yml exec -T web sh -lc \
 
 **Branch:** `feat/seo-aeo-implementation`
 **Priority:** Medium
-**Status:** Plan only — `docs/SEO_AEO_OPTIMIZATION_PLAN.md` is a draft.
-No metadata, structured data, robots.txt, sitemap.xml, or static copy has
-been implemented. Four approval questions remain open.
+**Status:** Completed — PR #47, merge `76aa159`.
 
 ### Prerequisite
 
