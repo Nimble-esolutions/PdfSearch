@@ -38,6 +38,7 @@ from vaultops.models import (
     VaultJob,
 )
 from vaultops.services.read_model import (
+    _operations_summary,
     build_workbench_state,
     enrich_workbench_readiness,
     workspace_state_digest,
@@ -49,6 +50,243 @@ from vaultops.services.profiles import (
     profile_fingerprint,
 )
 from vaultops.views import WorkbenchRequestError, _mutation_error
+
+
+class OperationsSummaryTests(TestCase):
+    def identity(self, *, app_env="staging", writer=False):
+        return SimpleNamespace(
+            app_env=SimpleNamespace(value=app_env),
+            dataset_id="prod" if writer else "stage",
+            authoritative_dataset_id="prod",
+            deployment_id=f"{app_env}-deployment",
+            is_authoritative_writer=writer,
+            is_production=app_env == "production",
+        )
+
+    def state(self, *, writer=False):
+        profile_dataset = "prod"
+        return {
+            "observed_at": timezone.now(),
+            "environment": {
+                "app_env": "production" if writer else "staging",
+                "is_production": writer,
+                "production_source_id": "prod-source",
+            },
+            "profile": {
+                "key": "locked",
+                "dataset_id": profile_dataset,
+                "read_only": not writer,
+                "fingerprint": "f" * 64,
+            },
+            "profiles": [{
+                "key": "locked",
+                "dataset_id": profile_dataset,
+                "production_source_id": "prod-source",
+                "read_only": not writer,
+                "enabled": True,
+                "environment_locked": True,
+            }],
+            "authority": {"blocking_reasons": []},
+            "jobs": [],
+            "workspaces": [],
+            "pending_activation": None,
+            "feature_flags": {
+                "admin_mutations_enabled": True,
+                "sync_enabled": True,
+                "restore_enabled": True,
+                "staging_activation_enabled": True,
+            },
+        }
+
+    def test_summary_is_query_free_and_uses_environment_direction_policy(self):
+        state = self.state(writer=True)
+        with self.assertNumQueries(0):
+            summary = _operations_summary(
+                state,
+                identity=self.identity(app_env="production", writer=True),
+            )
+        self.assertEqual(summary["environment_role"], "backup_source")
+        self.assertEqual(summary["primary_action"]["kind"], "backup")
+
+        stage = _operations_summary(
+            self.state(), identity=self.identity()
+        )
+        self.assertEqual(stage["environment_role"], "restore_target")
+        self.assertEqual(
+            stage["primary_action"]["kind"], "prepare_restore"
+        )
+
+    def test_newest_working_job_suppresses_duplicate_restore(self):
+        state = self.state()
+        state["jobs"] = [{
+            "public_id": str(uuid.uuid4()),
+            "operation": "restore_generation",
+            "status": VaultJob.Status.QUEUED,
+            "phase": "",
+            "generation_id": "",
+            "safe_error_code": "",
+            "created_at": timezone.now(),
+            "updated_at": timezone.now(),
+            "finished_at": None,
+        }]
+        summary = _operations_summary(state, identity=self.identity())
+        self.assertEqual(summary["posture"], "working")
+        self.assertEqual(summary["primary_action"]["kind"], "none")
+
+    def test_activation_uses_exact_successful_job_workspace_binding(self):
+        state = self.state()
+        succeeded_id = str(uuid.uuid4())
+        other_id = str(uuid.uuid4())
+        now = timezone.now()
+        state["jobs"] = [{
+            "public_id": succeeded_id,
+            "operation": "restore_generation",
+            "status": VaultJob.Status.SUCCEEDED,
+            "phase": "completed",
+            "generation_id": "",
+            "safe_error_code": "",
+            "created_at": now,
+            "updated_at": now,
+            "finished_at": now,
+        }]
+        state["workspaces"] = [
+            {
+                "public_id": str(uuid.uuid4()),
+                "job_public_id": other_id,
+                "generation_id": "same-generation",
+                "manifest_digest": "a" * 64,
+                "profile_fingerprint": "f" * 64,
+                "state": RestoreWorkspace.State.ACTIVATION_READY,
+                "activation_allowed": True,
+                "prepared_at": now,
+                "created_at": now + timedelta(seconds=1),
+            },
+            {
+                "public_id": str(uuid.uuid4()),
+                "job_public_id": succeeded_id,
+                "generation_id": "same-generation",
+                "manifest_digest": "b" * 64,
+                "profile_fingerprint": "f" * 64,
+                "state": RestoreWorkspace.State.ACTIVATION_READY,
+                "activation_allowed": True,
+                "prepared_at": now,
+                "created_at": now,
+            },
+        ]
+        summary = _operations_summary(state, identity=self.identity())
+        self.assertEqual(
+            summary["primary_action"]["kind"], "activate_restore"
+        )
+        self.assertEqual(
+            summary["primary_action"]["target_public_id"],
+            state["workspaces"][1]["public_id"],
+        )
+        self.assertEqual(
+            summary["latest_receipt"]["generation_id"],
+            "same-generation",
+        )
+
+    def test_duplicate_exact_workspaces_fail_closed(self):
+        state = self.state()
+        job_id = str(uuid.uuid4())
+        now = timezone.now()
+        state["jobs"] = [{
+            "public_id": job_id,
+            "operation": "restore_generation",
+            "status": VaultJob.Status.SUCCEEDED,
+            "created_at": now,
+            "updated_at": now,
+            "finished_at": now,
+        }]
+        state["workspaces"] = [
+            {
+                "public_id": str(uuid.uuid4()),
+                "job_public_id": job_id,
+                "generation_id": f"generation-{index}",
+                "manifest_digest": str(index + 1) * 64,
+                "profile_fingerprint": "f" * 64,
+                "state": RestoreWorkspace.State.ACTIVATION_READY,
+                "activation_allowed": True,
+                "prepared_at": now,
+                "created_at": now,
+            }
+            for index in range(2)
+        ]
+        summary = _operations_summary(state, identity=self.identity())
+        self.assertEqual(summary["posture"], "attention")
+        self.assertEqual(summary["reason_code"], "restore_workspace_ambiguous")
+        self.assertFalse(summary["primary_action"]["enabled"])
+
+    def test_newer_failed_restore_does_not_activate_older_workspace(self):
+        state = self.state()
+        succeeded_id = str(uuid.uuid4())
+        now = timezone.now()
+        state["jobs"] = [
+            {
+                "public_id": str(uuid.uuid4()),
+                "operation": "restore_generation",
+                "status": VaultJob.Status.RETRYABLE_FAILED,
+                "created_at": now + timedelta(seconds=1),
+                "updated_at": now + timedelta(seconds=1),
+                "finished_at": now + timedelta(seconds=1),
+            },
+            {
+                "public_id": succeeded_id,
+                "operation": "restore_generation",
+                "status": VaultJob.Status.SUCCEEDED,
+                "created_at": now,
+                "updated_at": now,
+                "finished_at": now,
+            },
+        ]
+        state["workspaces"] = [{
+            "public_id": str(uuid.uuid4()),
+            "job_public_id": succeeded_id,
+            "generation_id": "older-generation",
+            "manifest_digest": "a" * 64,
+            "profile_fingerprint": "f" * 64,
+            "state": RestoreWorkspace.State.ACTIVATION_READY,
+            "activation_allowed": True,
+            "prepared_at": now,
+            "created_at": now,
+        }]
+        summary = _operations_summary(state, identity=self.identity())
+        self.assertEqual(
+            summary["primary_action"]["kind"], "prepare_restore"
+        )
+        self.assertEqual(
+            summary["latest_receipt"]["status"],
+            VaultJob.Status.RETRYABLE_FAILED,
+        )
+
+    def test_development_cannot_activate_even_if_projection_claims_allowed(self):
+        state = self.state()
+        now = timezone.now()
+        job_id = str(uuid.uuid4())
+        state["jobs"] = [{
+            "public_id": job_id,
+            "operation": "restore_generation",
+            "status": VaultJob.Status.SUCCEEDED,
+            "created_at": now,
+            "updated_at": now,
+            "finished_at": now,
+        }]
+        state["workspaces"] = [{
+            "public_id": str(uuid.uuid4()),
+            "job_public_id": job_id,
+            "generation_id": "generation",
+            "manifest_digest": "a" * 64,
+            "profile_fingerprint": "f" * 64,
+            "state": RestoreWorkspace.State.ACTIVATION_READY,
+            "activation_allowed": True,
+            "prepared_at": now,
+            "created_at": now,
+        }]
+        summary = _operations_summary(
+            state, identity=self.identity(app_env="development")
+        )
+        self.assertEqual(summary["posture"], "attention")
+        self.assertEqual(summary["reason_code"], "staging_activation_disabled")
 
 
 @override_settings(
@@ -118,11 +356,23 @@ class VaultWorkbenchTests(TestCase):
     def test_superadmin_workbench_is_server_rendered_and_no_js_required(self):
         response = self.client.get(reverse("operations_panel"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Vault & Recovery")
-        self.assertContains(response, "Authority comparison")
+        self.assertContains(response, "Backup & Restore")
+        self.assertContains(response, "Current status")
+        self.assertContains(response, "Support tools and technical evidence")
         self.assertContains(response, "vault-workbench.css")
         self.assertContains(response, "<noscript>", html=False)
         self.assertNotContains(response, "cdn.jsdelivr.net")
+        self.assertNotContains(
+            response,
+            'action="/dashboard/operations/api/v1/gc-plans/create/"',
+            html=False,
+        )
+
+        advanced = self.client.get(
+            reverse("operations_panel"), {"section": "overview"}
+        )
+        self.assertContains(advanced, "Vault & Recovery")
+        self.assertContains(advanced, "Authority comparison")
 
     def test_restore_section_keeps_signed_rollback_visible_with_reason(self):
         response = self.client.get(
@@ -214,6 +464,39 @@ class VaultWorkbenchTests(TestCase):
 
         self.assertIsNone(state["pending_activation"])
         capability.assert_called_once_with(pending_activation=None)
+
+    def test_workspace_projection_exposes_exact_restore_binding(self):
+        job = VaultJob.objects.create(
+            operation="restore_generation",
+            status=VaultJob.Status.SUCCEEDED,
+            profile=self.profile,
+            profile_fingerprint=self.profile.fingerprint,
+            dataset_id=self.profile.dataset_id,
+            idempotency_key="project-exact-restore-binding",
+        )
+        workspace = RestoreWorkspace.objects.create(
+            job=job,
+            generation=self.candidate,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=self.candidate.manifest_digest,
+            profile_fingerprint=self.profile.fingerprint,
+            prepared_at=timezone.now(),
+        )
+
+        state = build_workbench_state(profile_key=self.profile.key)
+        projected = next(
+            item
+            for item in state["workspaces"]
+            if item["public_id"] == str(workspace.public_id)
+        )
+
+        self.assertEqual(projected["job_public_id"], str(job.public_id))
+        self.assertEqual(
+            projected["manifest_digest"], self.candidate.manifest_digest
+        )
+        self.assertEqual(
+            projected["profile_fingerprint"], self.profile.fingerprint
+        )
 
     @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
     def test_non_superadmin_cannot_issue_or_schedule_signed_rollback(self):
@@ -534,7 +817,9 @@ class VaultWorkbenchTests(TestCase):
         self.assertTrue(state["readiness"]["local_development"]["enabled"])
 
     def test_workbench_renders_local_posture_and_remediation_link(self):
-        response = self.client.get(reverse("operations_panel"))
+        response = self.client.get(
+            reverse("operations_panel"), {"section": "overview"}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Local development posture")
         self.assertContains(response, "Remote publication and production activation")
@@ -926,9 +1211,15 @@ class VaultWorkbenchTests(TestCase):
         self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
         response = self.client.get(reverse("operations_panel"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "व्हॉल्ट आणि पुनर्प्राप्ती")
-        self.assertContains(response, "अधिकृत स्थिती तुलना")
-        self.assertNotContains(response, "Vault &amp; Recovery")
+        self.assertContains(response, "बॅकअप आणि पुनर्स्थापना")
+        self.assertContains(response, "सध्याची स्थिती")
+        self.assertContains(response, "सहाय्य साधने आणि तांत्रिक पुरावा")
+        self.assertNotContains(response, "Backup &amp; Restore")
+        overview = self.client.get(
+            reverse("operations_panel"), {"section": "overview"}
+        )
+        self.assertContains(overview, "व्हॉल्ट आणि पुनर्प्राप्ती")
+        self.assertContains(overview, "अधिकृत स्थिती तुलना")
         retention = self.client.get(
             reverse("operations_panel"), {"section": "retention"}
         )
@@ -979,6 +1270,13 @@ class VaultWorkbenchTests(TestCase):
         self.assertNotIn(lease.owner_token, serialized)
         self.assertNotIn("sensitive-instance-name", serialized)
         self.assertEqual(payload["data"]["lease"]["state"], "held")
+        self.assertEqual(
+            payload["data"]["operations"]["contract_version"], 1
+        )
+        self.assertNotIn(
+            "profile_fingerprint",
+            payload["data"]["operations"],
+        )
 
     def test_diagnostics_export_is_redacted_and_aggregated(self):
         object_key = "datasets/private/objects/pdf/" + "7" * 64
@@ -1398,6 +1696,18 @@ class VaultWorkbenchTests(TestCase):
         )
 
     def test_operations_navigation_marks_active_section(self):
+        ordinary = self.client.get(reverse("operations_panel"))
+        self.assertContains(
+            ordinary,
+            'href="?section=operations" aria-current="page"',
+            html=False,
+        )
+        self.assertNotContains(
+            ordinary,
+            '<details class="operations-support-nav" open>',
+            html=False,
+        )
+
         response = self.client.get(
             reverse("operations_panel"), {"section": "maintenance"}
         )
@@ -1423,6 +1733,9 @@ class VaultWorkbenchTests(TestCase):
             ),
             nav,
         )
+        self.assertIn(
+            '<details class="operations-support-nav" open>', nav
+        )
 
     def test_profile_scope_is_preserved_in_live_state_url(self):
         response = self.client.get(
@@ -1435,6 +1748,33 @@ class VaultWorkbenchTests(TestCase):
                 reverse("vaultops:state"),
                 self.profile.key,
             ),
+        )
+
+    def test_ordinary_operations_ignores_profile_override(self):
+        other = VaultConnectionProfile.objects.create(
+            key="other-profile",
+            display_name="Other profile",
+            enabled=True,
+            read_only=True,
+            endpoint_origin="https://other.example",
+            bucket="other",
+            region="test",
+            dataset_id="other-dataset",
+            production_source_id="other-source",
+            credential_alias="environment:OTHER",
+            fingerprint="e" * 64,
+        )
+        response = self.client.get(
+            reverse("operations_panel"), {"profile": other.key}
+        )
+        self.assertEqual(
+            response.context["state"].get("profile", {}).get("key"),
+            settings.VAULT_DEFAULT_PROFILE,
+        )
+        self.assertNotContains(
+            response,
+            f"{reverse('vaultops:state')}?profile={other.key}",
+            html=False,
         )
 
     def test_mutation_rejects_missing_idempotency_key(self):

@@ -79,6 +79,7 @@ from vaultops.services.sync import queue_sync_job
 
 
 SECTIONS = {
+    "operations",
     "overview",
     "sync",
     "generations",
@@ -357,11 +358,16 @@ def _mutation_error(request, exc, *, section="overview"):
 @superadmin_required
 @require_GET
 def workbench(request):
-    section = request.GET.get("section", "overview")
+    section = request.GET.get("section", "operations")
     if section not in SECTIONS:
-        section = "overview"
+        section = "operations"
+    support_mode = section != "operations" or request.GET.get("support") == "1"
     state = build_workbench_state(
-        profile_key=request.GET.get("profile") or None
+        profile_key=(
+            request.GET.get("profile") or None
+            if section != "operations"
+            else None
+        )
     )
     state["maintenance"] = workbench_maintenance_state(
         selected_plan_id=request.GET.get("plan", ""),
@@ -388,6 +394,7 @@ def workbench(request):
         {
             "title": "Vault Operations Workbench",
             "section": section,
+            "support_mode": support_mode,
             "state": state,
             "idempotency_key": str(uuid.uuid4()),
             "profile_form": form_state,

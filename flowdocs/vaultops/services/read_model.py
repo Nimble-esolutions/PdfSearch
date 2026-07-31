@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.utils.translation import gettext
 
 from core.artifact_vault import ArtifactVaultConfigurationError
+from core.environment_policy import EnvironmentDirectionPolicy, Operation
 from core.recovery_auth import (
     RecoveryAuthenticationError,
     verify_recovery_superadmin_database,
@@ -693,17 +694,22 @@ def _generation_records(profile, dataset_id, limit=50):
 
 def _workspace_records(profile, dataset_id, limit=25):
     queryset = (
-        RestoreWorkspace.objects.select_related("generation")
+        RestoreWorkspace.objects.select_related("generation", "job")
         .filter(
             generation__profile=profile,
             generation__dataset_id=dataset_id,
         )
-        .order_by("-created_at")[:limit]
+        .order_by("-created_at", "-pk")[:limit]
     )
     return [
         {
             "public_id": str(workspace.public_id),
+            "job_public_id": (
+                str(workspace.job.public_id) if workspace.job_id else ""
+            ),
             "generation_id": workspace.generation.generation_id,
+            "manifest_digest": workspace.manifest_digest,
+            "profile_fingerprint": workspace.profile_fingerprint,
             "state": workspace.state,
             "downloaded_objects": workspace.downloaded_objects,
             "downloaded_bytes": workspace.downloaded_bytes,
@@ -726,7 +732,7 @@ def _job_records(profile, dataset_id, limit=50):
     records = []
     for job in VaultJob.objects.filter(
         profile=profile, dataset_id=dataset_id
-    ).order_by("-created_at")[:limit]:
+    ).order_by("-created_at", "-pk")[:limit]:
         resumable_snapshot = eligible_finalized_snapshot(job)
         retry_mode = (
             "checkpoint_resume"
@@ -741,12 +747,16 @@ def _job_records(profile, dataset_id, limit=50):
             "phase": job.phase,
             "status": job.status,
             "generation_id": job.generation_id,
+            "manifest_digest": job.manifest_digest,
+            "profile_fingerprint": job.profile_fingerprint,
             "progress": _safe_mapping(job.progress),
             "heartbeat_at": job.heartbeat_at,
             "safe_error_code": job.safe_error_code,
             "state_version": job.state_version,
             "created_at": job.created_at,
             "updated_at": job.updated_at,
+            "started_at": job.started_at,
+            "finished_at": job.finished_at,
             "cancellable": job.status
             in (
                 {VaultJob.Status.QUEUED} | ACTIVE_JOB_STATES
@@ -988,6 +998,251 @@ def _rollback_capability(*, pending_activation=None):
     }
 
 
+def _newest_record(records):
+    """Return a deterministic newest projected record without querying."""
+    eligible = [
+        item
+        for item in records
+        if item.get("created_at") is not None and item.get("public_id")
+    ]
+    return max(
+        eligible,
+        key=lambda item: (item["created_at"], item["public_id"]),
+        default=None,
+    )
+
+
+def _operation_receipt(record):
+    if record is None:
+        return None
+    return {
+        "public_id": record.get("public_id", ""),
+        "operation": record.get("operation", ""),
+        "status": record.get("status", ""),
+        "phase": record.get("phase", ""),
+        "generation_id": record.get("generation_id", ""),
+        "safe_error_code": record.get("safe_error_code", ""),
+        "created_at": record.get("created_at"),
+        "updated_at": record.get("updated_at"),
+        "finished_at": record.get("finished_at"),
+    }
+
+
+def _operations_summary(state, *, identity):
+    """Build the ordinary Operations contract from projected state only."""
+    summary = {
+        "contract_version": 1,
+        "environment_role": "unsupported",
+        "posture": "disabled",
+        "reason_code": "profile_unavailable",
+        "primary_action": {
+            "kind": "none",
+            "enabled": False,
+            "reason_code": "profile_unavailable",
+            "profile_key": "",
+            "target_public_id": "",
+        },
+        "current_operation": None,
+        "latest_receipt": None,
+        "support": {
+            "issue_count": len(
+                (state.get("authority") or {}).get(
+                    "blocking_reasons", []
+                )
+            ),
+        },
+    }
+    selected = state.get("profile") or {}
+    selected_key = selected.get("key", "")
+    if not selected_key or not selected.get("fingerprint"):
+        return summary
+    matching_profiles = [
+        profile
+        for profile in state.get("profiles", [])
+        if profile.get("key") == selected_key
+    ]
+    if len(matching_profiles) != 1:
+        return summary
+    locked_profile = matching_profiles[0]
+    environment = state.get("environment") or {}
+    if (
+        not locked_profile.get("enabled")
+        or not locked_profile.get("environment_locked")
+        or locked_profile.get("dataset_id") != selected.get("dataset_id")
+        or locked_profile.get("production_source_id")
+        != environment.get("production_source_id")
+    ):
+        return summary
+
+    policy = EnvironmentDirectionPolicy.from_identity(identity)
+    backup = policy.decision(
+        Operation.BACKUP,
+        remote_dataset_id=selected.get("dataset_id", ""),
+    )
+    restore = policy.decision(
+        Operation.RESTORE,
+        remote_dataset_id=selected.get("dataset_id", ""),
+    )
+    if backup.allowed and not selected.get("read_only"):
+        role = "backup_source"
+        relevant_operation = "sync_publish"
+    elif restore.allowed and selected.get("read_only"):
+        role = "restore_target"
+        relevant_operation = "restore_generation"
+    else:
+        reason_code = (
+            backup.reason_code
+            if environment.get("is_production")
+            else restore.reason_code
+        )
+        if restore.allowed and not selected.get("read_only"):
+            reason_code = "restore_profile_read_only_required"
+        summary["reason_code"] = reason_code
+        summary["primary_action"]["reason_code"] = reason_code
+        return summary
+
+    summary["environment_role"] = role
+    jobs = [
+        job
+        for job in state.get("jobs", [])
+        if job.get("operation") == relevant_operation
+    ]
+    working = _newest_record([
+        job
+        for job in jobs
+        if job.get("status")
+        in ({VaultJob.Status.QUEUED} | ACTIVE_JOB_STATES)
+    ])
+    terminal = _newest_record([
+        job
+        for job in jobs
+        if job.get("status")
+        in {
+            VaultJob.Status.SUCCEEDED,
+            VaultJob.Status.RETRYABLE_FAILED,
+            VaultJob.Status.TERMINAL_FAILED,
+            VaultJob.Status.STALE,
+            VaultJob.Status.CANCELLED,
+        }
+    ])
+    summary["latest_receipt"] = _operation_receipt(terminal)
+    if working is not None:
+        summary.update({
+            "posture": "working",
+            "reason_code": "",
+            "current_operation": _operation_receipt(working),
+        })
+        summary["primary_action"]["reason_code"] = ""
+        return summary
+
+    flags = state.get("feature_flags") or {}
+    if not flags.get("admin_mutations_enabled"):
+        reason_code = "vault_admin_mutations_disabled"
+        summary["reason_code"] = reason_code
+        summary["primary_action"]["reason_code"] = reason_code
+        return summary
+
+    if role == "backup_source":
+        if not flags.get("sync_enabled"):
+            reason_code = "vault_sync_disabled"
+            summary["reason_code"] = reason_code
+            summary["primary_action"]["reason_code"] = reason_code
+            return summary
+        summary.update({"posture": "ready", "reason_code": ""})
+        summary["primary_action"].update({
+            "kind": "backup",
+            "enabled": True,
+            "reason_code": "",
+            "profile_key": selected_key,
+        })
+        return summary
+
+    if not flags.get("restore_enabled"):
+        reason_code = "vault_restore_disabled"
+        summary["reason_code"] = reason_code
+        summary["primary_action"]["reason_code"] = reason_code
+        return summary
+    if state.get("pending_activation"):
+        pending = state["pending_activation"]
+        summary.update({
+            "posture": "working",
+            "reason_code": "",
+            "current_operation": {
+                "public_id": pending.get("public_id", ""),
+                "operation": "activation",
+                "status": pending.get("state", ""),
+                "phase": "",
+                "generation_id": pending.get(
+                    "target_generation_id", ""
+                ),
+                "safe_error_code": "",
+                "created_at": None,
+                "updated_at": None,
+                "finished_at": None,
+            },
+        })
+        summary["primary_action"]["reason_code"] = ""
+        return summary
+
+    successful_restore = (
+        terminal
+        if terminal is not None
+        and terminal.get("status") == VaultJob.Status.SUCCEEDED
+        else None
+    )
+    candidates = [
+        workspace
+        for workspace in state.get("workspaces", [])
+        if successful_restore is not None
+        and workspace.get("job_public_id")
+        == successful_restore.get("public_id")
+        and workspace.get("state")
+        == RestoreWorkspace.State.ACTIVATION_READY
+        and workspace.get("activation_allowed") is True
+        and workspace.get("profile_fingerprint")
+        == selected.get("fingerprint")
+        and workspace.get("manifest_digest")
+        and workspace.get("prepared_at") is not None
+    ]
+    if len(candidates) > 1:
+        reason_code = "restore_workspace_ambiguous"
+        summary.update({"posture": "attention", "reason_code": reason_code})
+        summary["primary_action"]["reason_code"] = reason_code
+        return summary
+    activation = policy.decision(Operation.ACTIVATE)
+    if candidates and activation.allowed:
+        workspace = candidates[0]
+        summary.update({"posture": "ready", "reason_code": ""})
+        summary["latest_receipt"] = {
+            **(_operation_receipt(successful_restore) or {}),
+            "generation_id": workspace.get("generation_id", ""),
+        }
+        summary["primary_action"].update({
+            "kind": "activate_restore",
+            "enabled": True,
+            "reason_code": "",
+            "profile_key": selected_key,
+            "target_public_id": workspace.get("public_id", ""),
+        })
+        return summary
+    if candidates and not activation.allowed:
+        summary.update({
+            "posture": "attention",
+            "reason_code": activation.reason_code,
+        })
+        summary["primary_action"]["reason_code"] = activation.reason_code
+        return summary
+
+    summary.update({"posture": "ready", "reason_code": ""})
+    summary["primary_action"].update({
+        "kind": "prepare_restore",
+        "enabled": True,
+        "reason_code": "",
+        "profile_key": selected_key,
+    })
+    return summary
+
+
 def build_workbench_state(*, profile_key=None):
     from vaultops.services.profiles import (
         VaultProfileError,
@@ -1008,7 +1263,7 @@ def build_workbench_state(*, profile_key=None):
     except VaultConnectionProfile.DoesNotExist:
         unavailable_reason = "profile_unavailable"
     if unavailable_reason:
-        return {
+        payload = {
             "status": "unknown",
             "reason_code": unavailable_reason,
             "severity": "warning",
@@ -1040,6 +1295,10 @@ def build_workbench_state(*, profile_key=None):
             "feature_flags": _feature_flags(),
             "rollback_capability": _rollback_capability(),
         }
+        payload["operations"] = _operations_summary(
+            payload, identity=identity
+        )
+        return payload
     authority = _authority_state(
         profile, profile.dataset_id, identity.deployment_id
     )
@@ -1184,6 +1443,9 @@ def build_workbench_state(*, profile_key=None):
                 for item in gc_plans
             ],
         }
+    )
+    payload["operations"] = _operations_summary(
+        payload, identity=identity
     )
     return payload
 
