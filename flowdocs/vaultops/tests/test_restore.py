@@ -343,7 +343,7 @@ class InventoryAndRestoreTests(TestCase):
                 include_status=True,
             )
 
-    def _publish_fixture(self, *, path="db.sqlite3"):
+    def _publish_fixture(self, *, path="db.sqlite3", manifest_overrides=None):
         keys = KeyBuilder(self.profile.dataset_id)
         database = database_bytes()
         database_digest = hashlib.sha256(database).hexdigest()
@@ -379,6 +379,7 @@ class InventoryAndRestoreTests(TestCase):
                 }
             ],
         }
+        manifest.update(manifest_overrides or {})
         manifest_key = keys.generation_manifest(self.generation_id)
         manifest_digest = self._put_json(manifest_key, manifest)
         pointer = {
@@ -575,6 +576,39 @@ class InventoryAndRestoreTests(TestCase):
         self.assertTrue(workspace.sanitization_evidence["validated"])
         self.assertEqual(
             (Path(workspace.runtime_path).stat().st_mode & 0o222), 0
+        )
+
+    @override_settings(
+        VAULT_RESTORE_ENABLED=True,
+        VAULT_RESTORE_REQUIRE_SANITIZATION=True,
+        VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH=True,
+        VAULT_RESTORE_MIN_FREE_BYTES=0,
+        VAULT_RESTORE_MIN_FREE_INODES=0,
+        ACTIVATION_RECOVERY_SUPERADMIN_USERNAME="recovery",
+        ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD="staging-recovery-password",
+    )
+    def test_restore_accepts_guarded_read_only_repacked_release(self):
+        self._publish_fixture(
+            manifest_overrides={
+                "app_release": "legacy-producer",
+                "image_digest": "sha256:legacy-producer",
+                "repacked_from_generation_id": "legacy-source",
+            }
+        )
+        job = self._job()
+
+        with self.settings(
+            VAULT_RESTORE_ROOT=self.root / "restore",
+            RUNTIME_GENERATIONS_ROOT=self.root / "runtime",
+        ):
+            workspace = run_restore_job(
+                job,
+                vault=self.vault,
+                run_rehearsal=False,
+            )
+
+        self.assertEqual(
+            workspace.state, RestoreWorkspace.State.ACTIVATION_READY
         )
 
     @override_settings(

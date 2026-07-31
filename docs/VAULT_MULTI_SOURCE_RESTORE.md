@@ -79,6 +79,7 @@ Keep both switches disabled during initial deployment:
 VAULT_RESTORE_ENABLED=0
 VAULT_ADMIN_MUTATIONS_ENABLED=0
 VAULT_RESTORE_REQUIRE_SANITIZATION=1
+VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH=0
 VAULT_ALLOWED_S3_ENDPOINTS=https://approved-vault.example
 ```
 
@@ -115,6 +116,15 @@ Important codes include:
 A failed or cancelled restore does not move the remote pointer or the runtime
 pointer. Removing a failed workspace is a separately authorized retention
 operation; do not delete quarantine during incident analysis.
+
+For an explicitly repacked, read-only legacy generation, a non-production
+staging deployment may set
+`VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH=1`. This permits only the
+producer release/image identity checks to differ when
+`repacked_from_generation_id` provenance and both producer identity fields are
+present. Manifest schema, migration, embedding, FAISS, sanitization, capacity,
+object-integrity, and migration-rehearsal gates remain mandatory. The setting
+is rejected outside staging and is default-deny.
 
 ## Verification
 
