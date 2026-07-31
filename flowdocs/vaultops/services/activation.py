@@ -804,10 +804,36 @@ def reconcile_activation_result(intent):
             and intent.checkpoint.get("protocol_state") == status
         ):
             return intent
-        target = ArtifactGeneration.objects.using("control").select_for_update().get(
-            deployment_id=intent.deployment_id,
-            generation_id=intent.target_generation_id,
-        )
+        if intent.workspace_id:
+            target_generation_pk = (
+                RestoreWorkspace.objects.using("control")
+                .only("generation_id")
+                .get(pk=intent.workspace_id)
+                .generation_id
+            )
+            target = (
+                ArtifactGeneration.objects.using("control")
+                .select_for_update()
+                .get(pk=target_generation_pk)
+            )
+        else:
+            target = (
+                ArtifactGeneration.objects.using("control")
+                .select_for_update()
+                .get(
+                    deployment_id=intent.deployment_id,
+                    generation_id=intent.target_generation_id,
+                    manifest_digest=intent.manifest_digest,
+                )
+            )
+        if (
+            target.deployment_id != intent.deployment_id
+            or target.generation_id != intent.target_generation_id
+            or target.manifest_digest != intent.manifest_digest
+        ):
+            raise ActivationCoordinatorError(
+                "activation_result_identity_mismatch"
+            )
         previous = None
         if not initial_activation:
             previous = ArtifactGeneration.objects.using(
