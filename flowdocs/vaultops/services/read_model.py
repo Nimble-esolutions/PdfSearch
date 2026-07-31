@@ -4,6 +4,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.db import DatabaseError
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 from django.utils.translation import gettext
 
@@ -290,6 +291,40 @@ def _job_summary(job):
     }
 
 
+def _unresolved_unhealthy_job(profile, dataset_id):
+    """Return the latest failure that has not been superseded safely.
+
+    Restore preparation can be retried as a new durable job.  A later
+    successful restore for the exact same artifact supersedes the earlier
+    preparation failure only after it has produced an activation-ready
+    workspace.  The failed job remains in history; it simply stops poisoning
+    the current authority summary.
+    """
+    successful_restore = VaultJob.objects.filter(
+        profile_id=OuterRef("profile_id"),
+        dataset_id=OuterRef("dataset_id"),
+        operation="restore",
+        generation_id=OuterRef("generation_id"),
+        manifest_digest=OuterRef("manifest_digest"),
+        status=VaultJob.Status.SUCCEEDED,
+        updated_at__gt=OuterRef("updated_at"),
+        restore_workspaces__state=RestoreWorkspace.State.ACTIVATION_READY,
+    )
+    return (
+        VaultJob.objects.filter(
+            profile=profile,
+            dataset_id=dataset_id,
+            status__in=UNHEALTHY_JOB_STATES,
+        )
+        .annotate(
+            superseded_by_verified_restore=Exists(successful_restore)
+        )
+        .filter(superseded_by_verified_restore=False)
+        .order_by("-updated_at")
+        .first()
+    )
+
+
 def _authority_state(profile, dataset_id, deployment_id):
     observed_at = timezone.now()
     projection = (
@@ -306,15 +341,7 @@ def _authority_state(profile, dataset_id, deployment_id):
         .order_by("-observed_at")
         .first()
     )
-    unhealthy_job = (
-        VaultJob.objects.filter(
-            profile=profile,
-            dataset_id=dataset_id,
-            status__in=UNHEALTHY_JOB_STATES,
-        )
-        .order_by("-updated_at")
-        .first()
-    )
+    unhealthy_job = _unresolved_unhealthy_job(profile, dataset_id)
     active_job = (
         VaultJob.objects.filter(
             profile=profile,
