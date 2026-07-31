@@ -50,7 +50,12 @@ from .media_quarantine import (
 from .maintenance_plans import queue_plan
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat
 from .worker_readiness import heartbeat_path
-from .views import _parse_bulk_filters
+from .views import (
+    _backup_readiness_check,
+    _data_readiness_check,
+    _parse_bulk_filters,
+    _signed_active_runtime,
+)
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
 from .runtime_config import validate_redis_url
 from .utils import SearchDataIntegrityError, search_chunks_with_faiss_or_numpy
@@ -82,6 +87,31 @@ class OperationalEndpointTests(TestCase):
         response = self.client.get('/readyz')
         self.assertIn(response.status_code, (200, 503))
         self.assertIn('checks', response.json())
+
+    @override_settings(
+        ACTIVE_RUNTIME=SimpleNamespace(
+            generation_id="generation-1",
+            manifest_digest="a" * 64,
+        ),
+        RUNTIME_GENERATION_ID="generation-1",
+        RUNTIME_MANIFEST_DIGEST="a" * 64,
+    )
+    def test_signed_active_runtime_uses_activation_verification_for_readiness(self):
+        self.assertTrue(_signed_active_runtime())
+        self.assertEqual(_data_readiness_check(), "ok")
+        self.assertEqual(_backup_readiness_check(), "ok")
+
+    @override_settings(
+        ACTIVE_RUNTIME=SimpleNamespace(
+            generation_id="generation-1",
+            manifest_digest="a" * 64,
+        ),
+        RUNTIME_GENERATION_ID="generation-2",
+        RUNTIME_MANIFEST_DIGEST="a" * 64,
+    )
+    def test_runtime_identity_mismatch_does_not_bypass_readiness(self):
+        self.assertFalse(_signed_active_runtime())
+        self.assertEqual(_data_readiness_check(), "empty")
 
 
 class LanguageAndPublicUiTests(TestCase):
