@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.artifact_vault import ArtifactVault, object_metadata_value
+from core.environment_policy import EnvironmentDirectionPolicy, Operation
 from core.media_quarantine import (
     build_unauthorized_missing_attestation,
     build_unavailable_attestation,
@@ -884,12 +885,25 @@ def promote_candidate(
     """CAS-promote a validated candidate; publication never calls this implicitly."""
     if not confirmed:
         raise PromotionError("typed_confirmation_required")
+    identity = settings.ENV_IDENTITY
+    direction = EnvironmentDirectionPolicy.from_identity(identity).decision(
+        Operation.PROMOTE,
+        remote_dataset_id=generation.dataset_id,
+    )
+    if not direction.allowed:
+        raise PromotionError(direction.reason_code)
+    if (
+        profile.dataset_id != generation.dataset_id
+        or generation.profile_id != profile.pk
+        or job.profile_id != profile.pk
+        or job.dataset_id != generation.dataset_id
+    ):
+        raise PromotionError("profile_identity_mismatch")
     if generation.vault_state != ArtifactGeneration.VaultState.CANDIDATE:
         raise PromotionError("generation_not_candidate")
     if job.profile_fingerprint != profile.fingerprint:
         raise PromotionError("profile_fingerprint_changed")
     vault = vault or ArtifactVault()
-    identity = settings.ENV_IDENTITY
     capabilities = probe_capabilities(
         vault, deployment_id=identity.deployment_id
     )

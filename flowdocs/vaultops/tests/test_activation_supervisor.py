@@ -74,6 +74,7 @@ def staging_identity(**overrides):
     values = {
         "is_production": False,
         "app_env": SimpleNamespace(value="staging"),
+        "dataset_id": "staging-dataset",
         "deployment_id": DEPLOYMENT_ID,
         "app_release_version": "release-1",
         "app_image_digest": "sha256:image-1",
@@ -584,6 +585,22 @@ class ActivationCoordinatorTests(TestCase):
             ):
                 schedule_activation(self.workspace, confirmed=True)
         self.assertFalse(self.paths["intents"].exists())
+
+    def test_incomplete_identity_blocks_before_filesystem_mutation(self):
+        for identity_override in (
+            {"dataset_id": ""},
+            {"deployment_id": ""},
+        ):
+            with self.subTest(identity_override=identity_override):
+                with override_settings(
+                    ENV_IDENTITY=staging_identity(**identity_override)
+                ):
+                    with self.assertRaisesMessage(
+                        ActivationCoordinatorError,
+                        "environment_identity_incomplete",
+                    ):
+                        schedule_activation(self.workspace, confirmed=True)
+                self.assertFalse(self.paths["intents"].exists())
 
     def test_schedule_requires_working_recovery_login(self):
         with override_settings(

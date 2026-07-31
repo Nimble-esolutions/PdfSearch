@@ -104,6 +104,7 @@ class FakeS3Client:
 
 def identity(**overrides):
     values = {
+        "app_env": SimpleNamespace(value="staging"),
         "dataset_id": "staging-dataset",
         "production_source_id": "staging-source",
         "instance_id": "instance-1",
@@ -502,6 +503,112 @@ class InventoryAndRestoreTests(TestCase):
         self.assertEqual(
             first.profile_fingerprint, self.profile.fingerprint
         )
+
+    @override_settings(
+        VAULT_RESTORE_ENABLED=True,
+        VAULT_ADMIN_MUTATIONS_ENABLED=True,
+        ENV_IDENTITY=identity(
+            app_env=SimpleNamespace(value="production"),
+            dataset_id="production-local",
+            is_production=True,
+        ),
+    )
+    def test_production_restore_is_rejected_before_job_creation(self):
+        with self.assertRaisesMessage(
+            RestoreError, "restore_environment_required"
+        ):
+            queue_restore_job(
+                profile=self.profile,
+                generation_id=self.generation_id,
+                idempotency_key="production-restore-attempt",
+            )
+
+        self.assertFalse(
+            VaultJob.objects.filter(
+                idempotency_key="production-restore-attempt"
+            ).exists()
+        )
+
+    @override_settings(
+        VAULT_RESTORE_ENABLED=True,
+        VAULT_ADMIN_MUTATIONS_ENABLED=True,
+    )
+    def test_empty_idempotency_precedes_direction_policy(self):
+        with self.assertRaisesMessage(
+            RestoreError, "idempotency_key_required"
+        ):
+            queue_restore_job(profile=self.profile, idempotency_key="")
+
+    @override_settings(
+        VAULT_RESTORE_ENABLED=True,
+        VAULT_ADMIN_MUTATIONS_ENABLED=True,
+    )
+    def test_writable_restore_profile_is_rejected(self):
+        self.profile.read_only = False
+        self.profile.fingerprint = profile_fingerprint(self.profile)
+        self.profile.save(
+            update_fields=["read_only", "fingerprint", "updated_at"]
+        )
+
+        with self.assertRaisesMessage(
+            RestoreError, "restore_profile_read_only_required"
+        ):
+            queue_restore_job(
+                profile=self.profile,
+                idempotency_key="writable-profile-attempt",
+            )
+
+    @override_settings(
+        VAULT_RESTORE_ENABLED=True,
+        VAULT_ADMIN_MUTATIONS_ENABLED=True,
+    )
+    @patch("vaultops.services.restore.verify_generation")
+    def test_queued_restore_is_rechecked_before_execution(
+        self, verify_generation_mock
+    ):
+        job = queue_restore_job(
+            profile=self.profile,
+            generation_id=self.generation_id,
+            idempotency_key="queued-before-production-restart",
+        )
+        with override_settings(
+            ENV_IDENTITY=identity(
+                app_env=SimpleNamespace(value="production"),
+                dataset_id="production-local",
+                is_production=True,
+            )
+        ):
+            with self.assertRaisesMessage(
+                RestoreError, "restore_environment_required"
+            ):
+                run_restore_job(job, vault=self.vault)
+
+        verify_generation_mock.assert_not_called()
+        self.assertFalse(RestoreWorkspace.objects.filter(job=job).exists())
+
+    @override_settings(
+        VAULT_RESTORE_ENABLED=True,
+        VAULT_ADMIN_MUTATIONS_ENABLED=True,
+    )
+    @patch("vaultops.services.restore.verify_generation")
+    def test_restore_execution_rejects_job_profile_dataset_mismatch(
+        self, verify_generation_mock
+    ):
+        job = queue_restore_job(
+            profile=self.profile,
+            generation_id=self.generation_id,
+            idempotency_key="dataset-binding-attempt",
+        )
+        job.dataset_id = "tampered-dataset"
+        job.save(update_fields=["dataset_id", "updated_at"])
+
+        with self.assertRaisesMessage(
+            RestoreError, "profile_identity_mismatch"
+        ):
+            run_restore_job(job, vault=self.vault)
+
+        verify_generation_mock.assert_not_called()
+        self.assertFalse(RestoreWorkspace.objects.filter(job=job).exists())
 
     @override_settings(
         VAULT_RESTORE_ENABLED=True,

@@ -33,6 +33,38 @@ def _authored(title, detail, consequence, action_label, section, severity):
 
 
 REASONS = {
+    "environment_identity_incomplete": (
+        "Environment setup is incomplete",
+        "This deployment does not identify its local dataset completely.",
+        "Backup and restore operations remain unavailable.",
+        "Review deployed environment settings",
+        "configuration",
+        "danger",
+    ),
+    "restore_environment_required": (
+        "Restore is unavailable in this environment",
+        "Ordinary restore is allowed only in a configured non-production environment.",
+        "No restore job was created and existing data remains unchanged.",
+        "Review restore configuration",
+        "configuration",
+        "danger",
+    ),
+    "restore_dataset_mismatch": (
+        "Restore source matches the local dataset",
+        "A non-production restore must read from a different approved dataset namespace.",
+        "No restore job was created, preventing an unsafe same-namespace operation.",
+        "Review the approved restore source",
+        "configuration",
+        "danger",
+    ),
+    "restore_profile_read_only_required": (
+        "Restore profile is not read-only",
+        "The selected Vault profile can write to its remote storage namespace.",
+        "Restore preparation remains blocked before any remote access.",
+        "Review the approved restore profile",
+        "configuration",
+        "danger",
+    ),
     "operations_ready": (
         "Operations are ready",
         "No immediate document operations need attention.",
