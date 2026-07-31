@@ -384,8 +384,11 @@ def publish_and_restore() -> None:
     ):
         raise SystemExit("published_generation_identity_invalid")
 
+    profile.key = f"{settings.VAULT_DEFAULT_PROFILE}-publisher"
+    profile.fingerprint = profile_fingerprint(profile)
+    profile.save(update_fields=["key", "fingerprint", "updated_at"])
     restore_profile = VaultConnectionProfile.objects.create(
-        key=f"{settings.VAULT_DEFAULT_PROFILE}-restore",
+        key=settings.VAULT_DEFAULT_PROFILE,
         display_name="Disposable lifecycle restore profile",
         source=VaultConnectionProfile.Source.ENVIRONMENT,
         enabled=True,
