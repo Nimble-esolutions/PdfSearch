@@ -16,6 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.compatibility import check_generation_compatibility
+from core.environment_policy import EnvironmentDirectionPolicy, Operation
 from core.rehearsal import RehearsalError, rehearse_migrations
 from core.sanitize import (
     provision_recovery_superadmin,
@@ -55,6 +56,16 @@ class RestoreCancelled(RestoreError):
     retryable = True
 
 
+def _guard_restore_direction(profile):
+    if not profile.read_only:
+        raise RestoreError("restore_profile_read_only_required")
+    direction = EnvironmentDirectionPolicy.from_identity(
+        settings.ENV_IDENTITY
+    ).decision(Operation.RESTORE, remote_dataset_id=profile.dataset_id)
+    if not direction.allowed:
+        raise RestoreError(direction.reason_code)
+
+
 def queue_restore_job(
     *,
     profile,
@@ -73,6 +84,7 @@ def queue_restore_job(
     fingerprint = profile_fingerprint(profile)
     if not profile.enabled or profile.fingerprint != fingerprint:
         raise RestoreError("profile_fingerprint_changed")
+    _guard_restore_direction(profile)
     with transaction.atomic(using="control"):
         job, created = VaultJob.objects.get_or_create(
             operation="restore_generation",
@@ -395,8 +407,13 @@ def run_restore_job(
         raise RestoreError("vault_restore_disabled")
     if not job.profile_id:
         raise RestoreError("profile_required")
+    if job.dataset_id != job.profile.dataset_id:
+        raise RestoreError("profile_identity_mismatch")
     if job.profile_fingerprint != profile_fingerprint(job.profile):
         raise RestoreError("profile_fingerprint_changed")
+    if not job.profile.enabled:
+        raise RestoreError("profile_fingerprint_changed")
+    _guard_restore_direction(job.profile)
     cancellation_check = cancellation_check or (lambda: False)
     heartbeat = heartbeat or (lambda **kwargs: None)
     vault = vault or vault_for_profile(

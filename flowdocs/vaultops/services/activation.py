@@ -16,6 +16,7 @@ from core.recovery_auth import (
     RecoveryAuthenticationError,
     verify_recovery_superadmin_database,
 )
+from core.environment_policy import EnvironmentDirectionPolicy, Operation
 from core.media_quarantine import (
     build_unavailable_attestation,
     validate_unavailable_attestation,
@@ -49,12 +50,12 @@ class ActivationCoordinatorError(RuntimeError):
 
 def _guard_activation_enabled():
     identity = settings.ENV_IDENTITY
-    if identity.is_production:
-        raise ActivationCoordinatorError("production_activation_disabled")
-    if (
-        not settings.STAGING_RUNTIME_ACTIVATION_ENABLED
-        or identity.app_env.value != "staging"
-    ):
+    direction = EnvironmentDirectionPolicy.from_identity(identity).decision(
+        Operation.ACTIVATE
+    )
+    if not direction.allowed:
+        raise ActivationCoordinatorError(direction.reason_code)
+    if not settings.STAGING_RUNTIME_ACTIVATION_ENABLED:
         raise ActivationCoordinatorError("staging_activation_disabled")
     if not settings.VAULT_ADMIN_MUTATIONS_ENABLED:
         raise ActivationCoordinatorError("vault_admin_mutations_disabled")

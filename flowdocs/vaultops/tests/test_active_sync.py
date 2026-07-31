@@ -69,6 +69,7 @@ from vaultops.services.snapshot import SnapshotError, create_consistent_snapshot
 from vaultops.services import publication as publication_service
 from vaultops.services import snapshot as snapshot_service
 from vaultops.services.sync import (
+    TERMINAL_ERROR_CODES,
     SyncPolicyError,
     evaluate_sync_scheduler,
     execute_claimed_job,
@@ -143,7 +144,9 @@ class FakeS3Client:
 
 def fake_identity(**overrides):
     values = {
+        "app_env": SimpleNamespace(value="production"),
         "dataset_id": "ai-sahakar-test",
+        "authoritative_dataset_id": "ai-sahakar-test",
         "production_source_id": "source-1",
         "instance_id": "instance-1",
         "deployment_id": "deployment-1",
@@ -1726,6 +1729,16 @@ class SnapshotServiceTests(ActiveSyncTestCase):
     ENV_IDENTITY=fake_identity(),
 )
 class CandidatePublicationTests(ActiveSyncTestCase):
+    def test_environment_policy_denials_are_terminal(self):
+        self.assertTrue(
+            {
+                "environment_identity_incomplete",
+                "restore_environment_required",
+                "restore_dataset_mismatch",
+                "restore_profile_read_only_required",
+            }.issubset(TERMINAL_ERROR_CODES)
+        )
+
     def setUp(self):
         super().setUp()
         self.temporary = tempfile.TemporaryDirectory()
@@ -2425,6 +2438,78 @@ class CandidatePublicationTests(ActiveSyncTestCase):
             )
         self.assertEqual(
             raised.exception.reason_code, "typed_confirmation_required"
+        )
+
+    @patch(
+        "vaultops.services.publication.release_global_writer",
+        return_value=None,
+    )
+    @patch(
+        "vaultops.services.publication.validate_writer_for_publication",
+        side_effect=lambda *args, writer_record=None, **kwargs: writer_record,
+    )
+    @patch(
+        "vaultops.services.publication.acquire_global_writer",
+        return_value=fake_writer(),
+    )
+    @patch(
+        "vaultops.services.publication.probe_capabilities",
+        return_value=fake_capabilities(),
+    )
+    def test_reader_cannot_promote_an_existing_candidate(self, *_mocks):
+        candidate = publish_snapshot_candidate(
+            snapshot=self.snapshot,
+            profile=self.profile,
+            job=self.job,
+            vault=self.vault,
+        )
+        promote_job = self.make_job(operation="promote_generation")
+
+        with override_settings(
+            ENV_IDENTITY=fake_identity(
+                is_authoritative_writer=False,
+                is_backup_writer=False,
+            )
+        ):
+            with self.assertRaises(PromotionError) as raised:
+                promote_candidate(
+                    generation=candidate,
+                    job=promote_job,
+                    profile=self.profile,
+                    confirmed=True,
+                    vault=self.vault,
+                )
+
+        self.assertEqual(
+            raised.exception.reason_code, "writer_environment_required"
+        )
+        candidate.refresh_from_db()
+        self.assertEqual(
+            candidate.vault_state,
+            ArtifactGeneration.VaultState.CANDIDATE,
+        )
+
+    def test_promotion_requires_exact_job_profile_generation_binding(self):
+        generation = SimpleNamespace(
+            dataset_id=self.profile.dataset_id,
+            profile_id=self.profile.pk,
+        )
+        mismatched_job = SimpleNamespace(
+            profile_id=None,
+            dataset_id=self.profile.dataset_id,
+        )
+
+        with self.assertRaises(PromotionError) as raised:
+            promote_candidate(
+                generation=generation,
+                job=mismatched_job,
+                profile=self.profile,
+                confirmed=True,
+                vault=self.vault,
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code, "profile_identity_mismatch"
         )
 
     @patch(

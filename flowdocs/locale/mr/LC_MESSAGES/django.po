@@ -4594,3 +4594,51 @@ msgstr "सक्रियकरण उमेदवाराचा अनुप�
 
 msgid "Runtime activation remains blocked."
 msgstr "कार्यरत आवृत्तीचे सक्रियकरण अवरोधित राहील."
+
+msgid "Environment setup is incomplete"
+msgstr "पर्यावरण संयोजना अपूर्ण आहे"
+
+msgid "This deployment does not identify its local dataset completely."
+msgstr "ही तैनाती तिचा स्थानिक डेटासेट पूर्णपणे ओळखत नाही."
+
+msgid "Backup and restore operations remain unavailable."
+msgstr "बॅकअप आणि पुनर्स्थापना कार्ये उपलब्ध राहणार नाहीत."
+
+msgid "Review deployed environment settings"
+msgstr "तैनात पर्यावरण संयोजनांचा आढावा घ्या"
+
+msgid "Restore is unavailable in this environment"
+msgstr "या पर्यावरणात पुनर्स्थापना उपलब्ध नाही"
+
+msgid "Ordinary restore is allowed only in a configured non-production environment."
+msgstr "सामान्य पुनर्स्थापना केवळ संयोजित गैर-उत्पादन पर्यावरणात अनुमत आहे."
+
+msgid "No restore job was created and existing data remains unchanged."
+msgstr "पुनर्स्थापना कार्य तयार झाले नाही आणि विद्यमान डेटा बदललेला नाही."
+
+msgid "Review restore configuration"
+msgstr "पुनर्स्थापना संयोजनेचा आढावा घ्या"
+
+msgid "Restore source matches the local dataset"
+msgstr "पुनर्स्थापना स्रोत स्थानिक डेटासेटशी जुळतो"
+
+msgid "A non-production restore must read from a different approved dataset namespace."
+msgstr "गैर-उत्पादन पुनर्स्थापनेने वेगळ्या मान्यताप्राप्त डेटासेट नामक्षेत्रातून वाचले पाहिजे."
+
+msgid "No restore job was created, preventing an unsafe same-namespace operation."
+msgstr "असुरक्षित समान-नामक्षेत्र कार्य रोखण्यासाठी पुनर्स्थापना कार्य तयार झाले नाही."
+
+msgid "Review the approved restore source"
+msgstr "मान्यताप्राप्त पुनर्स्थापना स्रोताचा आढावा घ्या"
+
+msgid "Restore profile is not read-only"
+msgstr "पुनर्स्थापना प्रोफाइल केवळ-वाचन स्वरूपाचे नाही"
+
+msgid "The selected Vault profile can write to its remote storage namespace."
+msgstr "निवडलेले व्हॉल्ट प्रोफाइल त्याच्या दूरस्थ साठवण नामक्षेत्रात लिहू शकते."
+
+msgid "Restore preparation remains blocked before any remote access."
+msgstr "कोणत्याही दूरस्थ प्रवेशापूर्वी पुनर्स्थापना तयारी अवरोधित राहते."
+
+msgid "Review the approved restore profile"
+msgstr "मान्यताप्राप्त पुनर्स्थापना प्रोफाइलचा आढावा घ्या"
