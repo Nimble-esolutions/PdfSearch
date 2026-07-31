@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 import sys
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -23,9 +24,11 @@ django.setup()
 
 import fitz
 from django.conf import settings
+from django.test import override_settings
 from django.utils import timezone
 
 from core.artifact_vault import ArtifactVault
+from core.environment import AppEnv, BackupRole
 from core.models import CustomUser, Folder, PDFFile
 from core.utils import precompute_pdf_embeddings
 from vaultops.models import (
@@ -381,25 +384,50 @@ def publish_and_restore() -> None:
     ):
         raise SystemExit("published_generation_identity_invalid")
 
+    restore_profile = VaultConnectionProfile.objects.create(
+        key=f"{settings.VAULT_DEFAULT_PROFILE}-restore",
+        display_name="Disposable lifecycle restore profile",
+        source=VaultConnectionProfile.Source.ENVIRONMENT,
+        enabled=True,
+        read_only=True,
+        environment_locked=True,
+        endpoint_origin=endpoint_origin,
+        bucket=vault.config.bucket,
+        region=vault.config.region,
+        dataset_id=profile.dataset_id,
+        production_source_id=profile.production_source_id,
+        credential_alias="environment:ARTIFACT_VAULT",
+    )
+    restore_profile.fingerprint = profile_fingerprint(restore_profile)
+    restore_profile.save(update_fields=["fingerprint", "updated_at"])
     restore_job = VaultJob.objects.create(
         operation="restore_generation",
         status=VaultJob.Status.RUNNING,
-        profile=profile,
-        profile_fingerprint=profile.fingerprint,
-        dataset_id=profile.dataset_id,
+        profile=restore_profile,
+        profile_fingerprint=restore_profile.fingerprint,
+        dataset_id=restore_profile.dataset_id,
         generation_id=generation.generation_id,
         idempotency_key=f"maintenance-e2e-restore:{uuid.uuid4()}",
         requested_by_id=actor.pk,
         requested_by_name=actor.username,
     )
-    workspace = run_restore_job(
-        restore_job,
-        vault=vault,
-        run_rehearsal=True,
+    staging_identity = replace(
+        settings.ENV_IDENTITY,
+        app_env=AppEnv.STAGING,
+        dataset_id="maintenance-lifecycle-stage",
+        authoritative_dataset_id=profile.dataset_id,
+        restore_source_dataset_id=profile.dataset_id,
+        backup_role=BackupRole.READER,
     )
+    with override_settings(ENV_IDENTITY=staging_identity):
+        workspace = run_restore_job(
+            restore_job,
+            vault=vault,
+            run_rehearsal=True,
+        )
     if (
         workspace.state != RestoreWorkspace.State.ACTIVATION_READY
-        or workspace.generation_id != generation.pk
+        or workspace.generation.generation_id != generation.generation_id
         or workspace.manifest_digest != verified.manifest_digest
         or workspace.validation_evidence.get("manifest_digest")
         != verified.manifest_digest
@@ -420,7 +448,7 @@ def publish_and_restore() -> None:
 
     journey = {
         "schema_version": 1,
-        "profile_key": profile.key,
+        "profile_key": restore_profile.key,
         "publication_job_id": str(publication_job.public_id),
         "restore_job_id": str(restore_job.public_id),
         "workspace_id": str(workspace.public_id),
