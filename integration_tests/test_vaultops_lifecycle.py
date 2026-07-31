@@ -8,6 +8,7 @@ import os
 import sqlite3
 import tempfile
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 os.environ.setdefault(
@@ -18,11 +19,13 @@ import django
 
 django.setup()
 
+from django.conf import settings
 from django.core.cache import cache
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 
 from core.artifact_vault import ArtifactVault
+from core.environment import AppEnv, BackupRole
 from core.lease import (
     LeaseConflict,
     LeaseLost,
@@ -228,20 +231,44 @@ class VaultOpsLifecycleIntegrationTests(TransactionTestCase):
         self.assertEqual(verified.manifest_digest, generation.manifest_digest)
         self.assertEqual(verified.file_count, 1)
 
+        restore_profile = VaultConnectionProfile.objects.create(
+            key="vaultops-ci-reader",
+            display_name="Vaultops CI restore reader",
+            source=VaultConnectionProfile.Source.ENVIRONMENT,
+            enabled=True,
+            read_only=True,
+            environment_locked=True,
+            endpoint_origin=self.vault.config.endpoint,
+            bucket=self.vault.config.bucket,
+            region=self.vault.config.region,
+            dataset_id=DATASET_ID,
+            production_source_id=SOURCE_ID,
+        )
+        restore_profile.fingerprint = profile_fingerprint(restore_profile)
+        restore_profile.save(update_fields=["fingerprint", "updated_at"])
         restore_job = VaultJob.objects.create(
             operation="restore_generation",
             status=VaultJob.Status.RUNNING,
-            profile=self.profile,
-            profile_fingerprint=self.profile.fingerprint,
+            profile=restore_profile,
+            profile_fingerprint=restore_profile.fingerprint,
             dataset_id=DATASET_ID,
             generation_id=generation.generation_id,
             idempotency_key=f"restore:{uuid.uuid4()}",
         )
-        workspace = run_restore_job(
-            restore_job,
-            vault=self.vault,
-            run_rehearsal=False,
+        staging_identity = replace(
+            settings.ENV_IDENTITY,
+            app_env=AppEnv.STAGING,
+            dataset_id="ai-sahakar-stage",
+            authoritative_dataset_id=DATASET_ID,
+            restore_source_dataset_id=DATASET_ID,
+            backup_role=BackupRole.READER,
         )
+        with override_settings(ENV_IDENTITY=staging_identity):
+            workspace = run_restore_job(
+                restore_job,
+                vault=self.vault,
+                run_rehearsal=False,
+            )
         self.assertEqual(workspace.state, "activation_ready")
         self.assertTrue(Path(workspace.runtime_path, "db.sqlite3").is_file())
         self.assertEqual(
