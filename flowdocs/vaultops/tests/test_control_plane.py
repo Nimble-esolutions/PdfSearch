@@ -583,6 +583,124 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
         )
         self.assertEqual(state["reason_code"], "critical_job_unhealthy")
 
+    def test_verified_restore_supersedes_same_artifact_failure(self):
+        now = timezone.now()
+        generation = ArtifactGeneration.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            generation_id="restored-generation",
+            manifest_digest="d" * 64,
+        )
+        VaultDatasetProjection.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_state="verified",
+            authoritative_generation_id=generation.generation_id,
+            inventory_observed_at=now,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id="staging-01",
+            status="not_ready",
+            observed_at=now,
+        )
+        failed = VaultJob.objects.create(
+            operation="restore",
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            generation_id=generation.generation_id,
+            manifest_digest=generation.manifest_digest,
+            status=VaultJob.Status.TERMINAL_FAILED,
+            idempotency_key="failed-restore",
+        )
+        succeeded = VaultJob.objects.create(
+            operation="restore",
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            generation_id=generation.generation_id,
+            manifest_digest=generation.manifest_digest,
+            status=VaultJob.Status.SUCCEEDED,
+            idempotency_key="successful-restore",
+        )
+        RestoreWorkspace.objects.create(
+            job=succeeded,
+            generation=generation,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=generation.manifest_digest,
+        )
+
+        state = build_authority_state(
+            profile_key=self.profile.key,
+            dataset_id=self.profile.dataset_id,
+            deployment_id="staging-01",
+        )
+
+        self.assertIsNone(state["critical_job"])
+        self.assertNotIn("critical_job_unhealthy", state["blocking_reasons"])
+        self.assertIn("runtime_not_ready", state["blocking_reasons"])
+        self.assertTrue(VaultJob.objects.filter(pk=failed.pk).exists())
+
+    def test_success_for_different_artifact_does_not_supersede_failure(self):
+        now = timezone.now()
+        failed_generation = ArtifactGeneration.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            generation_id="failed-generation",
+            manifest_digest="e" * 64,
+        )
+        successful_generation = ArtifactGeneration.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            generation_id="successful-generation",
+            manifest_digest="f" * 64,
+        )
+        VaultDatasetProjection.objects.create(
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            inventory_state="verified",
+            authoritative_generation_id=successful_generation.generation_id,
+            inventory_observed_at=now,
+        )
+        RuntimePointerObservation.objects.create(
+            deployment_id="staging-01",
+            status="ready",
+            observed_at=now,
+        )
+        failed = VaultJob.objects.create(
+            operation="restore",
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            generation_id=failed_generation.generation_id,
+            manifest_digest=failed_generation.manifest_digest,
+            status=VaultJob.Status.TERMINAL_FAILED,
+            idempotency_key="different-failed-restore",
+        )
+        succeeded = VaultJob.objects.create(
+            operation="restore",
+            profile=self.profile,
+            dataset_id=self.profile.dataset_id,
+            generation_id=successful_generation.generation_id,
+            manifest_digest=successful_generation.manifest_digest,
+            status=VaultJob.Status.SUCCEEDED,
+            idempotency_key="different-successful-restore",
+        )
+        RestoreWorkspace.objects.create(
+            job=succeeded,
+            generation=successful_generation,
+            state=RestoreWorkspace.State.ACTIVATION_READY,
+            manifest_digest=successful_generation.manifest_digest,
+        )
+
+        state = build_authority_state(
+            profile_key=self.profile.key,
+            dataset_id=self.profile.dataset_id,
+            deployment_id="staging-01",
+        )
+
+        self.assertEqual(
+            state["critical_job"]["public_id"], str(failed.public_id)
+        )
+        self.assertIn("critical_job_unhealthy", state["blocking_reasons"])
+
     @override_settings(VAULT_DEFAULT_PROFILE="test-profile")
     def test_dashboard_authority_summary_has_fixed_control_query_budget(self):
         now = timezone.now()

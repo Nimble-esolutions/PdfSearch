@@ -316,7 +316,8 @@ REASONS = {
     "runtime_not_ready": (
         "Runtime is not ready",
         "The runtime does not yet satisfy the verified readiness conditions.",
-        "Activation remains unavailable.",
+        "For first activation, use an activation-ready restore workspace; "
+        "all signed activation checks still apply.",
         "Review restore evidence",
         "restore",
         "warning",
