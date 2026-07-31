@@ -728,9 +728,16 @@ class RehearsalTests(SimpleTestCase):
                 "core.rehearsal.subprocess.run",
                 return_value=SimpleNamespace(returncode=0),
             ) as run:
-                evidence = rehearse_migrations(
-                    source, workspace_path=workspace
-                )
+                with patch.dict(
+                    os.environ,
+                    {
+                        "MAINTENANCE_CANDIDATE_PREPARATION_ENABLED": "1",
+                        "VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH": "1",
+                    },
+                ):
+                    evidence = rehearse_migrations(
+                        source, workspace_path=workspace
+                    )
         self.assertTrue(evidence["success"])
         self.assertNotIn("source_db", evidence)
         self.assertEqual(
@@ -748,6 +755,30 @@ class RehearsalTests(SimpleTestCase):
         self.assertEqual(
             run.call_args.kwargs["env"][
                 "STAGING_INITIAL_ACTIVATION_ENABLED"
+            ],
+            "0",
+        )
+        self.assertEqual(
+            run.call_args.kwargs["env"][
+                "VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH"
+            ],
+            "0",
+        )
+        self.assertEqual(
+            run.call_args.kwargs["env"][
+                "MAINTENANCE_CANDIDATE_PREPARATION_ENABLED"
+            ],
+            "0",
+        )
+        self.assertEqual(
+            run.call_args.kwargs["env"][
+                "MAINTENANCE_CANDIDATE_WRITER_MODE"
+            ],
+            "0",
+        )
+        self.assertEqual(
+            run.call_args.kwargs["env"][
+                "MAINTENANCE_CANDIDATE_EXECUTION"
             ],
             "0",
         )
