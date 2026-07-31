@@ -553,7 +553,7 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
             observed_at=now,
         )
         unhealthy = VaultJob.objects.create(
-            operation="restore",
+            operation="restore_generation",
             profile=self.profile,
             dataset_id=self.profile.dataset_id,
             status=VaultJob.Status.TERMINAL_FAILED,
@@ -604,7 +604,7 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
             observed_at=now,
         )
         failed = VaultJob.objects.create(
-            operation="restore",
+            operation="restore_generation",
             profile=self.profile,
             dataset_id=self.profile.dataset_id,
             generation_id=generation.generation_id,
@@ -613,7 +613,7 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
             idempotency_key="failed-restore",
         )
         succeeded = VaultJob.objects.create(
-            operation="restore",
+            operation="restore_generation",
             profile=self.profile,
             dataset_id=self.profile.dataset_id,
             generation_id=generation.generation_id,
@@ -666,7 +666,7 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
             observed_at=now,
         )
         failed = VaultJob.objects.create(
-            operation="restore",
+            operation="restore_generation",
             profile=self.profile,
             dataset_id=self.profile.dataset_id,
             generation_id=failed_generation.generation_id,
@@ -675,7 +675,7 @@ class AuthorityReadModelTests(ControlPlaneTestCase):
             idempotency_key="different-failed-restore",
         )
         succeeded = VaultJob.objects.create(
-            operation="restore",
+            operation="restore_generation",
             profile=self.profile,
             dataset_id=self.profile.dataset_id,
             generation_id=successful_generation.generation_id,

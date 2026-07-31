@@ -303,7 +303,7 @@ def _unresolved_unhealthy_job(profile, dataset_id):
     successful_restore = VaultJob.objects.filter(
         profile_id=OuterRef("profile_id"),
         dataset_id=OuterRef("dataset_id"),
-        operation="restore",
+        operation="restore_generation",
         generation_id=OuterRef("generation_id"),
         manifest_digest=OuterRef("manifest_digest"),
         status=VaultJob.Status.SUCCEEDED,
