@@ -1730,6 +1730,83 @@ class SupervisorProtocolTests(SimpleTestCase):
         self.assertEqual(web._read_ack(self.intent, "web")["state"], "reconciled")
         self.assertEqual(self._result()["status"], "committed")
 
+    def test_maintenance_reconciles_durable_result_after_web_failure(self):
+        maintenance = self._quiesce()
+
+        def web_command(command, **kwargs):
+            if "reconcile_activation_result" in command:
+                return SimpleNamespace(returncode=1)
+            success_path = kwargs["env"].get(
+                "ACTIVATION_VERIFICATION_SUCCESS_PATH"
+            )
+            if success_path:
+                write_runtime_verification_success(
+                    success_path,
+                    build_unavailable_attestation(()),
+                )
+            return SimpleNamespace(returncode=0)
+
+        web = self._supervisor(
+            "web",
+            run_command=web_command,
+            maintenance=maintenance,
+        )
+        web.web_tick()
+        self.assertEqual(web._read_ack(self.intent, "web")["state"], "committed")
+
+        reconciliation_calls = {"count": 0}
+
+        def maintenance_command(command, **_kwargs):
+            if "reconcile_activation_result" in command:
+                reconciliation_calls["count"] += 1
+            return SimpleNamespace(returncode=0)
+
+        maintenance.run_command = maintenance_command
+        maintenance.maintenance_tick()
+
+        self.assertEqual(reconciliation_calls["count"], 1)
+        self.assertEqual(
+            maintenance._read_ack(self.intent, "maintenance")["state"],
+            "reconciled",
+        )
+        self.assertEqual(maintenance.paused_for_intent, "")
+
+        maintenance.maintenance_tick()
+        self.assertEqual(reconciliation_calls["count"], 1)
+
+    def test_maintenance_retries_transient_result_projection_failure(self):
+        maintenance = self._quiesce()
+        web = self._supervisor("web", maintenance=maintenance)
+        web._reconcile_result_best_effort = lambda _intent: False
+        web.web_tick()
+
+        reconciliation_calls = {"count": 0}
+
+        def maintenance_command(command, **_kwargs):
+            if "reconcile_activation_result" in command:
+                reconciliation_calls["count"] += 1
+                return SimpleNamespace(
+                    returncode=1
+                    if reconciliation_calls["count"] == 1
+                    else 0
+                )
+            return SimpleNamespace(returncode=0)
+
+        maintenance.run_command = maintenance_command
+        maintenance.maintenance_tick()
+        self.assertNotEqual(
+            maintenance._read_ack(self.intent, "maintenance")["state"],
+            "reconciled",
+        )
+
+        maintenance.maintenance_tick()
+        self.assertEqual(reconciliation_calls["count"], 2)
+        self.assertEqual(
+            maintenance._read_ack(self.intent, "maintenance")["state"],
+            "reconciled",
+        )
+        self.assertEqual(self._result()["status"], "committed")
+
     def test_stale_maintenance_ack_cannot_release_barrier(self):
         stale = sign_document(
             {
