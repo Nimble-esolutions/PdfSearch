@@ -2895,8 +2895,6 @@ msgstr ""
 "प्रथम सक्रियकरणासाठी, सक्रियकरणासाठी तयार पुनर्स्थापना कार्यक्षेत्र वापरा; सर्व "
 "स्वाक्षरीत सक्रियकरण तपासण्या तरीही लागू राहतात."
 
-msgid "Review restore evidence"
-msgstr "पुनर्स्थापना पुराव्याचा आढावा घ्या"
 
 msgid "A critical Vault job needs attention"
 msgstr "व्हॉल्टमधील एका गंभीर कार्याकडे लक्ष देणे आवश्यक आहे"
@@ -4642,3 +4640,130 @@ msgstr "कोणत्याही दूरस्थ प्रवेशाप�
 
 msgid "Review the approved restore profile"
 msgstr "मान्यताप्राप्त पुनर्स्थापना प्रोफाइलचा आढावा घ्या"
+
+# Simplified backup and restore operations.
+msgid "Backup & Restore — CC & RCS Maharashtra"
+msgstr "बॅकअप आणि पुनर्स्थापना — सहकार आयुक्त व निबंधक, महाराष्ट्र"
+
+msgid "Backup & Restore"
+msgstr "बॅकअप आणि पुनर्स्थापना"
+
+msgid "Keep production data protected and prepare an approved production backup in this environment."
+msgstr "उत्पादन डेटा सुरक्षित ठेवा आणि या पर्यावरणात मान्यताप्राप्त उत्पादन बॅकअप तयार करा."
+
+msgid "Support tools"
+msgstr "सहाय्य साधने"
+
+msgid "Current status"
+msgstr "सध्याची स्थिती"
+
+msgid "Operation in progress"
+msgstr "कार्य सुरू आहे"
+
+msgid "Ready for the next step"
+msgstr "पुढील टप्प्यासाठी सज्ज"
+
+msgid "Review required"
+msgstr "आढावा आवश्यक"
+
+msgid "Operation unavailable"
+msgstr "कार्य उपलब्ध नाही"
+
+msgid "Production is ready to create another immutable backup."
+msgstr "उत्पादन प्रणाली आणखी एक अपरिवर्तनीय बॅकअप तयार करण्यासाठी सज्ज आहे."
+
+msgid "This environment is ready to prepare the latest approved production backup."
+msgstr "हे पर्यावरण नवीनतम मान्यताप्राप्त उत्पादन बॅकअप तयार करण्यासाठी सज्ज आहे."
+
+msgid "Back up now"
+msgstr "आता बॅकअप घ्या"
+
+msgid "Prepare latest production backup"
+msgstr "नवीनतम उत्पादन बॅकअप तयार करा"
+
+msgid "Review and activate restored data"
+msgstr "पुनर्स्थापित डेटाचा आढावा घेऊन सक्रिय करा"
+
+msgid "Wait for the current operation"
+msgstr "सध्याचे कार्य पूर्ण होईपर्यंत प्रतीक्षा करा"
+
+msgid "Review support guidance"
+msgstr "सहाय्य मार्गदर्शनाचा आढावा घ्या"
+
+msgid "Creates and verifies an immutable backup candidate. It does not move remote authority."
+msgstr "अपरिवर्तनीय बॅकअप उमेदवार तयार करून पडताळतो. यामुळे दूरस्थ अधिकृत स्थिती बदलत नाही."
+
+msgid "Downloads and verifies the latest approved backup in an isolated workspace. Active data is not changed."
+msgstr "नवीनतम मान्यताप्राप्त बॅकअप स्वतंत्र कार्यक्षेत्रात डाउनलोड करून पडताळतो. सक्रिय डेटा बदलत नाही."
+
+msgid "Opens the existing typed confirmation before active data can change."
+msgstr "सक्रिय डेटा बदलण्यापूर्वी विद्यमान टाइप केलेली पुष्टी उघडतो."
+
+msgid "Review activation"
+msgstr "सक्रियकरणाचा आढावा घ्या"
+
+msgid "No additional request is needed now. Refresh this page after the current operation finishes."
+msgstr "आत्ता आणखी विनंती आवश्यक नाही. सध्याचे कार्य पूर्ण झाल्यानंतर हे पृष्ठ रीफ्रेश करा."
+
+msgid "Review the guidance above or open support tools to resolve the blocked setting safely."
+msgstr "अवरोधित संयोजना सुरक्षितपणे सोडवण्यासाठी वरील मार्गदर्शन पहा किंवा सहाय्य साधने उघडा."
+
+msgid "Recent activity"
+msgstr "अलीकडील कार्य"
+
+msgid "Latest receipt"
+msgstr "नवीनतम पावती"
+
+msgid "Receipt"
+msgstr "पावती"
+
+msgid "No backup or restore receipt is recorded yet."
+msgstr "अद्याप कोणतीही बॅकअप किंवा पुनर्स्थापना पावती नोंदलेली नाही."
+
+msgid "Support tools and technical evidence"
+msgstr "सहाय्य साधने आणि तांत्रिक पुरावा"
+
+msgid "Use specialist controls only for investigation, recovery, retention, or configuration work."
+msgstr "विशेषज्ञ नियंत्रणे केवळ तपास, पुनर्प्राप्ती, धारणा किंवा संयोजना कार्यासाठी वापरा."
+
+msgid "Open support tools"
+msgstr "सहाय्य साधने उघडा"
+
+msgid "Production backup is unavailable here"
+msgstr "येथे उत्पादन बॅकअप उपलब्ध नाही"
+
+msgid "Only the configured production writer may create or publish backups for its authoritative dataset."
+msgstr "केवळ संयोजित उत्पादन लेखक त्याच्या अधिकृत डेटासेटसाठी बॅकअप तयार किंवा प्रकाशित करू शकतो."
+
+msgid "No backup job was created and remote authority remains unchanged."
+msgstr "बॅकअप कार्य तयार झाले नाही आणि दूरस्थ अधिकृत स्थिती बदललेली नाही."
+
+msgid "Production backup is disabled"
+msgstr "उत्पादन बॅकअप अक्षम आहे"
+
+msgid "This deployment is not configured to create immutable Vault backups."
+msgstr "ही तैनाती अपरिवर्तनीय व्हॉल्ट बॅकअप तयार करण्यासाठी संयोजित केलेली नाही."
+
+msgid "No backup job can be queued until the deployed setting is enabled."
+msgstr "तैनात संयोजना सक्षम होईपर्यंत बॅकअप कार्य रांगेत लावता येणार नाही."
+
+msgid "Restore preparation is disabled"
+msgstr "पुनर्स्थापना तयारी अक्षम आहे"
+
+msgid "This deployment is not configured to prepare data from an approved Vault backup."
+msgstr "ही तैनाती मान्यताप्राप्त व्हॉल्ट बॅकअपमधून डेटा तयार करण्यासाठी संयोजित केलेली नाही."
+
+msgid "No restore job can be queued until the deployed setting is enabled."
+msgstr "तैनात संयोजना सक्षम होईपर्यंत पुनर्स्थापना कार्य रांगेत लावता येणार नाही."
+
+msgid "Restore workspace needs specialist review"
+msgstr "पुनर्स्थापना कार्यक्षेत्रासाठी विशेषज्ञ आढावा आवश्यक आहे"
+
+msgid "More than one activation-ready workspace is bound to the latest restore receipt."
+msgstr "नवीनतम पुनर्स्थापना पावतीशी एकापेक्षा अधिक सक्रियकरण-सज्ज कार्यक्षेत्रे जोडलेली आहेत."
+
+msgid "Ordinary activation remains blocked to prevent choosing the wrong prepared data."
+msgstr "चुकीचा तयार डेटा निवडला जाऊ नये म्हणून सामान्य सक्रियकरण अवरोधित राहते."
+
+msgid "Review restore evidence"
+msgstr "पुनर्स्थापना पुराव्याचा आढावा घ्या"

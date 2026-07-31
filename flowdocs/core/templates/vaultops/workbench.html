@@ -1,17 +1,21 @@
 {% extends "base.html" %}
 {% load static i18n %}
 
-{% block title %}{% if section == "maintenance" %}{% trans "Documents & Search — CC & RCS Maharashtra" %}{% else %}{% trans "Vault & Recovery — CC & RCS Maharashtra" %}{% endif %}{% endblock %}
+{% block title %}{% if section == "operations" %}{% trans "Backup & Restore — CC & RCS Maharashtra" %}{% elif section == "maintenance" %}{% trans "Documents & Search — CC & RCS Maharashtra" %}{% else %}{% trans "Vault & Recovery — CC & RCS Maharashtra" %}{% endif %}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'main/css/vault-workbench.css' %}">
 {% endblock %}
 
 {% block content %}
-<div class="vault-workbench" data-state-url="{% url 'vaultops:state' %}{% if request.GET.profile %}?profile={{ request.GET.profile|urlencode }}{% endif %}">
+<div class="vault-workbench" data-state-url="{% url 'vaultops:state' %}{% if section != 'operations' and request.GET.profile %}?profile={{ request.GET.profile|urlencode }}{% endif %}">
   <header class="vault-heading">
     <div>
-      {% if section == "maintenance" %}
+      {% if section == "operations" %}
+      <p class="vault-kicker">{% trans "Operations" %}</p>
+      <h2>{% trans "Backup & Restore" %}</h2>
+      <p>{% trans "Keep production data protected and prepare an approved production backup in this environment." %}</p>
+      {% elif section == "maintenance" %}
       <p class="vault-kicker">{% trans "Operations / Daily document care" %}</p>
       <h2>{% trans "Documents & Search" %}</h2>
       <p>{% trans "Check local documents, repair stored search indexes, or prepare a bounded reindex. Remote Vault authority is not changed." %}</p>
@@ -27,6 +31,7 @@
     </p>
   </header>
 
+  {% if section != "operations" %}
   {% if section == "maintenance" %}
   <details class="vault-advanced-summary">
     <summary>{% trans "Show advanced Vault and runtime evidence" %}</summary>
@@ -46,19 +51,26 @@
     </dl>
   </section>
   {% if section == "maintenance" %}</details>{% endif %}
+  {% endif %}
 
   <nav class="vault-section-nav" aria-label="{% trans 'Workbench sections' %}">
-    <a class="vault-section-nav__primary" href="?section=maintenance"{% if section == "maintenance" %} aria-current="page"{% endif %}>{% trans "Documents & Search" %}</a>
-    <span class="vault-section-nav__label">{% trans "Advanced Vault & Recovery" %}</span>
-    <a href="?section=overview"{% if section == "overview" %} aria-current="page"{% endif %}>{% trans "Overview" %}</a>
-    <a href="?section=sync"{% if section == "sync" %} aria-current="page"{% endif %}>{% trans "Active Sync" %}</a>
-    <a href="?section=generations"{% if section == "generations" %} aria-current="page"{% endif %}>{% trans "Generations" %}</a>
-    <a href="?section=restore"{% if section == "restore" %} aria-current="page"{% endif %}>{% trans "Restore & Activation" %}</a>
-    <a href="?section=jobs"{% if section == "jobs" %} aria-current="page"{% endif %}>{% trans "Jobs & Audit" %}</a>
-    <a href="?section=retention"{% if section == "retention" %} aria-current="page"{% endif %}>{% trans "Retention & GC" %}</a>
-    <a href="?section=configuration"{% if section == "configuration" %} aria-current="page"{% endif %}>{% trans "Configuration" %}</a>
+    <a class="vault-section-nav__primary" href="?section=operations"{% if section == "operations" %} aria-current="page"{% endif %}>{% trans "Backup & Restore" %}</a>
+    <details class="operations-support-nav"{% if support_mode %} open{% endif %}>
+      <summary>{% trans "Support tools" %}</summary>
+      <div>
+        <a href="?section=maintenance"{% if section == "maintenance" %} aria-current="page"{% endif %}>{% trans "Documents & Search" %}</a>
+        <a href="?section=overview"{% if section == "overview" %} aria-current="page"{% endif %}>{% trans "Overview" %}</a>
+        <a href="?section=sync"{% if section == "sync" %} aria-current="page"{% endif %}>{% trans "Active Sync" %}</a>
+        <a href="?section=generations"{% if section == "generations" %} aria-current="page"{% endif %}>{% trans "Generations" %}</a>
+        <a href="?section=restore"{% if section == "restore" %} aria-current="page"{% endif %}>{% trans "Restore & Activation" %}</a>
+        <a href="?section=jobs"{% if section == "jobs" %} aria-current="page"{% endif %}>{% trans "Jobs & Audit" %}</a>
+        <a href="?section=retention"{% if section == "retention" %} aria-current="page"{% endif %}>{% trans "Retention & GC" %}</a>
+        <a href="?section=configuration"{% if section == "configuration" %} aria-current="page"{% endif %}>{% trans "Configuration" %}</a>
+      </div>
+    </details>
   </nav>
 
+  {% if section != "operations" %}
   {% if state.authority.blocking_reasons or state.readiness.issues %}
   <section class="vault-alert vault-alert--warning" role="status" aria-labelledby="vault-alert-heading">
     <h3 id="vault-alert-heading">{% trans "Evidence requires attention" %}</h3>
@@ -82,6 +94,98 @@
     <h3 id="local-posture-heading">{{ state.readiness.local_development.title }}</h3>
     <p>{{ state.readiness.local_development.message }}</p>
   </section>
+  {% endif %}
+  {% endif %}
+
+  {% if section == "operations" %}
+  <div class="operations-home" aria-labelledby="operations-status-heading">
+    <section class="operations-status status--{{ state.operations.posture }}" aria-live="polite">
+      <p>{% trans "Current status" %}</p>
+      <h3 id="operations-status-heading">
+        {% if state.operations.posture == "working" %}{% trans "Operation in progress" %}
+        {% elif state.operations.posture == "ready" %}{% trans "Ready for the next step" %}
+        {% elif state.operations.posture == "attention" %}{% trans "Review required" %}
+        {% else %}{% trans "Operation unavailable" %}{% endif %}
+      </h3>
+      {% if state.operations.current_operation %}
+      <p>{{ state.operations.current_operation.operation_label }} · {{ state.operations.current_operation.status_label|default:state.operations.current_operation.status }}</p>
+      <code lang="en" dir="ltr">{{ state.operations.current_operation.public_id }}</code>
+      {% elif state.operations.reason_code %}
+      {% include "components/operator_evidence.html" with presentation=state.operations.presentation technical_code=state.operations.reason_code show_action=False only %}
+      {% elif state.operations.environment_role == "backup_source" %}
+      <p>{% trans "Production is ready to create another immutable backup." %}</p>
+      {% else %}
+      <p>{% trans "This environment is ready to prepare the latest approved production backup." %}</p>
+      {% endif %}
+    </section>
+
+    <section class="operations-action" aria-labelledby="operations-action-heading">
+      <header>
+        <p>{% trans "Next step" %}</p>
+        <h3 id="operations-action-heading">
+          {% if state.operations.primary_action.kind == "backup" %}{% trans "Back up now" %}
+          {% elif state.operations.primary_action.kind == "prepare_restore" %}{% trans "Prepare latest production backup" %}
+          {% elif state.operations.primary_action.kind == "activate_restore" %}{% trans "Review and activate restored data" %}
+          {% elif state.operations.posture == "working" %}{% trans "Wait for the current operation" %}
+          {% else %}{% trans "Review support guidance" %}{% endif %}
+        </h3>
+      </header>
+      {% if state.operations.primary_action.kind == "backup" %}
+      <p>{% trans "Creates and verifies an immutable backup candidate. It does not move remote authority." %}</p>
+      <form method="post" action="{% url 'vaultops:sync_run' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:operations-backup">
+        <input type="hidden" name="state_version" value="{{ state.state_version }}">
+        <button class="vault-button" type="submit">{% trans "Back up now" %}</button>
+      </form>
+      {% elif state.operations.primary_action.kind == "prepare_restore" %}
+      <p>{% trans "Downloads and verifies the latest approved backup in an isolated workspace. Active data is not changed." %}</p>
+      <form method="post" action="{% url 'vaultops:restore_start' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:operations-restore">
+        <input type="hidden" name="state_version" value="{{ state.state_version }}">
+        <input type="hidden" name="profile_key" value="{{ state.operations.primary_action.profile_key }}">
+        <input type="hidden" name="generation_id" value="">
+        <button class="vault-button" type="submit">{% trans "Prepare latest production backup" %}</button>
+      </form>
+      {% elif state.operations.primary_action.kind == "activate_restore" %}
+      <p>{% trans "Opens the existing typed confirmation before active data can change." %}</p>
+      <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:operations-activate">
+        <input type="hidden" name="action" value="activate_workspace">
+        <input type="hidden" name="target" value="{{ state.operations.primary_action.target_public_id }}">
+        <button class="vault-button vault-button--danger" type="submit">{% trans "Review activation" %}</button>
+      </form>
+      {% else %}
+      {% if state.operations.posture == "working" %}
+      <p>{% trans "No additional request is needed now. Refresh this page after the current operation finishes." %}</p>
+      {% else %}
+      <p>{% trans "Review the guidance above or open support tools to resolve the blocked setting safely." %}</p>
+      {% endif %}
+      {% endif %}
+    </section>
+
+    <section class="operations-receipt" aria-labelledby="operations-receipt-heading">
+      <header><p>{% trans "Recent activity" %}</p><h3 id="operations-receipt-heading">{% trans "Latest receipt" %}</h3></header>
+      {% if state.operations.latest_receipt %}
+      <dl class="vault-facts">
+        <div><dt>{% trans "Operation" %}</dt><dd>{{ state.operations.latest_receipt.operation_label }}</dd></div>
+        <div><dt>{% trans "Status" %}</dt><dd>{{ state.operations.latest_receipt.status_label|default:state.operations.latest_receipt.status }}</dd></div>
+        {% if state.operations.latest_receipt.generation_id %}<div><dt>{% trans "Backup" %}</dt><dd><code lang="en" dir="ltr">{{ state.operations.latest_receipt.generation_id }}</code></dd></div>{% endif %}
+        <div><dt>{% trans "Receipt" %}</dt><dd><code lang="en" dir="ltr">{{ state.operations.latest_receipt.public_id }}</code></dd></div>
+      </dl>
+      {% else %}
+      <p class="vault-empty">{% trans "No backup or restore receipt is recorded yet." %}</p>
+      {% endif %}
+    </section>
+
+    <details class="operations-support-evidence">
+      <summary>{% trans "Support tools and technical evidence" %}{% if state.operations.support.issue_count %} · {{ state.operations.support.issue_count }}{% endif %}</summary>
+      <p>{% trans "Use specialist controls only for investigation, recovery, retention, or configuration work." %}</p>
+      <a class="vault-button vault-button--secondary" href="?section=overview">{% trans "Open support tools" %}</a>
+    </details>
+  </div>
   {% endif %}
 
   {% if section == "overview" %}
