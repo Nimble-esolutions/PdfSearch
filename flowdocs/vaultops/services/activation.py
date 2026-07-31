@@ -480,8 +480,13 @@ def schedule_activation(
             previous_generation = ArtifactGeneration.objects.get(
                 deployment_id=settings.ENV_IDENTITY.deployment_id,
                 generation_id=current_pointer.generation_id,
+                manifest_digest=current_pointer.manifest_digest,
+                runtime_state=ArtifactGeneration.RuntimeState.ACTIVE,
             )
-        except ArtifactGeneration.DoesNotExist as exc:
+        except (
+            ArtifactGeneration.DoesNotExist,
+            ArtifactGeneration.MultipleObjectsReturned,
+        ) as exc:
             raise ActivationCoordinatorError(
                 "activation_previous_generation_unprojected"
             ) from exc
@@ -554,6 +559,12 @@ def schedule_activation(
         "previous_generation_id": (
             current_pointer.generation_id if current_pointer else ""
         ),
+        "previous_generation_record_id": (
+            previous_generation.pk if current_pointer else None
+        ),
+        "previous_manifest_digest": (
+            current_pointer.manifest_digest if current_pointer else ""
+        ),
         "previous_pointer_digest": (
             current_pointer.pointer_digest if current_pointer else ""
         ),
@@ -616,6 +627,14 @@ def schedule_activation(
                 checkpoint={
                     "previous_pointer_digest": (
                         current_pointer.pointer_digest
+                        if current_pointer
+                        else ""
+                    ),
+                    "previous_generation_record_id": (
+                        previous_generation.pk if current_pointer else None
+                    ),
+                    "previous_manifest_digest": (
+                        current_pointer.manifest_digest
                         if current_pointer
                         else ""
                     ),
@@ -817,15 +836,27 @@ def reconcile_activation_result(intent):
                 .get(pk=target_generation_pk)
             )
         else:
-            target = (
-                ArtifactGeneration.objects.using("control")
-                .select_for_update()
-                .get(
-                    deployment_id=intent.deployment_id,
-                    generation_id=intent.target_generation_id,
-                    manifest_digest=intent.manifest_digest,
+            try:
+                target = (
+                    ArtifactGeneration.objects.using("control")
+                    .select_for_update()
+                    .get(
+                        deployment_id=intent.deployment_id,
+                        generation_id=intent.target_generation_id,
+                        manifest_digest=intent.manifest_digest,
+                        runtime_state__in={
+                            ArtifactGeneration.RuntimeState.PENDING,
+                            ArtifactGeneration.RuntimeState.APPLYING,
+                        },
+                    )
                 )
-            )
+            except (
+                ArtifactGeneration.DoesNotExist,
+                ArtifactGeneration.MultipleObjectsReturned,
+            ) as exc:
+                raise ActivationCoordinatorError(
+                    "activation_result_identity_mismatch"
+                ) from exc
         if (
             target.deployment_id != intent.deployment_id
             or target.generation_id != intent.target_generation_id
@@ -836,12 +867,40 @@ def reconcile_activation_result(intent):
             )
         previous = None
         if not initial_activation:
-            previous = ArtifactGeneration.objects.using(
-                "control"
-            ).select_for_update().get(
-                deployment_id=intent.deployment_id,
-                generation_id=intent.previous_generation_id,
+            previous_record_id = intent.checkpoint.get(
+                "previous_generation_record_id"
             )
+            try:
+                previous_query = ArtifactGeneration.objects.using(
+                    "control"
+                ).select_for_update()
+                if previous_record_id:
+                    previous = previous_query.get(pk=previous_record_id)
+                else:
+                    previous = previous_query.get(
+                        deployment_id=intent.deployment_id,
+                        generation_id=intent.previous_generation_id,
+                        runtime_state=ArtifactGeneration.RuntimeState.ACTIVE,
+                    )
+            except (
+                ArtifactGeneration.DoesNotExist,
+                ArtifactGeneration.MultipleObjectsReturned,
+            ) as exc:
+                raise ActivationCoordinatorError(
+                    "activation_result_identity_mismatch"
+                ) from exc
+            if (
+                previous.deployment_id != intent.deployment_id
+                or previous.generation_id != intent.previous_generation_id
+                or (
+                    intent.checkpoint.get("previous_manifest_digest")
+                    and previous.manifest_digest
+                    != intent.checkpoint["previous_manifest_digest"]
+                )
+            ):
+                raise ActivationCoordinatorError(
+                    "activation_result_identity_mismatch"
+                )
         if status == "committed":
             if previous is not None:
                 previous.runtime_state = ArtifactGeneration.RuntimeState.PREVIOUS

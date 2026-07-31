@@ -984,7 +984,6 @@ class ActivationCoordinatorTests(TestCase):
         )
 
     def test_signed_commit_result_updates_independent_projections(self):
-        intent = schedule_activation(self.workspace, confirmed=True)
         publisher_profile = VaultConnectionProfile.objects.create(
             key="activation-publisher",
             display_name="Activation publisher",
@@ -999,6 +998,15 @@ class ActivationCoordinatorTests(TestCase):
             deployment_id=DEPLOYMENT_ID,
             runtime_state=ArtifactGeneration.RuntimeState.UNKNOWN,
         )
+        publisher_previous_projection = ArtifactGeneration.objects.create(
+            profile=publisher_profile,
+            dataset_id="test-dataset",
+            generation_id=CURRENT_GENERATION,
+            manifest_digest=CURRENT_DIGEST,
+            deployment_id=DEPLOYMENT_ID,
+            runtime_state=ArtifactGeneration.RuntimeState.UNKNOWN,
+        )
+        intent = schedule_activation(self.workspace, confirmed=True)
         target_pointer_document = make_pointer(
             self.target_runtime,
             TARGET_GENERATION,
@@ -1056,6 +1064,11 @@ class ActivationCoordinatorTests(TestCase):
         publisher_projection.refresh_from_db()
         self.assertEqual(
             publisher_projection.runtime_state,
+            ArtifactGeneration.RuntimeState.UNKNOWN,
+        )
+        publisher_previous_projection.refresh_from_db()
+        self.assertEqual(
+            publisher_previous_projection.runtime_state,
             ArtifactGeneration.RuntimeState.UNKNOWN,
         )
         self.assertEqual(
