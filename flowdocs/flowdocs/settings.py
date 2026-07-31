@@ -581,6 +581,9 @@ VAULT_RESTORE_ROOT = Path(
 VAULT_RESTORE_REQUIRE_SANITIZATION = _env_bool(
     'VAULT_RESTORE_REQUIRE_SANITIZATION', True
 )
+VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH = _env_bool(
+    'VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH', False
+)
 VAULT_RESTORE_MIN_FREE_BYTES = _env_nonnegative_int(
     'VAULT_RESTORE_MIN_FREE_BYTES', 0
 )
@@ -742,3 +745,14 @@ if VAULT_RESTORE_ENABLED and not VAULT_ALLOWED_S3_ENDPOINTS:
     raise ImproperlyConfigured(
         'VAULT_RESTORE_ENABLED requires VAULT_ALLOWED_S3_ENDPOINTS'
     )
+if VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH:
+    if ENV_IDENTITY.is_production or ENV_IDENTITY.app_env.value != 'staging':
+        raise ImproperlyConfigured(
+            'VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH requires '
+            'non-production staging'
+        )
+    if not VAULT_RESTORE_ENABLED or not VAULT_RESTORE_REQUIRE_SANITIZATION:
+        raise ImproperlyConfigured(
+            'VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH requires guarded '
+            'restore with sanitization'
+        )

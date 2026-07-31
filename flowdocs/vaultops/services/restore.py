@@ -417,6 +417,9 @@ def run_restore_job(
         verified.manifest,
         app_release=settings.ENV_IDENTITY.app_release_version,
         image_digest=settings.ENV_IDENTITY.app_image_digest,
+        allow_repacked_release_mismatch=(
+            settings.VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH
+        ),
     )
     if not compatibility.compatible:
         raise RestoreError("generation_compatibility_failed")

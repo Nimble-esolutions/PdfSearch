@@ -36,6 +36,7 @@ def check_generation_compatibility(
     *,
     app_release: str = "",
     image_digest: str = "",
+    allow_repacked_release_mismatch: bool = False,
 ) -> CompatibilityReport:
     """Check whether a generation manifest is compatible with the running code."""
     report = CompatibilityReport()
@@ -46,28 +47,63 @@ def check_generation_compatibility(
     _check_faiss_compat(manifest, report)
     _check_sanitization_compat(manifest, report)
 
-    if app_release and manifest.get("app_release"):
-        report.checks["app_release"] = manifest.get("app_release") == app_release
-        if not report.checks["app_release"]:
-            report.errors.append(
-                f"Generation was created with app release "
-                f"'{manifest.get('app_release')}', running '{app_release}'"
-            )
-            report.compatible = False
-    elif app_release:
-        report.checks["app_release"] = False
-        report.errors.append("Generation has no application release evidence")
-        report.compatible = False
-
-    if image_digest:
-        report.checks["image_digest"] = (
-            manifest.get("image_digest") == image_digest
-        )
-        if not report.checks["image_digest"]:
-            report.errors.append("Generation image digest is incompatible")
-            report.compatible = False
+    _check_release_identity(
+        manifest,
+        report,
+        app_release=app_release,
+        image_digest=image_digest,
+        allow_repacked_release_mismatch=allow_repacked_release_mismatch,
+    )
 
     return report
+
+
+def _check_release_identity(
+    manifest: Mapping[str, Any],
+    report: CompatibilityReport,
+    *,
+    app_release: str,
+    image_digest: str,
+    allow_repacked_release_mismatch: bool,
+) -> None:
+    manifest_release = manifest.get("app_release")
+    manifest_image = manifest.get("image_digest")
+    release_matches = not app_release or manifest_release == app_release
+    image_matches = not image_digest or manifest_image == image_digest
+
+    if app_release:
+        report.checks["app_release"] = release_matches
+    if image_digest:
+        report.checks["image_digest"] = image_matches
+    if release_matches and image_matches:
+        return
+
+    repacked_override = bool(
+        allow_repacked_release_mismatch
+        and manifest.get("read_only") is True
+        and str(manifest.get("repacked_from_generation_id") or "").strip()
+        and str(manifest_release or "").strip()
+        and str(manifest_image or "").strip()
+    )
+    report.checks["repacked_release_override"] = repacked_override
+    if repacked_override:
+        report.warnings.append(
+            "Read-only repacked generation producer identity differs from the "
+            "running staging release; structural compatibility and restore "
+            "rehearsal remain mandatory"
+        )
+        return
+
+    if app_release and not manifest_release:
+        report.errors.append("Generation has no application release evidence")
+    elif not release_matches:
+        report.errors.append(
+            f"Generation was created with app release '{manifest_release}', "
+            f"running '{app_release}'"
+        )
+    if not image_matches:
+        report.errors.append("Generation image digest is incompatible")
+    report.compatible = False
 
 
 def _check_manifest_version(manifest: Mapping[str, Any], report: CompatibilityReport) -> None:
