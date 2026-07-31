@@ -247,19 +247,20 @@ jobs:
           COMPOSE_PROJECT_NAME: pdfsearch-vault-source
         run: bash scripts/ci/run_vault_integration.sh
 
-  release:
-    name: Build and publish dev release
+  candidate:
+    name: Build and certify immutable dev candidate
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.publish == true)
-    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    environment: production
     permissions:
       contents: read
       packages: write
       id-token: write
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+      image_revision: ${{ github.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 (Node 24)
@@ -386,6 +387,58 @@ jobs:
             echo "::warning::Trivy found HIGH/CRITICAL findings; release continued with a remediation summary."
           fi
 
+      - name: Enforce image size budget
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
+          SIZE="$(docker image inspect "$IMAGE_REF" --format '{{.Size}}')"
+          MAX=$((12 * 1024 * 1024 * 1024))
+          echo "Image size: $SIZE bytes; budget: $MAX bytes"
+          test "$SIZE" -le "$MAX"
+
+  release:
+    name: Promote certified dev release
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.publish == true)
+    needs: [validate, candidate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 (Node 24)
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0 (Node 24)
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0 (Node 24)
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify certified candidate handoff
+        env:
+          DIGEST: ${{ needs.candidate.outputs.image_digest }}
+          REVISION: ${{ needs.candidate.outputs.image_revision }}
+        run: |
+          set -euo pipefail
+          test "$REVISION" = "$GITHUB_SHA"
+          printf '%s\n' "$DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
+          docker buildx imagetools inspect "$IMAGE_REF" >/dev/null
+
       - name: Guard against a newer dev commit
         id: release_guard
         run: |
@@ -398,22 +451,10 @@ jobs:
             echo "eligible=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Enforce image size budget
-        if: steps.release_guard.outputs.eligible == 'true'
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          set -euo pipefail
-          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
-          SIZE="$(docker image inspect "$IMAGE_REF" --format '{{.Size}}')"
-          MAX=$((12 * 1024 * 1024 * 1024))
-          echo "Image size: $SIZE bytes; budget: $MAX bytes"
-          test "$SIZE" -le "$MAX"
-
       - name: Promote compatibility tags
         if: steps.release_guard.outputs.eligible == 'true'
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ needs.candidate.outputs.image_digest }}
         run: |
           set -euo pipefail
           IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
@@ -445,7 +486,7 @@ jobs:
       - name: Publish release evidence
         if: steps.release_guard.outputs.eligible == 'true'
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ needs.candidate.outputs.image_digest }}
         run: |
           IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
           {
