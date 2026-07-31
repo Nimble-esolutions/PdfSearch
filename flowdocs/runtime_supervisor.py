@@ -293,6 +293,12 @@ class RuntimeSupervisor:
             except SupervisorError:
                 continue
             if self._result_exists(intent):
+                maintenance_ack = self._read_ack(intent, "maintenance")
+                if (
+                    not maintenance_ack
+                    or maintenance_ack.get("state") != "reconciled"
+                ) and self._reconcile_result_best_effort(intent):
+                    self._write_ack(intent, "reconciled")
                 if self.paused_for_intent == intent["intent_id"]:
                     self.start_child()
                     self.paused_for_intent = ""
