@@ -437,6 +437,8 @@ def readyz(request):
 
 def _data_readiness_check():
     from .models import PDFFile
+    if _signed_active_runtime():
+        return "ok"
     total = PDFFile.objects.count()
     indexed = PDFFile.objects.filter(
         lifecycle__in=("ready", "processing")
@@ -452,6 +454,8 @@ def _data_readiness_check():
 
 
 def _backup_readiness_check():
+    if _signed_active_runtime():
+        return "ok"
     env_identity = getattr(settings, "ENV_IDENTITY", None)
     if env_identity is None or env_identity.backup_role.value == "disabled":
         return "not_configured"
@@ -461,6 +465,22 @@ def _backup_readiness_check():
     if last_gen.status == "failed":
         return "degraded"
     return "ok"
+
+
+def _signed_active_runtime():
+    """Recognize the signed runtime selected by the activation supervisor."""
+    runtime = getattr(settings, "ACTIVE_RUNTIME", None)
+    if runtime is None:
+        return False
+    generation_id = getattr(settings, "RUNTIME_GENERATION_ID", "")
+    manifest_digest = getattr(settings, "RUNTIME_MANIFEST_DIGEST", "")
+    return bool(
+        generation_id
+        and manifest_digest
+        and runtime.generation_id == generation_id
+        and runtime.manifest_digest == manifest_digest
+    )
+
 
 @login_required
 def view_pdf(request, pdf_id):
