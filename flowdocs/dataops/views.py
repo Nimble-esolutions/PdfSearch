@@ -22,6 +22,7 @@ from django.views.decorators.http import require_GET, require_POST
 from core.maintenance import queue_job
 from core.maintenance_plans import workbench_maintenance_state
 from core.models import MaintenanceJob, PDFFile
+from core.operator_presentation import decorate_operator_state
 
 from .config import resolve_profiles, resolve_selectors, resolve_setting, validate_profiles
 from .models import DataOperation, DataProfile, DataOpsAuditEvent, RecoveryPoint
@@ -89,6 +90,7 @@ def _state(request):
             "selected_plan": None,
             "selected_job": None,
         }
+    decorate_operator_state(maintenance)
     maintenance_version = maintenance.get("state_version", "")
     profile_cards = []
     for profile in profiles:

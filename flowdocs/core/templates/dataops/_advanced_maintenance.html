@@ -24,10 +24,10 @@
       {% endif %}
       {% endwith %}
       <div class="dataops-advanced__grid">
-        {% with capability=state.maintenance.capabilities.validate %}<article{% if not capability.enabled %} aria-disabled="true"{% endif %}><h4>{% trans "Validate Files" %}</h4><p>{% trans "Read-only checks for databases, media references, and stored search artifacts." %}</p>{% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}</article>{% endwith %}
-        {% with capability=state.maintenance.capabilities.repair_indexes %}<article{% if not capability.enabled %} aria-disabled="true"{% endif %}><h4>{% trans "Repair Stored Indexes" %}</h4><p>{% trans "Rebuild folder indexes from existing chunks and embeddings." %}</p>{% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}</article>{% endwith %}
-        {% with capability=state.maintenance.capabilities.reindex_needed %}<article{% if not capability.enabled %} aria-disabled="true"{% endif %}><h4>{% trans "Reindex Needed" %}</h4><p>{% trans "Reprocess only documents whose searchable artifacts are missing or invalid." %}</p>{% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}</article>{% endwith %}
-        {% with capability=state.maintenance.capabilities.reindex_selected %}<article{% if not capability.enabled %} aria-disabled="true"{% endif %}><h4>{% trans "Reindex Selected" %}</h4><p>{% trans "Deliberately regenerate searchable artifacts for the selected scope." %}</p>{% if capability.reason_code %}<code>{{ capability.reason_code }}</code>{% endif %}</article>{% endwith %}
+        {% with capability=state.maintenance.capabilities.validate %}<article{% if not capability.enabled %} aria-disabled="true"{% endif %}><h4>{% trans "Validate Files" %}</h4><p>{% trans "Read-only checks for databases, media references, and stored search artifacts." %}</p>{% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}</article>{% endwith %}
+        {% with capability=state.maintenance.capabilities.repair_indexes %}<article{% if not capability.enabled %} aria-disabled="true"{% endif %}><h4>{% trans "Repair Stored Indexes" %}</h4><p>{% trans "Rebuild folder indexes from existing chunks and embeddings." %}</p>{% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}</article>{% endwith %}
+        {% with capability=state.maintenance.capabilities.reindex_needed %}<article{% if not capability.enabled %} aria-disabled="true"{% endif %}><h4>{% trans "Reindex Needed" %}</h4><p>{% trans "Reprocess only documents whose searchable artifacts are missing or invalid." %}</p>{% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}</article>{% endwith %}
+        {% with capability=state.maintenance.capabilities.reindex_selected %}<article{% if not capability.enabled %} aria-disabled="true"{% endif %}><h4>{% trans "Reindex Selected" %}</h4><p>{% trans "Deliberately regenerate searchable artifacts for the selected scope." %}</p>{% if capability.reason_code %}{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}{% endif %}</article>{% endwith %}
       </div>
     </div>
 
@@ -61,7 +61,7 @@
   <section class="dataops-advanced__section" aria-labelledby="dataops-maintenance-preview-heading">
     <header><p class="dataops-eyebrow">{% trans "15-minute confirmation authority" %}</p><h3 id="dataops-maintenance-preview-heading">{% trans "Maintenance previews" %}</h3></header>
     {% if state.maintenance.selected_plan %}
-      <article><p>{% trans "Selected preview" %}</p><h4>{{ state.maintenance.selected_plan.operation|default:_('Maintenance') }}</h4><code>{{ state.maintenance.selected_plan.public_id }}</code></article>
+      <article><p>{% trans "Selected preview" %}</p><h4>{{ state.maintenance.selected_plan.operation_label|default:_('Maintenance') }}</h4><code>{{ state.maintenance.selected_plan.public_id }}</code></article>
     {% else %}<p>{% trans "No maintenance previews are recorded." %}</p>{% endif %}
   </section>
 

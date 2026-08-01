@@ -50,4 +50,3 @@ class DataOperationLeaseTests(TestCase):
         self.assertEqual(second.state, DataOperation.State.QUEUED)
         self.assertTrue(first.lease_token)
         self.assertIsNotNone(first.lease_expires_at)
-
