@@ -105,7 +105,14 @@ Recent release records:
 
 ## GitHub Actions Release Policy
 
-- Pull requests run validation only and never publish an image.
+- Pull requests run the bounded `PR contract` and never publish an image. That
+  fast check is early feedback, not full certification.
+- The protected `dev` merge queue runs full validation and publishes an
+  immutable candidate for the exact merge-group SHA. `Pre-merge certification`
+  fails unless both jobs succeed.
+- Merge queue and the required `PR contract` / `Pre-merge certification`
+  checks are repository settings; workflow files do not enforce those settings.
+  Do not enable the fast-only PR path until those settings are active.
 - A push to `dev` after merge is the release trigger.
 - Manual publishing is allowed only from `dev` with explicit approval/input.
 - Docker/Checkout Actions are pinned to verified Node 24 commit SHAs.

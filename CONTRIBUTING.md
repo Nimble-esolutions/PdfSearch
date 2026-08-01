@@ -40,17 +40,22 @@ test(config): cover MB upload limits
 ## Dev-to-release map
 
 1. Open the PR against `dev`.
-2. Pull-request validation checks source, Docker, migrations, tests, and
-   disposable Compose behavior. It does not deploy stage or production.
-3. After a human merges into `dev`, the Docker workflow builds and publishes
+2. The required `PR contract` gives bounded static and Compose feedback within
+   two minutes. It is not full runtime certification and never publishes an
+   image.
+3. Add the approved PR to the protected `dev` merge queue. The queue's exact
+   synthetic merge SHA must pass the full source/runtime suite, immutable-image
+   candidate smoke, and `Pre-merge certification` rollup before GitHub merges it.
+   Never bypass the queue merely because the fast PR check is green.
+4. After GitHub merges into `dev`, the Docker workflow builds and publishes
    the immutable GHCR image, runs the published-image smoke gate, and promotes
    compatibility tags only after the digest gate.
-4. Dokploy must then be configured to pull that exact digest, recreate the
+5. Dokploy must then be configured to pull that exact digest, recreate the
    intended service, and route the intended hostname. A successful GitHub
    release is not deployment evidence.
-5. Verify `/livez`, `/readyz`, static assets, rendered HTML, representative
+6. Verify `/livez`, `/readyz`, static assets, rendered HTML, representative
    search, admin access, image revision, route/TLS, and rollback identity.
-6. Production promotion is a separate approved operation with data, backup,
+7. Production promotion is a separate approved operation with data, backup,
    digest, Compose, and rollback evidence.
 
 ## Configuration changes
