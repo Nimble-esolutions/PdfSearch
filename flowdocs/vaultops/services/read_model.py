@@ -14,7 +14,7 @@ from core.recovery_auth import (
     RecoveryAuthenticationError,
     verify_recovery_superadmin_database,
 )
-from core.operator_presentation import present_reason
+from core.operator_presentation import label_for, present_reason
 from vaultops.models import (
     ActivationIntent,
     ArtifactGeneration,
@@ -1051,6 +1051,12 @@ def _rollback_capability(*, pending_activation=None):
 def _operation_receipt(record):
     if record is None:
         return None
+    operation = record.get("operation", "")
+    operation_label = {
+        "sync_publish": gettext("Back up now"),
+        "restore_generation": gettext("Prepare latest production backup"),
+        "activation": gettext("Review activation"),
+    }.get(operation)
     return {
         "public_id": record.get("public_id", ""),
         "operation": record.get("operation", ""),
@@ -1061,6 +1067,8 @@ def _operation_receipt(record):
         "created_at": record.get("created_at"),
         "updated_at": record.get("updated_at"),
         "finished_at": record.get("finished_at"),
+        "operation_label": operation_label or label_for(operation),
+        "status_label": label_for(record.get("status")),
     }
 
 
@@ -1185,7 +1193,7 @@ def _operations_summary(state, *, identity):
         summary.update({
             "posture": "working",
             "reason_code": "",
-            "current_operation": {
+            "current_operation": _operation_receipt({
                 "public_id": pending.get("public_id", ""),
                 "operation": "activation",
                 "status": pending.get("state", ""),
@@ -1197,7 +1205,7 @@ def _operations_summary(state, *, identity):
                 "created_at": None,
                 "updated_at": None,
                 "finished_at": None,
-            },
+            }),
         })
         summary["primary_action"]["reason_code"] = ""
         return summary
