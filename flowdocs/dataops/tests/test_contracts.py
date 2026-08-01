@@ -9,6 +9,8 @@ from pathlib import Path
 import unittest
 
 from dataops.package import PackageContractError, build_manifest, validate_manifest
+from dataops.router import DataOpsControlRouter
+from vaultops.router import VaultControlRouter
 
 try:
     from django.core.exceptions import ImproperlyConfigured
@@ -47,6 +49,14 @@ class DataOpsEnvironmentContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.vectors = json.loads(VECTORS.read_text())
+
+    def test_control_routers_coexist_without_blocking_each_other(self):
+        vault = VaultControlRouter()
+        dataops = DataOpsControlRouter()
+        self.assertIsNone(vault.allow_migrate("control", "dataops"))
+        self.assertIsNone(dataops.allow_migrate("control", "vaultops"))
+        self.assertFalse(vault.allow_migrate("control", "core"))
+        self.assertFalse(dataops.allow_migrate("control", "core"))
 
     def test_environment_always_wins_over_database_fallback(self):
         for vector in self.vectors["env_precedence"]:

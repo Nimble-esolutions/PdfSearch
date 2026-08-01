@@ -24,5 +24,9 @@ class VaultControlRouter:
         if app_label == self.app_label:
             return db == self.database_alias
         if db == self.database_alias:
+            # Other control-plane apps (for example dataops) may own tables
+            # in this database. Let their router make that decision.
+            if app_label == "dataops":
+                return None
             return False
         return None
