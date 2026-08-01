@@ -1,6 +1,6 @@
 import unittest
 
-from flowdocs.dataops.recovery import RecoveryInspectionError, inspect_manifest, plan_v1_repack
+from dataops.recovery import RecoveryInspectionError, inspect_manifest, plan_v1_repack
 
 
 class RecoveryInspectionTests(unittest.TestCase):

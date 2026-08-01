@@ -1,6 +1,6 @@
 import unittest
 
-from flowdocs.dataops.reconciler import AutoHealBudget, choose_repairs
+from dataops.reconciler import AutoHealBudget, choose_repairs
 
 
 class AutoHealDecisionTests(unittest.TestCase):
