@@ -39,7 +39,7 @@ class DataOperationsTemplateTests(unittest.TestCase):
         self.assertNotIn("<script", self.template)
 
     def test_styles_preserve_workbench_tokens_and_mobile_layout(self):
-        for token in ("--vault-maroon", "--vault-ochre", "--vault-canvas"):
+        for token in ("--dataops-maroon", "--dataops-ochre", "--dataops-canvas"):
             self.assertIn(token, self.stylesheet)
         self.assertIn(".dataops-status", self.stylesheet)
         self.assertIn("@media (max-width: 560px)", self.stylesheet)
