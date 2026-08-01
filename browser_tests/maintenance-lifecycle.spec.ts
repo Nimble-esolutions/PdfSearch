@@ -19,7 +19,17 @@ async function waitForJob(page: Page, status: RegExp) {
       '/dashboard/operations/api/v1/state/',
     );
     const payload = await response.json();
-    return payload.data.maintenance.jobs[0]?.status || '';
+    const job = payload.data.maintenance.jobs[0];
+    const observed = job?.status || '';
+    if (
+      ['completed', 'failed', 'partial', 'cancelled'].includes(observed)
+      && !status.test(observed)
+    ) {
+      throw new Error(
+        `maintenance job reached unexpected terminal state: ${JSON.stringify(job)}`,
+      );
+    }
+    return observed;
   }, { timeout: 120_000, intervals: [500, 1000, 2000] }).toMatch(status);
   await page.reload();
 }
