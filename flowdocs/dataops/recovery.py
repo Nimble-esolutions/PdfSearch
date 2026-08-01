@@ -35,7 +35,11 @@ def inspect_manifest(payload: Mapping[str, Any]) -> RecoveryInspection:
         source_id = str(payload.get("source", {}).get("source_id") or "").strip()
         if not release_id or not dataset_id:
             raise RecoveryInspectionError("release_id and dataset_id are required")
-        keys = tuple(_safe_key(str(item.get("key", ""))) for item in files if isinstance(item, Mapping))
+        keys = tuple(
+            _safe_key(str(item.get("key") or item.get("object_key") or ""))
+            for item in files
+            if isinstance(item, Mapping)
+        )
         from .package import manifest_digest
         return RecoveryInspection(release_id, dataset_id, source_id, manifest_digest(payload), 2, len(keys), keys)
     try:

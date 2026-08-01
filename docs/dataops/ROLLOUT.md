@@ -20,3 +20,9 @@ are green. For the stage rollout:
 The old control-plane records are not migrated into Data Operations. Keep the
 pre-cutover snapshot until the post-restore search and document-count checks are
 accepted by the operator.
+
+The quarantine restore primitive downloads a selected generation, verifies each
+object SHA-256 against its manifest, and writes a receipt under an isolated
+workspace. It never replaces the runtime data root or changes an authoritative
+pointer; a separate activation step must consume that verified workspace after
+operator review.
