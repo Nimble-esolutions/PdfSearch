@@ -9,9 +9,11 @@ import os
 import re
 import shutil
 import sqlite3
+import stat
 import subprocess
 import sys
 import uuid
+import fcntl
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -39,6 +41,63 @@ class CandidateMaintenanceError(RuntimeError):
     def __init__(self, reason_code: str, detail: str = ""):
         self.reason_code = reason_code
         super().__init__(detail or reason_code)
+
+
+class PinnedWorkspace:
+    """A candidate directory retained by descriptor until publication handoff."""
+
+    def __init__(self, path, root_descriptor, descriptor, root_authority):
+        self.path = Path(path)
+        self.root_descriptor = root_descriptor
+        self.descriptor = descriptor
+        self.root_authority = root_authority
+        opened = os.fstat(descriptor)
+        self.authority = (opened.st_dev, opened.st_ino)
+        self.closed = False
+
+    @property
+    def name(self):
+        return self.path.name
+
+    def anchored_path(self):
+        opened = os.fstat(self.descriptor)
+        if (opened.st_dev, opened.st_ino) != self.authority:
+            raise CandidateMaintenanceError(
+                "maintenance_workspace_authority_changed"
+            )
+        return _descriptor_path(self.descriptor)
+
+    def assert_lexical_identity(self):
+        if self.path.is_symlink() or not self.path.is_dir():
+            raise CandidateMaintenanceError(
+                "maintenance_workspace_authority_changed"
+            )
+        observed = self.path.stat()
+        if (observed.st_dev, observed.st_ino) != self.authority:
+            raise CandidateMaintenanceError(
+                "maintenance_workspace_authority_changed"
+            )
+
+    def close(self):
+        if not self.closed:
+            os.close(self.descriptor)
+            os.close(self.root_descriptor)
+            self.closed = True
+
+    def __fspath__(self):
+        return os.fspath(self.path)
+
+    def __str__(self):
+        return str(self.path)
+
+    def __truediv__(self, value):
+        return self.path / value
+
+    def __del__(self):
+        try:
+            self.close()
+        except OSError:
+            pass
 
 
 def workspace_root() -> Path:
@@ -90,6 +149,34 @@ def _workspace_root_authority(*, create: bool = False) -> tuple[Path, tuple[int,
     return root, authority
 
 
+def _open_workspace_root(root: Path, authority: tuple[int, int]) -> int:
+    """Open and pin the authorized root without following its final path."""
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        descriptor = os.open(root, flags)
+    except OSError as exc:
+        raise CandidateMaintenanceError("maintenance_workspace_unsafe") from exc
+    opened = os.fstat(descriptor)
+    if (opened.st_dev, opened.st_ino) != authority:
+        os.close(descriptor)
+        raise CandidateMaintenanceError("maintenance_workspace_authority_changed")
+    return descriptor
+
+
+def _descriptor_path(descriptor: int) -> Path:
+    proc = Path("/proc/self/fd") / str(descriptor)
+    if proc.exists():
+        return proc
+    if hasattr(fcntl, "F_GETPATH"):
+        raw = fcntl.fcntl(descriptor, fcntl.F_GETPATH, b"\0" * 1024)
+        return Path(raw.split(b"\0", 1)[0].decode())
+    raise CandidateMaintenanceError("maintenance_workspace_unsafe")
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -109,15 +196,102 @@ def _copy_sqlite(source: Path, target: Path) -> None:
 
 
 def _copy_tree(source: Path, target: Path) -> None:
+    """Copy a tree without ever following a source-side symlink."""
+    no_follow = getattr(os, "O_NOFOLLOW", 0)
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | no_follow
+
+    def copy_directory(source_fd: int, target_fd: int) -> None:
+        for name in sorted(os.listdir(source_fd)):
+            try:
+                before = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+                if stat.S_ISLNK(before.st_mode):
+                    raise CandidateMaintenanceError(
+                        "maintenance_source_runtime_unsafe"
+                    )
+                if stat.S_ISDIR(before.st_mode):
+                    os.mkdir(name, mode=0o700, dir_fd=target_fd)
+                    child_source = os.open(name, directory_flags, dir_fd=source_fd)
+                    child_target = os.open(name, directory_flags, dir_fd=target_fd)
+                    try:
+                        opened = os.fstat(child_source)
+                        if (opened.st_dev, opened.st_ino) != (
+                            before.st_dev,
+                            before.st_ino,
+                        ):
+                            raise CandidateMaintenanceError(
+                                "maintenance_source_snapshot_changed"
+                            )
+                        copy_directory(child_source, child_target)
+                    finally:
+                        os.close(child_target)
+                        os.close(child_source)
+                    continue
+                if not stat.S_ISREG(before.st_mode):
+                    raise CandidateMaintenanceError(
+                        "maintenance_source_runtime_unsafe"
+                    )
+                source_file = os.open(
+                    name, os.O_RDONLY | no_follow, dir_fd=source_fd
+                )
+                try:
+                    opened = os.fstat(source_file)
+                    if (opened.st_dev, opened.st_ino) != (
+                        before.st_dev,
+                        before.st_ino,
+                    ):
+                        raise CandidateMaintenanceError(
+                            "maintenance_source_snapshot_changed"
+                        )
+                    target_file = os.open(
+                        name,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | no_follow,
+                        0o600,
+                        dir_fd=target_fd,
+                    )
+                    try:
+                        while True:
+                            block = os.read(source_file, 1024 * 1024)
+                            if not block:
+                                break
+                            remaining = memoryview(block)
+                            while remaining:
+                                written = os.write(target_file, remaining)
+                                remaining = remaining[written:]
+                    finally:
+                        os.close(target_file)
+                finally:
+                    os.close(source_file)
+            except CandidateMaintenanceError:
+                raise
+            except OSError as exc:
+                raise CandidateMaintenanceError(
+                    "maintenance_source_runtime_unsafe"
+                ) from exc
+
     if source.is_symlink():
         raise CandidateMaintenanceError("maintenance_source_runtime_unsafe")
-    if source.is_dir():
-        # Preserve a symlink introduced during the copy instead of following
-        # it into an attacker-selected tree. Candidate validation then rejects
-        # the link before the candidate can be used.
-        shutil.copytree(source, target, symlinks=True)
-    else:
+    if not source.exists():
         target.mkdir(parents=True)
+        return
+    source_fd = None
+    target_fd = None
+    try:
+        source_fd = os.open(source, directory_flags)
+        target.mkdir(mode=0o700)
+        target_fd = os.open(target, directory_flags)
+    except OSError as exc:
+        if target_fd is not None:
+            os.close(target_fd)
+        if source_fd is not None:
+            os.close(source_fd)
+        raise CandidateMaintenanceError(
+            "maintenance_source_runtime_unsafe"
+        ) from exc
+    try:
+        copy_directory(source_fd, target_fd)
+    finally:
+        os.close(target_fd)
+        os.close(source_fd)
     _tree_identity(target)
 
 
@@ -144,6 +318,87 @@ def _tree_identity(root: Path) -> dict:
         )
         file_count += 1
         byte_count += size
+    return {
+        "sha256": digest.hexdigest(),
+        "files": file_count,
+        "bytes": byte_count,
+    }
+
+
+def _tree_identity_fd(root_fd: int) -> dict:
+    """Identify a pinned directory without trusting an fd-symlink pathname."""
+    digest = hashlib.sha256()
+    file_count = 0
+    byte_count = 0
+    no_follow = getattr(os, "O_NOFOLLOW", 0)
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | no_follow
+
+    def walk(directory_fd: int, prefix: str = "") -> None:
+        nonlocal file_count, byte_count
+        for name in sorted(os.listdir(directory_fd)):
+            relative = f"{prefix}/{name}" if prefix else name
+            try:
+                before = os.stat(
+                    name, dir_fd=directory_fd, follow_symlinks=False
+                )
+                if stat.S_ISLNK(before.st_mode):
+                    raise CandidateMaintenanceError(
+                        "maintenance_source_runtime_unsafe"
+                    )
+                if stat.S_ISDIR(before.st_mode):
+                    digest.update(f"d\0{relative}\0".encode())
+                    child = os.open(name, directory_flags, dir_fd=directory_fd)
+                    try:
+                        opened = os.fstat(child)
+                        if (opened.st_dev, opened.st_ino) != (
+                            before.st_dev,
+                            before.st_ino,
+                        ):
+                            raise CandidateMaintenanceError(
+                                "maintenance_source_snapshot_changed"
+                            )
+                        walk(child, relative)
+                    finally:
+                        os.close(child)
+                    continue
+                if not stat.S_ISREG(before.st_mode):
+                    raise CandidateMaintenanceError(
+                        "maintenance_source_runtime_unsafe"
+                    )
+                source = os.open(
+                    name, os.O_RDONLY | no_follow, dir_fd=directory_fd
+                )
+                try:
+                    opened = os.fstat(source)
+                    if (opened.st_dev, opened.st_ino) != (
+                        before.st_dev,
+                        before.st_ino,
+                    ):
+                        raise CandidateMaintenanceError(
+                            "maintenance_source_snapshot_changed"
+                        )
+                    file_digest = hashlib.sha256()
+                    while True:
+                        block = os.read(source, 1024 * 1024)
+                        if not block:
+                            break
+                        file_digest.update(block)
+                finally:
+                    os.close(source)
+                digest.update(
+                    f"f\0{relative}\0{before.st_size}\0"
+                    f"{file_digest.hexdigest()}\0".encode()
+                )
+                file_count += 1
+                byte_count += before.st_size
+            except CandidateMaintenanceError:
+                raise
+            except OSError as exc:
+                raise CandidateMaintenanceError(
+                    "maintenance_source_runtime_unsafe"
+                ) from exc
+
+    walk(root_fd)
     return {
         "sha256": digest.hexdigest(),
         "files": file_count,
@@ -224,7 +479,14 @@ def _verified_mutable_source_runtime_identity():
         observation is None
         or observation.active_generation_id != pointer.generation_id
         or observation.pointer_digest != pointer.pointer_digest
-        or observation.status != "ready"
+        or observation.status != "committed"
+        or observation.readiness_evidence.get("livez") != "ok"
+        or observation.readiness_evidence.get("readyz") != "ready"
+        or observation.readiness_evidence.get("runtime_generation_id")
+        != pointer.generation_id
+        or observation.readiness_evidence.get("runtime_manifest_digest")
+        != pointer.manifest_digest
+        or observation.readiness_evidence.get("runtime_smoke") != "passed"
     ):
         raise CandidateMaintenanceError(
             "maintenance_source_observation_stale"
@@ -339,15 +601,28 @@ def create_workspace(job: MaintenanceJob) -> Path:
     capacity = capacity_report(source_bytes=source_bytes, operation="maintenance")
     if not capacity["byte_capacity_ok"] or not capacity["inode_capacity_ok"]:
         raise CandidateMaintenanceError("insufficient_maintenance_capacity")
+    root_descriptor = _open_workspace_root(root, root_authority)
     workspace = root / f"mw-{job.public_id}-{uuid.uuid4().hex[:8]}"
-    temporary = root / f".{workspace.name}.tmp"
-    temporary.mkdir(mode=0o700)
-    checked_root, checked_authority = _workspace_root_authority()
-    if checked_root != root or checked_authority != root_authority:
-        raise CandidateMaintenanceError("maintenance_workspace_authority_changed")
-    if temporary.is_symlink() or temporary.parent != root:
-        raise CandidateMaintenanceError("maintenance_workspace_unsafe")
+    temporary_name = f".{workspace.name}.tmp"
+    try:
+        os.mkdir(temporary_name, mode=0o700, dir_fd=root_descriptor)
+        temporary_descriptor = os.open(
+            temporary_name,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=root_descriptor,
+        )
+    except Exception:
+        shutil.rmtree(
+            _descriptor_path(root_descriptor) / temporary_name,
+            ignore_errors=True,
+        )
+        os.close(root_descriptor)
+        raise
+    temporary = _descriptor_path(temporary_descriptor)
     barrier_acquired = False
+    transferred = False
     try:
         from vaultops.services.mutations import (
             assert_barrier_owner,
@@ -385,7 +660,7 @@ def create_workspace(job: MaintenanceJob) -> Path:
         _copy_tree(
             Path(settings.CHROMA_DIR), temporary / "chroma_db"
         )
-        _tree_identity(temporary)
+        _tree_identity_fd(temporary_descriptor)
         (temporary / "pdf_cache").mkdir()
         (temporary / "backups").mkdir()
         parent_after = _maintenance_source_parent()
@@ -419,7 +694,7 @@ def create_workspace(job: MaintenanceJob) -> Path:
             raise CandidateMaintenanceError(
                 "maintenance_source_snapshot_changed"
             )
-        source["snapshot"] = _tree_identity(temporary)
+        source["snapshot"] = _tree_identity_fd(temporary_descriptor)
         unavailable_documents = _database_unavailable_attestation(
             temporary / "db.sqlite3"
         )
@@ -456,10 +731,36 @@ def create_workspace(job: MaintenanceJob) -> Path:
             + "\n",
             encoding="utf-8",
         )
-        temporary.rename(workspace)
-        return workspace
+        checked_root, checked_authority = _workspace_root_authority()
+        opened_root = os.fstat(root_descriptor)
+        if (
+            checked_root != root
+            or checked_authority != root_authority
+            or (opened_root.st_dev, opened_root.st_ino) != root_authority
+        ):
+            raise CandidateMaintenanceError(
+                "maintenance_workspace_authority_changed"
+            )
+        os.rename(
+            temporary_name,
+            workspace.name,
+            src_dir_fd=root_descriptor,
+            dst_dir_fd=root_descriptor,
+        )
+        pinned = PinnedWorkspace(
+            workspace,
+            root_descriptor,
+            temporary_descriptor,
+            root_authority,
+        )
+        pinned.assert_lexical_identity()
+        transferred = True
+        return pinned
     except Exception:
-        shutil.rmtree(temporary, ignore_errors=True)
+        shutil.rmtree(
+            _descriptor_path(root_descriptor) / temporary_name,
+            ignore_errors=True,
+        )
         raise
     finally:
         if barrier_acquired:
@@ -468,6 +769,9 @@ def create_workspace(job: MaintenanceJob) -> Path:
                 source_deployment=settings.ENV_IDENTITY.deployment_id,
                 tolerate_lost=True,
             )
+        if not transferred:
+            os.close(temporary_descriptor)
+            os.close(root_descriptor)
 
 
 def _candidate_environment(workspace: Path) -> dict:
@@ -833,7 +1137,8 @@ def execute_candidate_job(job: MaintenanceJob) -> MaintenanceJob:
     if not job.options.get("recovery_set_id"):
         raise CandidateMaintenanceError("recovery_point_required")
     workspace = create_workspace(job)
-    manifest_path = workspace / WORKSPACE_MANIFEST
+    execution_workspace = workspace.anchored_path()
+    manifest_path = execution_workspace / WORKSPACE_MANIFEST
     try:
         result = subprocess.run(
             [
@@ -844,19 +1149,21 @@ def execute_candidate_job(job: MaintenanceJob) -> MaintenanceJob:
                 str(job.public_id),
             ],
             cwd=settings.BASE_DIR,
-            env=_candidate_environment(workspace),
+            env=_candidate_environment(execution_workspace),
+            pass_fds=(workspace.descriptor,),
             capture_output=True,
             text=True,
             timeout=getattr(settings, "MAINTENANCE_JOB_TIMEOUT_SECONDS", 7200),
             check=False,
         )
-        _mirror_job(workspace / "db.sqlite3", job)
+        execution_workspace = workspace.anchored_path()
+        _mirror_job(execution_workspace / "db.sqlite3", job)
         job.refresh_from_db()
         if result.returncode or job.status != "completed":
             raise CandidateMaintenanceError(
                 "candidate_execution_failed", f"exit={result.returncode}"
             )
-        validation = validate_candidate(workspace)
+        validation = validate_candidate(execution_workspace)
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest.update(
             {
@@ -864,7 +1171,9 @@ def execute_candidate_job(job: MaintenanceJob) -> MaintenanceJob:
                 "completed_at": timezone.now().isoformat(),
                 "validation": validation,
                 "derived": {
-                    "database_sha256": _sha256(workspace / "db.sqlite3"),
+                    "database_sha256": _sha256(
+                        execution_workspace / "db.sqlite3"
+                    ),
                     "manifest_basis_sha256": hashlib.sha256(
                         json.dumps(
                             validation, sort_keys=True
@@ -881,10 +1190,15 @@ def execute_candidate_job(job: MaintenanceJob) -> MaintenanceJob:
             json.dumps(manifest, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        workspace.assert_lexical_identity()
         job.options = {
             **job.options,
             "candidate_workspace_id": workspace.name,
             "candidate_workspace": str(workspace),
+            "candidate_workspace_identity": {
+                "device": workspace.authority[0],
+                "inode": workspace.authority[1],
+            },
             "candidate_state": "activation_ready",
         }
         job.save(update_fields=["options", "updated_at"])
@@ -932,3 +1246,5 @@ def execute_candidate_job(job: MaintenanceJob) -> MaintenanceJob:
             ]
         )
         return job
+    finally:
+        workspace.close()

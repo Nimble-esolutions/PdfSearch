@@ -15,6 +15,8 @@ from core.maintenance import queue_job, run_job
 from core.candidate_maintenance import (
     CandidateMaintenanceError,
     _copy_tree,
+    _open_workspace_root,
+    _workspace_root_authority,
     maintenance_source_capability_reason,
 )
 from core.management.commands.run_maintenance_jobs import (
@@ -359,28 +361,56 @@ class MaintenancePlanningTests(TestCase):
                     "maintenance_workspace_unsafe",
                 )
 
-    def test_tree_copy_preserves_and_rejects_racing_symlink(self):
+    def test_tree_copy_rejects_file_swapped_to_symlink_before_open(self):
         with tempfile.TemporaryDirectory() as temporary:
-            source = f"{temporary}/source"
-            target = f"{temporary}/target"
-            outside = f"{temporary}/outside"
-            os.mkdir(source)
-            os.mkdir(outside)
+            parent = Path(temporary).resolve()
+            source = parent / "source"
+            target = parent / "target"
+            outside = parent / "outside.txt"
+            source.mkdir()
+            payload = source / "payload.txt"
+            payload.write_text("original", encoding="utf-8")
+            outside.write_text("must-not-copy", encoding="utf-8")
+            real_open = os.open
+            raced = False
 
-            def racing_copytree(_source, destination, *, symlinks):
-                self.assertTrue(symlinks)
-                os.mkdir(destination)
-                os.symlink(outside, f"{destination}/raced-link")
+            def racing_open(path, flags, *args, **kwargs):
+                nonlocal raced
+                if path == "payload.txt" and kwargs.get("dir_fd") is not None:
+                    raced = True
+                    payload.unlink()
+                    payload.symlink_to(outside)
+                return real_open(path, flags, *args, **kwargs)
 
             with patch(
-                "core.candidate_maintenance.shutil.copytree",
-                side_effect=racing_copytree,
+                "core.candidate_maintenance.os.open",
+                side_effect=racing_open,
             ):
                 with self.assertRaisesRegex(
                     CandidateMaintenanceError,
                     "maintenance_source_runtime_unsafe",
                 ):
-                    _copy_tree(Path(source), Path(target))
+                    _copy_tree(source, target)
+            self.assertTrue(raced)
+            self.assertFalse((target / "payload.txt").exists())
+
+    def test_pinned_workspace_descriptor_survives_lexical_root_swap(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve()
+            root = parent / "workspaces"
+            moved = parent / "original-workspaces"
+            root.mkdir()
+            with override_settings(MAINTENANCE_WORKSPACE_ROOT=root):
+                _, authority = _workspace_root_authority()
+                descriptor = _open_workspace_root(root, authority)
+                try:
+                    root.rename(moved)
+                    root.mkdir()
+                    os.mkdir("pinned-child", dir_fd=descriptor)
+                finally:
+                    os.close(descriptor)
+            self.assertTrue((moved / "pinned-child").is_dir())
+            self.assertFalse((root / "pinned-child").exists())
 
     def test_normalize_selection_rejects_inverted_date_range(self):
         with self.assertRaisesRegex(MaintenancePlanError, "malformed_filters"):

@@ -20,6 +20,9 @@ from django.utils import timezone
 from core.candidate_maintenance import (
     WORKSPACE_MANIFEST,
     CandidateMaintenanceError,
+    PinnedWorkspace,
+    _open_workspace_root,
+    _workspace_root_authority,
     validate_candidate,
     workspace_root,
 )
@@ -127,21 +130,45 @@ def _resolve_candidate(job):
         or not candidate_id.startswith(f"mw-{job.public_id}-")
     ):
         raise MaintenanceImportError("maintenance_candidate_identity_invalid")
-    configured_root = Path(settings.MAINTENANCE_WORKSPACE_ROOT)
-    if configured_root.is_symlink() or not configured_root.is_dir():
-        raise MaintenanceImportError("maintenance_workspace_root_unsafe")
-    root = workspace_root()
-    candidate = root / candidate_id
-    if candidate.is_symlink() or not candidate.is_dir():
-        raise MaintenanceImportError("maintenance_candidate_workspace_unsafe")
-    resolved = candidate.resolve()
     try:
-        resolved.relative_to(root)
-    except ValueError as exc:
+        root, root_authority = _workspace_root_authority()
+        root_descriptor = _open_workspace_root(root, root_authority)
+    except CandidateMaintenanceError as exc:
+        raise MaintenanceImportError("maintenance_workspace_root_unsafe") from exc
+    candidate = root / candidate_id
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    pinned = None
+    try:
+        candidate_descriptor = os.open(
+            candidate_id, flags, dir_fd=root_descriptor
+        )
+        pinned = PinnedWorkspace(
+            candidate,
+            root_descriptor,
+            candidate_descriptor,
+            root_authority,
+        )
+        pinned.assert_lexical_identity()
+    except (OSError, CandidateMaintenanceError) as exc:
+        if pinned is not None:
+            pinned.close()
+        else:
+            os.close(root_descriptor)
         raise MaintenanceImportError(
             "maintenance_candidate_workspace_unsafe"
         ) from exc
-    return resolved
+    expected_identity = job.options.get("candidate_workspace_identity") or {}
+    if expected_identity != {
+        "device": pinned.authority[0],
+        "inode": pinned.authority[1],
+    }:
+        pinned.close()
+        raise MaintenanceImportError("maintenance_candidate_workspace_unsafe")
+    return pinned
 
 
 def _validate_job_and_manifest(job, candidate):
@@ -466,7 +493,8 @@ def import_maintenance_candidate(
             runtime_root=Path(settings.RUNTIME_GENERATIONS_ROOT),
         )
         return keyed_workspace
-    candidate = _resolve_candidate(job)
+    pinned_candidate = _resolve_candidate(job)
+    candidate = pinned_candidate.anchored_path()
     candidate_manifest, recovery = _validate_job_and_manifest(job, candidate)
     candidate_manifest_sha256 = _sha256(candidate / WORKSPACE_MANIFEST)
     try:
