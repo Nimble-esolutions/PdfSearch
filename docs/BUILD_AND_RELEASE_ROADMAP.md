@@ -118,8 +118,8 @@ Recent release records:
   Do not enable the fast-only PR path until those settings are active and proven
   by a queued test PR. That phase-two change must be a separate PR.
 - Initial queue settings must use build concurrency/group size 1, an ALLGREEN
-  merge policy, and a status-check timeout longer than the full job (at least
-  90 minutes while the workflow timeout is 90 minutes).
+  merge policy, and a 120-minute status-check timeout, which is strictly longer
+  than the full job's 90-minute timeout.
 - Require CODEOWNER approval for workflows, Docker entrypoints, dependency
   locks, and CI scripts; dismiss stale approvals and restrict bypasses.
 - Do not universally require the path-filtered documentation workflow context;
