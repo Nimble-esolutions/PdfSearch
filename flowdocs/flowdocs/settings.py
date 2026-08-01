@@ -139,6 +139,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'core',
     'vaultops',
+    'dataops',
 ]
 
 MIDDLEWARE = [
@@ -197,7 +198,10 @@ DATABASES = {
     },
 }
 
-DATABASE_ROUTERS = ['vaultops.router.VaultControlRouter']
+DATABASE_ROUTERS = [
+    'vaultops.router.VaultControlRouter',
+    'dataops.router.DataOpsControlRouter',
+]
 
 
 # Password validation

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load i18n static %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'main/css/data-operations.css' %}">{% endblock %}
+{% block title %}{% trans "Data Operations configuration" %}{% endblock %}
+{% block content %}
+<main class="dataops-workbench">
+  <p class="dataops-kicker">{% trans "Configuration" %}</p>
+  <h2>{% trans "Storage and automation" %}</h2>
+  <p>{% trans "Environment values win and stay locked. Database values are only fallbacks." %}</p>
+  {% if error %}<p class="dataops-alert">{{ error }}</p>{% endif %}
+  <ul>{% for profile in profiles %}<li><strong>{{ profile.display_name }}</strong> · {{ profile.role }} · {{ profile.bucket }} · {% trans "ENV locked" %}</li>{% empty %}<li>{% trans "No ENV profile is configured." %}</li>{% endfor %}</ul>
+  <p><a href="{% url 'dataops:workbench' %}">{% trans "Back to Data Operations" %}</a></p>
+</main>
+{% endblock %}

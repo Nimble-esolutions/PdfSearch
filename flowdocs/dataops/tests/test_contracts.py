@@ -141,6 +141,8 @@ class DataOpsArtifactContractTests(unittest.TestCase):
         self.assertEqual(manifest.digest, build_manifest(**{k: manifest.raw[k] for k in ("release_id", "dataset_id", "source", "identity", "counts", "files")}, evidence=manifest.raw["evidence"]).digest)
         with self.assertRaises(PackageContractError):
             validate_manifest({**manifest.raw, "credentials": "secret"})
+        with self.assertRaises(PackageContractError):
+            validate_manifest({**manifest.raw, "evidence": {"nested": {"secret_key": "secret"}}})
 
 
 @unittest.skipUnless(RUNTIME_AVAILABLE, "runtime DataOps dependencies are not installed")

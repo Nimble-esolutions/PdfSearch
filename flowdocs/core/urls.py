@@ -3,7 +3,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
 from . import views
-from vaultops import views as vault_views
+from dataops import views as dataops_views
 
 urlpatterns = [
     path("favicon.ico", RedirectView.as_view(url="/static/main/images/favicon.ico", permanent=True)),
@@ -12,7 +12,8 @@ urlpatterns = [
     path('health/data/', views.health_data, name='health_data'),
     path('health/lease/', views.health_lease, name='health_lease'),
     path('health/metrics/', views.metrics_view, name='health_metrics'),
-    path('dashboard/operations/', vault_views.workbench, name='operations_panel'),
+    path('dashboard/operations/', dataops_views.workbench, name='operations_panel'),
+    path('dashboard/data-operations/', include('dataops.urls')),
     path(
         'dashboard/operations/api/v1/',
         include('vaultops.urls'),

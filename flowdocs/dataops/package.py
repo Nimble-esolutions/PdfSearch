@@ -64,6 +64,17 @@ def validate_manifest(manifest: Mapping[str, Any]) -> None:
     for entry in files:
         if not isinstance(entry, Mapping) or not entry.get("key") or not entry.get("sha256"):
             raise PackageContractError("each file requires key and sha256")
+    def contains_forbidden(value: Any) -> bool:
+        if isinstance(value, Mapping):
+            if any(str(key).lower() in {"credential", "credentials", "secret", "secret_key", "access_key"} for key in value):
+                return True
+            return any(contains_forbidden(item) for item in value.values())
+        if isinstance(value, (list, tuple)):
+            return any(contains_forbidden(item) for item in value)
+        return False
+
     forbidden = sorted(set(manifest) & EXCLUDED_TOP_LEVEL)
     if forbidden:
         raise PackageContractError("package cannot include: " + ", ".join(forbidden))
+    if contains_forbidden(manifest.get("evidence", {})):
+        raise PackageContractError("package evidence cannot include credentials or secrets")
