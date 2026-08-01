@@ -28,7 +28,7 @@ class MaintenanceCandidateImportTests(TestCase):
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.maintenance_root = self.root / "maintenance"
         self.runtime_root = self.root / "runtimes"
         self.control_root = self.root / "control"
@@ -84,7 +84,12 @@ class MaintenanceCandidateImportTests(TestCase):
         ):
             (self.workspace / directory).mkdir()
         (self.workspace / "media" / "one.pdf").write_bytes(b"%PDF-1.4")
+        workspace_stat = self.workspace.stat()
         self.job.options["candidate_workspace_id"] = self.workspace.name
+        self.job.options["candidate_workspace_identity"] = {
+            "device": workspace_stat.st_dev,
+            "inode": workspace_stat.st_ino,
+        }
         self.job.save(update_fields=["options", "updated_at"])
         self.manifest = {
             "manifest_version": 1,
@@ -355,6 +360,23 @@ class MaintenanceCandidateImportTests(TestCase):
             raised.exception.reason_code,
             "maintenance_workspace_root_unsafe",
         )
+
+    def test_workspace_replacement_after_candidate_creation_is_rejected(self):
+        original = self.maintenance_root / f"{self.workspace.name}.original"
+        self.workspace.rename(original)
+        self.workspace.mkdir()
+
+        with self.assertRaises(MaintenanceImportError) as raised:
+            import_maintenance_candidate(
+                self.job,
+                idempotency_key="maintenance-import-swapped-workspace",
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "maintenance_candidate_workspace_unsafe",
+        )
+        self.assertFalse(ArtifactGeneration.objects.exists())
 
     def test_symlinked_import_lock_is_rejected(self):
         lock_target = self.root / "lock-target"

@@ -483,7 +483,14 @@ class ActivationCoordinatorTests(TestCase):
             deployment_id=DEPLOYMENT_ID,
             active_generation_id=CURRENT_GENERATION,
             pointer_digest=pointer.pointer_digest,
-            status="ready",
+            readiness_evidence={
+                "livez": "ok",
+                "readyz": "ready",
+                "runtime_generation_id": CURRENT_GENERATION,
+                "runtime_manifest_digest": CURRENT_DIGEST,
+                "runtime_smoke": "passed",
+            },
+            status="committed",
             observed_at=timezone.now(),
         )
         return pointer
@@ -573,6 +580,19 @@ class ActivationCoordinatorTests(TestCase):
 
         with override_settings(
             ACTIVE_RUNTIME=None,
+            MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+        ):
+            with self.assertRaisesMessage(
+                CandidateMaintenanceError,
+                "maintenance_source_observation_stale",
+            ):
+                _verified_mutable_source_runtime_identity()
+
+    def test_mutable_writer_source_rejects_incomplete_readiness_evidence(self):
+        self._observe_current_source_pointer()
+        RuntimePointerObservation.objects.update(readiness_evidence={})
+
+        with override_settings(
             MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
         ):
             with self.assertRaisesMessage(
