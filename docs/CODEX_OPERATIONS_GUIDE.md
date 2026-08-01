@@ -72,8 +72,9 @@ write actions.
 
 The repository workflows define the checks, but GitHub settings enforce merge
 queue usage, required checks, review, and bypass restrictions. Start with queue
-build concurrency/group size 1, ALLGREEN, and a status-check timeout of at least
-90 minutes. Require CODEOWNER approval for the workflow/Docker/build boundary,
+build concurrency/group size 1, ALLGREEN, and a 120-minute status-check timeout,
+which is strictly longer than the full job's 90-minute timeout. Require
+CODEOWNER approval for the workflow/Docker/build boundary,
 dismiss stale approvals, and restrict bypasses. Do not universally require the
 path-filtered documentation context: it is absent on unrelated PRs.
 
