@@ -4767,3 +4767,12 @@ msgstr "चुकीचा तयार डेटा निवडला जा�
 
 msgid "Review restore evidence"
 msgstr "पुनर्स्थापना पुराव्याचा आढावा घ्या"
+
+msgid "This request key belongs to another restore"
+msgstr "ही विनंती कळ दुसऱ्या पुनर्स्थापनेसाठी वापरलेली आहे"
+
+msgid "The repeated request changed its profile or generation while reusing an existing idempotency key."
+msgstr "विद्यमान पुनरावृत्ती-प्रतिबंधक कळ पुन्हा वापरताना पुनरावृत्त विनंतीने तिचे प्रोफाइल किंवा पिढी बदलली."
+
+msgid "No second restore job was created."
+msgstr "दुसरे पुनर्स्थापना कार्य तयार झाले नाही."

@@ -250,11 +250,11 @@ def _actor(request):
     return request.user.pk, request.user.get_username()
 
 
-def _state_version_guard(request):
+def _state_version_guard(request, *, profile_key=None):
     supplied = _request_value(request, "state_version", "")
     if not supplied:
         raise WorkbenchRequestError("state_version_required")
-    current = build_workbench_state()
+    current = build_workbench_state(profile_key=profile_key)
     if supplied != current["state_version"]:
         raise WorkbenchRequestError("stale_state", status_code=409)
     return current
@@ -782,18 +782,25 @@ def sync_run(request):
 def restore_start(request):
     try:
         idempotency_key = _request_idempotency_key(request)
-        _state_version_guard(request)
+        profile_key = _request_value(request, "profile_key", "")
         profile = get_object_or_404(
             VaultConnectionProfile,
-            key=_request_value(request, "profile_key", ""),
+            key=profile_key,
             enabled=True,
         )
+        generation_id = _request_value(
+            request, "generation_id", ""
+        ).strip()
+        existing = VaultJob.objects.filter(
+            operation="restore_generation",
+            idempotency_key=idempotency_key,
+        ).first()
+        if existing is None:
+            _state_version_guard(request, profile_key=profile.key)
         actor_id, actor_name = _actor(request)
         job = queue_restore_job(
             profile=profile,
-            generation_id=_request_value(
-                request, "generation_id", ""
-            ).strip(),
+            generation_id=generation_id,
             idempotency_key=idempotency_key,
             requested_by_id=actor_id,
             requested_by_name=actor_name,

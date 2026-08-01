@@ -503,6 +503,41 @@ class InventoryAndRestoreTests(TestCase):
         self.assertEqual(
             first.profile_fingerprint, self.profile.fingerprint
         )
+        self.assertEqual(
+            VaultJob.objects.filter(
+                operation="restore_generation",
+                idempotency_key="operator-request-1",
+            ).count(),
+            1,
+        )
+
+    @override_settings(
+        VAULT_RESTORE_ENABLED=True,
+        VAULT_ADMIN_MUTATIONS_ENABLED=True,
+    )
+    def test_restore_idempotency_key_is_locked_to_original_request(self):
+        queue_restore_job(
+            profile=self.profile,
+            generation_id=self.generation_id,
+            idempotency_key="operator-request-conflict",
+        )
+
+        with self.assertRaisesMessage(
+            RestoreError, "idempotency_conflict"
+        ):
+            queue_restore_job(
+                profile=self.profile,
+                generation_id="different-generation",
+                idempotency_key="operator-request-conflict",
+            )
+
+        self.assertEqual(
+            VaultJob.objects.filter(
+                operation="restore_generation",
+                idempotency_key="operator-request-conflict",
+            ).count(),
+            1,
+        )
 
     @override_settings(
         VAULT_RESTORE_ENABLED=True,
