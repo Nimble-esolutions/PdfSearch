@@ -30,4 +30,3 @@ Budgets are hard limits, not advisory counters. A run cannot enqueue more than
 `DATAOPS_AUTO_HEAL_REINDEX_PER_DAY` across all runs for the UTC day. A denied
 attempt is recorded as `budget_exhausted` and is retried on the next scheduled
 window, never by an unbounded loop.
-
