@@ -79,6 +79,7 @@ class Command(BaseCommand):
         self._kv("PUBLIC_SEARCH_RATE_WINDOW", str(settings.PUBLIC_SEARCH_RATE_WINDOW))
         self._kv("OPENAI_EMBED_MODEL", settings.OPENAI_EMBED_MODEL)
         self._kv("OPENAI_CHAT_MODEL", settings.OPENAI_CHAT_MODEL)
+        self._kv("EXTERNAL_AI_MODE", getattr(settings, "EXTERNAL_AI_MODE", "") or "follows external side effects")
         self._kv("PDF_CHUNK_SIZE", str(settings.PDF_CHUNK_SIZE))
         self._kv("PDF_CHUNK_OVERLAP", str(settings.PDF_CHUNK_OVERLAP))
         self._kv("MAX_CONTEXT_WORDS", str(settings.MAX_CONTEXT_WORDS))

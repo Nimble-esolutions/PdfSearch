@@ -105,6 +105,9 @@ environ.Env.read_env()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-small")
 OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
+# Optional AI-only override.  When unset, ai_guard follows ENV_IDENTITY's
+# EXTERNAL_SIDE_EFFECTS_MODE for backwards compatibility.
+EXTERNAL_AI_MODE = os.getenv("EXTERNAL_AI_MODE", "").strip().lower()
 #OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Quick-start development settings - unsuitable for production

@@ -23,6 +23,7 @@ CONFIGURATION_DEFINITIONS = (
     ConfigurationDefinition("PUBLIC_SEARCH_RATE_WINDOW", "Rate window seconds", "Search policy"),
     ConfigurationDefinition("OPENAI_EMBED_MODEL", "Embedding model", "Search runtime"),
     ConfigurationDefinition("OPENAI_CHAT_MODEL", "Chat model", "Search runtime"),
+    ConfigurationDefinition("EXTERNAL_AI_MODE", "AI provider mode", "Search runtime", True, False),
     ConfigurationDefinition("DISPLAY_SERVICE_FOOTER", "Service footer", "Runtime controls", True, False),
     ConfigurationDefinition("MAINTENANCE_SCHEDULER_ENABLED", "Maintenance scheduler", "Runtime controls", True, False),
     ConfigurationDefinition("BACKUP_SYNC_MODE", "Backup sync mode", "Runtime controls", True, False),
