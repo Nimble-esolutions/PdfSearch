@@ -55,6 +55,18 @@
 .dataops-alert ul { margin: .6rem 0 0; padding-left: 1.2rem; color: var(--dataops-ink); font-size: .8rem; }
 
 .dataops-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.dataops-section-heading { margin: 1.4rem 0 .75rem; }
+.dataops-section-heading h3 { margin: .15rem 0 .3rem; color: var(--dataops-maroon-dark); }
+.dataops-section-heading p:last-child { color: var(--dataops-muted); font-size: .82rem; }
+.dataops-profile-grid { margin: 1.25rem 0; }
+.dataops-profile-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: .8rem; }
+.dataops-profile-card { min-width: 0; padding: 1rem; background: var(--dataops-paper); border: 1px solid var(--dataops-line); border-left: 4px solid var(--dataops-maroon); }
+.dataops-profile-card--configured { border-left-color: var(--dataops-green); }
+.dataops-profile-card--attention { border-left-color: var(--dataops-warning); }
+.dataops-profile-card__heading { display: flex; align-items: baseline; justify-content: space-between; gap: .7rem; }
+.dataops-profile-card h4 { margin: 0; color: var(--dataops-maroon-dark); font-size: 1rem; overflow-wrap: anywhere; }
+.dataops-profile-card__heading span { color: var(--dataops-muted); font-size: .7rem; text-transform: uppercase; }
+.dataops-profile-card > p { color: var(--dataops-muted); font-size: .76rem; }
 .dataops-panel { min-width: 0; padding: 1.2rem; background: var(--dataops-paper); border: 1px solid var(--dataops-line); border-top: 4px solid var(--dataops-maroon); }
 .dataops-panel > header { margin-bottom: .85rem; padding-bottom: .7rem; border-bottom: 1px solid var(--dataops-line); }
 .dataops-panel h3 { margin: .15rem 0 0; color: var(--dataops-maroon-dark); font-size: 1.2rem; }

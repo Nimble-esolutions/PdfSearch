@@ -43,6 +43,28 @@
   </section>
   {% endif %}
 
+  <section class="dataops-profile-grid" aria-labelledby="dataops-profiles-heading">
+    <header class="dataops-section-heading">
+      <p class="dataops-eyebrow">{% trans "Configured routes" %}</p>
+      <h3 id="dataops-profiles-heading">{% trans "Profiles" %}</h3>
+      <p>{% trans "Each card shows the effective non-secret configuration and the direction in which it may be used." %}</p>
+    </header>
+    <div class="dataops-profile-cards">
+      {% for profile in state.profile_cards %}
+      <article class="dataops-profile-card dataops-profile-card--{{ profile.health }}">
+        <div class="dataops-profile-card__heading"><h4>{{ profile.display_name }}</h4><span>{{ profile.health }}</span></div>
+        <p><code lang="en" dir="ltr">{{ profile.key }}</code> · {{ profile.role }}</p>
+        <dl class="dataops-facts">
+          <div><dt>{% trans "Bucket" %}</dt><dd>{{ profile.bucket }}</dd></div>
+          <div><dt>{% trans "Dataset / namespace" %}</dt><dd>{{ profile.dataset_id }} / {{ profile.namespace }}</dd></div>
+          <div><dt>{% trans "Effective source" %}</dt><dd>{{ profile.effective_source }}</dd></div>
+          <div><dt>{% trans "Selected" %}</dt><dd>{% if profile.selected_for_backup %}{% trans "Backup" %}{% endif %}{% if profile.selected_for_backup and profile.selected_for_restore %} · {% endif %}{% if profile.selected_for_restore %}{% trans "Restore" %}{% endif %}{% if not profile.selected_for_backup and not profile.selected_for_restore %}—{% endif %}</dd></div>
+        </dl>
+      </article>
+      {% empty %}<p class="dataops-empty">{% trans "No profile manifest is active. Configure a named backup or restore profile before executing an operation." %}</p>{% endfor %}
+    </div>
+  </section>
+
   <div class="dataops-grid">
     <section class="dataops-panel" aria-labelledby="dataops-refresh-heading">
       <header><p class="dataops-eyebrow">{% trans "Documents & search" %}</p><h3 id="dataops-refresh-heading">{% trans "Refresh data" %}</h3></header>
@@ -75,6 +97,11 @@
       <form class="dataops-form" method="post" action="{% url 'dataops:backup' %}">
         {% csrf_token %}
         <input type="hidden" name="idempotency_key" value="{{ idempotency_key|default:'' }}:backup">
+        <label for="dataops-backup-destination">{% trans "Destination profile" %}</label>
+        <select id="dataops-backup-destination" name="destination_profile" required{% if not state.permissions.can_backup %} disabled{% endif %}>
+          <option value="">{% trans "Use configured backup profile" %}</option>
+          {% for profile in state.profile_cards %}{% if profile.role == 'backup' or profile.role == 'both' %}<option value="{{ profile.key }}"{% if profile.selected_for_backup %} selected{% endif %}>{{ profile.display_name }} · {{ profile.bucket }} / {{ profile.namespace }}</option>{% endif %}{% endfor %}
+        </select>
         <button class="dataops-button" type="submit"{% if not state.permissions.can_backup %} disabled{% endif %}>{% trans "Back up now" %}</button>
       </form>
     </section>
@@ -91,14 +118,21 @@
       {% endif %}
       <form class="dataops-form" method="post" action="{% url 'dataops:restore' %}">
         {% csrf_token %}
-        <label for="dataops-recovery-point">{% trans "Recovery point" %}</label>
-        <select id="dataops-recovery-point" name="recovery_point_id" required{% if not state.permissions.can_restore %} disabled{% endif %}>
-          <option value="">{% trans "Choose a verified recovery point" %}</option>
-          {% for point in state.backup.recovery_points %}<option value="{{ point.id }}"{% if point.selected %} selected{% endif %}>{{ point.label|default:point.id }}</option>{% endfor %}
+        <label for="dataops-restore-source">{% trans "Source profile" %}</label>
+        <select id="dataops-restore-source" name="source_profile" required{% if not state.permissions.can_restore %} disabled{% endif %}>
+          <option value="">{% trans "Use configured restore profile" %}</option>
+          {% for profile in state.profile_cards %}{% if profile.role == 'restore' or profile.role == 'both' %}<option value="{{ profile.key }}"{% if profile.selected_for_restore %} selected{% endif %}>{{ profile.display_name }} · {{ profile.bucket }} / {{ profile.namespace }}</option>{% endif %}{% endfor %}
+        </select>
+        <label for="dataops-release-id">{% trans "Release / recovery point" %}</label>
+        <input id="dataops-release-id" name="release_id" type="text" maxlength="160" placeholder="{% trans 'Exact release ID' %}">
+        <label for="dataops-restore-destination">{% trans "Optional destination profile" %}</label>
+        <select id="dataops-restore-destination" name="destination_profile"{% if not state.permissions.can_restore %} disabled{% endif %}>
+          <option value="">{% trans "Restore into a new local generation" %}</option>
+          {% for profile in state.profile_cards %}{% if profile.role == 'backup' or profile.role == 'both' %}<option value="{{ profile.key }}">{{ profile.display_name }} · {{ profile.bucket }} / {{ profile.namespace }}</option>{% endif %}{% endfor %}
         </select>
         <button class="dataops-button dataops-button--secondary" type="submit"{% if not state.permissions.can_restore %} disabled{% endif %}>{% trans "Inspect and restore" %}</button>
       </form>
-      <p class="dataops-help">{% trans "Staging can activate automatically after every integrity, migration, and search check. Production always asks for confirmation." %}</p>
+      <p class="dataops-help">{% trans "The preflight route is shown before transfer. Staging activates only after capacity, checksum, database/media, index, and health checks pass." %}</p>
     </section>
 
     <section class="dataops-panel" aria-labelledby="dataops-config-heading">
@@ -109,6 +143,8 @@
         <div><dt>{% trans "Restore profile" %}</dt><dd>{{ state.configuration.restore_profile|default:_('Not configured') }}</dd></div>
         <div><dt>{% trans "Automation" %}</dt><dd>{{ state.configuration.mode_label|default:_('Manual') }}</dd></div>
         <div><dt>{% trans "ENV values" %}</dt><dd>{% if state.configuration.env_locked %}{% trans "Locked by ENV" %}{% else %}{% trans "Database fallback" %}{% endif %}</dd></div>
+        <div><dt>{% trans "Backup selector source" %}</dt><dd>{{ state.configuration.backup_source }}</dd></div>
+        <div><dt>{% trans "Restore selector source" %}</dt><dd>{{ state.configuration.restore_source }}</dd></div>
       </dl>
       <div class="dataops-actions">
         {% if state.permissions.can_configure %}<a class="dataops-button dataops-button--secondary" href="{% url 'dataops:configuration' %}">{% trans "Review configuration" %}</a>{% endif %}
@@ -124,8 +160,8 @@
     <div class="dataops-history__table-wrap">
       <table class="dataops-history__table">
         <caption class="visually-hidden">{% trans "Recent data operations" %}</caption>
-        <thead><tr><th scope="col">{% trans "Operation" %}</th><th scope="col">{% trans "Status" %}</th><th scope="col">{% trans "Started" %}</th><th scope="col">{% trans "Receipt" %}</th></tr></thead>
-        <tbody>{% for item in state.history.items %}<tr><th scope="row">{{ item.label }}</th><td>{{ item.status_label }}</td><td>{{ item.started_at }}</td><td><code lang="en" dir="ltr">{{ item.receipt_id }}</code></td></tr>{% endfor %}</tbody>
+        <thead><tr><th scope="col">{% trans "Operation" %}</th><th scope="col">{% trans "Status / stage" %}</th><th scope="col">{% trans "Started" %}</th><th scope="col">{% trans "Receipt" %}</th><th scope="col">{% trans "Failure" %}</th></tr></thead>
+        <tbody>{% for item in state.history.items %}<tr><th scope="row">{{ item.label }}</th><td>{{ item.status_label }} · {{ item.stage }}</td><td>{{ item.started_at }}</td><td><code lang="en" dir="ltr">{{ item.receipt_id }}</code></td><td>{{ item.error_code|default:'—' }}</td></tr>{% endfor %}</tbody>
       </table>
     </div>
     {% else %}<p class="dataops-empty">{% trans "No operations recorded yet." %}</p>{% endif %}
