@@ -11,6 +11,9 @@
 ## PR Validation
 
 - [ ] Based on latest `dev` or explicitly documented stacked branch
+- [ ] `PR contract` passed (bounded feedback only; not full certification)
+- [ ] Approved PR entered the `dev` merge queue; no direct-merge bypass used
+- [ ] Exact merge-group SHA passed `Pre-merge certification`
 - [ ] No secrets or production `.env` values added
 - [ ] `docker compose config` passes
 - [ ] `docker build --check` passes

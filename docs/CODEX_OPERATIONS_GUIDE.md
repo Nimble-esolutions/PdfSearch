@@ -59,11 +59,20 @@ write actions.
 4. Open a PR into `dev`.
 5. Resolve conflicts by merging or rebasing latest `origin/dev`, then rerun the
    affected local checks.
-6. Merge only after required checks are green and review is complete.
-7. Let the `dev` merge event publish the new image.
-8. Capture the release evidence from the completed GitHub Actions run.
-9. Deploy through Dokploy only after Git SHA, OCI digest, Compose hash, route,
+6. Treat `PR contract` as bounded early feedback only. After review, add the PR
+   to the protected `dev` merge queue.
+7. Merge only after the queue's exact merge-group SHA passes full validation,
+   immutable candidate certification, and `Pre-merge certification`. Never use
+   a settings bypass to substitute the fast check for those gates.
+8. Let the `dev` merge event publish the new image.
+9. Capture the release evidence from the completed GitHub Actions run.
+10. Deploy through Dokploy only after Git SHA, OCI digest, Compose hash, route,
    data generation, and rollback evidence agree.
+
+The repository workflows define the checks, but GitHub settings enforce merge
+queue usage, required checks, review, and bypass restrictions. If merge queue is
+not enabled with both `PR contract` and `Pre-merge certification` required, the
+fast PR workflow must remain rollout-blocked.
 
 Recommended local verification:
 
