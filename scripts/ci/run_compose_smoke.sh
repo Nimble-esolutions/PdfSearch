@@ -60,7 +60,7 @@ echo "=== Running admin UI smoke tests ==="
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${web_port}" \
     npx playwright test \
     browser_tests/operations-cockpit.spec.ts \
-    browser_tests/vault-workbench.spec.ts \
+    browser_tests/dataops-workbench.spec.ts \
     --project=desktop --project=mobile --workers=1
 "${compose[@]}" exec --no-TTY --user appuser web python -m pip check
 
