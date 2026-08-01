@@ -50,7 +50,7 @@
       {% if state.refresh %}
       <dl class="dataops-facts">
         <div><dt>{% trans "Documents" %}</dt><dd>{{ state.refresh.documents|default:'—' }}</dd></div>
-        <div><dt>{% trans "Search index" %}</dt><dd>{{ state.refresh.index_status|default:_('Unknown') }}</dd></div>
+        <div><dt>{% trans "Search index" %}</dt><dd>{{ state.refresh.index_status_label|default:_('Unknown') }}</dd></div>
         <div><dt>{% trans "Pending work" %}</dt><dd>{{ state.refresh.pending|default:'0' }}</dd></div>
       </dl>
       {% endif %}

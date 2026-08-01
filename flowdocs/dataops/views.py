@@ -56,7 +56,7 @@ def _state(request):
         "last_verified_at": datetime.now(timezone.utc),
         "environment": getattr(request, "environment", ""),
         "issues": issues,
-        "refresh": {"documents": documents, "index_status": "observed", "pending": pending, "note": "Repairs are limited by the configured run and daily budgets."},
+        "refresh": {"documents": documents, "index_status_label": "Observed", "pending": pending, "note": "Repairs are limited by the configured run and daily budgets."},
         "backup": {"latest": {"id": latest.release_id, "verified_at": latest.updated_at, "objects": latest.counts.get("objects", "—")} if latest else None, "recovery_points": []},
         "restore": {"candidate": None},
         "configuration": {"backup_profile": resolve_setting("DATAOPS_BACKUP_PROFILE", default="")[0], "restore_profile": resolve_setting("DATAOPS_RESTORE_PROFILE", default="")[0], "mode_label": resolve_setting("DATAOPS_BACKUP_MODE", default="manual")[0], "env_locked": bool(profiles)},
