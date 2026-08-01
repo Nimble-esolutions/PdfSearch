@@ -188,16 +188,47 @@ def _verified_mutable_source_runtime_identity():
 
 
 def _verified_mutable_source_runtime():
-    """Return the verified parent pointer while preserving the public helper."""
+    """Return the verified parent pointer bound to this process' data paths.
+
+    Maintenance always copies this parent into an isolated candidate before
+    running a job.  Exact path binding prevents a correctly signed pointer
+    from authorizing work against bootstrap or otherwise mismatched paths.
+    """
     from vaultops.runtime_control import read_runtime_pointer, runtime_control_paths
 
-    _verified_mutable_source_runtime_identity()
-    return read_runtime_pointer(
+    generation_id, manifest_digest = (
+        _verified_mutable_source_runtime_identity()
+    )
+    pointer = read_runtime_pointer(
         runtime_control_paths(settings.DATA_CONTROL_ROOT)["active"],
         deployment_id=settings.ENV_IDENTITY.deployment_id,
         signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
         runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
     )
+    if (
+        pointer.generation_id != generation_id
+        or pointer.manifest_digest != manifest_digest
+    ):
+        raise CandidateMaintenanceError(
+            "maintenance_source_authority_changed"
+        )
+    configured_paths = {
+        "database": Path(settings.DATABASES["default"]["NAME"]).resolve(),
+        "media": Path(settings.MEDIA_ROOT).resolve(),
+        "faiss": Path(settings.FAISS_INDEX_DIR).resolve(),
+        "chroma": Path(settings.CHROMA_DIR).resolve(),
+    }
+    pointer_paths = {
+        "database": pointer.database_path.resolve(),
+        "media": pointer.media_root.resolve(),
+        "faiss": pointer.faiss_index_dir.resolve(),
+        "chroma": pointer.chroma_dir.resolve(),
+    }
+    if configured_paths != pointer_paths:
+        raise CandidateMaintenanceError(
+            "maintenance_source_runtime_identity_mismatch"
+        )
+    return pointer
 
 
 def _maintenance_source_parent():
@@ -227,6 +258,18 @@ def maintenance_source_capability_reason() -> str:
     """
     try:
         _maintenance_source_parent()
+        root = workspace_root()
+        probe = root
+        while not probe.exists() and probe != probe.parent:
+            probe = probe.parent
+        if (
+            not probe.is_dir()
+            or probe.is_symlink()
+            or not probe.stat().st_mode & 0o222
+        ):
+            raise CandidateMaintenanceError(
+                "maintenance_workspace_unwritable"
+            )
     except CandidateMaintenanceError as exc:
         return exc.reason_code
     except Exception:

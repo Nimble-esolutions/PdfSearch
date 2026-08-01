@@ -119,9 +119,7 @@ def capability_reasons() -> dict[str, str]:
     disabled flag cannot accidentally mask another.
     """
     common = ""
-    if getattr(settings, "ACTIVE_RUNTIME", None) is not None:
-        common = "runtime_read_only"
-    elif not getattr(settings, "LOCAL_INDEX_MAINTENANCE_ENABLED", False):
+    if not getattr(settings, "LOCAL_INDEX_MAINTENANCE_ENABLED", False):
         common = "bulk_reindex_disabled"
     elif (
         getattr(settings, "MAINTENANCE_WORKER_READINESS_REQUIRED", True)
