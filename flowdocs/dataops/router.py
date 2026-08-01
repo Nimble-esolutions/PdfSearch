@@ -20,5 +20,9 @@ class DataOpsControlRouter:
         if app_label == self.app_label:
             return db == self.database_alias
         if db == self.database_alias:
+            # Preserve the legacy Vault control app's ownership while this
+            # router participates in the same control database.
+            if app_label == "vaultops":
+                return None
             return False
         return None
