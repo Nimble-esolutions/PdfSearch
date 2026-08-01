@@ -48,7 +48,7 @@ test.describe('Documents & Search and Vault & Recovery', () => {
       const url = new URL(request.url());
       if (url.hostname === 'cdn.jsdelivr.net') externalRequests.push(request.url());
     });
-    await login(page);
+    await login(page, '/dashboard/operations/?section=overview');
     await expect(page.getByRole('heading', { name: 'Vault & Recovery' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Authority comparison' })).toBeVisible();
     await expect(page.locator('[data-summary="runtime"]')).toBeVisible();
@@ -163,6 +163,8 @@ test.describe('Documents & Search and Vault & Recovery', () => {
 
     await page.setViewportSize({ width: 320, height: 720 });
     await page.goto('/dashboard/operations/');
+    await expect(page.getByRole('heading', { name: 'Backup & Restore' })).toBeVisible();
+    await expect(page.getByText('Support tools and technical evidence')).toBeVisible();
     const dimensions = await page.evaluate(() => ({
       scroll: document.documentElement.scrollWidth,
       client: document.documentElement.clientWidth,
