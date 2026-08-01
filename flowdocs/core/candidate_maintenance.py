@@ -781,6 +781,7 @@ def _candidate_environment(workspace: Path) -> dict:
             "DJANGO_SETTINGS_MODULE": "flowdocs.settings_candidate",
             "MAINTENANCE_WORKSPACE_ROOT": str(workspace),
             "MAINTENANCE_CANDIDATE_EXECUTION": "1",
+            "MAINTENANCE_CANDIDATE_PREPARATION_ENABLED": "0",
             "VAULT_SYNC_ENABLED": "0",
             "STAGING_RUNTIME_ACTIVATION_ENABLED": "0",
         }

@@ -84,7 +84,7 @@ class MaintenanceCandidateImportTests(TestCase):
         ):
             (self.workspace / directory).mkdir()
         (self.workspace / "media" / "one.pdf").write_bytes(b"%PDF-1.4")
-        workspace_stat = self.workspace.stat()
+        workspace_stat = self.workspace.resolve().stat()
         self.job.options["candidate_workspace_id"] = self.workspace.name
         self.job.options["candidate_workspace_identity"] = {
             "device": workspace_stat.st_dev,
