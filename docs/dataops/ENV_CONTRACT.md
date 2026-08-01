@@ -60,6 +60,7 @@ The implementation recognises these controls (all have safe defaults):
 | `DATAOPS_UI_SECRET_STORAGE_ENABLED` | Permit explicitly opted-in encrypted DB credentials. |
 | `DATAOPS_CONFIG_ENCRYPTION_KEY` | Key reference for AES-256-GCM fallback values; never log the value. |
 | `DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING` | Auto-activate only after all staging gates pass. |
+| `DATAOPS_RESTORE_STAGING_ROOT` | Isolated quarantine root used by the staging command; never the active data root. |
 
 ## Hard cutover
 
