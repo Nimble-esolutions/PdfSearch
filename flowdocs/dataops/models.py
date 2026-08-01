@@ -27,6 +27,7 @@ class DataProfile(TimeStampedModel):
     class Source(models.TextChoices):
         ENVIRONMENT = "environment", "Environment"
         STORED = "stored", "Stored fallback"
+        DEFAULT = "default", "Safe default"
 
     key = models.SlugField(max_length=80, unique=True)
     display_name = models.CharField(max_length=160)
@@ -39,7 +40,10 @@ class DataProfile(TimeStampedModel):
     region = models.CharField(max_length=80, blank=True, default="")
     dataset_id = models.CharField(max_length=120)
     source_id = models.CharField(max_length=120, blank=True, default="")
+    namespace = models.CharField(max_length=200, blank=True, default="")
+    prefix = models.CharField(max_length=200, blank=True, default="")
     credential_prefix = models.CharField(max_length=120, blank=True, default="")
+    credential_ref = models.CharField(max_length=120, blank=True, default="")
     fingerprint = models.CharField(max_length=64, blank=True, default="")
     last_observed_at = models.DateTimeField(null=True, blank=True)
     observation = models.JSONField(default=dict, blank=True)
@@ -85,6 +89,10 @@ class DataOperation(TimeStampedModel):
     kind = models.CharField(max_length=24, choices=Kind.choices)
     state = models.CharField(max_length=20, choices=State.choices, default=State.QUEUED)
     profile_key = models.SlugField(max_length=80, blank=True, default="")
+    source_profile_key = models.SlugField(max_length=80, blank=True, default="")
+    destination_profile_key = models.SlugField(max_length=80, blank=True, default="")
+    release_id = models.CharField(max_length=160, blank=True, default="")
+    pipeline_stage = models.CharField(max_length=32, blank=True, default="preflight")
     request_id = models.CharField(max_length=160, blank=True, default="")
     idempotency_key = models.CharField(max_length=160, blank=True, default="")
     checkpoint = models.JSONField(default=dict, blank=True)

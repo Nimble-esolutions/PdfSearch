@@ -4,7 +4,7 @@ from dataops.worker import reconcile_receipts
 
 
 class Command(BaseCommand):
-    help = "Reconcile Data Operations receipts without executing backup or restore"
+    help = "Execute and reconcile queued Data Operations pipelines"
 
     def add_arguments(self, parser):
         parser.add_argument("--limit", type=int, default=50)
