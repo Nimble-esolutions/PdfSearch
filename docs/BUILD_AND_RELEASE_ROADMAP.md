@@ -105,14 +105,25 @@ Recent release records:
 
 ## GitHub Actions Release Policy
 
-- Pull requests run the bounded `PR contract` and never publish an image. That
-  fast check is early feedback, not full certification.
-- The protected `dev` merge queue runs full validation and publishes an
-  immutable candidate for the exact merge-group SHA. `Pre-merge certification`
-  fails unless both jobs succeed.
+- Phase one keeps existing full pull-request validation and adds the bounded
+  `PR contract`; the fast check is supplemental feedback, not certification.
+- The protected `dev` merge queue runs full validation for the exact merge-group
+  SHA. It does not receive package-write permission or publish to GHCR.
+  `Pre-merge certification` fails unless full validation succeeds.
+- The protected final `dev` push rebuilds, publishes, and certifies its exact
+  image SHA. This rebuild is intentionally unavoidable until a separately
+  reviewed candidate-reuse design proves merge-group and final SHA identity.
 - Merge queue and the required `PR contract` / `Pre-merge certification`
   checks are repository settings; workflow files do not enforce those settings.
-  Do not enable the fast-only PR path until those settings are active.
+  Do not enable the fast-only PR path until those settings are active and proven
+  by a queued test PR. That phase-two change must be a separate PR.
+- Initial queue settings must use build concurrency/group size 1, an ALLGREEN
+  merge policy, and a status-check timeout longer than the full job (at least
+  90 minutes while the workflow timeout is 90 minutes).
+- Require CODEOWNER approval for workflows, Docker entrypoints, dependency
+  locks, and CI scripts; dismiss stale approvals and restrict bypasses.
+- Do not universally require the path-filtered documentation workflow context;
+  require the always-materialized rollup contexts instead.
 - A push to `dev` after merge is the release trigger.
 - Manual publishing is allowed only from `dev` with explicit approval/input.
 - Docker/Checkout Actions are pinned to verified Node 24 commit SHAs.
