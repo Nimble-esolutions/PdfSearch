@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load static i18n %}
+
+{% block title %}{% trans "Data Operations — CC & RCS Maharashtra" %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'main/css/data-operations.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="dataops-workbench" data-state-url="{{ state_url|default:'' }}">
+  <header class="dataops-heading">
+    <div>
+      <p class="dataops-kicker">{% trans "Operations" %}</p>
+      <h2>{% trans "Data operations" %}</h2>
+      <p>{% trans "Keep documents, search indexes, and recovery copies healthy. Routine repairs happen automatically; approval is requested only when active data would change." %}</p>
+    </div>
+    {% if state.observed_at %}
+    <p class="dataops-observed">{% trans "Last verified" %}<br><time datetime="{{ state.observed_at|date:'c' }}">{{ state.observed_at|date:"Y-m-d H:i:s T" }}</time></p>
+    {% endif %}
+  </header>
+
+  <section class="dataops-status dataops-status--{{ state.posture|default:'unknown' }}" aria-labelledby="dataops-status-heading" aria-live="polite">
+    <div class="dataops-status__summary">
+      <p class="dataops-eyebrow">{% trans "Current condition" %}</p>
+      <h3 id="dataops-status-heading">{{ state.status_label|default:_('Checking data health') }}</h3>
+      {% if state.condition %}<p>{{ state.condition }}</p>{% endif %}
+    </div>
+    <dl class="dataops-status__facts">
+      <div><dt>{% trans "Automatic response" %}</dt><dd>{{ state.automatic_response|default:_('No automatic action running') }}</dd></div>
+      <div><dt>{% trans "Last evidence" %}</dt><dd>{% if state.last_verified_at %}<time datetime="{{ state.last_verified_at|date:'c' }}">{{ state.last_verified_at|date:"Y-m-d H:i T" }}</time>{% else %}{% trans "Not recorded" %}{% endif %}</dd></div>
+      <div><dt>{% trans "Environment" %}</dt><dd>{{ state.environment|default:request.user.environment|default:_('Unknown') }}</dd></div>
+    </dl>
+  </section>
+
+  {% if state.issues %}
+  <section class="dataops-alert" role="status" aria-labelledby="dataops-alert-heading">
+    <h3 id="dataops-alert-heading">{% trans "A decision is needed" %}</h3>
+    <p>{% trans "The system could not safely resolve every issue. Review the evidence before approving a restore or activation." %}</p>
+    <ul>
+      {% for issue in state.issues %}<li>{% if issue.label %}{{ issue.label }}{% else %}{{ issue }}{% endif %}{% if issue.code %} <code lang="en" dir="ltr">{{ issue.code }}</code>{% endif %}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <div class="dataops-grid">
+    <section class="dataops-panel" aria-labelledby="dataops-refresh-heading">
+      <header><p class="dataops-eyebrow">{% trans "Documents & search" %}</p><h3 id="dataops-refresh-heading">{% trans "Refresh data" %}</h3></header>
+      <p>{% trans "Refresh the latest observations, repair derived indexes, or run a bounded reindex. Active documents remain available while work runs." %}</p>
+      {% if state.refresh %}
+      <dl class="dataops-facts">
+        <div><dt>{% trans "Documents" %}</dt><dd>{{ state.refresh.documents|default:'—' }}</dd></div>
+        <div><dt>{% trans "Search index" %}</dt><dd>{{ state.refresh.index_status|default:_('Unknown') }}</dd></div>
+        <div><dt>{% trans "Pending work" %}</dt><dd>{{ state.refresh.pending|default:'0' }}</dd></div>
+      </dl>
+      {% endif %}
+      <form class="dataops-form" method="post" action="{% url 'dataops:refresh' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key|default:'' }}:refresh">
+        <button class="dataops-button" type="submit"{% if not state.permissions.can_refresh %} disabled{% endif %}>{% trans "Refresh and repair" %}</button>
+      </form>
+      {% if state.refresh.note %}<p class="dataops-help">{{ state.refresh.note }}</p>{% endif %}
+    </section>
+
+    <section class="dataops-panel" aria-labelledby="dataops-backup-heading">
+      <header><p class="dataops-eyebrow">{% trans "Recovery copies" %}</p><h3 id="dataops-backup-heading">{% trans "Back up data" %}</h3></header>
+      <p>{% trans "Create a verified, immutable recovery point in the configured storage profile. Credentials are never shown here." %}</p>
+      {% if state.backup.latest %}
+      <dl class="dataops-facts">
+        <div><dt>{% trans "Latest recovery point" %}</dt><dd><code lang="en" dir="ltr">{{ state.backup.latest.id }}</code></dd></div>
+        <div><dt>{% trans "Verified" %}</dt><dd>{{ state.backup.latest.verified_at|default:_('Pending') }}</dd></div>
+        <div><dt>{% trans "Objects" %}</dt><dd>{{ state.backup.latest.objects|default:'—' }}</dd></div>
+      </dl>
+      {% else %}<p class="dataops-empty">{% trans "No verified recovery point is recorded yet." %}</p>{% endif %}
+      <form class="dataops-form" method="post" action="{% url 'dataops:backup' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key|default:'' }}:backup">
+        <button class="dataops-button" type="submit"{% if not state.permissions.can_backup %} disabled{% endif %}>{% trans "Back up now" %}</button>
+      </form>
+    </section>
+
+    <section class="dataops-panel" aria-labelledby="dataops-restore-heading">
+      <header><p class="dataops-eyebrow">{% trans "Recovery copies" %}</p><h3 id="dataops-restore-heading">{% trans "Restore data" %}</h3></header>
+      <p>{% trans "Choose a verified recovery point. The package is inspected in quarantine before it can replace a staging runtime." %}</p>
+      {% if state.restore.candidate %}
+      <dl class="dataops-facts">
+        <div><dt>{% trans "Candidate" %}</dt><dd><code lang="en" dir="ltr">{{ state.restore.candidate.id }}</code></dd></div>
+        <div><dt>{% trans "Gate" %}</dt><dd>{{ state.restore.candidate.gate_label|default:_('Awaiting checks') }}</dd></div>
+        <div><dt>{% trans "Target" %}</dt><dd>{{ state.restore.candidate.target|default:_('Staging') }}</dd></div>
+      </dl>
+      {% endif %}
+      <form class="dataops-form" method="post" action="{% url 'dataops:restore' %}">
+        {% csrf_token %}
+        <label for="dataops-recovery-point">{% trans "Recovery point" %}</label>
+        <select id="dataops-recovery-point" name="recovery_point_id" required{% if not state.permissions.can_restore %} disabled{% endif %}>
+          <option value="">{% trans "Choose a verified recovery point" %}</option>
+          {% for point in state.backup.recovery_points %}<option value="{{ point.id }}"{% if point.selected %} selected{% endif %}>{{ point.label|default:point.id }}</option>{% endfor %}
+        </select>
+        <button class="dataops-button dataops-button--secondary" type="submit"{% if not state.permissions.can_restore %} disabled{% endif %}>{% trans "Inspect and restore" %}</button>
+      </form>
+      <p class="dataops-help">{% trans "Staging can activate automatically after every integrity, migration, and search check. Production always asks for confirmation." %}</p>
+    </section>
+
+    <section class="dataops-panel" aria-labelledby="dataops-config-heading">
+      <header><p class="dataops-eyebrow">{% trans "Configuration" %}</p><h3 id="dataops-config-heading">{% trans "Storage and automation" %}</h3></header>
+      <p>{% trans "Environment variables are the source of truth. Values supplied by ENV are locked; edits here are safe database fallbacks and can be exported for Dokploy review." %}</p>
+      <dl class="dataops-facts">
+        <div><dt>{% trans "Backup profile" %}</dt><dd>{{ state.configuration.backup_profile|default:_('Not configured') }}</dd></div>
+        <div><dt>{% trans "Restore profile" %}</dt><dd>{{ state.configuration.restore_profile|default:_('Not configured') }}</dd></div>
+        <div><dt>{% trans "Automation" %}</dt><dd>{{ state.configuration.mode_label|default:_('Manual') }}</dd></div>
+        <div><dt>{% trans "ENV values" %}</dt><dd>{% if state.configuration.env_locked %}{% trans "Locked by ENV" %}{% else %}{% trans "Database fallback" %}{% endif %}</dd></div>
+      </dl>
+      <div class="dataops-actions">
+        {% if state.permissions.can_configure %}<a class="dataops-button dataops-button--secondary" href="{% url 'dataops:configuration' %}">{% trans "Review configuration" %}</a>{% endif %}
+        {% if state.permissions.can_export_env %}<a class="dataops-button dataops-button--text" href="{% url 'dataops:env_patch' %}">{% trans "Export ENV patch" %}</a>{% endif %}
+      </div>
+    </section>
+  </div>
+
+  <details class="dataops-history">
+    <summary>{% trans "History and technical evidence" %}{% if state.history.count %} · {{ state.history.count }}{% endif %}</summary>
+    <p class="dataops-help">{% trans "History is append-only and contains operation IDs, counts, and reason codes—not credentials or secret values." %}</p>
+    {% if state.history.items %}
+    <div class="dataops-history__table-wrap">
+      <table class="dataops-history__table">
+        <caption class="visually-hidden">{% trans "Recent data operations" %}</caption>
+        <thead><tr><th scope="col">{% trans "Operation" %}</th><th scope="col">{% trans "Status" %}</th><th scope="col">{% trans "Started" %}</th><th scope="col">{% trans "Receipt" %}</th></tr></thead>
+        <tbody>{% for item in state.history.items %}<tr><th scope="row">{{ item.label }}</th><td>{{ item.status_label }}</td><td>{{ item.started_at }}</td><td><code lang="en" dir="ltr">{{ item.receipt_id }}</code></td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}<p class="dataops-empty">{% trans "No operations recorded yet." %}</p>{% endif %}
+  </details>
+</div>
+{% endblock %}
