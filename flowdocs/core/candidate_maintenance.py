@@ -42,13 +42,52 @@ class CandidateMaintenanceError(RuntimeError):
 
 
 def workspace_root() -> Path:
-    return Path(
-        getattr(
-            settings,
-            "MAINTENANCE_WORKSPACE_ROOT",
-            Path(settings.DATA_CONTROL_ROOT) / "maintenance-workspaces",
-        )
-    ).resolve()
+    configured = getattr(
+        settings,
+        "MAINTENANCE_WORKSPACE_ROOT",
+        Path(settings.DATA_CONTROL_ROOT) / "maintenance-workspaces",
+    )
+    # Preserve the configured lexical path. Resolving here would erase a
+    # symlink before the authority check below could reject it.
+    return Path(os.path.abspath(os.fspath(configured)))
+
+
+def _workspace_root_authority(*, create: bool = False) -> tuple[Path, tuple[int, int]]:
+    """Validate a lexical workspace path and bind its existing parent."""
+    root = workspace_root()
+    current = Path(root.anchor)
+    for part in root.parts[1:]:
+        candidate = current / part
+        if candidate.is_symlink():
+            raise CandidateMaintenanceError("maintenance_workspace_unsafe")
+        if not candidate.exists():
+            break
+        current = candidate
+    if (
+        not current.is_dir()
+        or current.is_symlink()
+        or not current.stat().st_mode & 0o222
+    ):
+        raise CandidateMaintenanceError("maintenance_workspace_unwritable")
+    parent_stat = current.stat()
+    authority = (parent_stat.st_dev, parent_stat.st_ino)
+    if create:
+        allowed_parent = current
+        root.mkdir(parents=True, exist_ok=True)
+        # Repeat every lexical-component check after mkdir. This detects a
+        # parent swap instead of trusting the path walk that preceded it.
+        verified_root, verified_authority = _workspace_root_authority()
+        allowed_parent_stat = allowed_parent.stat()
+        if (
+            verified_root != root
+            or (allowed_parent_stat.st_dev, allowed_parent_stat.st_ino)
+            != authority
+        ):
+            raise CandidateMaintenanceError("maintenance_workspace_authority_changed")
+        if not root.is_dir() or root.is_symlink():
+            raise CandidateMaintenanceError("maintenance_workspace_unsafe")
+        return verified_root, verified_authority
+    return root, authority
 
 
 def _sha256(path: Path) -> str:
@@ -70,10 +109,16 @@ def _copy_sqlite(source: Path, target: Path) -> None:
 
 
 def _copy_tree(source: Path, target: Path) -> None:
+    if source.is_symlink():
+        raise CandidateMaintenanceError("maintenance_source_runtime_unsafe")
     if source.is_dir():
-        shutil.copytree(source, target, symlinks=False)
+        # Preserve a symlink introduced during the copy instead of following
+        # it into an attacker-selected tree. Candidate validation then rejects
+        # the link before the candidate can be used.
+        shutil.copytree(source, target, symlinks=True)
     else:
         target.mkdir(parents=True)
+    _tree_identity(target)
 
 
 def _tree_identity(root: Path) -> dict:
@@ -108,9 +153,9 @@ def _tree_identity(root: Path) -> dict:
 
 def _mutable_source_identities() -> dict:
     return {
-        "media": _tree_identity(Path(settings.MEDIA_ROOT).resolve()),
-        "faiss": _tree_identity(Path(settings.FAISS_INDEX_DIR).resolve()),
-        "chroma": _tree_identity(Path(settings.CHROMA_DIR).resolve()),
+        "media": _tree_identity(Path(settings.MEDIA_ROOT)),
+        "faiss": _tree_identity(Path(settings.FAISS_INDEX_DIR)),
+        "chroma": _tree_identity(Path(settings.CHROMA_DIR)),
     }
 
 
@@ -184,7 +229,7 @@ def _verified_mutable_source_runtime_identity():
         raise CandidateMaintenanceError(
             "maintenance_source_observation_stale"
         )
-    return pointer.generation_id, pointer.manifest_digest
+    return pointer
 
 
 def _verified_mutable_source_runtime():
@@ -196,9 +241,7 @@ def _verified_mutable_source_runtime():
     """
     from vaultops.runtime_control import read_runtime_pointer, runtime_control_paths
 
-    generation_id, manifest_digest = (
-        _verified_mutable_source_runtime_identity()
-    )
+    verified_pointer = _verified_mutable_source_runtime_identity()
     pointer = read_runtime_pointer(
         runtime_control_paths(settings.DATA_CONTROL_ROOT)["active"],
         deployment_id=settings.ENV_IDENTITY.deployment_id,
@@ -206,8 +249,9 @@ def _verified_mutable_source_runtime():
         runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
     )
     if (
-        pointer.generation_id != generation_id
-        or pointer.manifest_digest != manifest_digest
+        pointer.generation_id != verified_pointer.generation_id
+        or pointer.manifest_digest != verified_pointer.manifest_digest
+        or pointer.pointer_digest != verified_pointer.pointer_digest
     ):
         raise CandidateMaintenanceError(
             "maintenance_source_authority_changed"
@@ -232,6 +276,13 @@ def _verified_mutable_source_runtime():
 
 
 def _maintenance_source_parent():
+    if (
+        getattr(settings, "ACTIVE_RUNTIME", None) is not None
+        and not settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED
+    ):
+        raise CandidateMaintenanceError(
+            "maintenance_candidate_preparation_disabled"
+        )
     if settings.MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:
         return _verified_mutable_source_runtime()
     generation_id = getattr(settings, "RUNTIME_GENERATION_ID", "")
@@ -258,18 +309,7 @@ def maintenance_source_capability_reason() -> str:
     """
     try:
         _maintenance_source_parent()
-        root = workspace_root()
-        probe = root
-        while not probe.exists() and probe != probe.parent:
-            probe = probe.parent
-        if (
-            not probe.is_dir()
-            or probe.is_symlink()
-            or not probe.stat().st_mode & 0o222
-        ):
-            raise CandidateMaintenanceError(
-                "maintenance_workspace_unwritable"
-            )
+        _workspace_root_authority()
     except CandidateMaintenanceError as exc:
         return exc.reason_code
     except Exception:
@@ -294,8 +334,7 @@ def estimate_workspace_bytes(job: MaintenanceJob) -> int:
 
 
 def create_workspace(job: MaintenanceJob) -> Path:
-    root = workspace_root()
-    root.mkdir(parents=True, exist_ok=True)
+    root, root_authority = _workspace_root_authority(create=True)
     source_bytes = estimate_workspace_bytes(job)
     capacity = capacity_report(source_bytes=source_bytes, operation="maintenance")
     if not capacity["byte_capacity_ok"] or not capacity["inode_capacity_ok"]:
@@ -303,6 +342,11 @@ def create_workspace(job: MaintenanceJob) -> Path:
     workspace = root / f"mw-{job.public_id}-{uuid.uuid4().hex[:8]}"
     temporary = root / f".{workspace.name}.tmp"
     temporary.mkdir(mode=0o700)
+    checked_root, checked_authority = _workspace_root_authority()
+    if checked_root != root or checked_authority != root_authority:
+        raise CandidateMaintenanceError("maintenance_workspace_authority_changed")
+    if temporary.is_symlink() or temporary.parent != root:
+        raise CandidateMaintenanceError("maintenance_workspace_unsafe")
     barrier_acquired = False
     try:
         from vaultops.services.mutations import (
@@ -324,18 +368,24 @@ def create_workspace(job: MaintenanceJob) -> Path:
         mutation_epoch = barrier.current_epoch
         parent = _maintenance_source_parent()
         parent_tree_before = _tree_identity(Path(parent.runtime_path))
-        live_database = Path(settings.DATABASES["default"]["NAME"]).resolve()
+        live_database_configured = Path(settings.DATABASES["default"]["NAME"])
+        if live_database_configured.is_symlink():
+            raise CandidateMaintenanceError(
+                "maintenance_source_runtime_unsafe"
+            )
+        live_database = live_database_configured.resolve()
         live_database_before = _sha256(live_database)
         source_trees_before = _mutable_source_identities()
         _copy_sqlite(live_database, temporary / "db.sqlite3")
-        _copy_tree(Path(settings.MEDIA_ROOT).resolve(), temporary / "media")
+        _copy_tree(Path(settings.MEDIA_ROOT), temporary / "media")
         _copy_tree(
-            Path(settings.FAISS_INDEX_DIR).resolve(),
+            Path(settings.FAISS_INDEX_DIR),
             temporary / "faiss_indexes",
         )
         _copy_tree(
-            Path(settings.CHROMA_DIR).resolve(), temporary / "chroma_db"
+            Path(settings.CHROMA_DIR), temporary / "chroma_db"
         )
+        _tree_identity(temporary)
         (temporary / "pdf_cache").mkdir()
         (temporary / "backups").mkdir()
         parent_after = _maintenance_source_parent()

@@ -20,6 +20,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from core.models import Folder, PDFFile
+from core.maintenance_plans import capability_reasons
 from core.candidate_maintenance import (
     CandidateMaintenanceError,
     _verified_mutable_source_runtime,
@@ -495,7 +496,15 @@ class ActivationCoordinatorTests(TestCase):
         with (
             override_settings(
                 MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
-                MAINTENANCE_WORKSPACE_ROOT=self.root / "maintenance-workspaces",
+                MAINTENANCE_WORKSPACE_ROOT=(
+                    self.root.resolve() / "maintenance-workspaces"
+                ),
+                ACTIVE_RUNTIME=object(),
+                LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+                FORCE_REINDEX_ENABLED=True,
+                EXTERNAL_EMBEDDINGS_ENABLED=True,
+                VAULT_MUTATION_TRACKING_ENABLED=True,
+                MAINTENANCE_WORKER_READINESS_REQUIRED=False,
             ),
             patch.object(
                 settings,
@@ -519,14 +528,24 @@ class ActivationCoordinatorTests(TestCase):
             identity = _verified_mutable_source_runtime_identity()
             source = _verified_mutable_source_runtime()
             reason = maintenance_source_capability_reason()
+            reasons = capability_reasons()
 
-        self.assertEqual(identity, (CURRENT_GENERATION, CURRENT_DIGEST))
+        self.assertEqual(identity.generation_id, CURRENT_GENERATION)
+        self.assertEqual(identity.manifest_digest, CURRENT_DIGEST)
+        self.assertEqual(identity.pointer_digest, pointer.pointer_digest)
         self.assertEqual(source.pointer_digest, pointer.pointer_digest)
         self.assertEqual(reason, "")
+        for operation in (
+            "validate",
+            "repair_indexes",
+            "reindex_needed",
+            "reindex_selected",
+        ):
+            self.assertEqual(reasons[operation], "")
         self.assertEqual(
             hashlib.sha256(database.read_bytes()).hexdigest(), before
         )
-        self.assertEqual(pointer.generation_id, identity[0])
+        self.assertEqual(pointer.generation_id, identity.generation_id)
 
     def test_mutable_writer_source_rejects_tampered_pointer(self):
         self._observe_current_source_pointer()
@@ -590,6 +609,36 @@ class ActivationCoordinatorTests(TestCase):
             with self.assertRaisesMessage(
                 CandidateMaintenanceError,
                 "maintenance_source_runtime_identity_mismatch",
+            ):
+                _verified_mutable_source_runtime()
+
+    def test_mutable_writer_source_rejects_same_generation_pointer_race(self):
+        first = self._observe_current_source_pointer()
+        alternate_path = self.control / "alternate-pointer.json"
+        atomic_write_json(
+            alternate_path,
+            make_pointer(
+                self.current_runtime,
+                CURRENT_GENERATION,
+                CURRENT_DIGEST,
+                "different-signed-intent",
+            ),
+        )
+        second = read_runtime_pointer(
+            alternate_path,
+            deployment_id=DEPLOYMENT_ID,
+            signing_key=SIGNING_KEY,
+            runtime_root=self.runtime_root,
+        )
+        self.assertNotEqual(first.pointer_digest, second.pointer_digest)
+
+        with patch(
+            "vaultops.runtime_control.read_runtime_pointer",
+            side_effect=[first, second],
+        ):
+            with self.assertRaisesMessage(
+                CandidateMaintenanceError,
+                "maintenance_source_authority_changed",
             ):
                 _verified_mutable_source_runtime()
 
