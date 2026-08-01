@@ -29,7 +29,14 @@ from django.utils import timezone
 
 from core.artifact_vault import ArtifactVault
 from core.environment import AppEnv, BackupRole
-from core.models import CustomUser, Folder, PDFFile
+from core.models import (
+    CustomUser,
+    Folder,
+    MaintenanceAuditEvent,
+    MaintenanceJob,
+    MaintenancePlan,
+    PDFFile,
+)
 from core.utils import precompute_pdf_embeddings
 from vaultops.models import (
     ActivationIntent,
@@ -107,6 +114,13 @@ def _tree_records(root: Path) -> list[dict]:
 
 def _database_custody(path: Path) -> dict:
     """Capture schema and non-operational row identity without row contents."""
+    operational_tables = {
+        "django_session",
+        "core_maintenanceplan",
+        "core_maintenancejob",
+        "core_maintenancejobitem",
+        "core_maintenanceauditevent",
+    }
     connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
         tables = connection.execute(
@@ -119,7 +133,7 @@ def _database_custody(path: Path) -> dict:
             evidence["schema"][table] = hashlib.sha256(
                 (schema_sql or "").encode("utf-8")
             ).hexdigest()
-            if table == "django_session":
+            if table in operational_tables:
                 continue
             columns = [
                 row[1]
@@ -284,7 +298,14 @@ def seed_and_freeze() -> None:
             "active_generation_id": generation.generation_id,
             "previous_generation_id": "",
             "pointer_digest": pointer["document_digest"],
-            "status": "ready",
+            "status": "committed",
+            "readiness_evidence": {
+                "livez": "ok",
+                "readyz": "ready",
+                "runtime_generation_id": generation.generation_id,
+                "runtime_manifest_digest": generation.manifest_digest,
+                "runtime_smoke": "passed",
+            },
             "observed_at": timezone.now(),
         },
     )
@@ -606,16 +627,49 @@ def assert_vault_activation_evidence() -> None:
 def remove_retry_file() -> None:
     path = Path(settings.MEDIA_ROOT) / "pdfs/e2e-retry.pdf"
     if path.exists():
-        path.unlink()
+        path.rename(Path(settings.DATA_ROOT) / "e2e-retry.pdf")
     print("retry_file_removed")
 
 
 def repair_retry_file() -> None:
-    _pdf(
-        Path(settings.MEDIA_ROOT) / "pdfs/e2e-retry.pdf",
-        "Member register evidence. सभासद नोंदवही पुरावा.",
-    )
+    held = Path(settings.DATA_ROOT) / "e2e-retry.pdf"
+    held.rename(Path(settings.MEDIA_ROOT) / "pdfs/e2e-retry.pdf")
     print("retry_file_restored")
+
+
+def assert_maintenance_capability() -> None:
+    """Fail before browser automation unless the exact active source is usable."""
+    from core.maintenance_plans import workbench_maintenance_state
+
+    state = workbench_maintenance_state()
+    capability = state["capabilities"]["repair_indexes"]
+    if not capability["enabled"] or capability["reason_code"]:
+        raise SystemExit(
+            "repair_indexes_capability_disabled:"
+            f"{capability['reason_code'] or 'unknown'}"
+        )
+    pointer = read_runtime_pointer(
+        runtime_control_paths(settings.DATA_CONTROL_ROOT)["active"],
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+        signing_key=settings.ACTIVATION_INTENT_SIGNING_KEY,
+        runtime_root=settings.RUNTIME_GENERATIONS_ROOT,
+    )
+    observation = RuntimePointerObservation.objects.using("control").filter(
+        deployment_id=settings.ENV_IDENTITY.deployment_id,
+    ).latest("observed_at")
+    evidence = observation.readiness_evidence
+    if (
+        observation.status != "committed"
+        or observation.active_generation_id != pointer.generation_id
+        or observation.pointer_digest != pointer.pointer_digest
+        or evidence.get("livez") != "ok"
+        or evidence.get("readyz") != "ready"
+        or evidence.get("runtime_generation_id") != pointer.generation_id
+        or evidence.get("runtime_manifest_digest") != pointer.manifest_digest
+        or evidence.get("runtime_smoke") != "passed"
+    ):
+        raise SystemExit("maintenance_source_evidence_inexact")
+    print("maintenance_source_capability_verified")
 
 
 def activation_evidence() -> None:
@@ -676,23 +730,43 @@ def activation_evidence() -> None:
 
 
 def assert_parent_tree() -> None:
-    expected = json.loads(PARENT_EVIDENCE.read_text(encoding="utf-8"))
-    actual = _tree_records(Path(expected["runtime_path"]))
-    if actual != expected["records"]:
-        expected_by_path = {
-            item["path"]: item for item in expected["records"]
-        }
-        actual_by_path = {item["path"]: item for item in actual}
-        changed_paths = sorted(
-            path
-            for path in expected_by_path.keys() | actual_by_path.keys()
-            if expected_by_path.get(path) != actual_by_path.get(path)
-        )
-        raise SystemExit(
-            "parent_runtime_tree_changed:"
-            + ",".join(changed_paths[:20])
-        )
+    # Once served, the supervisor deliberately thaws the active runtime and
+    # Django writes only explicitly enumerated operational rows. Reuse the
+    # stricter content-custody verifier: exact path/type/mode, every non-DB
+    # file digest, schema, and every non-operational table must still match.
+    assert_final_parent_custody()
+    _assert_maintenance_operation_scope()
     print("parent_runtime_tree_unchanged")
+
+
+def _assert_maintenance_operation_scope() -> None:
+    """Allow only the two deliberately queued operation families."""
+    allowed_kinds = {"repair_indexes", "reindex_selected"}
+    plans = list(MaintenancePlan.objects.all())
+    jobs = list(MaintenanceJob.objects.prefetch_related("items").all())
+    if any(plan.operation not in allowed_kinds for plan in plans):
+        raise SystemExit("unexpected_maintenance_plan_operation")
+    if any(job.kind not in allowed_kinds for job in jobs):
+        raise SystemExit("unexpected_maintenance_job_kind")
+    if len(plans) > 2 or len(jobs) > 2:
+        raise SystemExit("unexpected_maintenance_operation_count")
+    if sum(job.kind == "repair_indexes" for job in jobs) > 1:
+        raise SystemExit("duplicate_repair_job")
+    if sum(job.kind == "reindex_selected" for job in jobs) > 1:
+        raise SystemExit("duplicate_reindex_job")
+    folder_ids = set(Folder.objects.values_list("id", flat=True))
+    pdf_ids = set(PDFFile.objects.values_list("id", flat=True))
+    for job in jobs:
+        if not job.options.get("candidate_required"):
+            raise SystemExit("maintenance_candidate_boundary_missing")
+        for item in job.items.all():
+            if item.folder_id not in folder_ids:
+                raise SystemExit("maintenance_item_folder_out_of_scope")
+            if item.pdf_id is not None and item.pdf_id not in pdf_ids:
+                raise SystemExit("maintenance_item_pdf_out_of_scope")
+    job_ids = {job.id for job in jobs}
+    if MaintenanceAuditEvent.objects.exclude(job_id__in=job_ids).exists():
+        raise SystemExit("maintenance_audit_job_out_of_scope")
 
 
 def assert_final_parent_custody() -> None:
@@ -842,6 +916,8 @@ if __name__ == "__main__":
         remove_retry_file()
     elif operation == "repair-retry-file":
         repair_retry_file()
+    elif operation == "assert-maintenance-capability":
+        assert_maintenance_capability()
     elif operation == "activation-evidence":
         activation_evidence()
     elif operation == "assert-parent-tree":
@@ -856,7 +932,8 @@ if __name__ == "__main__":
         raise SystemExit(
             "expected seed-and-freeze, publish-and-restore, "
             "assert-vault-activation-evidence, remove-retry-file, "
-            "repair-retry-file, activation-evidence, assert-parent-tree, "
+            "repair-retry-file, assert-maintenance-capability, "
+            "activation-evidence, assert-parent-tree, "
             "assert-final-parent-custody, assert-maintenance-evidence, "
             "or assert-final-control-evidence"
         )

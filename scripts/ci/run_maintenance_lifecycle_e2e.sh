@@ -59,9 +59,15 @@ fi
 "${COMPOSE[@]}" up -d --wait minio redis web browser-proxy
 "${COMPOSE[@]}" stop web
 "${COMPOSE[@]}" run --rm fixture seed-and-freeze
+# The fixture now has a signed, projected active generation with committed
+# readiness evidence. Run every queue/retry participant against that exact
+# runtime so the lifecycle exercises the same authority boundary as staging.
+export LIFECYCLE_ACTIVATION_ENABLED=1
+export LIFECYCLE_WRITER_MODE=0
 "${COMPOSE[@]}" up -d maintenance
 "${COMPOSE[@]}" up -d --wait web browser-proxy
 require_running_service maintenance
+"${COMPOSE[@]}" run --rm fixture assert-maintenance-capability
 
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=queue \
@@ -74,9 +80,8 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=fail \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
     --project=desktop --reporter=list
-"${COMPOSE[@]}" run --rm fixture assert-parent-tree
-
 "${COMPOSE[@]}" run --rm fixture repair-retry-file
+"${COMPOSE[@]}" run --rm fixture assert-parent-tree
 PLAYWRIGHT_BASE_URL="http://127.0.0.1:${WEB_PORT}" \
   MAINTENANCE_E2E_PHASE=retry \
   npx playwright test browser_tests/maintenance-lifecycle.spec.ts \
