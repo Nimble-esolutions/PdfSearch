@@ -8,6 +8,12 @@ import json
 from pathlib import Path
 import unittest
 
+from django.core.exceptions import ImproperlyConfigured
+
+from flowdocs.dataops.config import resolve_profiles, resolve_setting, validate_legacy_environment
+from flowdocs.dataops.credentials import decrypt, encrypt
+from flowdocs.dataops.package import PackageContractError, build_manifest, validate_manifest
+
 
 ROOT = Path(__file__).resolve().parents[3]
 VECTORS = Path(__file__).with_name("contracts.json")
@@ -56,6 +62,31 @@ class DataOpsEnvironmentContractTests(unittest.TestCase):
         self.assertIn("never log", text.lower())
         self.assertNotIn("AKIA", text)
 
+    def test_runtime_resolver_keeps_environment_authoritative(self):
+        self.assertEqual(resolve_setting("DATAOPS_ENABLED", "0", "0", {"DATAOPS_ENABLED": "1"}), ("1", "environment"))
+        self.assertEqual(resolve_setting("DATAOPS_ENABLED", "1", "0", {}), ("1", "stored"))
+        self.assertEqual(resolve_setting("DATAOPS_ENABLED", None, "0", {}), ("0", "default"))
+
+    def test_profile_rows_are_redacted_and_environment_locked(self):
+        profiles = resolve_profiles(
+            {
+                "DATAOPS_ENV_PROFILES": "primary_backup",
+                "DATAOPS_PROFILE_PRIMARY_BACKUP_ROLE": "backup",
+                "DATAOPS_PROFILE_PRIMARY_BACKUP_BUCKET": "example",
+                "DATAOPS_PROFILE_PRIMARY_BACKUP_DATASET_ID": "prod",
+                "DATAOPS_PROFILE_PRIMARY_BACKUP_CREDENTIAL_PREFIX": "OPS",
+            }
+        )
+        self.assertEqual(len(profiles), 1)
+        self.assertTrue(profiles[0].environment_locked)
+        self.assertNotIn("secret", profiles[0].redacted())
+
+    def test_legacy_environment_fails_closed_without_echoing_values(self):
+        with self.assertRaises(ImproperlyConfigured) as caught:
+            validate_legacy_environment({"VAULT_SECRET_KEY": "do-not-print"})
+        self.assertIn("VAULT_SECRET_KEY", str(caught.exception))
+        self.assertNotIn("do-not-print", str(caught.exception))
+
 
 class BoundedAutoHealContractTests(unittest.TestCase):
     @classmethod
@@ -82,3 +113,27 @@ class BoundedAutoHealContractTests(unittest.TestCase):
         self.assertEqual(accepted, self.budget["accepted"])
         self.assertEqual(denied, self.budget["denied"])
         self.assertLessEqual(used_day, self.budget["per_day"])
+
+
+class DataOpsArtifactContractTests(unittest.TestCase):
+    def test_v2_manifest_is_deterministic_and_excludes_runtime_secrets(self):
+        manifest = build_manifest(
+            release_id="release-1",
+            dataset_id="flowdocs-prod",
+            source={"profile": "primary_backup"},
+            identity={"schema": "2026.1", "image": "sha256:abc"},
+            counts={"documents": 2},
+            files=[{"key": "db.sqlite3", "sha256": "a" * 64}],
+            evidence={"snapshot": "s-1"},
+        )
+        self.assertEqual(manifest.raw["format_version"], 2)
+        self.assertEqual(manifest.digest, build_manifest(**{k: manifest.raw[k] for k in ("release_id", "dataset_id", "source", "identity", "counts", "files")}, evidence=manifest.raw["evidence"]).digest)
+        with self.assertRaises(PackageContractError):
+            validate_manifest({**manifest.raw, "credentials": "secret"})
+
+    def test_optional_credential_storage_is_authenticated_and_round_trips(self):
+        key = b"0123456789abcdef0123456789abcdef"
+        ciphertext, nonce = encrypt("access-token", key=key, aad="profile:primary")
+        self.assertEqual(decrypt(ciphertext, nonce, key=key, aad="profile:primary"), "access-token")
+        with self.assertRaises(ImproperlyConfigured):
+            decrypt(ciphertext, nonce, key=key, aad="profile:other")

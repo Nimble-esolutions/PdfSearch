@@ -1,6 +1,9 @@
-"""Data Operations contract package.
+"""Data Operations control plane.
 
-Runtime services are added incrementally; the contract tests intentionally do
-not import the legacy ``vaultops`` control plane.
+This package is deliberately small: profiles, durable operation state and
+format-aware backup/restore helpers live here while execution remains in the
+existing maintenance worker.
 """
+
+default_app_config = "dataops.apps.DataOpsConfig"
 
