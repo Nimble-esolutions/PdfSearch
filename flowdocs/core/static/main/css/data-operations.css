@@ -1,17 +1,17 @@
 /* Data Operations keeps the Workbench contract: paper, maroon, ochre, and
    quiet evidence. It intentionally does not introduce a second admin shell. */
 :root {
-  --dataops-paper: var(--vault-paper, #fffdf8);
-  --dataops-canvas: var(--vault-canvas, #f4efe6);
-  --dataops-ink: var(--vault-ink, #211d1d);
-  --dataops-muted: var(--vault-muted, #675f5a);
-  --dataops-line: var(--vault-line, #d8cec0);
-  --dataops-maroon: var(--vault-maroon, #681f2a);
-  --dataops-maroon-dark: var(--vault-maroon-dark, #43141c);
-  --dataops-ochre: var(--vault-ochre, #87520d);
-  --dataops-green: var(--vault-green, #21643d);
-  --dataops-warning: var(--vault-warning, #8a5710);
-  --dataops-danger: var(--vault-danger, #8b2531);
+  --dataops-paper: #fffdf8;
+  --dataops-canvas: #f4efe6;
+  --dataops-ink: #211d1d;
+  --dataops-muted: #675f5a;
+  --dataops-line: #d8cec0;
+  --dataops-maroon: #681f2a;
+  --dataops-maroon-dark: #43141c;
+  --dataops-ochre: #87520d;
+  --dataops-green: #21643d;
+  --dataops-warning: #8a5710;
+  --dataops-danger: #8b2531;
 }
 
 .dataops-workbench {
