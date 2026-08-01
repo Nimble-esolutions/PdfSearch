@@ -22,7 +22,9 @@ from django.utils import timezone
 from core.models import Folder, PDFFile
 from core.candidate_maintenance import (
     CandidateMaintenanceError,
+    _verified_mutable_source_runtime,
     _verified_mutable_source_runtime_identity,
+    maintenance_source_capability_reason,
 )
 from core.recovery_auth import RecoveryAuthenticationError
 from runtime_paths_cli import main as runtime_paths_main
@@ -490,13 +492,37 @@ class ActivationCoordinatorTests(TestCase):
         database = self.current_runtime / "db.sqlite3"
         before = hashlib.sha256(database.read_bytes()).hexdigest()
 
-        with override_settings(
-            ACTIVE_RUNTIME=None,
-            MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+        with (
+            override_settings(
+                MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+                MAINTENANCE_WORKSPACE_ROOT=self.root / "maintenance-workspaces",
+            ),
+            patch.object(
+                settings,
+                "DATABASES",
+                {
+                    **settings.DATABASES,
+                    "default": {
+                        **settings.DATABASES["default"],
+                        "NAME": database,
+                    },
+                },
+            ),
+            patch.object(settings, "MEDIA_ROOT", self.current_runtime / "media"),
+            patch.object(
+                settings,
+                "FAISS_INDEX_DIR",
+                self.current_runtime / "faiss_indexes",
+            ),
+            patch.object(settings, "CHROMA_DIR", self.current_runtime / "chroma_db"),
         ):
             identity = _verified_mutable_source_runtime_identity()
+            source = _verified_mutable_source_runtime()
+            reason = maintenance_source_capability_reason()
 
         self.assertEqual(identity, (CURRENT_GENERATION, CURRENT_DIGEST))
+        self.assertEqual(source.pointer_digest, pointer.pointer_digest)
+        self.assertEqual(reason, "")
         self.assertEqual(
             hashlib.sha256(database.read_bytes()).hexdigest(), before
         )
@@ -535,6 +561,37 @@ class ActivationCoordinatorTests(TestCase):
                 "maintenance_source_observation_stale",
             ):
                 _verified_mutable_source_runtime_identity()
+
+    def test_mutable_writer_source_rejects_process_path_mismatch(self):
+        self._observe_current_source_pointer()
+        with (
+            override_settings(
+                MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=True,
+            ),
+            patch.object(
+                settings,
+                "DATABASES",
+                {
+                    **settings.DATABASES,
+                    "default": {
+                        **settings.DATABASES["default"],
+                        "NAME": self.target_runtime / "db.sqlite3",
+                    },
+                },
+            ),
+            patch.object(settings, "MEDIA_ROOT", self.current_runtime / "media"),
+            patch.object(
+                settings,
+                "FAISS_INDEX_DIR",
+                self.current_runtime / "faiss_indexes",
+            ),
+            patch.object(settings, "CHROMA_DIR", self.current_runtime / "chroma_db"),
+        ):
+            with self.assertRaisesMessage(
+                CandidateMaintenanceError,
+                "maintenance_source_runtime_identity_mismatch",
+            ):
+                _verified_mutable_source_runtime()
 
     def test_exact_activation_request_reuses_the_same_intent(self):
         first = schedule_activation(

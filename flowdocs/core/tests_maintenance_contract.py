@@ -1,3 +1,4 @@
+import os
 import uuid
 import tempfile
 from datetime import timedelta
@@ -204,6 +205,18 @@ class MaintenancePlanningTests(TestCase):
                 "maintenance_source_pointer_unverified",
             )
 
+    @override_settings(ACTIVE_RUNTIME=object())
+    def test_verified_active_runtime_enables_bounded_candidate_operations(self):
+        reasons = capability_reasons()
+
+        for operation in (
+            "validate",
+            "repair_indexes",
+            "reindex_needed",
+            "reindex_selected",
+        ):
+            self.assertEqual(reasons[operation], "")
+
     def test_queue_rechecks_source_authority_before_recovery_or_job(self):
         plan = self._plan(operation="repair_indexes")
         with (
@@ -246,6 +259,25 @@ class MaintenancePlanningTests(TestCase):
                 maintenance_source_capability_reason(),
                 "maintenance_source_pointer_unverified",
             )
+
+    def test_source_capability_rejects_unwritable_workspace_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = f"{temporary}/maintenance-workspaces"
+            os.chmod(temporary, 0o555)
+            try:
+                with (
+                    patch(
+                        "core.candidate_maintenance._maintenance_source_parent",
+                        return_value=object(),
+                    ),
+                    override_settings(MAINTENANCE_WORKSPACE_ROOT=workspace),
+                ):
+                    self.assertEqual(
+                        maintenance_source_capability_reason(),
+                        "maintenance_workspace_unwritable",
+                    )
+            finally:
+                os.chmod(temporary, 0o700)
 
     def test_normalize_selection_rejects_inverted_date_range(self):
         with self.assertRaisesRegex(MaintenancePlanError, "malformed_filters"):
