@@ -171,7 +171,7 @@ def _resolve_candidate(job):
     return pinned
 
 
-def _validate_job_and_manifest(job, candidate):
+def _validate_job_and_manifest(job, candidate, *, candidate_id):
     if job.kind not in {
         "repair_indexes",
         "reindex_needed",
@@ -186,7 +186,7 @@ def _validate_job_and_manifest(job, candidate):
     manifest = _read_candidate_manifest(candidate / WORKSPACE_MANIFEST)
     if (
         manifest.get("state") != "activation_ready"
-        or manifest.get("workspace_id") != candidate.name
+        or manifest.get("workspace_id") != candidate_id
         or manifest.get("operation") != job.kind
         or manifest.get("source", {}).get("job_id") != str(job.public_id)
     ):
@@ -495,7 +495,11 @@ def import_maintenance_candidate(
         return keyed_workspace
     pinned_candidate = _resolve_candidate(job)
     candidate = pinned_candidate.anchored_path()
-    candidate_manifest, recovery = _validate_job_and_manifest(job, candidate)
+    candidate_manifest, recovery = _validate_job_and_manifest(
+        job,
+        candidate,
+        candidate_id=pinned_candidate.name,
+    )
     candidate_manifest_sha256 = _sha256(candidate / WORKSPACE_MANIFEST)
     try:
         pre_rehearsal_validation = validate_candidate(candidate)

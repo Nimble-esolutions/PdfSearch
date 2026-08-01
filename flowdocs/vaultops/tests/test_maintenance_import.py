@@ -378,6 +378,22 @@ class MaintenanceCandidateImportTests(TestCase):
         )
         self.assertFalse(ArtifactGeneration.objects.exists())
 
+    def test_missing_workspace_identity_is_rejected(self):
+        self.job.options.pop("candidate_workspace_identity")
+        self.job.save(update_fields=["options", "updated_at"])
+
+        with self.assertRaises(MaintenanceImportError) as raised:
+            import_maintenance_candidate(
+                self.job,
+                idempotency_key="maintenance-import-missing-identity",
+            )
+
+        self.assertEqual(
+            raised.exception.reason_code,
+            "maintenance_candidate_workspace_unsafe",
+        )
+        self.assertFalse(ArtifactGeneration.objects.exists())
+
     def test_symlinked_import_lock_is_rejected(self):
         lock_target = self.root / "lock-target"
         lock_target.write_text("unsafe")
