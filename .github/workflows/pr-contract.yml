@@ -1,0 +1,53 @@
+name: Fast PR Contract
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: PR contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      SECRET_KEY: ci-only-secret
+      OPENAI_API_KEY: ci-only-key
+      PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      REDIS_IMAGE: redis@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      MINIO_IMAGE: minio/minio@sha256:0000000000000000000000000000000000000000000000000000000000000000
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 (Node 24)
+
+      - name: Validate source without dependency installation
+        run: |
+          set -euo pipefail
+          git diff --check
+          bash -n start.sh docker-entrypoint.sh scripts/ops/run_recovery_certification.sh
+          python3 -m compileall -q flowdocs scripts
+          python3 -m unittest \
+            scripts.ci.test_release_workflow_contract \
+            scripts.ci.test_pr_contract_workflow \
+            scripts.ci.test_docs_contract \
+            scripts.ci.test_operator_language \
+            scripts.ci.test_recovery_certification_contract \
+            scripts.ci.test_compose_env_parity
+          python3 scripts/ci/validate_operator_language.py
+
+      - name: Validate build and Compose contracts
+        run: |
+          set -euo pipefail
+          docker build --check -f Dockerfile .
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.ci.yml config --quiet
+          docker compose -f docker-compose.integration.yml config --quiet
+          docker compose -f docker-compose.maintenance-e2e.yml config --quiet

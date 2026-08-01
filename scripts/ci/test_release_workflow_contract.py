@@ -23,14 +23,17 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
     def setUp(self):
         self.validate = job_block("validate")
         self.candidate = job_block("candidate")
+        self.premerge = job_block("premerge")
         self.release = job_block("release")
 
     def test_validation_contract_stays_independent(self):
         self.assertIn("name: Validate source and deployment contract", self.validate)
         self.assertNotRegex(self.validate, r"(?m)^    needs:")
+        self.assertIn("if: github.event_name != 'pull_request'", self.validate)
 
-    def test_candidate_is_dev_only_and_exports_exact_build_identity(self):
+    def test_candidate_supports_merge_group_and_exports_exact_build_identity(self):
         self.assertNotRegex(self.candidate, r"(?m)^    needs:")
+        self.assertIn("github.event_name == 'merge_group'", self.candidate)
         self.assertIn("github.event_name == 'push'", self.candidate)
         self.assertIn("github.event_name == 'workflow_dispatch'", self.candidate)
         self.assertEqual(self.candidate.count("github.ref == 'refs/heads/dev'"), 2)
@@ -83,13 +86,21 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn('--tag "${IMAGE_NAME}:dev"', self.release)
         self.assertIn('--tag "${IMAGE_NAME}:latest"', self.release)
 
-    def test_release_repeats_the_dev_only_event_guard(self):
-        for block in (self.candidate, self.release):
-            with self.subTest(job=block.splitlines()[0].strip()):
-                self.assertIn("github.event_name == 'push'", block)
-                self.assertIn("github.event_name == 'workflow_dispatch'", block)
-                self.assertEqual(block.count("github.ref == 'refs/heads/dev'"), 2)
-                self.assertIn("inputs.publish == true", block)
+    def test_release_remains_dev_only(self):
+        self.assertNotIn("github.event_name == 'merge_group'", self.release)
+        self.assertIn("github.event_name == 'push'", self.release)
+        self.assertIn("github.event_name == 'workflow_dispatch'", self.release)
+        self.assertEqual(self.release.count("github.ref == 'refs/heads/dev'"), 2)
+        self.assertIn("inputs.publish == true", self.release)
+
+    def test_premerge_rollup_fails_closed_by_event(self):
+        self.assertIn("name: Pre-merge certification", self.premerge)
+        self.assertIn("always()", self.premerge)
+        self.assertIn("needs: [validate, candidate]", self.premerge)
+        self.assertIn('test "$VALIDATE_RESULT" = "skipped"', self.premerge)
+        self.assertIn('test "$CANDIDATE_RESULT" = "skipped"', self.premerge)
+        self.assertIn('test "$VALIDATE_RESULT" = "success"', self.premerge)
+        self.assertIn('test "$CANDIDATE_RESULT" = "success"', self.premerge)
 
 
 if __name__ == "__main__":
