@@ -441,6 +441,19 @@ PDF_CACHE_DIR = (
     else Path(os.getenv('PDF_CACHE_DIR', str(DATA_ROOT / 'pdf_cache')))
 )
 
+# Data Operations is the replacement control-plane contract. It is additive in
+# this release so existing restore workers can finish their compatibility
+# drain; ENV values still remain the source of truth for the new UI.
+DATAOPS_ENABLED = _env_bool('DATAOPS_ENABLED', False)
+DATAOPS_BACKUP_MODE = os.getenv('DATAOPS_BACKUP_MODE', 'manual').strip().lower()
+if DATAOPS_BACKUP_MODE not in {'manual', 'scheduled', 'changes'}:
+    raise ImproperlyConfigured('DATAOPS_BACKUP_MODE must be manual, scheduled, or changes')
+DATAOPS_BACKUP_INTERVAL_SECONDS = _env_positive_int('DATAOPS_BACKUP_INTERVAL_SECONDS', 900)
+DATAOPS_AUTO_HEAL_ENABLED = _env_bool('DATAOPS_AUTO_HEAL_ENABLED', False)
+DATAOPS_AUTO_HEAL_REINDEX_PER_RUN = _env_nonnegative_int('DATAOPS_AUTO_HEAL_REINDEX_PER_RUN', 500)
+DATAOPS_AUTO_HEAL_REINDEX_PER_DAY = _env_nonnegative_int('DATAOPS_AUTO_HEAL_REINDEX_PER_DAY', 5000)
+DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING = _env_bool('DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING', False)
+
 # Vault Active Sync remains disabled unless every required switch is explicit.
 VAULT_SYNC_ENABLED = _env_bool('VAULT_SYNC_ENABLED', False)
 VAULT_MUTATION_TRACKING_ENABLED = _env_bool(

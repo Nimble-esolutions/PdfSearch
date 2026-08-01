@@ -81,8 +81,17 @@ def state_api(request):
 def _queue(request, kind, maintenance_kind):
     if not _can_act(request):
         return HttpResponse("Superadmin approval required", status=403)
-    job = queue_job(kind=maintenance_kind, requested_by=request.user)
-    operation = DataOperation.objects.using("control").create(kind=kind, state=DataOperation.State.QUEUED, request_id=str(job.public_id))
+    try:
+        job = queue_job(kind=maintenance_kind, requested_by=request.user)
+    except Exception as exc:
+        # A disabled worker or safety gate is an operator-visible blocked state,
+        # not an unhandled server error.
+        return HttpResponse(f"Operation blocked: {getattr(exc, 'reason_code', 'maintenance_unavailable')}", status=409)
+    operation, _ = DataOperation.objects.using("control").get_or_create(
+        kind=kind,
+        idempotency_key=request.POST.get("idempotency_key", ""),
+        defaults={"state": DataOperation.State.QUEUED, "request_id": str(job.public_id)},
+    )
     DataOpsAuditEvent.objects.using("control").create(actor_id=request.user.pk, actor_name=request.user.get_username(), action=kind, operation_id=operation.public_id, outcome="queued")
     return redirect("dataops:workbench")
 
