@@ -8,7 +8,7 @@
   <div class="admin-page-heading mb-4">
     <p class="admin-kicker">{% trans "Superadmin" %}</p>
     <h2 id="settings-page-heading">{% trans "Settings & Configuration" %}</h2>
-    <p>{% trans "Environment identity, artifact vault status, and runtime feature flags." %}</p>
+    <p>{% trans "Environment identity, data recovery status, and runtime feature flags." %}</p>
   </div>
 
   {% if env_fields %}
@@ -94,16 +94,16 @@
   {% endif %}
 
   <section class="mb-4" aria-labelledby="vault-status-heading">
-    <h3 id="vault-status-heading" class="border-bottom pb-2 mb-3">{% trans "S3 Artifact Vault Status" %}</h3>
+    <h3 id="vault-status-heading" class="border-bottom pb-2 mb-3">{% trans "Data recovery status" %}</h3>
     <div class="row">
       <div class="col-md-6 col-lg-4">
         <section class="admin-panel h-100" aria-labelledby="vault-connectivity-heading">
           <div class="border-bottom pb-2 mb-3">
-            <h4 id="vault-connectivity-heading" class="h6 mb-0">{% trans "Vault Connectivity" %}</h4>
+            <h4 id="vault-connectivity-heading" class="h6 mb-0">{% trans "Object storage connectivity" %}</h4>
           </div>
           <div>
             <dl class="row small mb-0">
-              <dt class="col-sm-5">{% trans "Vault Enabled" %}</dt>
+              <dt class="col-sm-5">{% trans "Recovery enabled" %}</dt>
               <dd class="col-sm-7"><span class="badge {% if vault_status.enabled %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.enabled|yesno:_("Enabled,Disabled") }}</span></dd>
 
               <dt class="col-sm-5">{% trans "Endpoint Reachable" %}</dt>
