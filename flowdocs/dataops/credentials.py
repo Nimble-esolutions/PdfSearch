@@ -16,8 +16,8 @@ def _key(raw: str | bytes | None = None) -> bytes:
             value = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
         except Exception as exc:
             raise ImproperlyConfigured("DATAOPS_CONFIG_ENCRYPTION_KEY must be urlsafe base64") from exc
-    if len(value) not in (16, 24, 32):
-        raise ImproperlyConfigured("DATAOPS_CONFIG_ENCRYPTION_KEY must decode to 16, 24 or 32 bytes")
+    if len(value) != 32:
+        raise ImproperlyConfigured("DATAOPS_CONFIG_ENCRYPTION_KEY must decode to 32 bytes (AES-256)")
     return value
 
 

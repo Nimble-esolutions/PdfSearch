@@ -21,7 +21,7 @@ _BOOLS = {"1": True, "true": True, "yes": True, "on": True, "0": False, "false":
 
 
 def _env_bool(name: str, default: bool = False, environ: Mapping[str, str] | None = None) -> bool:
-    value = (environ or os.environ).get(name)
+    value = (os.environ if environ is None else environ).get(name)
     if value is None:
         return default
     try:
@@ -72,7 +72,7 @@ class ResolvedProfile:
 
 
 def resolve_profiles(environ: Mapping[str, str] | None = None) -> tuple[ResolvedProfile, ...]:
-    env = environ or os.environ
+    env = os.environ if environ is None else environ
     raw = env.get("DATAOPS_ENV_PROFILES", "").strip()
     if not raw:
         return ()
@@ -107,7 +107,7 @@ def resolve_profiles(environ: Mapping[str, str] | None = None) -> tuple[Resolved
 
 def resolve_setting(name: str, stored: object | None = None, default: object | None = None, environ: Mapping[str, str] | None = None) -> tuple[object, str]:
     """Return ``(value, source)`` with ENV > stored > default precedence."""
-    env = environ or os.environ
+    env = os.environ if environ is None else environ
     if name in env:
         return env[name], "environment"
     if stored is not None:
@@ -117,7 +117,7 @@ def resolve_setting(name: str, stored: object | None = None, default: object | N
 
 def validate_legacy_environment(environ: Mapping[str, str] | None = None) -> None:
     """Fail closed when removed vault aliases are still present."""
-    env = environ or os.environ
+    env = os.environ if environ is None else environ
     legacy = sorted(key for key in env if key.startswith(("ARTIFACT_VAULT_", "VAULT_")))
     if legacy:
         raise ImproperlyConfigured("Removed Data Operations environment keys present: " + ", ".join(legacy))
