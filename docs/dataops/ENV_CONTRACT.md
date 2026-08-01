@@ -53,6 +53,7 @@ The implementation recognises these controls (all have safe defaults):
 | `DATAOPS_AUTO_HEAL_ENABLED` | Enable bounded, non-destructive repair. |
 | `DATAOPS_AUTO_HEAL_INTERVAL_SECONDS` | Reconciler interval. |
 | `DATAOPS_AUTO_HEAL_MAX_RETRIES` | Retry cap per operation. |
+| `DATAOPS_OPERATION_LEASE_SECONDS` | Expiring control-plane lease used to prevent duplicate worker execution and reclaim crashed preflight operations. |
 | `DATAOPS_AUTO_HEAL_REINDEX_PER_RUN` / `DATAOPS_AUTO_HEAL_REINDEX_PER_DAY` | Reindex budgets. |
 | `DATAOPS_STALE_AFTER_SECONDS` | Age after which an observation is stale. |
 | `DATAOPS_UI_CONFIG_ENABLED` | Allow editing encrypted DB fallbacks. |

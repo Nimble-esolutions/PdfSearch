@@ -797,7 +797,12 @@ def run_operation_pipeline(
     raise DataOpsPipelineError("pipeline_retry_exhausted", stage="publish_receipt", retryable=False)
 
 
-def execute_operation_record(operation, *, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+def execute_operation_record(
+    operation,
+    *,
+    environ: Mapping[str, str] | None = None,
+    lease: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
     """Execute a queued ``DataOperation`` and persist its safe receipt."""
     from django.conf import settings
     from .models import DataOperation
@@ -908,4 +913,5 @@ def execute_operation_record(operation, *, environ: Mapping[str, str] | None = N
         budget=budget,
         max_retries=int(getattr(settings, "DATAOPS_AUTO_HEAL_MAX_RETRIES", 3)),
         require_permissions=True,
+        lease=lease,
     )

@@ -102,6 +102,8 @@ class DataOperation(TimeStampedModel):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     attempt = models.PositiveSmallIntegerField(default=0)
+    lease_token = models.CharField(max_length=64, blank=True, default="")
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -112,7 +114,10 @@ class DataOperation(TimeStampedModel):
                 name="dataops_unique_operation_idempotency",
             )
         ]
-        indexes = [models.Index(fields=["state", "kind"])]
+        indexes = [
+            models.Index(fields=["state", "kind"]),
+            models.Index(fields=["state", "lease_expires_at"], name="dataops_op_state_lease_idx"),
+        ]
 
 
 class RecoveryPoint(TimeStampedModel):
