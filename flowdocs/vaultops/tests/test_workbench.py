@@ -955,6 +955,20 @@ class VaultWorkbenchTests(TestCase):
         )
         self.assertTrue(state["readiness"]["local_development"]["enabled"])
 
+    def test_transient_readiness_issues_are_marked_for_safe_auto_recovery(self):
+        state = {
+            "authority": {
+                "blocking_reasons": ["runtime_observation_stale", "restore_dataset_mismatch"],
+            },
+            "maintenance": {"health": {}, "capabilities": {}},
+            "environment": {"app_env": "staging", "is_production": False},
+        }
+        enrich_workbench_readiness(state)
+        issues = {item["reason_code"]: item for item in state["readiness"]["issues"]}
+        self.assertTrue(issues["runtime_observation_stale"]["automatic_recovery"])
+        self.assertTrue(issues["runtime_observation_stale"]["automatic_recovery_label"])
+        self.assertFalse(issues["restore_dataset_mismatch"]["automatic_recovery"])
+
     def test_workbench_renders_local_posture_and_remediation_link(self):
         response = self.client.get(
             reverse("operations_panel"), {"section": "overview"}

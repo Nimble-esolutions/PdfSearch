@@ -80,8 +80,11 @@
       <article class="vault-remediation">
         <div>
           {% include "components/operator_evidence.html" with presentation=issue.presentation technical_code=issue.reason_code show_action=False only %}
+          {% if issue.automatic_recovery %}
+          <p class="vault-note vault-note--automatic-recovery">{{ issue.automatic_recovery_label }}</p>
+          {% endif %}
         </div>
-        <a class="vault-button vault-button--secondary" href="?section={{ issue.section }}">{{ issue.label }}</a>
+        {% if not issue.automatic_recovery %}<a class="vault-button vault-button--secondary" href="?section={{ issue.section }}">{{ issue.label }}</a>{% endif %}
       </article>
       {% endfor %}
     </div>

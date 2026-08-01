@@ -131,6 +131,18 @@ REMEDIATION_DESTINATIONS = {
     },
 }
 
+# These conditions are transient control-plane observations.  Workers and
+# readiness probes can safely retry them without asking an administrator to
+# understand internal job states.  Data-integrity, identity, and destructive
+# actions deliberately remain manual.
+AUTO_HEALABLE_REASONS = frozenset({
+    "maintenance_worker_unavailable",
+    "runtime_observation_unavailable",
+    "runtime_observation_stale",
+    "inventory_observation_stale",
+    "critical_job_unhealthy",
+})
+
 
 def enrich_workbench_readiness(state):
     """Attach safe, typed remediation guidance without exposing secrets."""
@@ -156,6 +168,12 @@ def enrich_workbench_readiness(state):
             "label": presentation["action_label"],
             "section": REMEDIATION_DESTINATIONS.get(reason_code, {}).get(
                 "section", "jobs"
+            ),
+            "automatic_recovery": reason_code in AUTO_HEALABLE_REASONS,
+            "automatic_recovery_label": (
+                gettext("Safe retry is handled automatically; review only if it persists.")
+                if reason_code in AUTO_HEALABLE_REASONS
+                else ""
             ),
         })
 
