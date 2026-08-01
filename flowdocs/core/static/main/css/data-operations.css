@@ -33,6 +33,7 @@
 .dataops-heading h2 { margin: .15rem 0 .4rem; color: var(--dataops-maroon-dark); font-size: clamp(1.65rem, 3vw, 2.5rem); line-height: 1.1; }
 .dataops-heading p { max-width: 72ch; color: var(--dataops-muted); }
 .dataops-kicker, .dataops-eyebrow { margin: 0; color: var(--dataops-ochre) !important; font-size: .76rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.dataops-status .dataops-eyebrow { color: #f3c979 !important; }
 .dataops-observed { flex: 0 0 auto; text-align: right; font-size: .76rem; }
 .dataops-observed time { color: var(--dataops-ink); font-family: ui-monospace, monospace; }
 
