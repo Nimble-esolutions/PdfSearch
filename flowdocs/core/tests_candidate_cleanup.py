@@ -51,7 +51,9 @@ class _Values:
 class CandidateWorkspaceTests(SimpleTestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        # Candidate workspace authority deliberately rejects lexical symlink
+        # components; macOS exposes /var as a symlink to /private/var.
+        self.root = Path(self.temporary.name).resolve()
         self.data = self.root / "data"
         self.control = self.root / "control"
         self.data.mkdir()

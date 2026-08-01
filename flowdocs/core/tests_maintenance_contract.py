@@ -2,6 +2,7 @@ import os
 import uuid
 import tempfile
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -13,6 +14,7 @@ from django.utils import timezone
 from core.maintenance import queue_job, run_job
 from core.candidate_maintenance import (
     CandidateMaintenanceError,
+    _copy_tree,
     maintenance_source_capability_reason,
 )
 from core.management.commands.run_maintenance_jobs import (
@@ -43,6 +45,55 @@ LOCAL_GATES = override_settings(
     RUNTIME_GENERATION_ID="",
     RUNTIME_MANIFEST_DIGEST="",
 )
+
+
+@override_settings(
+    LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+    FORCE_REINDEX_ENABLED=True,
+    EXTERNAL_EMBEDDINGS_ENABLED=True,
+    VAULT_MUTATION_TRACKING_ENABLED=True,
+    MAINTENANCE_WORKER_READINESS_REQUIRED=False,
+    ACTIVE_RUNTIME=object(),
+    MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=False,
+)
+class ActiveRuntimeMaintenanceConfigurationTests(TestCase):
+    databases = {"default", "control"}
+
+    def test_active_runtime_without_candidate_preparation_fails_closed(self):
+        actor = CustomUser.objects.create_user(
+            username="config-root",
+            password="password",
+            role="superadmin",
+            is_superuser=True,
+            is_staff=True,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary).resolve() / "maintenance-workspaces"
+            with override_settings(MAINTENANCE_WORKSPACE_ROOT=workspace):
+                reasons = capability_reasons()
+                for operation in (
+                    "repair_indexes",
+                    "reindex_needed",
+                    "reindex_selected",
+                ):
+                    self.assertEqual(
+                        reasons[operation],
+                        "maintenance_candidate_preparation_disabled",
+                    )
+                with self.assertRaisesRegex(
+                    MaintenancePlanError,
+                    "^maintenance_candidate_preparation_disabled$",
+                ):
+                    create_plan(
+                        operation="reindex_needed",
+                        data={},
+                        actor=actor,
+                        idempotency_key="active-runtime-disabled",
+                    )
+                self.assertFalse(workspace.exists())
+
+        self.assertFalse(MaintenancePlan.objects.exists())
+        self.assertFalse(MaintenanceJob.objects.exists())
 
 
 @LOCAL_GATES
@@ -205,18 +256,6 @@ class MaintenancePlanningTests(TestCase):
                 "maintenance_source_pointer_unverified",
             )
 
-    @override_settings(ACTIVE_RUNTIME=object())
-    def test_verified_active_runtime_enables_bounded_candidate_operations(self):
-        reasons = capability_reasons()
-
-        for operation in (
-            "validate",
-            "repair_indexes",
-            "reindex_needed",
-            "reindex_selected",
-        ):
-            self.assertEqual(reasons[operation], "")
-
     def test_queue_rechecks_source_authority_before_recovery_or_job(self):
         plan = self._plan(operation="repair_indexes")
         with (
@@ -262,8 +301,9 @@ class MaintenancePlanningTests(TestCase):
 
     def test_source_capability_rejects_unwritable_workspace_root(self):
         with tempfile.TemporaryDirectory() as temporary:
-            workspace = f"{temporary}/maintenance-workspaces"
-            os.chmod(temporary, 0o555)
+            lexical_parent = Path(temporary).resolve()
+            workspace = lexical_parent / "maintenance-workspaces"
+            os.chmod(lexical_parent, 0o555)
             try:
                 with (
                     patch(
@@ -277,7 +317,70 @@ class MaintenancePlanningTests(TestCase):
                         "maintenance_workspace_unwritable",
                     )
             finally:
-                os.chmod(temporary, 0o700)
+                os.chmod(lexical_parent, 0o700)
+
+    def test_source_capability_rejects_final_workspace_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            lexical_parent = Path(temporary).resolve()
+            target = lexical_parent / "target"
+            workspace = lexical_parent / "maintenance-workspaces"
+            os.mkdir(target)
+            os.symlink(target, workspace)
+            with (
+                patch(
+                    "core.candidate_maintenance._maintenance_source_parent",
+                    return_value=object(),
+                ),
+                override_settings(MAINTENANCE_WORKSPACE_ROOT=workspace),
+            ):
+                self.assertEqual(
+                    maintenance_source_capability_reason(),
+                    "maintenance_workspace_unsafe",
+                )
+
+    def test_source_capability_rejects_intermediate_workspace_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            lexical_parent = Path(temporary).resolve()
+            target = lexical_parent / "target"
+            linked_parent = lexical_parent / "linked-parent"
+            os.mkdir(target)
+            os.symlink(target, linked_parent)
+            with (
+                patch(
+                    "core.candidate_maintenance._maintenance_source_parent",
+                    return_value=object(),
+                ),
+                override_settings(
+                    MAINTENANCE_WORKSPACE_ROOT=linked_parent / "workspaces"
+                ),
+            ):
+                self.assertEqual(
+                    maintenance_source_capability_reason(),
+                    "maintenance_workspace_unsafe",
+                )
+
+    def test_tree_copy_preserves_and_rejects_racing_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = f"{temporary}/source"
+            target = f"{temporary}/target"
+            outside = f"{temporary}/outside"
+            os.mkdir(source)
+            os.mkdir(outside)
+
+            def racing_copytree(_source, destination, *, symlinks):
+                self.assertTrue(symlinks)
+                os.mkdir(destination)
+                os.symlink(outside, f"{destination}/raced-link")
+
+            with patch(
+                "core.candidate_maintenance.shutil.copytree",
+                side_effect=racing_copytree,
+            ):
+                with self.assertRaisesRegex(
+                    CandidateMaintenanceError,
+                    "maintenance_source_runtime_unsafe",
+                ):
+                    _copy_tree(Path(source), Path(target))
 
     def test_normalize_selection_rejects_inverted_date_range(self):
         with self.assertRaisesRegex(MaintenancePlanError, "malformed_filters"):
