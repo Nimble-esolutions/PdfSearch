@@ -91,7 +91,7 @@ def main():
             and 'name="readiness"' in dashboard.text
             and 'name="provenance"' in dashboard.text
             and "Active Work" in dashboard.text
-            and "Vault posture" in dashboard.text
+            and "Data recovery posture" in dashboard.text
             and "Add Category" in dashboard.text
             and ("No categories yet" in dashboard.text or "admin-category-card" in dashboard.text),
             "dashboard UI missing",
@@ -99,30 +99,17 @@ def main():
 
         operations = client.get("/dashboard/operations/")
         require(operations.status_code == 200, "backup and restore GET failed")
-        require("Backup & Restore" in operations.text, "backup and restore heading missing")
-        require(
-            "Support tools and technical evidence" in operations.text,
-            "backup and restore support boundary missing",
-        )
+        require("Data operations" in operations.text, "data operations heading missing")
+        require("Refresh data" in operations.text, "refresh controls missing")
+        require("Back up data" in operations.text, "backup controls missing")
+        require("Restore data" in operations.text, "restore controls missing")
         require(
             "vendor/bootstrap/5.3.0" in operations.text,
             "vendored Bootstrap asset missing",
         )
         require("cdn.jsdelivr.net" not in operations.text, "external Bootstrap dependency found")
-        advanced = client.get("/dashboard/operations/?section=overview")
-        require(
-            advanced.status_code == 200
-            and "Vault & Recovery" in advanced.text
-            and "Authority comparison" in advanced.text,
-            "advanced Vault evidence missing",
-        )
-        sync = client.get("/dashboard/operations/?section=sync")
-        require(
-            sync.status_code == 200
-            and "Queue publish-only sync" in sync.text
-            and 'method="post"' in sync.text,
-            "no-JavaScript Active Sync form missing",
-        )
+        configuration = client.get("/dashboard/data-operations/configuration/")
+        require(configuration.status_code == 200 and "Storage and automation" in configuration.text, "configuration page missing")
         maintenance = client.get("/dashboard/operations/?section=maintenance")
         require(maintenance.status_code == 200, "maintenance workbench GET failed")
         for expected in (

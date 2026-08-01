@@ -34,13 +34,13 @@ async function expectNoSeriousAxeViolations(page: Page) {
 }
 
 test.describe('Operations Cockpit', () => {
-  test('prioritizes work and separates local maintenance from Vault authority', async ({ page }) => {
+  test('prioritizes work and separates routine recovery from approval-gated actions', async ({ page }) => {
     await login(page);
     await expect(page.getByRole('heading', { name: 'Operations Cockpit' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Category Yard' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Active Work' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Vault posture' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Data recovery posture' })).toBeVisible();
 
     await expect(page.locator('.cockpit-posture__code')).toHaveCount(0);
     await expect(page.locator('.cockpit-attention-item code')).toHaveCount(0);
@@ -50,8 +50,8 @@ test.describe('Operations Cockpit', () => {
 
     const maintenance = page.getByRole('link', { name: 'Maintain Documents & Search' }).first();
     await expect(maintenance).toHaveAttribute('href', /section=maintenance/);
-    const vault = page.getByRole('link', { name: 'Open advanced Vault & Recovery' }).first();
-    await expect(vault).toHaveAttribute('href', /\/dashboard\/operations\/$/);
+    const dataops = page.getByRole('link', { name: 'Open Data Operations' }).first();
+    await expect(dataops).toHaveAttribute('href', /\/dashboard\/operations\/$/);
     await expect(page.getByText('sync data to S3')).toHaveCount(0);
     await expect(page.locator('#job-drawer-toggle')).toHaveCount(0);
 
