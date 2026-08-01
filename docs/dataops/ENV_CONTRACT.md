@@ -21,20 +21,19 @@ redeploy is required for an ENV change to take effect.
 
 ## Profile model
 
-`DATAOPS_ENV_PROFILES` is a comma-separated list of profile IDs. Each profile
-has a role (`backup`, `restore`, or `both`) and an independent bucket/dataset
-target:
+`DATAOPS_PROFILE_MANIFEST` is the canonical JSON list of named profiles. Each
+profile has a role (`backup`, `restore`, or `both`), an independent
+bucket/dataset, and an explicit namespace/prefix:
 
 ```dotenv
-DATAOPS_ENV_PROFILES=primary_backup,stage_restore
-DATAOPS_PROFILE_PRIMARY_BACKUP_ROLE=backup
-DATAOPS_PROFILE_PRIMARY_BACKUP_ENDPOINT=https://s3.example.invalid
-DATAOPS_PROFILE_PRIMARY_BACKUP_BUCKET=example-backups
-DATAOPS_PROFILE_PRIMARY_BACKUP_REGION=ap-south-1
-DATAOPS_PROFILE_PRIMARY_BACKUP_DATASET_ID=flowdocs-prod
-DATAOPS_PROFILE_PRIMARY_BACKUP_SOURCE_ID=prod
-DATAOPS_PROFILE_PRIMARY_BACKUP_CREDENTIAL_PREFIX=DATAOPS_PRIMARY_BACKUP
+DATAOPS_PROFILE_MANIFEST=[{"name":"primary_backup","role":"backup","endpoint":"https://s3.example.invalid","bucket":"example-backups","region":"ap-south-1","dataset_id":"flowdocs-prod","source_id":"prod","namespace":"primary","credential_ref":"DATAOPS_PRIMARY_BACKUP","enabled":true}]
 ```
+
+The legacy `DATAOPS_ENV_PROFILES` CSV plus `DATAOPS_PROFILE_<NAME>_*` form is
+accepted during migration. `DATAOPS_BACKUP_PROFILE` selects a backup
+destination and `DATAOPS_RESTORE_PROFILE` selects a restore source;
+`DATAOPS_*_SOURCE_PROFILE` and `DATAOPS_*_DESTINATION_PROFILE` provide
+per-operation overrides.
 
 Credential values are supplied by the referenced prefix (`*_ACCESS_KEY` and
 `*_SECRET_KEY`) or by an explicitly enabled encrypted database credential. They
@@ -62,8 +61,10 @@ The implementation recognises these controls (all have safe defaults):
 | `DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING` | Auto-activate only after all staging gates pass. |
 | `DATAOPS_RESTORE_STAGING_ROOT` | Isolated quarantine root used by the staging command; never the active data root. |
 
-## Hard cutover
+## Compatibility window
 
-`ARTIFACT_VAULT_*` and `VAULT_*` are retired. Their presence is a startup
-configuration error with key names only (never values). There are no aliases;
-remove the old keys from Dokploy before deploying the Data Operations build.
+`ARTIFACT_VAULT_*` names remain accepted as a temporary compatibility profile
+when no structured manifest is present. They are never copied into a profile
+receipt or exposed as secret values. Generic retired `VAULT_*` credential
+aliases continue to fail closed; remove them after all services consume the
+manifest.
