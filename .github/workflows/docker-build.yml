@@ -10,32 +10,9 @@ on:
       - 'refactor/**'
       - 'test/**'
       - 'chore/**'
-    paths:
-      - Dockerfile
-      - docker-entrypoint.sh
-      - docker-compose.yml
-      - docker-compose.dev.yml
-      - docker-compose.integration.yml
-      - docker-compose.recovery-cert.yml
-      - requirements.txt
-      - requirements-web.txt
-      - requirements-web.lock
-      - requirements-indexing.txt
-      - start.sh
-      - .dockerignore
-      - docker-compose.ci.yml
-      - scripts/ci/**
-      - init/**
-      - locale/**
-      - flowdocs/locale/**
-      - flowdocs/flowdocs/settings*.py
-      - env.template
-      - env.minimal
-      - .env.example
-      - '**/*.po'
-      - '**/*.mo'
-      - flowdocs/**
-      - .github/workflows/**
+  merge_group:
+    types: [checks_requested]
+    branches: [dev]
   push:
     branches: [dev]
     paths:
@@ -82,6 +59,7 @@ env:
 jobs:
   validate:
     name: Validate source and deployment contract
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -250,6 +228,7 @@ jobs:
   candidate:
     name: Build and certify immutable dev candidate
     if: >-
+      github.event_name == 'merge_group' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.publish == true)
     runs-on: ubuntu-latest
@@ -397,6 +376,40 @@ jobs:
           MAX=$((12 * 1024 * 1024 * 1024))
           echo "Image size: $SIZE bytes; budget: $MAX bytes"
           test "$SIZE" -le "$MAX"
+
+  premerge:
+    name: Pre-merge certification
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    needs: [validate, candidate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - name: Enforce event-specific certification results
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          CANDIDATE_RESULT: ${{ needs.candidate.result }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              test "$VALIDATE_RESULT" = "skipped"
+              test "$CANDIDATE_RESULT" = "skipped"
+              echo "Full certification is reserved for the merge-group SHA."
+              ;;
+            merge_group)
+              test "$VALIDATE_RESULT" = "success"
+              test "$CANDIDATE_RESULT" = "success"
+              echo "The merge-group SHA passed source and immutable-image certification."
+              ;;
+            *)
+              echo "Unsupported pre-merge event: $GITHUB_EVENT_NAME" >&2
+              exit 2
+              ;;
+          esac
 
   release:
     name: Promote certified dev release
