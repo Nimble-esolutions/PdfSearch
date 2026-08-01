@@ -1,0 +1,99 @@
+/* Data Operations keeps the Workbench contract: paper, maroon, ochre, and
+   quiet evidence. It intentionally does not introduce a second admin shell. */
+:root {
+  --dataops-paper: var(--vault-paper, #fffdf8);
+  --dataops-canvas: var(--vault-canvas, #f4efe6);
+  --dataops-ink: var(--vault-ink, #211d1d);
+  --dataops-muted: var(--vault-muted, #675f5a);
+  --dataops-line: var(--vault-line, #d8cec0);
+  --dataops-maroon: var(--vault-maroon, #681f2a);
+  --dataops-maroon-dark: var(--vault-maroon-dark, #43141c);
+  --dataops-ochre: var(--vault-ochre, #87520d);
+  --dataops-green: var(--vault-green, #21643d);
+  --dataops-warning: var(--vault-warning, #8a5710);
+  --dataops-danger: var(--vault-danger, #8b2531);
+}
+
+.dataops-workbench {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: clamp(1rem, 2.5vw, 2.5rem);
+  color: var(--dataops-ink);
+  font-family: Inter, "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif;
+}
+
+.dataops-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 3px solid var(--dataops-maroon);
+}
+.dataops-heading h2 { margin: .15rem 0 .4rem; color: var(--dataops-maroon-dark); font-size: clamp(1.65rem, 3vw, 2.5rem); line-height: 1.1; }
+.dataops-heading p { max-width: 72ch; color: var(--dataops-muted); }
+.dataops-kicker, .dataops-eyebrow { margin: 0; color: var(--dataops-ochre) !important; font-size: .76rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.dataops-observed { flex: 0 0 auto; text-align: right; font-size: .76rem; }
+.dataops-observed time { color: var(--dataops-ink); font-family: ui-monospace, monospace; }
+
+.dataops-status { display: grid; grid-template-columns: minmax(15rem, 1fr) minmax(0, 2fr); gap: 1.25rem; margin: 1rem 0; padding: 1rem 1.2rem; color: #fffdf8; background: var(--dataops-maroon-dark); border: 1px solid var(--dataops-maroon-dark); }
+.dataops-status--ready { border-left: 6px solid #8cc69e; }
+.dataops-status--working { border-left: 6px solid #d99a2b; }
+.dataops-status--attention, .dataops-status--degraded { border-left: 6px solid #e0ae54; }
+.dataops-status--unknown { border-left: 6px solid #b3aaa2; }
+.dataops-status h3 { margin: .2rem 0 .4rem; font-size: clamp(1.2rem, 2vw, 1.55rem); }
+.dataops-status p { margin: 0; color: #dfd1c4; }
+.dataops-status__facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin: 0; }
+.dataops-status__facts > div { min-width: 0; padding-left: .8rem; border-left: 1px solid rgba(255,255,255,.2); }
+.dataops-status dt { color: #dfd1c4; font-size: .68rem; font-weight: 700; }
+.dataops-status dd { margin: .25rem 0 0; overflow-wrap: anywhere; font-size: .78rem; font-weight: 750; }
+
+.dataops-alert { margin: 1rem 0; padding: 1rem 1.2rem; background: #f9eedc; border: 1px solid #d5aa65; border-left: 5px solid var(--dataops-warning); }
+.dataops-alert h3 { margin: 0 0 .4rem; color: var(--dataops-maroon-dark); font-size: 1rem; }
+.dataops-alert p { margin: 0; color: var(--dataops-muted); font-size: .82rem; }
+.dataops-alert ul { margin: .6rem 0 0; padding-left: 1.2rem; color: var(--dataops-ink); font-size: .8rem; }
+
+.dataops-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.dataops-panel { min-width: 0; padding: 1.2rem; background: var(--dataops-paper); border: 1px solid var(--dataops-line); border-top: 4px solid var(--dataops-maroon); }
+.dataops-panel > header { margin-bottom: .85rem; padding-bottom: .7rem; border-bottom: 1px solid var(--dataops-line); }
+.dataops-panel h3 { margin: .15rem 0 0; color: var(--dataops-maroon-dark); font-size: 1.2rem; }
+.dataops-panel > p { color: var(--dataops-muted); font-size: .82rem; }
+.dataops-facts { display: grid; gap: 0; margin: .75rem 0 0; }
+.dataops-facts > div { display: grid; grid-template-columns: minmax(8rem, .8fr) minmax(0, 1.2fr); gap: .7rem; padding: .58rem 0; border-bottom: 1px solid var(--dataops-line); }
+.dataops-facts dt { color: var(--dataops-muted); font-size: .75rem; }
+.dataops-facts dd { margin: 0; overflow-wrap: anywhere; font-size: .8rem; font-weight: 700; }
+.dataops-help, .dataops-empty { color: var(--dataops-muted); font-size: .78rem; }
+.dataops-empty { margin: .75rem 0; }
+
+.dataops-form { display: grid; gap: .55rem; margin-top: 1rem; }
+.dataops-form label { color: var(--dataops-maroon-dark); font-size: .78rem; font-weight: 750; }
+.dataops-form input, .dataops-form select { width: 100%; min-height: 44px; padding: .6rem .7rem; color: var(--dataops-ink); background: #fff; border: 1px solid #958a7d; border-radius: 0; font: inherit; }
+.dataops-form select:disabled { color: #746d68; background: #e1dbd2; }
+.dataops-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; justify-self: start; padding: .65rem .9rem; color: #fff; background: var(--dataops-maroon); border: 1px solid var(--dataops-maroon); border-radius: 0; font: inherit; font-size: .8rem; font-weight: 750; text-decoration: none; cursor: pointer; }
+.dataops-button--secondary { color: var(--dataops-maroon-dark); background: transparent; }
+.dataops-button--text { color: var(--dataops-maroon); background: transparent; border-color: transparent; }
+.dataops-button:disabled { color: #746d68; background: #e1dbd2; border-color: #c8beb1; cursor: not-allowed; }
+.dataops-button:focus-visible, .dataops-form input:focus-visible, .dataops-form select:focus-visible, .dataops-history summary:focus-visible { outline: 3px solid #d99a2b; outline-offset: 2px; }
+.dataops-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+
+.dataops-history { margin-top: 1rem; background: var(--dataops-paper); border: 1px solid var(--dataops-line); }
+.dataops-history summary { min-height: 44px; padding: .75rem .9rem; color: var(--dataops-maroon-dark); background: var(--dataops-canvas); font-size: .8rem; font-weight: 750; cursor: pointer; }
+.dataops-history > p { margin: .8rem 1rem; }
+.dataops-history__table-wrap { overflow-x: auto; margin: 0 1rem 1rem; }
+.dataops-history__table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.dataops-history__table th, .dataops-history__table td { padding: .65rem .5rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--dataops-line); }
+.dataops-history__table thead th { color: var(--dataops-muted); font-size: .7rem; }
+.dataops-history__table tbody th { color: var(--dataops-maroon-dark); font-weight: 750; }
+code { overflow-wrap: anywhere; color: var(--dataops-maroon-dark); }
+
+@media (max-width: 900px) {
+  .dataops-status, .dataops-grid { grid-template-columns: 1fr; }
+  .dataops-status__facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .dataops-heading { display: block; }
+  .dataops-observed { margin-top: 1rem; text-align: left; }
+  .dataops-status__facts { grid-template-columns: 1fr; gap: .6rem; }
+  .dataops-status__facts > div { padding: .45rem 0 0; border-top: 1px solid rgba(255,255,255,.2); border-left: 0; }
+  .dataops-facts > div { grid-template-columns: 1fr; gap: .15rem; }
+}
