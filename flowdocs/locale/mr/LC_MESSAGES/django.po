@@ -4776,3 +4776,12 @@ msgstr "विद्यमान पुनरावृत्ती-प्रत�
 
 msgid "No second restore job was created."
 msgstr "दुसरे पुनर्स्थापना कार्य तयार झाले नाही."
+
+msgid "Data operations"
+msgstr "डेटा संचालन"
+
+msgid "History and technical evidence"
+msgstr "इतिहास आणि तांत्रिक पुरावा"
+
+msgid "Storage and automation"
+msgstr "साठवण आणि स्वयंचलन"

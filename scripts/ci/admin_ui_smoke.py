@@ -160,8 +160,8 @@ def main():
         operations_mr = client.get("/dashboard/operations/")
         require(
             operations_mr.status_code == 200
-            and "बॅकअप आणि पुनर्स्थापना" in operations_mr.text
-            and "सहाय्य साधने आणि तांत्रिक पुरावा" in operations_mr.text,
+            and "डेटा संचालन" in operations_mr.text
+            and "इतिहास आणि तांत्रिक पुरावा" in operations_mr.text,
             "reviewed Marathi workbench language missing",
         )
         token = csrf_token(operations_mr.text)
