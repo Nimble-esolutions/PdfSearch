@@ -8,12 +8,12 @@ import json
 from pathlib import Path
 import unittest
 
-from flowdocs.dataops.package import PackageContractError, build_manifest, validate_manifest
+from dataops.package import PackageContractError, build_manifest, validate_manifest
 
 try:
     from django.core.exceptions import ImproperlyConfigured
-    from flowdocs.dataops.config import resolve_profiles, resolve_setting, validate_legacy_environment
-    from flowdocs.dataops.credentials import decrypt, encrypt
+    from dataops.config import resolve_profiles, resolve_setting, validate_legacy_environment
+    from dataops.credentials import decrypt, encrypt
 except ModuleNotFoundError:  # Keep policy tests runnable in the lightweight CI image.
     RUNTIME_AVAILABLE = False
 

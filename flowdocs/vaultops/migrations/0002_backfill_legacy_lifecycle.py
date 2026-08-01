@@ -36,6 +36,23 @@ def backfill_legacy_lifecycle(apps, schema_editor):
     if schema_editor.connection.alias != "control":
         return
 
+    # The application database is intentionally separate from the disposable
+    # control database. Fresh installs can run control migrations before the
+    # application schema exists; in that case there is nothing to project yet.
+    # A later inventory/restore pass will create the projection from evidence.
+    application_connection = schema_editor.connection
+    try:
+        application_connection = schema_editor.connection
+        # ``default`` is resolved below through Django's connection handler;
+        # this guard only avoids assuming legacy tables exist in control.
+        from django.db import connections
+        application_connection = connections["default"]
+        existing_tables = set(application_connection.introspection.table_names())
+    except Exception:
+        return
+    if "core_customuser" not in existing_tables or "core_artifactgeneration" not in existing_tables:
+        return
+
     LegacyGeneration = apps.get_model("core", "ArtifactGeneration")
     LegacyValidation = apps.get_model("core", "ArtifactValidation")
     LegacyJob = apps.get_model("core", "MaintenanceJob")
