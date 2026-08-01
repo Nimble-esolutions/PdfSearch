@@ -788,6 +788,56 @@ def _job_records(profile, dataset_id, limit=50):
     return records
 
 
+def _operation_job_state(profile, dataset_id):
+    """Project complete current truth independent of the history limit."""
+    active_states = {VaultJob.Status.QUEUED} | ACTIVE_JOB_STATES
+    terminal_states = {
+        VaultJob.Status.SUCCEEDED,
+        VaultJob.Status.RETRYABLE_FAILED,
+        VaultJob.Status.TERMINAL_FAILED,
+        VaultJob.Status.STALE,
+        VaultJob.Status.CANCELLED,
+    }
+
+    def projected(job):
+        if job is None:
+            return None
+        return {
+            "public_id": str(job.public_id),
+            "operation": job.operation,
+            "phase": job.phase,
+            "status": job.status,
+            "generation_id": job.generation_id,
+            "manifest_digest": job.manifest_digest,
+            "profile_fingerprint": job.profile_fingerprint,
+            "safe_error_code": job.safe_error_code,
+            "created_at": job.created_at,
+            "updated_at": job.updated_at,
+            "finished_at": job.finished_at,
+        }
+
+    result = {}
+    for operation in ("sync_publish", "restore_generation"):
+        scoped = VaultJob.objects.filter(
+            profile=profile,
+            dataset_id=dataset_id,
+            operation=operation,
+        )
+        result[operation] = {
+            "active": projected(
+                scoped.filter(status__in=active_states)
+                .order_by("-created_at", "-pk")
+                .first()
+            ),
+            "latest_terminal": projected(
+                scoped.filter(status__in=terminal_states)
+                .order_by("-created_at", "-pk")
+                .first()
+            ),
+        }
+    return result
+
+
 def _audit_records(limit=50):
     return [
         {
@@ -998,20 +1048,6 @@ def _rollback_capability(*, pending_activation=None):
     }
 
 
-def _newest_record(records):
-    """Return a deterministic newest projected record without querying."""
-    eligible = [
-        item
-        for item in records
-        if item.get("created_at") is not None and item.get("public_id")
-    ]
-    return max(
-        eligible,
-        key=lambda item: (item["created_at"], item["public_id"]),
-        default=None,
-    )
-
-
 def _operation_receipt(record):
     if record is None:
         return None
@@ -1102,29 +1138,11 @@ def _operations_summary(state, *, identity):
         return summary
 
     summary["environment_role"] = role
-    jobs = [
-        job
-        for job in state.get("jobs", [])
-        if job.get("operation") == relevant_operation
-    ]
-    working = _newest_record([
-        job
-        for job in jobs
-        if job.get("status")
-        in ({VaultJob.Status.QUEUED} | ACTIVE_JOB_STATES)
-    ])
-    terminal = _newest_record([
-        job
-        for job in jobs
-        if job.get("status")
-        in {
-            VaultJob.Status.SUCCEEDED,
-            VaultJob.Status.RETRYABLE_FAILED,
-            VaultJob.Status.TERMINAL_FAILED,
-            VaultJob.Status.STALE,
-            VaultJob.Status.CANCELLED,
-        }
-    ])
+    operation_state = (state.get("operation_jobs") or {}).get(
+        relevant_operation, {}
+    )
+    working = operation_state.get("active")
+    terminal = operation_state.get("latest_terminal")
     summary["latest_receipt"] = _operation_receipt(terminal)
     if working is not None:
         summary.update({
@@ -1188,6 +1206,8 @@ def _operations_summary(state, *, identity):
         terminal
         if terminal is not None
         and terminal.get("status") == VaultJob.Status.SUCCEEDED
+        and terminal.get("profile_fingerprint")
+        == selected.get("fingerprint")
         else None
     )
     candidates = [
@@ -1201,6 +1221,9 @@ def _operations_summary(state, *, identity):
         and workspace.get("activation_allowed") is True
         and workspace.get("profile_fingerprint")
         == selected.get("fingerprint")
+        and workspace.get("profile_fingerprint")
+        == successful_restore.get("profile_fingerprint")
+        and workspace.get("generation_id")
         and workspace.get("manifest_digest")
         and workspace.get("prepared_at") is not None
     ]
@@ -1287,6 +1310,7 @@ def build_workbench_state(*, profile_key=None):
             "generations": [],
             "workspaces": [],
             "jobs": [],
+            "operation_jobs": {},
             "audit": _audit_records(),
             "retention_holds": [],
             "gc_plans": [],
@@ -1318,6 +1342,7 @@ def build_workbench_state(*, profile_key=None):
     generations = _generation_records(profile, profile.dataset_id)
     workspaces = _workspace_records(profile, profile.dataset_id)
     jobs = _job_records(profile, profile.dataset_id)
+    operation_jobs = _operation_job_state(profile, profile.dataset_id)
     retention_holds = _retention_records(profile, profile.dataset_id)
     gc_plans = _gc_plan_records(profile, profile.dataset_id)
     sync_state = (
@@ -1358,6 +1383,7 @@ def build_workbench_state(*, profile_key=None):
         "generations": generations,
         "workspaces": workspaces,
         "jobs": jobs,
+        "operation_jobs": operation_jobs,
         "audit": _audit_records(),
         "retention_holds": retention_holds,
         "gc_plans": gc_plans,
@@ -1425,6 +1451,16 @@ def build_workbench_state(*, profile_key=None):
             "job_versions": [
                 (item["public_id"], item["state_version"]) for item in jobs
             ],
+            "operation_job_versions": {
+                operation: {
+                    key: (
+                        (record or {}).get("public_id", ""),
+                        (record or {}).get("updated_at"),
+                    )
+                    for key, record in records.items()
+                }
+                for operation, records in operation_jobs.items()
+            },
             "retention_versions": [
                 (
                     item["public_id"],

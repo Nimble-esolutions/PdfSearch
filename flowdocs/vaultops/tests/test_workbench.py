@@ -88,6 +88,16 @@ class OperationsSummaryTests(TestCase):
             }],
             "authority": {"blocking_reasons": []},
             "jobs": [],
+            "operation_jobs": {
+                "sync_publish": {
+                    "active": None,
+                    "latest_terminal": None,
+                },
+                "restore_generation": {
+                    "active": None,
+                    "latest_terminal": None,
+                },
+            },
             "workspaces": [],
             "pending_activation": None,
             "feature_flags": {
@@ -129,6 +139,9 @@ class OperationsSummaryTests(TestCase):
             "updated_at": timezone.now(),
             "finished_at": None,
         }]
+        state["operation_jobs"]["restore_generation"]["active"] = (
+            state["jobs"][0]
+        )
         summary = _operations_summary(state, identity=self.identity())
         self.assertEqual(summary["posture"], "working")
         self.assertEqual(summary["primary_action"]["kind"], "none")
@@ -142,6 +155,7 @@ class OperationsSummaryTests(TestCase):
             "public_id": succeeded_id,
             "operation": "restore_generation",
             "status": VaultJob.Status.SUCCEEDED,
+            "profile_fingerprint": "f" * 64,
             "phase": "completed",
             "generation_id": "",
             "safe_error_code": "",
@@ -149,6 +163,9 @@ class OperationsSummaryTests(TestCase):
             "updated_at": now,
             "finished_at": now,
         }]
+        state["operation_jobs"]["restore_generation"][
+            "latest_terminal"
+        ] = state["jobs"][0]
         state["workspaces"] = [
             {
                 "public_id": str(uuid.uuid4()),
@@ -194,10 +211,14 @@ class OperationsSummaryTests(TestCase):
             "public_id": job_id,
             "operation": "restore_generation",
             "status": VaultJob.Status.SUCCEEDED,
+            "profile_fingerprint": "f" * 64,
             "created_at": now,
             "updated_at": now,
             "finished_at": now,
         }]
+        state["operation_jobs"]["restore_generation"][
+            "latest_terminal"
+        ] = state["jobs"][0]
         state["workspaces"] = [
             {
                 "public_id": str(uuid.uuid4()),
@@ -234,11 +255,15 @@ class OperationsSummaryTests(TestCase):
                 "public_id": succeeded_id,
                 "operation": "restore_generation",
                 "status": VaultJob.Status.SUCCEEDED,
+                "profile_fingerprint": "f" * 64,
                 "created_at": now,
                 "updated_at": now,
                 "finished_at": now,
             },
         ]
+        state["operation_jobs"]["restore_generation"][
+            "latest_terminal"
+        ] = state["jobs"][0]
         state["workspaces"] = [{
             "public_id": str(uuid.uuid4()),
             "job_public_id": succeeded_id,
@@ -267,10 +292,14 @@ class OperationsSummaryTests(TestCase):
             "public_id": job_id,
             "operation": "restore_generation",
             "status": VaultJob.Status.SUCCEEDED,
+            "profile_fingerprint": "f" * 64,
             "created_at": now,
             "updated_at": now,
             "finished_at": now,
         }]
+        state["operation_jobs"]["restore_generation"][
+            "latest_terminal"
+        ] = state["jobs"][0]
         state["workspaces"] = [{
             "public_id": str(uuid.uuid4()),
             "job_public_id": job_id,
@@ -287,6 +316,74 @@ class OperationsSummaryTests(TestCase):
         )
         self.assertEqual(summary["posture"], "attention")
         self.assertEqual(summary["reason_code"], "staging_activation_disabled")
+
+    def test_activation_rejects_malformed_or_mismatched_lineage(self):
+        now = timezone.now()
+        job_id = str(uuid.uuid4())
+        state = self.state()
+        job = {
+            "public_id": job_id,
+            "operation": "restore_generation",
+            "status": VaultJob.Status.SUCCEEDED,
+            "profile_fingerprint": "f" * 64,
+            "created_at": now,
+            "updated_at": now,
+            "finished_at": now,
+        }
+        workspace = {
+            "public_id": str(uuid.uuid4()),
+            "job_public_id": job_id,
+            "generation_id": "resolved-generation",
+            "manifest_digest": "a" * 64,
+            "profile_fingerprint": "f" * 64,
+            "state": RestoreWorkspace.State.ACTIVATION_READY,
+            "activation_allowed": True,
+            "prepared_at": now,
+            "created_at": now,
+        }
+        state["operation_jobs"]["restore_generation"][
+            "latest_terminal"
+        ] = job
+        state["workspaces"] = [workspace]
+
+        for field, invalid in (
+            ("job_fingerprint", "e" * 64),
+            ("workspace_fingerprint", "e" * 64),
+            ("generation_id", ""),
+            ("manifest_digest", ""),
+        ):
+            with self.subTest(field=field):
+                job["profile_fingerprint"] = "f" * 64
+                workspace["profile_fingerprint"] = "f" * 64
+                workspace["generation_id"] = "resolved-generation"
+                workspace["manifest_digest"] = "a" * 64
+                if field == "job_fingerprint":
+                    job["profile_fingerprint"] = invalid
+                elif field == "workspace_fingerprint":
+                    workspace["profile_fingerprint"] = invalid
+                else:
+                    workspace[field] = invalid
+                summary = _operations_summary(
+                    state, identity=self.identity()
+                )
+                self.assertEqual(
+                    summary["primary_action"]["kind"],
+                    "prepare_restore",
+                )
+
+    def test_pending_activation_suppresses_ready_workspace_action(self):
+        state = self.state()
+        state["pending_activation"] = {
+            "public_id": str(uuid.uuid4()),
+            "state": ActivationIntent.State.PENDING,
+            "target_generation_id": "pending-generation",
+        }
+        summary = _operations_summary(state, identity=self.identity())
+        self.assertEqual(summary["posture"], "working")
+        self.assertEqual(
+            summary["current_operation"]["operation"], "activation"
+        )
+        self.assertEqual(summary["primary_action"]["kind"], "none")
 
 
 @override_settings(
@@ -496,6 +593,38 @@ class VaultWorkbenchTests(TestCase):
         )
         self.assertEqual(
             projected["profile_fingerprint"], self.profile.fingerprint
+        )
+
+    def test_active_operation_is_not_hidden_by_bounded_job_history(self):
+        active = VaultJob.objects.create(
+            operation="sync_publish",
+            status=VaultJob.Status.RUNNING,
+            profile=self.profile,
+            profile_fingerprint=self.profile.fingerprint,
+            dataset_id=self.profile.dataset_id,
+            idempotency_key="older-active-sync",
+        )
+        for index in range(51):
+            VaultJob.objects.create(
+                operation="promote_generation",
+                status=VaultJob.Status.SUCCEEDED,
+                profile=self.profile,
+                profile_fingerprint=self.profile.fingerprint,
+                dataset_id=self.profile.dataset_id,
+                idempotency_key=f"newer-terminal-{index}",
+            )
+
+        state = build_workbench_state(profile_key=self.profile.key)
+
+        self.assertNotIn(
+            str(active.public_id),
+            {job["public_id"] for job in state["jobs"]},
+        )
+        self.assertEqual(
+            state["operation_jobs"]["sync_publish"]["active"][
+                "public_id"
+            ],
+            str(active.public_id),
         )
 
     @override_settings(STAGING_RUNTIME_ACTIVATION_ENABLED=True)
@@ -1775,6 +1904,121 @@ class VaultWorkbenchTests(TestCase):
             response,
             f"{reverse('vaultops:state')}?profile={other.key}",
             html=False,
+        )
+    @patch("vaultops.views.queue_restore_job")
+    @patch("vaultops.views.build_workbench_state")
+    def test_restore_rejects_default_state_version_forged_for_other_profile(
+        self, build_state, queue_job
+    ):
+        other = VaultConnectionProfile.objects.create(
+            key="scoped-restore",
+            display_name="Scoped restore",
+            enabled=True,
+            read_only=True,
+            endpoint_origin="https://other.example",
+            bucket="other",
+            region="test",
+            dataset_id="other-dataset",
+            production_source_id="other-source",
+            credential_alias="environment:OTHER",
+            fingerprint="e" * 64,
+        )
+        build_state.side_effect = lambda profile_key=None: {
+            "state_version": (
+                "other-state"
+                if profile_key == other.key
+                else "default-state"
+            )
+        }
+
+        response = self.client.post(
+            reverse("vaultops:restore_start"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": "default-state",
+                "profile_key": other.key,
+                "generation_id": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 303)
+        queue_job.assert_not_called()
+        build_state.assert_called_once_with(profile_key=other.key)
+
+    @patch("vaultops.views.queue_restore_job")
+    @patch("vaultops.views.build_workbench_state")
+    def test_restore_accepts_state_version_scoped_to_posted_profile(
+        self, build_state, queue_job
+    ):
+        other = VaultConnectionProfile.objects.create(
+            key="scoped-restore",
+            display_name="Scoped restore",
+            enabled=True,
+            read_only=True,
+            endpoint_origin="https://other.example",
+            bucket="other",
+            region="test",
+            dataset_id="other-dataset",
+            production_source_id="other-source",
+            credential_alias="environment:OTHER",
+            fingerprint="e" * 64,
+        )
+        build_state.return_value = {"state_version": "other-state"}
+        queue_job.return_value = SimpleNamespace(
+            public_id=uuid.uuid4(), correlation_id=uuid.uuid4()
+        )
+
+        response = self.client.post(
+            reverse("vaultops:restore_start"),
+            {
+                "idempotency_key": str(uuid.uuid4()),
+                "state_version": "other-state",
+                "profile_key": other.key,
+                "generation_id": "",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 202, response.content)
+        build_state.assert_called_once_with(profile_key=other.key)
+        queue_job.assert_called_once()
+
+    @patch("vaultops.views.queue_restore_job")
+    @patch("vaultops.views.build_workbench_state")
+    def test_exact_restore_double_click_replays_without_stale_state_failure(
+        self, build_state, queue_job
+    ):
+        idempotency_key = str(uuid.uuid4())
+        existing = VaultJob.objects.create(
+            operation="restore_generation",
+            status=VaultJob.Status.QUEUED,
+            profile=self.profile,
+            profile_fingerprint=self.profile.fingerprint,
+            dataset_id=self.profile.dataset_id,
+            generation_id="",
+            idempotency_key=idempotency_key,
+        )
+        queue_job.return_value = existing
+
+        response = self.client.post(
+            reverse("vaultops:restore_start"),
+            {
+                "idempotency_key": idempotency_key,
+                "state_version": "state-before-first-click",
+                "profile_key": self.profile.key,
+                "generation_id": "",
+            },
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 202, response.content)
+        build_state.assert_not_called()
+        queue_job.assert_called_once_with(
+            profile=self.profile,
+            generation_id="",
+            idempotency_key=idempotency_key,
+            requested_by_id=self.superadmin.pk,
+            requested_by_name=self.superadmin.get_username(),
         )
 
     def test_mutation_rejects_missing_idempotency_key(self):

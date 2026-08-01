@@ -86,7 +86,7 @@ def queue_restore_job(
         raise RestoreError("profile_fingerprint_changed")
     _guard_restore_direction(profile)
     with transaction.atomic(using="control"):
-        job, created = VaultJob.objects.get_or_create(
+        job, created = VaultJob.objects.select_for_update().get_or_create(
             operation="restore_generation",
             idempotency_key=idempotency_key,
             defaults={
@@ -103,6 +103,13 @@ def queue_restore_job(
                 },
             },
         )
+        if not created and (
+            job.profile_id != profile.pk
+            or job.profile_fingerprint != fingerprint
+            or job.dataset_id != profile.dataset_id
+            or job.generation_id != generation_id
+        ):
+            raise RestoreError("idempotency_conflict")
         if created:
             append_event(
                 action="job_queued",

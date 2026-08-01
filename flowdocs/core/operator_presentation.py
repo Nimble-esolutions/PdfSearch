@@ -97,6 +97,14 @@ REASONS = {
         "restore",
         "danger",
     ),
+    "idempotency_conflict": (
+        "This request key belongs to another restore",
+        "The repeated request changed its profile or generation while reusing an existing idempotency key.",
+        "No second restore job was created.",
+        "Refresh and submit a new request",
+        "restore",
+        "danger",
+    ),
     "operations_ready": (
         "Operations are ready",
         "No immediate document operations need attention.",
