@@ -1,0 +1,16 @@
+{
+  "env_precedence": [
+    {"env": "1", "db": "0", "default": "0", "effective": "1", "source": "env"},
+    {"env": "", "db": "1", "default": "0", "effective": "1", "source": "db"},
+    {"env": null, "db": null, "default": "0", "effective": "0", "source": "default"}
+  ],
+  "legacy_prefixes": ["ARTIFACT_VAULT_", "VAULT_"],
+  "required_env_prefix": "DATAOPS_",
+  "auto_heal_budget": {
+    "per_run": 3,
+    "per_day": 5,
+    "requests": [2, 2, 2],
+    "accepted": [2, 2, 1],
+    "denied": [false, false, true]
+  }
+}
