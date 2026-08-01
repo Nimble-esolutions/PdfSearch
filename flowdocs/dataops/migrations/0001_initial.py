@@ -120,9 +120,9 @@ class Migration(migrations.Migration):
                 ("recovery_point", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="candidates", to="dataops.recoverypoint")),
             ],
         ),
-        migrations.AddIndex(model_name="dataprofile", index=models.Index(fields=["role", "enabled"], name="dataops_dat_role_2d8c2f_idx")),
-        migrations.AddIndex(model_name="dataoperation", index=models.Index(fields=["state", "kind"], name="dataops_dat_state_238b21_idx")),
-        migrations.AddIndex(model_name="dataopsauditevent", index=models.Index(fields=["action", "created_at"], name="dataops_dat_action_5a4e54_idx")),
+        migrations.AddIndex(model_name="dataprofile", index=models.Index(fields=["role", "enabled"], name="dataops_dat_role_eb4509_idx")),
+        migrations.AddIndex(model_name="dataoperation", index=models.Index(fields=["state", "kind"], name="dataops_dat_state_195e52_idx")),
+        migrations.AddIndex(model_name="dataopsauditevent", index=models.Index(fields=["action", "created_at"], name="dataops_dat_action_28fd37_idx")),
         migrations.AddConstraint(model_name="dataoperation", constraint=models.UniqueConstraint(condition=~models.Q(idempotency_key=""), fields=("kind", "idempotency_key"), name="dataops_unique_operation_idempotency")),
         migrations.AddConstraint(model_name="recoverypoint", constraint=models.UniqueConstraint(fields=("profile_key", "dataset_id", "release_id"), name="dataops_unique_recovery_point")),
     ]
