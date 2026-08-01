@@ -86,6 +86,22 @@ class OperatorPresentationTests(SimpleTestCase):
         )
         self.assertEqual(first_generation["severity"], "info")
 
+    def test_legacy_repacked_activation_reasons_have_actionable_copy(self):
+        for code in (
+            "activation_rehearsal_evidence_mismatch",
+            "generation_compatibility_failed",
+            "maintenance_candidate_lineage_invalid",
+            "activation_validation_expired",
+        ):
+            with self.subTest(reason_code=code):
+                presentation = present_reason(code)
+                self.assertTrue(presentation["known"])
+                self.assertNotEqual(
+                    presentation["title"], UNKNOWN_REASON["title"]
+                )
+                self.assertNotIn("technical evidence", presentation["detail"])
+                self.assertTrue(presentation["action_label"])
+
     def test_activation_runtime_reasons_have_authored_copy(self):
         reason_codes = SAFE_RUNTIME_VERIFICATION_REASONS | {
             "activation_runtime_command_failed"
