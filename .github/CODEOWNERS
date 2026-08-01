@@ -1,0 +1,7 @@
+# Changes to the build and release trust boundary require explicit owner review.
+/.github/workflows/ @yashodhank
+/Dockerfile @yashodhank
+/docker-entrypoint.sh @yashodhank
+/start.sh @yashodhank
+/requirements-web.lock @yashodhank
+/scripts/ci/ @yashodhank

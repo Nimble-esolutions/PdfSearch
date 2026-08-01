@@ -40,12 +40,13 @@ test(config): cover MB upload limits
 ## Dev-to-release map
 
 1. Open the PR against `dev`.
-2. The required `PR contract` gives bounded static and Compose feedback within
-   two minutes. It is not full runtime certification and never publishes an
-   image.
-3. Add the approved PR to the protected `dev` merge queue. The queue's exact
-   synthetic merge SHA must pass the full source/runtime suite, immutable-image
-   candidate smoke, and `Pre-merge certification` rollup before GitHub merges it.
+2. During phase one, the bounded `PR contract` supplements the existing full
+   pull-request validation; it does not replace it. Neither PR check publishes
+   an image.
+3. After the protected `dev` merge queue is configured and proven, its exact
+   synthetic merge SHA must pass the full source/runtime suite and
+   `Pre-merge certification` rollup. Merge-group workflows do not publish to
+   GHCR; the protected final `dev` push builds and certifies the release image.
    Never bypass the queue merely because the fast PR check is green.
 4. After GitHub merges into `dev`, the Docker workflow builds and publishes
    the immutable GHCR image, runs the published-image smoke gate, and promotes
@@ -57,6 +58,12 @@ test(config): cover MB upload limits
    search, admin access, image revision, route/TLS, and rollback identity.
 7. Production promotion is a separate approved operation with data, backup,
    digest, Compose, and rollback evidence.
+
+Phase two is a separate future PR: only after the queue and required contexts
+are proven may full validation be removed from ordinary PR events to make the
+fast check the primary hosted feedback. The path-filtered `Validate documentation
+and operator language` context must not be configured as a universal required
+check because it does not materialize for every PR.
 
 ## Configuration changes
 

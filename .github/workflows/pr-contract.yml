@@ -27,11 +27,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 (Node 24)
+        with:
+          fetch-depth: 0
 
       - name: Validate source without dependency installation
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
-          git diff --check
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) base_sha="$PR_BASE_SHA" ;;
+            merge_group) base_sha="$MERGE_GROUP_BASE_SHA" ;;
+            *) echo "Unsupported contract event: $GITHUB_EVENT_NAME" >&2; exit 2 ;;
+          esac
+          test -n "$base_sha"
+          git cat-file -e "${base_sha}^{commit}"
+          git diff --check "${base_sha}...HEAD"
           bash -n start.sh docker-entrypoint.sh scripts/ops/run_recovery_certification.sh
           python3 -m compileall -q flowdocs scripts
           python3 -m unittest \

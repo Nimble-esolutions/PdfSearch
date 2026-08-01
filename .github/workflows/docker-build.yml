@@ -59,7 +59,6 @@ env:
 jobs:
   validate:
     name: Validate source and deployment contract
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -228,7 +227,6 @@ jobs:
   candidate:
     name: Build and certify immutable dev candidate
     if: >-
-      github.event_name == 'merge_group' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.publish == true)
     runs-on: ubuntu-latest
@@ -396,14 +394,14 @@ jobs:
           set -euo pipefail
           case "$GITHUB_EVENT_NAME" in
             pull_request)
-              test "$VALIDATE_RESULT" = "skipped"
+              test "$VALIDATE_RESULT" = "success"
               test "$CANDIDATE_RESULT" = "skipped"
-              echo "Full certification is reserved for the merge-group SHA."
+              echo "Phase one preserves full pull-request validation."
               ;;
             merge_group)
               test "$VALIDATE_RESULT" = "success"
-              test "$CANDIDATE_RESULT" = "success"
-              echo "The merge-group SHA passed source and immutable-image certification."
+              test "$CANDIDATE_RESULT" = "skipped"
+              echo "The merge-group SHA passed full source and runtime certification."
               ;;
             *)
               echo "Unsupported pre-merge event: $GITHUB_EVENT_NAME" >&2

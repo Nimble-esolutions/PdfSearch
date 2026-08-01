@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 FAST_WORKFLOW = ROOT / ".github" / "workflows" / "pr-contract.yml"
 FULL_WORKFLOW = ROOT / ".github" / "workflows" / "docker-build.yml"
+CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 
 
 class FastPullRequestWorkflowTests(unittest.TestCase):
@@ -40,7 +41,10 @@ class FastPullRequestWorkflowTests(unittest.TestCase):
 
     def test_fast_check_covers_static_and_compose_contracts(self):
         required = (
-            "git diff --check",
+            'git diff --check "${base_sha}...HEAD"',
+            "PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}",
+            "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}",
+            "fetch-depth: 0",
             "bash -n",
             "python3 -m compileall",
             "test_release_workflow_contract",
@@ -59,6 +63,21 @@ class FastPullRequestWorkflowTests(unittest.TestCase):
         for token in required:
             with self.subTest(token=token):
                 self.assertIn(token, self.fast)
+
+    def test_build_trust_boundary_has_code_owners(self):
+        codeowners = CODEOWNERS.read_text(encoding="utf-8")
+        for protected_path in (
+            "/.github/workflows/",
+            "/Dockerfile",
+            "/docker-entrypoint.sh",
+            "/requirements-web.lock",
+            "/scripts/ci/",
+        ):
+            with self.subTest(protected_path=protected_path):
+                self.assertRegex(
+                    codeowners,
+                    rf"(?m)^{re.escape(protected_path)}\s+@yashodhank$",
+                )
 
     def test_full_workflow_materializes_for_every_pr_and_merge_group(self):
         pull_request_block = re.search(

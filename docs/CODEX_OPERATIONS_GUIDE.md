@@ -59,20 +59,28 @@ write actions.
 4. Open a PR into `dev`.
 5. Resolve conflicts by merging or rebasing latest `origin/dev`, then rerun the
    affected local checks.
-6. Treat `PR contract` as bounded early feedback only. After review, add the PR
-   to the protected `dev` merge queue.
-7. Merge only after the queue's exact merge-group SHA passes full validation,
-   immutable candidate certification, and `Pre-merge certification`. Never use
-   a settings bypass to substitute the fast check for those gates.
+6. In phase one, require both the bounded `PR contract` and the existing full PR
+   validation. The fast result is supplemental feedback only.
+7. After review and queue-settings proof, add the PR to the protected `dev`
+   merge queue. Merge only after the exact merge-group SHA passes full validation
+   and `Pre-merge certification`. Merge groups must not publish packages; the
+   protected final `dev` push rebuilds and certifies the release image.
 8. Let the `dev` merge event publish the new image.
 9. Capture the release evidence from the completed GitHub Actions run.
 10. Deploy through Dokploy only after Git SHA, OCI digest, Compose hash, route,
    data generation, and rollback evidence agree.
 
 The repository workflows define the checks, but GitHub settings enforce merge
-queue usage, required checks, review, and bypass restrictions. If merge queue is
-not enabled with both `PR contract` and `Pre-merge certification` required, the
-fast PR workflow must remain rollout-blocked.
+queue usage, required checks, review, and bypass restrictions. Start with queue
+build concurrency/group size 1, ALLGREEN, and a status-check timeout of at least
+90 minutes. Require CODEOWNER approval for the workflow/Docker/build boundary,
+dismiss stale approvals, and restrict bypasses. Do not universally require the
+path-filtered documentation context: it is absent on unrelated PRs.
+
+Removing full validation from ordinary PR events is phase two and requires a
+separate PR after a queued test proves `PR contract` and `Pre-merge certification`
+on the synthetic SHA. Phase one is safe to merge before settings because it
+retains the existing full PR gate.
 
 Recommended local verification:
 
