@@ -67,6 +67,30 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertLess(superseded_guard, promotion)
         self.assertLess(promotion, convergence)
 
+    def test_dev_push_build_and_validation_remain_parallel(self):
+        """Keep the expensive candidate build off validation's critical path."""
+        self.assertNotRegex(self.validate, r"(?m)^    needs:")
+        self.assertNotRegex(self.candidate, r"(?m)^    needs:")
+        self.assertIn("needs: [validate, candidate]", self.release)
+
+    def test_merge_group_cannot_reach_package_writes(self):
+        """Merge-queue certification must never publish or retag an image."""
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        jobs_text = workflow.split("\njobs:\n", maxsplit=1)[1]
+        job_names = re.findall(r"^  ([A-Za-z0-9_-]+):$", jobs_text, re.MULTILINE)
+        package_write_jobs = [
+            (job, job_block(job))
+            for job in job_names
+            if "packages: write" in job_block(job)
+        ]
+        self.assertEqual(
+            [job for job, _body in package_write_jobs],
+            ["candidate", "release"],
+        )
+        for job, body in package_write_jobs:
+            with self.subTest(job=job):
+                self.assertNotIn("github.event_name == 'merge_group'", body)
+
     def test_release_does_not_repeat_candidate_certification(self):
         for duplicate in (
             "docker/build-push-action@",
