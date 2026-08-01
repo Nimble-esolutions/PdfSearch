@@ -6,4 +6,3 @@ existing maintenance worker.
 """
 
 default_app_config = "dataops.apps.DataOpsConfig"
-
