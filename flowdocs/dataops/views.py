@@ -11,6 +11,7 @@ import secrets
 from datetime import datetime, timezone
 
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -54,7 +55,7 @@ def _state(request):
         "automatic_response": "No automatic action running" if not pending else f"{pending} maintenance item(s) in progress",
         "observed_at": datetime.now(timezone.utc),
         "last_verified_at": datetime.now(timezone.utc),
-        "environment": getattr(request, "environment", ""),
+        "environment": getattr(getattr(getattr(settings, "ENV_IDENTITY", None), "app_env", ""), "value", ""),
         "issues": issues,
         "refresh": {"documents": documents, "index_status_label": "Observed", "pending": pending, "note": "Repairs are limited by the configured run and daily budgets."},
         "backup": {"latest": {"id": latest.release_id, "verified_at": latest.updated_at, "objects": latest.counts.get("objects", "—")} if latest else None, "recovery_points": []},
