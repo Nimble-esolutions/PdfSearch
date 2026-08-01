@@ -944,6 +944,45 @@ for _code in {
         ),
     )
 
+# Activation and compatibility failures are deliberately fail-closed, but
+# they are common enough to deserve an actionable explanation.  These are
+# supplemental runtime tokens: they intentionally stay outside the catalog
+# inventory until translations are added, while still avoiding opaque copy.
+SUPPLEMENTAL_REASONS = {
+    "activation_rehearsal_evidence_mismatch": _authored(
+        "The prepared data was rehearsed by a different release",
+        "This is a read-only legacy or repacked candidate whose producer identity differs from the running stage release.",
+        "Activation stays blocked until structural validation and a current-release rehearsal are recorded.",
+        "Re-run candidate validation",
+        "maintenance",
+        "warning",
+    ),
+    "generation_compatibility_failed": _authored(
+        "The restored generation needs compatibility repair",
+        "The manifest, schema, migration, embedding, or release checks did not pass for the running stage release.",
+        "The active runtime was not changed.",
+        "Run compatibility validation",
+        "restore",
+        "danger",
+    ),
+    "maintenance_candidate_lineage_invalid": _authored(
+        "The maintenance candidate lineage needs repair",
+        "The candidate is not bound to the exact verified source generation required for safe activation.",
+        "The active runtime remains unchanged.",
+        "Rebuild the candidate from the verified source",
+        "maintenance",
+        "danger",
+    ),
+    "activation_validation_expired": _authored(
+        "Activation evidence has expired",
+        "The candidate was prepared outside the allowed validation window.",
+        "Refresh validation before activation; existing data remains unchanged.",
+        "Refresh candidate validation",
+        "maintenance",
+        "warning",
+    ),
+}
+
 
 # Stable reasons emitted directly by Dashboard, maintenance, and Workbench UI
 # producers. Keep this inventory explicit: adding a producer reason must add
@@ -1600,7 +1639,9 @@ def label_for(value):
 
 def present_reason(code, *, action_url=""):
     """Resolve a stable reason code to translated operator guidance."""
-    definition = REASONS.get(str(code), UNKNOWN_REASON)
+    definition = REASONS.get(
+        str(code), SUPPLEMENTAL_REASONS.get(str(code), UNKNOWN_REASON)
+    )
     if isinstance(definition, tuple):
         title, detail, consequence, action_label, section, severity = definition
     else:
@@ -1623,7 +1664,7 @@ def present_reason(code, *, action_url=""):
         "action_url": action_url,
         "severity": severity,
         "technical_code": str(code or ""),
-        "known": str(code) in REASONS,
+        "known": str(code) in REASONS or str(code) in SUPPLEMENTAL_REASONS,
     }
 
 
