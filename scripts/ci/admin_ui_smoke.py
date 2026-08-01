@@ -98,13 +98,23 @@ def main():
         )
 
         operations = client.get("/dashboard/operations/")
+        require(operations.status_code == 200, "backup and restore GET failed")
+        require("Backup & Restore" in operations.text, "backup and restore heading missing")
         require(
-            operations.status_code == 200
-            and "Vault & Recovery" in operations.text
-            and "Authority comparison" in operations.text
-            and "vendor/bootstrap/5.3.0" in operations.text
-            and "cdn.jsdelivr.net" not in operations.text,
-            "Vault and recovery workbench missing or externally dependent",
+            "Support tools and technical evidence" in operations.text,
+            "backup and restore support boundary missing",
+        )
+        require(
+            "vendor/bootstrap/5.3.0" in operations.text,
+            "vendored Bootstrap asset missing",
+        )
+        require("cdn.jsdelivr.net" not in operations.text, "external Bootstrap dependency found")
+        advanced = client.get("/dashboard/operations/?section=overview")
+        require(
+            advanced.status_code == 200
+            and "Vault & Recovery" in advanced.text
+            and "Authority comparison" in advanced.text,
+            "advanced Vault evidence missing",
         )
         sync = client.get("/dashboard/operations/?section=sync")
         require(
@@ -164,7 +174,8 @@ def main():
         operations_mr = client.get("/dashboard/operations/")
         require(
             operations_mr.status_code == 200
-            and "व्हॉल्ट आणि पुनर्प्राप्ती" in operations_mr.text,
+            and "बॅकअप आणि पुनर्स्थापना" in operations_mr.text
+            and "सहाय्य साधने आणि तांत्रिक पुरावा" in operations_mr.text,
             "reviewed Marathi workbench language missing",
         )
         token = csrf_token(operations_mr.text)
