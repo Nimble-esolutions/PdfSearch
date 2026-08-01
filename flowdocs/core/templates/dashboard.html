@@ -317,7 +317,7 @@
     {% if role == 'superadmin' %}
       <section class="admin-panel">
         <div class="admin-page-heading">
-          <h2>{% trans "Vault posture" %}</h2>
+          <h2>{% trans "Data recovery posture" %}</h2>
           <p>
             <strong>{{ cockpit.vault_posture.status_label|default:_("Unavailable") }}</strong>
           </p>
@@ -350,7 +350,7 @@
         </div>
         <div class="d-grid gap-2">
           <a href="{% url 'operations_panel' %}?section=maintenance" class="btn btn-outline-primary btn-sm">{% trans "Maintain Documents & Search" %}</a>
-          <a href="{% url 'operations_panel' %}" class="btn btn-outline-primary btn-sm">{% trans "Open advanced Vault & Recovery" %}</a>
+          <a href="{% url 'operations_panel' %}" class="btn btn-outline-primary btn-sm">{% trans "Open Data Operations" %}</a>
         </div>
       </section>
     {% endif %}
