@@ -114,10 +114,9 @@ def main():
         require(maintenance.status_code == 200, "maintenance workbench GET failed")
         for expected in (
             "Documents",
-            "Choose the outcome you need",
-            "Unchanged during processing",
-            "Preview Repair Stored Indexes",
-            'name="filter_indexed"',
+            "Refresh and repair",
+            "History and technical evidence",
+            "Storage and automation",
         ):
             require(
                 expected in maintenance.text,
