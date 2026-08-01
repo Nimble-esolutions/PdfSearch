@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import secrets
 import os
+import hashlib
 from datetime import datetime, timezone
 
 from django.contrib.auth.decorators import login_required
@@ -19,6 +20,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from core.maintenance import queue_job
+from core.maintenance_plans import workbench_maintenance_state
 from core.models import MaintenanceJob, PDFFile
 
 from .config import resolve_profiles, resolve_selectors, resolve_setting, validate_profiles
@@ -69,6 +71,25 @@ def _state(request):
     successful_backup = DataOperation.objects.using("control").filter(kind=DataOperation.Kind.BACKUP, state=DataOperation.State.SUCCEEDED).first()
     successful_restore = DataOperation.objects.using("control").filter(kind=DataOperation.Kind.RESTORE, state=DataOperation.State.SUCCEEDED).first()
     latest_points = RecoveryPoint.objects.using("control").filter(state=RecoveryPoint.State.VERIFIED)[:12]
+    try:
+        maintenance = workbench_maintenance_state(
+            selected_plan_id=request.GET.get("plan", ""),
+            selected_job_id=request.GET.get("job", ""),
+        )
+    except Exception:
+        # The advanced local controls are additive. A control-plane observation
+        # failure must not hide the profile workflow or turn the page into a
+        # 500 response.
+        maintenance = {
+            "state_version": "",
+            "capabilities": {},
+            "folders": [],
+            "plans": [],
+            "jobs": [],
+            "selected_plan": None,
+            "selected_job": None,
+        }
+    maintenance_version = maintenance.get("state_version", "")
     profile_cards = []
     for profile in profiles:
         key = profile["key"]
@@ -93,6 +114,11 @@ def _state(request):
         "restore": {"candidate": None, "last_successful": readiness.get("last_restore") or (str(successful_restore.public_id) if successful_restore else "")},
         "configuration": {"backup_profile": selectors.get("backup_destination") or selectors.get("backup") or resolve_setting("DATAOPS_BACKUP_PROFILE", default="")[0], "restore_profile": selectors.get("restore_source") or selectors.get("restore") or resolve_setting("DATAOPS_RESTORE_PROFILE", default="")[0], "mode_label": resolve_setting("DATAOPS_BACKUP_MODE", default="manual")[0], "env_locked": any(profile.effective_source == "environment" for profile in resolved), "backup_source": resolve_setting("DATAOPS_BACKUP_PROFILE", default="")[1], "restore_source": resolve_setting("DATAOPS_RESTORE_PROFILE", default="")[1]},
         "readiness": readiness,
+        "maintenance": maintenance,
+        "maintenance_state_version": maintenance_version,
+        "combined_state_version": hashlib.sha256(
+            (readiness.get("manifest_digest", "") + ":" + maintenance_version).encode("utf-8")
+        ).hexdigest(),
         "profile_cards": profile_cards,
         "history": {"count": len(recent), "items": [{"label": item.get_kind_display(), "status_label": item.get_state_display(), "started_at": item.created_at, "stage": item.pipeline_stage, "error_code": item.error_code, "receipt_id": str(item.public_id), "timeline": (item.result or {}).get("stages", [])} for item in recent]},
         "profiles": profiles,
