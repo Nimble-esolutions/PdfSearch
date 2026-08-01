@@ -202,6 +202,11 @@ class OperationsSummaryTests(TestCase):
             summary["latest_receipt"]["generation_id"],
             "same-generation",
         )
+        self.assertEqual(
+            summary["latest_receipt"]["operation_label"],
+            "Prepare latest production backup",
+        )
+        self.assertTrue(summary["latest_receipt"]["status_label"])
 
     def test_duplicate_exact_workspaces_fail_closed(self):
         state = self.state()
@@ -383,6 +388,11 @@ class OperationsSummaryTests(TestCase):
         self.assertEqual(
             summary["current_operation"]["operation"], "activation"
         )
+        self.assertEqual(
+            summary["current_operation"]["operation_label"],
+            "Review activation",
+        )
+        self.assertTrue(summary["current_operation"]["status_label"])
         self.assertEqual(summary["primary_action"]["kind"], "none")
 
 

@@ -108,7 +108,7 @@
         {% else %}{% trans "Operation unavailable" %}{% endif %}
       </h3>
       {% if state.operations.current_operation %}
-      <p>{{ state.operations.current_operation.operation_label }} · {{ state.operations.current_operation.status_label|default:state.operations.current_operation.status }}</p>
+      <p>{{ state.operations.current_operation.operation_label }} · {{ state.operations.current_operation.status_label }}</p>
       <code lang="en" dir="ltr">{{ state.operations.current_operation.public_id }}</code>
       {% elif state.operations.reason_code %}
       {% include "components/operator_evidence.html" with presentation=state.operations.presentation technical_code=state.operations.reason_code show_action=False only %}
@@ -171,7 +171,7 @@
       {% if state.operations.latest_receipt %}
       <dl class="vault-facts">
         <div><dt>{% trans "Operation" %}</dt><dd>{{ state.operations.latest_receipt.operation_label }}</dd></div>
-        <div><dt>{% trans "Status" %}</dt><dd>{{ state.operations.latest_receipt.status_label|default:state.operations.latest_receipt.status }}</dd></div>
+        <div><dt>{% trans "Status" %}</dt><dd>{{ state.operations.latest_receipt.status_label }}</dd></div>
         {% if state.operations.latest_receipt.generation_id %}<div><dt>{% trans "Backup" %}</dt><dd><code lang="en" dir="ltr">{{ state.operations.latest_receipt.generation_id }}</code></dd></div>{% endif %}
         <div><dt>{% trans "Receipt" %}</dt><dd><code lang="en" dir="ltr">{{ state.operations.latest_receipt.public_id }}</code></dd></div>
       </dl>
