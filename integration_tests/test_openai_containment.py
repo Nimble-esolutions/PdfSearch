@@ -61,3 +61,25 @@ class OpenAIContainmentTests(unittest.TestCase):
             from core.ai_guard import get_openai_client, ExternalAIBlocked
             with self.assertRaises(ExternalAIBlocked):
                 get_openai_client()
+
+    def test_explicit_ai_mode_overrides_sandbox_side_effects(self):
+        """Stage may enable AI without enabling unrelated external effects."""
+        from django.conf import settings
+        from core.ai_guard import get_chat_provider
+
+        with patch.object(settings, "EXTERNAL_AI_MODE", "enabled", create=True), \
+             patch.dict(os.environ, {"OPENAI_API_KEY": "stage-test-key"}):
+            with patch("openai.OpenAI") as openai_client:
+                openai_client.return_value.chat.completions.create.return_value.choices = [
+                    type("Choice", (), {"message": type("Message", (), {"content": "real stage answer"})()})()
+                ]
+                provider = get_chat_provider()
+                self.assertEqual(provider([{"role": "user", "content": "hello"}]), "real stage answer")
+                openai_client.assert_called_once_with(api_key="stage-test-key")
+
+    def test_invalid_explicit_ai_mode_falls_back_to_side_effect_policy(self):
+        from django.conf import settings
+        from core.ai_guard import _ai_policy_mode
+
+        with patch.object(settings, "EXTERNAL_AI_MODE", "not-a-mode", create=True):
+            self.assertEqual(_ai_policy_mode(), "disabled")

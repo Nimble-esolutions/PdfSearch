@@ -5,10 +5,15 @@ All OpenAI calls must go through one of these entry points:
   get_embedding_provider() → returns callable for embeddings
   get_chat_provider() → returns callable for chat completions
 
-Respects the environment side-effect policy:
+Respects the AI-specific policy first, falling back to the broader external
+side-effect policy for backwards compatibility:
   enabled  → real OpenAI client
   sandbox  → deterministic fake provider
   disabled → raises ExternalAIBlocked
+
+``EXTERNAL_AI_MODE`` deliberately stays separate from
+``EXTERNAL_SIDE_EFFECTS_MODE``.  A stage instance can use real AI answers while
+keeping email, webhooks, payments, and other side effects sandboxed.
 """
 
 from __future__ import annotations
@@ -29,6 +34,9 @@ class FakeAIProviderUsed(Exception):
 
 
 def _ai_policy_mode() -> str:
+    explicit_mode = str(getattr(settings, "EXTERNAL_AI_MODE", "") or "").strip().lower()
+    if explicit_mode in {"enabled", "sandbox", "disabled"}:
+        return explicit_mode
     identity = getattr(settings, "ENV_IDENTITY", None)
     if identity is None:
         return "disabled"
