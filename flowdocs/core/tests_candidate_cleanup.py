@@ -26,6 +26,7 @@ from core.artifact_cleanup import (
 from core.candidate_maintenance import (
     CandidateMaintenanceError,
     WORKSPACE_MANIFEST,
+    _candidate_environment,
     create_workspace,
     validate_candidate,
 )
@@ -107,6 +108,18 @@ class CandidateWorkspaceTests(SimpleTestCase):
     def tearDown(self):
         self.settings.disable()
         self.temporary.cleanup()
+
+    def test_candidate_subprocess_disables_nested_preparation(self):
+        environment = _candidate_environment(self.data)
+
+        self.assertEqual(
+            environment["MAINTENANCE_CANDIDATE_PREPARATION_ENABLED"],
+            "0",
+        )
+        self.assertEqual(
+            environment["STAGING_RUNTIME_ACTIVATION_ENABLED"],
+            "0",
+        )
 
     def test_workspace_snapshot_never_changes_source_database_bytes(self):
         before = hashlib.sha256(self.database.read_bytes()).hexdigest()
