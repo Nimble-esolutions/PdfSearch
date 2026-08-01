@@ -134,10 +134,10 @@ def main():
         retention = client.get("/dashboard/operations/?section=retention")
         require(
             retention.status_code == 200
-            and "It does not delete manifests" in retention.text
-            and "Create GC dry-run" in retention.text
+            and "History and technical evidence" in retention.text
+            and "Credentials are never shown here" in retention.text
             and "Permanently delete" not in retention.text,
-            "truthful retention and GC controls missing",
+            "truthful data operations controls missing",
         )
         diagnostics = client.get("/dashboard/operations/api/v1/diagnostics/")
         require(
