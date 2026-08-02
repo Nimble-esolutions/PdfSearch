@@ -240,11 +240,13 @@ class Command(BaseCommand):
             ):
                 try:
                     from dataops.job_scheduler import queue_due_backup_jobs
+                    from dataops.quarantine import cleanup_mirror_quarantines
                     from dataops.worker import queue_backup_if_due, reconcile_receipts
 
                     queue_backup_if_due(trigger="scheduler")
                     queue_due_backup_jobs()
                     reconcile_receipts(limit=10)
+                    cleanup_mirror_quarantines()
                 except Exception as exc:
                     logger.warning("Data Operations reconciliation failed: %s", getattr(exc, "reason_code", "dataops_reconcile_failed"))
                 last_dataops_eval = now
