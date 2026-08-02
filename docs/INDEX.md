@@ -13,6 +13,9 @@ Supersedes: None
   the legacy snapshot, RustFS v2 publication and clone, stage quarantine/OCR
   evidence, current environment posture, security remediation, and remaining
   activation/backup/round-trip gates.
+- [OPERATIONS_CHANGELOG-2026-08-02.md](OPERATIONS_CHANGELOG-2026-08-02.md) —
+  dated timeline, backup-size explanation, current-versus-historical matrix,
+  readiness guide, and documentation coverage checklist.
 
 This index routes readers by task. The metadata at the top of each maintained
 document identifies its status, audience, owner, verification date, canonical
