@@ -380,7 +380,7 @@ SEARCH_CACHE_TTL = _env_positive_int('SEARCH_CACHE_TTL', 60 * 10)
 # bounded and only runs for pages where native PDF text is absent.
 PDF_OCR_FALLBACK_ENABLED = _env_bool('PDF_OCR_FALLBACK_ENABLED', True)
 PDF_OCR_BINARY = os.getenv('PDF_OCR_BINARY', 'tesseract').strip() or 'tesseract'
-PDF_OCR_LANGUAGES = os.getenv('PDF_OCR_LANGUAGES', 'eng+mar').strip() or 'eng+mar'
+PDF_OCR_LANGUAGES = os.getenv('PDF_OCR_LANGUAGES', 'eng+mar+hin').strip() or 'eng+mar+hin'
 PDF_OCR_DPI = _env_bounded_int('PDF_OCR_DPI', 200, 72, 400)
 PDF_OCR_MAX_PAGES = _env_bounded_int('PDF_OCR_MAX_PAGES', 50, 1, 200)
 PDF_OCR_PAGE_TIMEOUT_SECONDS = _env_bounded_int(

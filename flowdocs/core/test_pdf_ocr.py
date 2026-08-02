@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 
-from .utils import extract_text_from_pdf_path
+from .utils import extract_pdf_content, extract_text_from_pdf_path
 
 
 class _FakePixmap:
@@ -52,6 +52,39 @@ class PdfOcrFallbackTests(SimpleTestCase):
 
         self.assertEqual(text, "native searchable text")
         run.assert_not_called()
+
+    def test_default_ocr_languages_include_english_marathi_and_hindi(self):
+        document = _FakeDocument([_FakePage()])
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="संस्था", stderr=""
+        )
+        with patch("core.utils.shutil.which", return_value="/usr/bin/tesseract"):
+            with patch("core.utils.subprocess.run", return_value=completed) as run:
+                text = self._extract(document, PDF_OCR_FALLBACK_ENABLED=True)
+
+        self.assertEqual(text, "संस्था")
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("-l") + 1], "eng+mar+hin")
+
+    def test_extraction_metadata_is_secret_free_and_records_ocr_pages(self):
+        document = _FakeDocument([_FakePage("native"), _FakePage()])
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="हिंदी", stderr="private details"
+        )
+        with patch("core.utils.shutil.which", return_value="/usr/bin/tesseract"):
+            with patch("core.utils.subprocess.run", return_value=completed):
+                with tempfile.NamedTemporaryFile(suffix=".pdf") as source:
+                    with override_settings(PDF_OCR_FALLBACK_ENABLED=True):
+                        with patch("core.utils.fitz.open", return_value=document):
+                            result = extract_pdf_content(source.name)
+
+        self.assertEqual(result.text, "native\nहिंदी")
+        self.assertEqual(result.metadata["page_count"], 2)
+        self.assertEqual(result.metadata["native_text_page_count"], 1)
+        self.assertEqual(result.metadata["ocr_page_count"], 1)
+        self.assertEqual(result.metadata["ocr_pages"], [1])
+        self.assertNotIn("private details", result.metadata)
+        self.assertNotIn("हिंदी", result.metadata)
 
     def test_image_only_page_uses_configured_tesseract_languages(self):
         document = _FakeDocument([_FakePage()])

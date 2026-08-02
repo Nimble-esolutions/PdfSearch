@@ -42,6 +42,13 @@ SEARCHABLE_PDF_LIFECYCLES = ("uploaded", "processing", "ready")
 
 # ---------------- PDF File ----------------
 class PDFFile(models.Model):
+    PROCESSING_STATUS_CHOICES = (
+        ("queued", "Queued"),
+        ("running", "Running"),
+        ("ready", "Ready"),
+        ("failed", "Failed"),
+    )
+
     title = models.CharField(max_length=200)
     file = models.FileField(upload_to="pdfs/")
     # in your models.py (PDFFile)
@@ -78,6 +85,21 @@ class PDFFile(models.Model):
         help_text="Relative path like housing/acts/154B.pdf",
     )
     indexed = models.BooleanField(default=False, help_text="FAISS index built or not")
+    processing_status = models.CharField(
+        max_length=16,
+        choices=PROCESSING_STATUS_CHOICES,
+        default="ready",
+        help_text="Durable OCR, embedding, and indexing status",
+    )
+    processing_attempts = models.PositiveIntegerField(default=0)
+    processing_error_code = models.CharField(max_length=64, blank=True, default="")
+    processing_error_message = models.TextField(blank=True, default="")
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    processing_finished_at = models.DateTimeField(null=True, blank=True)
+    ocr_metadata = models.JSONField(default=dict, blank=True)
+    embedding_provider = models.CharField(max_length=32, blank=True, default="")
+    embedding_model = models.CharField(max_length=128, blank=True, default="")
+    embedding_dimension = models.PositiveIntegerField(null=True, blank=True)
     lifecycle = models.CharField(
         max_length=20,
         choices=(
@@ -175,6 +197,7 @@ class MaintenanceJob(models.Model):
         ("reindex_needed", "Reindex needed"),
         ("reindex_all", "Reindex all"),
         ("reindex_selected", "Reindex selected"),
+        ("process_pdf", "Process uploaded PDF"),
         ("repair_indexes", "Repair stored indexes"),
         ("sync_generation", "Sync generation"),
         ("restore_generation", "Restore generation"),

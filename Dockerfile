@@ -67,7 +67,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
      fonts-noto-core \
      tesseract-ocr \
      tesseract-ocr-eng \
-     tesseract-ocr-mar
+     tesseract-ocr-mar \
+     tesseract-ocr-hin
 
 COPY --from=builder /build/wheels /wheels
 RUN pip install --no-compile --no-index --no-deps /wheels/*.whl && \

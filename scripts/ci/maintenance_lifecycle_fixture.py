@@ -217,6 +217,10 @@ def seed_and_freeze() -> None:
                 "subject": "cooperation",
                 "keywords": ["audit", "लेखापरीक्षण"],
                 "lifecycle": "ready",
+                # The browser contract deliberately selects today's fixture
+                # rows.  update_or_create() must refresh this value so a
+                # reused disposable database cannot retain yesterday's date.
+                "uploaded_at": timezone.now(),
             },
         )
         precompute_pdf_embeddings(pdf)
