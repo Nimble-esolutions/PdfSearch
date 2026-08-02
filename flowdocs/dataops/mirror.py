@@ -23,8 +23,8 @@ def _context(job, environ=None, source_client=None, target_client=None):
     target = profiles.get(job.target_profile_key)
     if source is None or target is None:
         raise DataOpsPipelineError("job_profile_missing", stage="preflight", retryable=False)
-    source_client = source_client or client_for_profile(source, environment, allow_http=source.endpoint.startswith("http://"))
-    target_client = target_client or client_for_profile(target, environment, allow_http=target.endpoint.startswith("http://"))
+    source_client = source_client or client_for_profile(source, environment)
+    target_client = target_client or client_for_profile(target, environment)
     return source, target, source_client, target_client
 
 

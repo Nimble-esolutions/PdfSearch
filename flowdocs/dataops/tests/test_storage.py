@@ -1,7 +1,10 @@
 import unittest
+from unittest import mock
+
+from django.test import override_settings
 
 from dataops.config import ResolvedProfile
-from dataops.storage import StorageConfigurationError, observe_manifests, validate_endpoint
+from dataops.storage import StorageConfigurationError, client_for_profile, observe_manifests, validate_endpoint
 
 
 class FakeBody:
@@ -30,6 +33,14 @@ class StorageTests(unittest.TestCase):
         profile = ResolvedProfile("prod", "Production", "backup", "https://objects.example.invalid", "bucket", "us-east-1", "prod", "source", "OPS")
         observations = observe_manifests(FakeClient(), profile)
         self.assertEqual(observations[0].inspection.release_id, "r1")
+
+    @override_settings(VAULT_ALLOW_HTTP_S3_ENDPOINTS=True)
+    def test_client_uses_runtime_http_endpoint_policy(self):
+        profile = ResolvedProfile("local", "Local", "backup", "http://rustfs:9000", "bucket", "", "dev", "local", "OPS")
+        with mock.patch("dataops.storage.validate_endpoint", side_effect=RuntimeError("endpoint_checked")) as validator:
+            with self.assertRaisesRegex(RuntimeError, "endpoint_checked"):
+                client_for_profile(profile, {})
+        validator.assert_called_once_with("http://rustfs:9000", allow_http=True)
 
 
 if __name__ == "__main__":

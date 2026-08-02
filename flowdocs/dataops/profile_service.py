@@ -114,7 +114,7 @@ def save_selectors(values, *, actor=None):
 
 def probe_profile(profile, resolved, *, actor=None):
     require_write = profile.role in {"backup", "both"}
-    client = client_for_profile(resolved, os.environ, allow_http=resolved.endpoint.startswith("http://"))
+    client = client_for_profile(resolved, os.environ)
     probe_profile_access(client, resolved, require_write=require_write)
     evidence = {
         "connect": True,

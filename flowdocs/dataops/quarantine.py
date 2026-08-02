@@ -51,7 +51,7 @@ def recover_mirror_quarantine(operation, *, actor=None, environ=None, client=Non
     expected = _prefix(profile.prefix if profile else "") + f".dataops-quarantine/{operation.public_id}/"
     if profile is None or quarantine_prefix != expected:
         raise ValueError("quarantine_prefix_invalid")
-    client = client or client_for_profile(profile, environment, allow_http=profile.endpoint.startswith("http://"))
+    client = client or client_for_profile(profile, environment)
     max_objects = max(1, min(10000, int(getattr(settings, "DATAOPS_MIRROR_QUARANTINE_CLEANUP_MAX_OBJECTS", 100))))
     objects = list(_objects(client, profile.bucket, quarantine_prefix))
     if len(objects) > max_objects:
@@ -118,7 +118,7 @@ def cleanup_mirror_quarantines(*, now=None, environ=None, clients=None) -> dict:
             )
             continue
         client = (clients or {}).get(profile.key) if clients else None
-        client = client or client_for_profile(profile, dict(os.environ) if environ is None else environ, allow_http=profile.endpoint.startswith("http://"))
+        client = client or client_for_profile(profile, dict(os.environ) if environ is None else environ)
         batch = list(_objects(client, profile.bucket, quarantine_prefix))[:max_objects]
         scanned += len(batch)
         for item in batch:

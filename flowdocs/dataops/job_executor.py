@@ -83,8 +83,8 @@ def execute_backup_job(
     ):
         raise DataOpsPipelineError("same_bucket_namespace_overlap", stage="preflight", retryable=False)
 
-    source_client = source_client or client_for_profile(source, environment, allow_http=source.endpoint.startswith("http://"))
-    target_client = target_client or client_for_profile(target, environment, allow_http=target.endpoint.startswith("http://"))
+    source_client = source_client or client_for_profile(source, environment)
+    target_client = target_client or client_for_profile(target, environment)
     probe_profile_access(source_client, source, require_write=False)
     probe_profile_access(target_client, target, require_write=True)
 

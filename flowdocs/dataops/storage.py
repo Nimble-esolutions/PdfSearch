@@ -49,9 +49,13 @@ def validate_endpoint(endpoint: str, *, allow_http: bool = False, resolve_dns: b
     return endpoint.rstrip("/")
 
 
-def client_for_profile(profile: ResolvedProfile, environ: Mapping[str, str], *, allow_http: bool = False):
+def client_for_profile(profile: ResolvedProfile, environ: Mapping[str, str], *, allow_http: bool | None = None):
     if not profile.endpoint:
         raise StorageConfigurationError("profile endpoint is required")
+    if allow_http is None:
+        from django.conf import settings
+
+        allow_http = bool(getattr(settings, "VAULT_ALLOW_HTTP_S3_ENDPOINTS", False))
     endpoint = validate_endpoint(profile.endpoint, allow_http=allow_http)
     try:
         from .credentials import CredentialConfigurationError, resolve_profile_credentials
