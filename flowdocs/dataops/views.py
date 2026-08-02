@@ -25,7 +25,8 @@ from core.models import MaintenanceJob, PDFFile
 from core.operator_presentation import decorate_operator_state
 
 from .config import resolve_profiles, resolve_selectors, resolve_setting, validate_profiles
-from .models import DataOperation, DataProfile, DataOpsAuditEvent, RecoveryPoint
+from .models import BackupJob, DataOperation, DataProfile, DataOpsAuditEvent, RecoveryPoint
+from .profile_service import ProfileMutationError, probe_profile, save_profile, save_selectors
 from .pipeline import DataOpsPipelineError, preflight_operation, resolve_operation_route
 from .readiness import readiness_payload
 from .storage import StorageConfigurationError
@@ -33,6 +34,10 @@ from .storage import StorageConfigurationError
 
 def _can_act(request):
     return bool(getattr(request.user, "is_superuser", False))
+
+
+def _navigation(active):
+    return {"active": active}
 
 
 def _resolved_profile_state():
@@ -72,26 +77,6 @@ def _state(request):
     successful_backup = DataOperation.objects.using("control").filter(kind=DataOperation.Kind.BACKUP, state=DataOperation.State.SUCCEEDED).first()
     successful_restore = DataOperation.objects.using("control").filter(kind=DataOperation.Kind.RESTORE, state=DataOperation.State.SUCCEEDED).first()
     latest_points = RecoveryPoint.objects.using("control").filter(state=RecoveryPoint.State.VERIFIED)[:12]
-    try:
-        maintenance = workbench_maintenance_state(
-            selected_plan_id=request.GET.get("plan", ""),
-            selected_job_id=request.GET.get("job", ""),
-        )
-    except Exception:
-        # The advanced local controls are additive. A control-plane observation
-        # failure must not hide the profile workflow or turn the page into a
-        # 500 response.
-        maintenance = {
-            "state_version": "",
-            "capabilities": {},
-            "folders": [],
-            "plans": [],
-            "jobs": [],
-            "selected_plan": None,
-            "selected_job": None,
-        }
-    decorate_operator_state(maintenance)
-    maintenance_version = maintenance.get("state_version", "")
     profile_cards = []
     for profile in profiles:
         key = profile["key"]
@@ -116,11 +101,7 @@ def _state(request):
         "restore": {"candidate": None, "last_successful": readiness.get("last_restore") or (str(successful_restore.public_id) if successful_restore else "")},
         "configuration": {"backup_profile": selectors.get("backup_destination") or selectors.get("backup") or resolve_setting("DATAOPS_BACKUP_PROFILE", default="")[0], "restore_profile": selectors.get("restore_source") or selectors.get("restore") or resolve_setting("DATAOPS_RESTORE_PROFILE", default="")[0], "mode_label": resolve_setting("DATAOPS_BACKUP_MODE", default="manual")[0], "env_locked": any(profile.effective_source == "environment" for profile in resolved), "backup_source": resolve_setting("DATAOPS_BACKUP_PROFILE", default="")[1], "restore_source": resolve_setting("DATAOPS_RESTORE_PROFILE", default="")[1]},
         "readiness": readiness,
-        "maintenance": maintenance,
-        "maintenance_state_version": maintenance_version,
-        "combined_state_version": hashlib.sha256(
-            (readiness.get("manifest_digest", "") + ":" + maintenance_version).encode("utf-8")
-        ).hexdigest(),
+        "active_maintenance_jobs": MaintenanceJob.objects.filter(status__in=("queued", "running", "retrying")).count(),
         "profile_cards": profile_cards,
         "history": {"count": len(recent), "items": [{"label": item.get_kind_display(), "status_label": item.get_state_display(), "started_at": item.created_at, "stage": item.pipeline_stage, "error_code": item.error_code, "receipt_id": str(item.public_id), "timeline": (item.result or {}).get("stages", [])} for item in recent]},
         "profiles": profiles,
@@ -131,7 +112,7 @@ def _state(request):
 @login_required
 def workbench(request):
     state = _state(request)
-    return render(request, "dataops/workbench.html", {"state": state, "state_url": reverse("dataops:state"), "idempotency_key": secrets.token_urlsafe(18)})
+    return render(request, "dataops/workbench.html", {"state": state, "state_url": reverse("dataops:state"), "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("overview")})
 
 
 @login_required
@@ -235,6 +216,10 @@ def configuration(request):
     if request.method == "POST":
         if not _can_act(request) or not getattr(settings, "DATAOPS_UI_CONFIG_ENABLED", False):
             return HttpResponse("Database profile configuration is disabled", status=403)
+        action = request.POST.get("action", "save_profile")
+        if action == "save_selectors":
+            save_selectors(request.POST, actor=request.user)
+            return redirect("dataops:configuration")
         key = request.POST.get("key", "").strip().lower()
         try:
             env_profiles = {profile.key for profile in resolve_profiles(environ=dict(os.environ), include_stored=False)}
@@ -244,31 +229,73 @@ def configuration(request):
             return HttpResponse("Environment profile values are locked", status=409)
         if not key:
             return HttpResponse("Profile name is required", status=400)
-        role = request.POST.get("role", "both").strip().lower()
-        if role not in {"backup", "restore", "both"}:
-            return HttpResponse("Invalid profile role", status=400)
-        DataProfile.objects.using("control").update_or_create(
-            key=key,
-            defaults={
-                "display_name": request.POST.get("display_name", key.replace("_", " ").title()).strip()[:160],
-                "role": role,
-                "source": DataProfile.Source.STORED,
-                "enabled": request.POST.get("enabled", "1") in {"1", "true", "on"},
-                "environment_locked": False,
-                "endpoint": request.POST.get("endpoint", "").strip(),
-                "bucket": request.POST.get("bucket", "").strip(),
-                "region": request.POST.get("region", "").strip(),
-                "dataset_id": request.POST.get("dataset_id", "").strip(),
-                "source_id": request.POST.get("source_id", "").strip(),
-                "namespace": request.POST.get("namespace", "").strip(),
-                "prefix": request.POST.get("prefix", "").strip(),
-                "credential_ref": request.POST.get("credential_ref", "").strip(),
-                "credential_prefix": request.POST.get("credential_ref", "").strip(),
-            },
-        )
+        try:
+            save_profile(request.POST, actor=request.user)
+        except (ProfileMutationError, ValueError) as exc:
+            return HttpResponse(str(exc), status=400)
         return redirect("dataops:configuration")
     resolved, selectors, issues, error = _resolved_profile_state()
-    return render(request, "dataops/configuration.html", {"profiles": [profile.redacted() for profile in resolved], "selectors": selectors, "issues": issues, "error": error})
+    stored = {profile.key: profile for profile in DataProfile.objects.using("control").all()}
+    cards = []
+    for profile in resolved:
+        row = stored.get(profile.key)
+        cards.append({**profile.redacted(), "last_observed_at": getattr(row, "last_observed_at", None), "observation": getattr(row, "observation", {}), "credential_configured": bool(getattr(getattr(row, "credential", None), "enabled", False)) if row else False})
+    return render(request, "dataops/configuration.html", {"profiles": cards, "selectors": selectors, "issues": issues, "error": error, "provider_choices": DataProfile.Provider.choices, "dataops_nav": _navigation("profiles")})
+
+
+@login_required
+@require_POST
+def profile_probe(request, profile_key):
+    if not _can_act(request):
+        return HttpResponse("Superadmin approval required", status=403)
+    row = DataProfile.objects.using("control").filter(key=profile_key).first()
+    resolved = {item.key: item for item in resolve_profiles()}.get(profile_key)
+    if row is None or resolved is None:
+        return HttpResponse("Profile not found", status=404)
+    try:
+        probe_profile(row, resolved, actor=request.user)
+    except Exception as exc:
+        return HttpResponse(f"Profile probe failed: {getattr(exc, 'code', str(exc))}", status=409)
+    return redirect("dataops:configuration")
+
+
+@login_required
+def jobs(request):
+    if request.method == "POST":
+        if not _can_act(request):
+            return HttpResponse("Superadmin approval required", status=403)
+        mode = request.POST.get("mode", "incremental")
+        if mode not in {"incremental", "archive", "mirror"}:
+            return HttpResponse("Invalid transfer mode", status=400)
+        if mode == "mirror" and request.POST.get("delete_orphans"):
+            return HttpResponse("Mirror deletion requires an independently verified preview", status=409)
+        BackupJob.objects.using("control").update_or_create(
+            slug=request.POST.get("slug", "").strip().lower(),
+            defaults={
+                "name": request.POST.get("name", "").strip(),
+                "source_profile_key": request.POST.get("source_profile", "").strip().lower(),
+                "target_profile_key": request.POST.get("target_profile", "").strip().lower(),
+                "source_prefix": request.POST.get("source_prefix", "").strip().strip("/"),
+                "target_prefix": request.POST.get("target_prefix", "").strip().strip("/"),
+                "mode": mode,
+                "schedule": request.POST.get("schedule", "").strip(),
+                "timezone": request.POST.get("timezone", "UTC").strip(),
+                "enabled": request.POST.get("enabled", "1") in {"1", "on", "true"},
+            },
+        )
+        return redirect("dataops:jobs")
+    profiles = [profile.redacted() for profile in resolve_profiles() if profile.enabled]
+    return render(request, "dataops/jobs.html", {"jobs": BackupJob.objects.using("control").all(), "profiles": profiles, "dataops_nav": _navigation("jobs")})
+
+
+@login_required
+def advanced(request):
+    try:
+        maintenance = workbench_maintenance_state(selected_plan_id=request.GET.get("plan", ""), selected_job_id=request.GET.get("job", ""))
+    except Exception:
+        maintenance = {"state_version": "", "capabilities": {}, "folders": [], "plans": [], "jobs": [], "selected_plan": None, "selected_job": None}
+    decorate_operator_state(maintenance)
+    return render(request, "dataops/advanced.html", {"state": {"maintenance": maintenance}, "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("advanced")})
 
 
 @login_required

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load i18n static %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'main/css/data-operations.css' %}">{% endblock %}
+{% block title %}{% trans "Backup and sync jobs — Data Operations" %}{% endblock %}
+{% block content %}
+<main class="dataops-workbench">
+  {% include "dataops/_navigation.html" %}
+  <header class="dataops-heading"><div><p class="dataops-kicker">{% trans "Transfer routes" %}</p><h2>{% trans "Backup & sync jobs" %}</h2><p>{% trans "Connect any compatible source profile to any target profile. Jobs are configuration records; execution remains gated by preflight, leases, manifests, and verification." %}</p></div><a class="dataops-button" href="#new-job">{% trans "Create job" %}</a></header>
+  <div class="dataops-job-list">
+    {% for job in jobs %}<article class="dataops-job-card"><div><p class="dataops-eyebrow">{{ job.get_mode_display }}</p><h3>{{ job.name }}</h3></div><div class="dataops-route-strip"><span>{{ job.source_profile_key }}</span><b>→</b><span>{{ job.target_profile_key }}</span></div><p>{{ job.schedule|default:_('Manual only') }} · {{ job.timezone }} · {{ job.last_run_status|default:_('Never run') }}</p></article>{% empty %}<p class="dataops-empty">{% trans "No reusable backup or sync job exists yet." %}</p>{% endfor %}
+  </div>
+  <section id="new-job" class="dataops-panel"><header><p class="dataops-eyebrow">{% trans "Source → mode → target" %}</p><h3>{% trans "Create backup job" %}</h3></header>
+    <form class="dataops-form dataops-form--columns" method="post">{% csrf_token %}
+      <label>{% trans "Job name" %}<input name="name" required maxlength="160"></label><label>{% trans "Job key" %}<input name="slug" required maxlength="100" pattern="[a-z0-9][a-z0-9_-]*"></label>
+      <label>{% trans "Source profile" %}<select name="source_profile" required>{% for profile in profiles %}{% if profile.role == 'restore' or profile.role == 'both' %}<option value="{{ profile.key }}">{{ profile.display_name }}</option>{% endif %}{% endfor %}</select></label>
+      <label>{% trans "Target profile" %}<select name="target_profile" required>{% for profile in profiles %}{% if profile.role == 'backup' or profile.role == 'both' %}<option value="{{ profile.key }}">{{ profile.display_name }}</option>{% endif %}{% endfor %}</select></label>
+      <label>{% trans "Mode" %}<select name="mode"><option value="incremental">{% trans "Incremental" %}</option><option value="archive">{% trans "Archive / versioned" %}</option><option value="mirror">{% trans "Mirror without deletion" %}</option></select></label>
+      <label>{% trans "Cron schedule" %}<input name="schedule" placeholder="0 2 * * *"></label><label>{% trans "Timezone" %}<input name="timezone" value="UTC"></label>
+      <label>{% trans "Source prefix" %}<input name="source_prefix"></label><label>{% trans "Target prefix" %}<input name="target_prefix"></label>
+      <button class="dataops-button" type="submit">{% trans "Save job" %}</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

@@ -1,34 +1,73 @@
 {% extends "base.html" %}
 {% load i18n static %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'main/css/data-operations.css' %}">{% endblock %}
-{% block title %}{% trans "Data Operations configuration" %}{% endblock %}
+{% block title %}{% trans "Storage profiles — Data Operations" %}{% endblock %}
 {% block content %}
 <main class="dataops-workbench">
-  <p class="dataops-kicker">{% trans "Configuration" %}</p>
-  <h2>{% trans "Storage and automation" %}</h2>
-  <p>{% trans "Environment values win and stay locked. Encrypted database values are fallbacks only; credential values are never rendered." %}</p>
+  {% include "dataops/_navigation.html" %}
+  <header class="dataops-heading">
+    <div><p class="dataops-kicker">{% trans "Connection registry" %}</p><h2>{% trans "Storage profiles" %}</h2><p>{% trans "Connect AWS S3, commercial S3-compatible services, RustFS, MinIO, or another self-hosted endpoint. Environment definitions remain locked and override only matching stored profiles." %}</p></div>
+    <a class="dataops-button" href="#add-profile">{% trans "Add storage profile" %}</a>
+  </header>
+
   {% if error %}<p class="dataops-alert">{{ error }}</p>{% endif %}
   {% if issues %}<div class="dataops-alert"><ul>{% for issue in issues %}<li>{{ issue.message }} <code>{{ issue.code }}</code></li>{% endfor %}</ul></div>{% endif %}
-  <div class="dataops-profile-cards">{% for profile in profiles %}<article class="dataops-profile-card"><div class="dataops-profile-card__heading"><h3>{{ profile.display_name }}</h3><span>{{ profile.effective_source }}</span></div><p><code>{{ profile.key }}</code> · {{ profile.role }}</p><dl class="dataops-facts"><div><dt>{% trans "Endpoint" %}</dt><dd>{{ profile.endpoint|default:'—' }}</dd></div><div><dt>{% trans "Bucket / dataset" %}</dt><dd>{{ profile.bucket }} / {{ profile.dataset_id }}</dd></div><div><dt>{% trans "Namespace" %}</dt><dd>{{ profile.namespace }}</dd></div><div><dt>{% trans "Credential reference" %}</dt><dd>{{ profile.credential_ref|default:'—' }}</dd></div></dl></article>{% empty %}<p>{% trans "No named profile is configured." %}</p>{% endfor %}</div>
-  <dl class="dataops-facts"><div><dt>{% trans "Backup selector" %}</dt><dd>{{ selectors.backup|default:'—' }}</dd></div><div><dt>{% trans "Restore selector" %}</dt><dd>{{ selectors.restore|default:'—' }}</dd></div></dl>
-  <details class="dataops-history"><summary>{% trans "Advanced: add or update a stored fallback profile" %}</summary>
-    <p class="dataops-help">{% trans "This writes only non-secret profile metadata. Environment profiles remain locked and take precedence." %}</p>
-    <form class="dataops-form" method="post">
-      {% csrf_token %}
-      <label>{% trans "Name" %}<input name="key" required maxlength="80" pattern="[a-z0-9][a-z0-9_-]*"></label>
-      <label>{% trans "Display name" %}<input name="display_name" maxlength="160"></label>
-      <label>{% trans "Role" %}<select name="role"><option value="both">{% trans "Backup and restore" %}</option><option value="backup">{% trans "Backup" %}</option><option value="restore">{% trans "Restore" %}</option></select></label>
-      <label>{% trans "Endpoint" %}<input name="endpoint" type="url"></label>
+
+  <section aria-labelledby="profiles-heading">
+    <div class="dataops-section-heading"><p class="dataops-eyebrow">{% trans "Effective connections" %}</p><h3 id="profiles-heading">{% trans "Configured profiles" %}</h3></div>
+    <div class="dataops-profile-cards">
+      {% for profile in profiles %}
+      <article class="dataops-profile-card{% if profile.environment_locked %} dataops-profile-card--locked{% endif %}">
+        <div class="dataops-profile-card__heading"><h4>{{ profile.display_name }}</h4><span>{{ profile.effective_source }}</span></div>
+        <p><code>{{ profile.key }}</code> · {{ profile.provider }} · {{ profile.role }}</p>
+        <div class="dataops-route-strip"><span>{{ profile.endpoint|default:_('AWS managed endpoint') }}</span><b>→</b><span>{{ profile.bucket }}/{{ profile.namespace }}</span></div>
+        <dl class="dataops-facts">
+          <div><dt>{% trans "Region / addressing" %}</dt><dd>{{ profile.region|default:'—' }} · {{ profile.addressing_style }}</dd></div>
+          <div><dt>{% trans "Dataset / source" %}</dt><dd>{{ profile.dataset_id }} · {{ profile.source_id|default:'—' }}</dd></div>
+          <div><dt>{% trans "Credentials" %}</dt><dd>{{ profile.credential_ref }} · {% if profile.credential_configured %}{% trans "encrypted fallback configured" %}{% else %}{% trans "reference only" %}{% endif %}</dd></div>
+          <div><dt>{% trans "Last probe" %}</dt><dd>{{ profile.last_observed_at|default:_('Never tested') }}</dd></div>
+        </dl>
+        {% if profile.environment_locked %}<p class="dataops-help">{% trans "This profile is controlled by ENV and is read-only here." %}</p>{% else %}
+        <form method="post" action="{% url 'dataops:profile_probe' profile.key %}">{% csrf_token %}<button class="dataops-button dataops-button--secondary" type="submit">{% trans "Test connection" %}</button></form>
+        {% endif %}
+      </article>
+      {% empty %}<p class="dataops-empty">{% trans "No storage profile is configured." %}</p>{% endfor %}
+    </div>
+  </section>
+
+  <section class="dataops-panel" aria-labelledby="selectors-heading">
+    <header><p class="dataops-eyebrow">{% trans "Application routes" %}</p><h3 id="selectors-heading">{% trans "Backup and restore selectors" %}</h3></header>
+    <form class="dataops-form dataops-form--columns" method="post">
+      {% csrf_token %}<input type="hidden" name="action" value="save_selectors">
+      <label>{% trans "Default backup target" %}<select name="backup">{% for profile in profiles %}{% if profile.role == 'backup' or profile.role == 'both' %}<option value="{{ profile.key }}"{% if selectors.backup == profile.key %} selected{% endif %}>{{ profile.display_name }}</option>{% endif %}{% endfor %}</select></label>
+      <label>{% trans "Default restore source" %}<select name="restore">{% for profile in profiles %}{% if profile.role == 'restore' or profile.role == 'both' %}<option value="{{ profile.key }}"{% if selectors.restore == profile.key %} selected{% endif %}>{{ profile.display_name }}</option>{% endif %}{% endfor %}</select></label>
+      <button class="dataops-button" type="submit">{% trans "Save selector fallbacks" %}</button>
+    </form>
+  </section>
+
+  <section id="add-profile" class="dataops-panel dataops-profile-editor" aria-labelledby="add-profile-heading">
+    <header><p class="dataops-eyebrow">{% trans "New or existing connection" %}</p><h3 id="add-profile-heading">{% trans "Add or update a stored profile" %}</h3></header>
+    <p class="dataops-help">{% trans "Leave credentials blank to use the named ENV reference. Entering credentials replaces the encrypted fallback; saved values are never rendered again." %}</p>
+    <form class="dataops-form dataops-form--columns" method="post">
+      {% csrf_token %}<input type="hidden" name="action" value="save_profile">
+      <label>{% trans "Profile name" %}<input name="key" required maxlength="80" pattern="[a-z0-9][a-z0-9_-]*" placeholder="r2-archive"></label>
+      <label>{% trans "Display name" %}<input name="display_name" maxlength="160" placeholder="R2 archive"></label>
+      <label>{% trans "Provider" %}<select name="provider">{% for value,label in provider_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+      <label>{% trans "Role" %}<select name="role"><option value="both">{% trans "Source and target" %}</option><option value="restore">{% trans "Source only" %}</option><option value="backup">{% trans "Target only" %}</option></select></label>
+      <label class="dataops-form__wide">{% trans "Endpoint URL" %}<input name="endpoint" type="url" placeholder="https://s3.example.com"></label>
+      <label>{% trans "Region" %}<input name="region" value="us-east-1" maxlength="80"></label>
+      <label>{% trans "Addressing style" %}<select name="addressing_style"><option value="auto">{% trans "Automatic" %}</option><option value="virtual">{% trans "Virtual hosted" %}</option><option value="path">{% trans "Path style" %}</option></select></label>
       <label>{% trans "Bucket" %}<input name="bucket" required maxlength="255"></label>
-      <label>{% trans "Region" %}<input name="region" maxlength="80"></label>
+      <label>{% trans "Default prefix / namespace" %}<input name="namespace" required maxlength="200" placeholder="backups/application"></label>
       <label>{% trans "Dataset" %}<input name="dataset_id" required maxlength="120"></label>
       <label>{% trans "Source ID" %}<input name="source_id" maxlength="120"></label>
-      <label>{% trans "Namespace / prefix" %}<input name="namespace" required maxlength="200"></label>
-      <label>{% trans "Credential reference" %}<input name="credential_ref" maxlength="120" aria-describedby="dataops-credential-help"></label>
-      <p id="dataops-credential-help" class="dataops-help">{% trans "Reference only; enter secret values through the encrypted credential workflow or deployment environment." %}</p>
-      <button class="dataops-button" type="submit">{% trans "Save fallback profile" %}</button>
+      <label>{% trans "Credential reference" %}<input name="credential_ref" required maxlength="120" placeholder="DATAOPS_R2_ARCHIVE"></label>
+      <label>{% trans "Access Key ID" %}<input name="access_key" autocomplete="off"></label>
+      <label>{% trans "Secret Access Key" %}<input name="secret_key" type="password" autocomplete="new-password"></label>
+      <label class="dataops-check"><input type="checkbox" name="verify_tls" value="1" checked> {% trans "Verify TLS certificate" %}</label>
+      <label class="dataops-check"><input type="checkbox" name="enabled" value="1" checked> {% trans "Profile enabled" %}</label>
+      <button class="dataops-button" type="submit">{% trans "Save profile" %}</button>
     </form>
-  </details>
-  <p><a href="{% url 'dataops:workbench' %}">{% trans "Back to Data Operations" %}</a></p>
+  </section>
 </main>
 {% endblock %}
