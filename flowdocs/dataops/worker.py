@@ -80,18 +80,21 @@ def _finish_pipeline_operation(operation, *, lease_token=""):
                 DataOperation.Kind.BACKUP,
                 DataOperation.Kind.RESTORE,
                 DataOperation.Kind.TEST_RECOVERY,
+                DataOperation.Kind.IMPORT,
             }
             and (operation.lifecycle_plan or {}).get("contract_version") == 3
         ):
             from .v3_executor import V3ExecutionError, execute_backup_operation
+            from .v3_legacy_executor import execute_legacy_import_operation
             from .v3_restore_executor import execute_restore_operation
 
             try:
-                result = (
-                    execute_backup_operation(operation, lease=lease)
-                    if operation.kind == DataOperation.Kind.BACKUP
-                    else execute_restore_operation(operation, lease=lease)
-                )
+                if operation.kind == DataOperation.Kind.BACKUP:
+                    result = execute_backup_operation(operation, lease=lease)
+                elif operation.kind == DataOperation.Kind.IMPORT:
+                    result = execute_legacy_import_operation(operation, lease=lease)
+                else:
+                    result = execute_restore_operation(operation, lease=lease)
             except V3ExecutionError as exc:
                 raise DataOpsPipelineError(
                     exc.code,
@@ -270,7 +273,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     changed = 0
     for operation in DataOperation.objects.using("control").filter(
         state=DataOperation.State.QUEUED,
-    ).exclude(kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC}).order_by("created_at")[:limit]:
+    ).exclude(kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.TEST_RECOVERY, DataOperation.Kind.IMPORT, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC}).order_by("created_at")[:limit]:
         with transaction.atomic(using="control"):
             current = DataOperation.objects.using("control").select_for_update().get(pk=operation.pk)
             if current.state != DataOperation.State.QUEUED:
@@ -305,7 +308,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     claims = []
     queued_ids = DataOperation.objects.using("control").filter(
         state=DataOperation.State.QUEUED,
-        kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
+        kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.TEST_RECOVERY, DataOperation.Kind.IMPORT, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
     ).order_by("created_at").values_list("pk", flat=True)[:limit]
     for operation_id in queued_ids:
         claim = _claim_pipeline_operation(operation_id)
@@ -315,7 +318,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     if remaining:
         stale_ids = DataOperation.objects.using("control").filter(
             state=DataOperation.State.RUNNING,
-            kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
+            kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.TEST_RECOVERY, DataOperation.Kind.IMPORT, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
         ).filter(Q(lease_expires_at__isnull=True) | Q(lease_expires_at__lte=timezone.now())).order_by("created_at").values_list("pk", flat=True)[:remaining]
         for operation_id in stale_ids:
             claim = _claim_pipeline_operation(operation_id)

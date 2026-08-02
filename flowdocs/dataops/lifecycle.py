@@ -216,6 +216,7 @@ def _source_refusals(passport: ArtifactPassport | None) -> list[str]:
     if passport.source_kind in {
         SourceKind.RECOVERY_POINT,
         SourceKind.PREVIOUS_RUNTIME,
+        SourceKind.LEGACY_OBJECT_STORE,
     }:
         if not passport.generation_id.strip():
             refusals.append("source_generation_missing")
@@ -347,18 +348,46 @@ def compile_lifecycle_plan(
             refusals=refusals,
         )
 
-    if passport.is_legacy and not passport.is_verified:
+    if passport.is_legacy:
         route = LifecycleRoute.LEGACY_IMPORT
-        steps.extend(
-            [
-                "discover_legacy_layout",
-                "scan_source_twice",
-                "verify_database_and_inventory",
-                "publish_canonical_recovery_point",
-                "verify_remote_recovery_point",
-            ]
-        )
-        gates.extend(["read_only_source", "stable_two_scan_snapshot", "sqlite_integrity", "object_hashes", "conditional_registration"])
+        if passport.source_kind is SourceKind.LEGACY_OBJECT_STORE:
+            steps.extend(
+                [
+                    "verify_selected_legacy_generation",
+                    "copy_to_isolated_quarantine",
+                    "verify_database_and_inventory",
+                    "publish_canonical_recovery_point",
+                    "verify_remote_recovery_point",
+                ]
+            )
+            gates.extend(
+                [
+                    "explicit_source_generation",
+                    "read_only_source",
+                    "sqlite_integrity",
+                    "object_hashes",
+                    "conditional_registration",
+                ]
+            )
+        else:
+            steps.extend(
+                [
+                    "discover_legacy_layout",
+                    "scan_source_twice",
+                    "verify_database_and_inventory",
+                    "publish_canonical_recovery_point",
+                    "verify_remote_recovery_point",
+                ]
+            )
+            gates.extend(
+                [
+                    "read_only_source",
+                    "stable_two_scan_snapshot",
+                    "sqlite_integrity",
+                    "object_hashes",
+                    "conditional_registration",
+                ]
+            )
         reasons.extend(["legacy_source", "canonicalization_required"])
         if not capabilities.owned_store_writable:
             refusals.append("owned_store_not_writable")

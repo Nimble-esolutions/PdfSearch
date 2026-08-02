@@ -7,8 +7,27 @@ import json
 import sqlite3
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
+from django.test import TestCase as DjangoTestCase, override_settings
+
+from dataops.lifecycle import (
+    ArtifactPassport,
+    ArtifactTrust,
+    InstanceIdentity,
+    LifecycleCapabilities,
+    LifecycleIntent,
+    LifecycleRequest,
+    SourceKind,
+    compile_lifecycle_plan,
+)
+from dataops.models import (
+    DataConnection,
+    DataOperation,
+    RecoveryPoint,
+    RestoreCandidate,
+)
 from dataops.package_v3 import validate_manifest, verify_manifest_signature
 from dataops.tests.test_v3_backup import FakeS3
 from dataops.v3_config import ConnectionView
@@ -20,6 +39,7 @@ from dataops.v3_legacy import (
     load_legacy_generation,
     materialize_legacy_generation,
 )
+from dataops.v3_legacy_executor import execute_legacy_import_operation
 
 
 class ListingFakeS3(FakeS3):
@@ -266,6 +286,193 @@ class LegacyV3ImportTests(unittest.TestCase):
                 dataset_id="wrong-dataset",
                 generation_id=self.generation_id,
             )
+
+
+class LegacyV3ExecutorTests(DjangoTestCase):
+    databases = {"default", "control"}
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.source_client = ListingFakeS3()
+        self.destination_client = FakeS3()
+        self.source_bucket = "legacy-source"
+        self.source_dataset = "legacy-production-v2"
+        self.generation_id = "legacy-20260802T085639Z"
+        database = self.root / "db.sqlite3"
+        with sqlite3.connect(database) as db:
+            db.execute(
+                "CREATE TABLE core_pdffile "
+                "(id INTEGER PRIMARY KEY, indexed INTEGER, processing_status TEXT)"
+            )
+            db.execute("INSERT INTO core_pdffile VALUES (1, 1, 'ready')")
+            db.execute("CREATE TABLE django_migrations (app TEXT, name TEXT)")
+            db.execute("INSERT INTO django_migrations VALUES ('core', '0029_latest')")
+        payloads = {
+            "db.sqlite3": ("database", database.read_bytes()),
+            "media/pdfs/one.pdf": ("media", b"%PDF-one"),
+        }
+        files = []
+        for path, (artifact_type, body) in payloads.items():
+            digest = hashlib.sha256(body).hexdigest()
+            key = (
+                f"datasets/{self.source_dataset}/blobs/pdfs/sha256/{digest}.pdf"
+                if path.endswith(".pdf")
+                else f"datasets/{self.source_dataset}/blobs/files/{digest}"
+            )
+            self.source_client.put_object(
+                Bucket=self.source_bucket,
+                Key=key,
+                Body=body,
+                Metadata={"sha256": digest},
+            )
+            files.append(
+                {
+                    "path": path,
+                    "bytes": len(body),
+                    "sha256": digest,
+                    "object_key": key,
+                    "artifact_type": artifact_type,
+                }
+            )
+        manifest = {
+            "manifest_version": 1,
+            "read_only": True,
+            "release_id": self.generation_id,
+            "dataset_id": self.source_dataset,
+            "production_source_id": "legacy-production",
+            "app_release": "legacy-release",
+            "image_digest": "sha256:" + "a" * 64,
+            "created_at": "2026-08-02T08:56:39+00:00",
+            "source": {
+                "root_contract": "read-only-volume",
+                "snapshot_evidence": {"stable": True},
+            },
+            "runtime_trees": ["media", "faiss_indexes", "chroma_db", "pdf_cache"],
+            "files": files,
+        }
+        body = (
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode()
+        self.source_client.put_object(
+            Bucket=self.source_bucket,
+            Key=legacy_manifest_key(self.source_dataset, self.generation_id),
+            Body=body,
+            Metadata={"sha256": hashlib.sha256(body).hexdigest()},
+        )
+        self.generation = load_legacy_generation(
+            self.source_client,
+            bucket=self.source_bucket,
+            dataset_id=self.source_dataset,
+            generation_id=self.generation_id,
+        )
+        self.source_connection = DataConnection.objects.using("control").create(
+            name="Read-only legacy source",
+            endpoint="https://rustfs.example.invalid",
+            bucket=self.source_bucket,
+            dataset_id=self.source_dataset,
+            credential_ref="secret://dataops/source",
+            capabilities={"read": True},
+        )
+        self.destination_connection = DataConnection.objects.using("control").create(
+            name="Owned destination",
+            endpoint="https://rustfs.example.invalid",
+            bucket="dev-destination",
+            dataset_id="ai-sahakar-dev",
+            credential_ref="secret://dataops/destination",
+            is_primary=True,
+            capabilities={
+                "probed": True,
+                "read": True,
+                "write": True,
+                "conditional_write": True,
+            },
+        )
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    @override_settings(
+        APP_ENV="development",
+        DATA_ROOT="/tmp/overridden-in-test",
+        ACTIVATION_INTENT_SIGNING_KEY="executor-test-signing-key",
+    )
+    def test_executor_imports_projects_restores_and_rehearses_without_activation(self):
+        plan = compile_lifecycle_plan(
+            LifecycleRequest(LifecycleIntent.IMPORT),
+            InstanceIdentity(
+                environment="development",
+                deployment_id="local-dev",
+                dataset_id=self.destination_connection.dataset_id,
+            ),
+            LifecycleCapabilities(
+                owned_store_readable=True,
+                owned_store_writable=True,
+                source_readable=True,
+                quarantine_writable=True,
+                isolated_restore_available=True,
+            ),
+            ArtifactPassport(
+                source_kind=SourceKind.LEGACY_OBJECT_STORE,
+                dataset_id=self.generation.dataset_id,
+                generation_id=self.generation.generation_id,
+                manifest_sha256=self.generation.manifest_sha256,
+                format_version=1,
+                trust=ArtifactTrust.VERIFIED,
+                complete=True,
+                read_only=True,
+            ),
+        )
+        self.assertEqual(plan.route, "legacy_import")
+        operation = DataOperation.objects.using("control").create(
+            kind=DataOperation.Kind.IMPORT,
+            state=DataOperation.State.RUNNING,
+            connection=self.destination_connection,
+            release_id="import-legacy-local-001",
+            lifecycle_route=plan.route,
+            lifecycle_plan=plan.as_dict(),
+            lifecycle_plan_digest=plan.plan_digest,
+            checkpoint={
+                "source_connection_id": str(self.source_connection.public_id),
+                "source_dataset_id": self.source_dataset,
+                "source_generation_id": self.generation_id,
+            },
+            idempotency_key=str(uuid.uuid4()),
+        )
+
+        def client_factory(connection):
+            return (
+                self.source_client
+                if connection.bucket == self.source_bucket
+                else self.destination_client
+            )
+
+        def migration_runner(database, *, workspace_path, promote_to):
+            self.assertEqual(database, promote_to)
+            self.assertEqual(database.parent, workspace_path)
+            return {
+                "success": True,
+                "migration_leaf_before": "0029_latest",
+                "migration_leaf_after": "0029_latest",
+                "integrity_ok": True,
+                "foreign_keys_ok": True,
+            }
+
+        with override_settings(DATA_ROOT=str(self.root / "data")):
+            result = execute_legacy_import_operation(
+                operation,
+                client_factory=client_factory,
+                migration_runner=migration_runner,
+            )
+        point = RecoveryPoint.objects.using("control").get(
+            public_id=result["effective_recovery_point_id"]
+        )
+        candidate = RestoreCandidate.objects.using("control").get(operation=operation)
+        self.assertEqual(point.dataset_id, self.destination_connection.dataset_id)
+        self.assertEqual(point.identity["parent_dataset_id"], self.source_dataset)
+        self.assertEqual(candidate.state, RestoreCandidate.State.VERIFIED)
+        self.assertTrue(result["requires_reindex"])
+        self.assertFalse(result["activation_performed"])
 
 
 if __name__ == "__main__":

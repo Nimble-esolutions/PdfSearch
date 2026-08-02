@@ -190,6 +190,21 @@ def legacy_mount_passport() -> ArtifactPassport:
     )
 
 
+def legacy_object_store_passport(generation) -> ArtifactPassport:
+    """Translate one already inspected legacy generation into planner facts."""
+
+    return ArtifactPassport(
+        source_kind=SourceKind.LEGACY_OBJECT_STORE,
+        dataset_id=generation.dataset_id,
+        generation_id=generation.generation_id,
+        manifest_sha256=generation.manifest_sha256,
+        format_version=1,
+        trust=ArtifactTrust.VERIFIED,
+        complete=True,
+        read_only=True,
+    )
+
+
 def _path_writable(path: Path) -> bool:
     candidate = path
     while not candidate.exists() and candidate != candidate.parent:
@@ -209,12 +224,13 @@ def capabilities_for(
     *,
     point: RecoveryPoint | None = None,
     legacy_mount: bool = False,
+    source_connection: ConnectionView | None = None,
 ) -> LifecycleCapabilities:
-    source_connection = None
-    if point and point.connection_id:
-        source_connection = connection_from_model(point.connection)
-    elif point and point.dataset_id == config.dataset_id:
-        source_connection = config.connection
+    resolved_source = source_connection
+    if resolved_source is None and point and point.connection_id:
+        resolved_source = connection_from_model(point.connection)
+    elif resolved_source is None and point and point.dataset_id == config.dataset_id:
+        resolved_source = config.connection
     data_root = Path(getattr(settings, "DATA_ROOT", Path("/nonexistent")))
     control_root = Path(
         getattr(settings, "DATA_CONTROL_ROOT", Path("/nonexistent"))
@@ -232,7 +248,7 @@ def capabilities_for(
         source_readable=(
             legacy_root.exists() and os.access(legacy_root, os.R_OK)
             if legacy_mount
-            else _connection_capability(source_connection, "read")
+            else _connection_capability(resolved_source, "read")
         ),
         quarantine_writable=_path_writable(data_root / "restore-quarantine"),
         signing_available=bool(
@@ -253,15 +269,20 @@ def compile_requested_plan(
     confirmation_present: bool,
     point: RecoveryPoint | None = None,
     source_kind: str = "",
+    legacy_generation=None,
+    source_connection: ConnectionView | None = None,
 ) -> tuple[RuntimeConfig, Any]:
     try:
         intent = LifecycleIntent(str(action or "").strip().lower())
     except ValueError as exc:
         raise ValueError("action_invalid") from exc
     legacy_mount = source_kind == SourceKind.LEGACY_MOUNT.value
+    legacy_object_store = source_kind == SourceKind.LEGACY_OBJECT_STORE.value
     passport = (
         passport_from_recovery_point(point)
         if point
+        else legacy_object_store_passport(legacy_generation)
+        if legacy_object_store and legacy_generation is not None
         else legacy_mount_passport()
         if legacy_mount
         else None
@@ -284,6 +305,7 @@ def compile_requested_plan(
             config,
             point=point,
             legacy_mount=legacy_mount,
+            source_connection=source_connection,
         ),
         passport,
     )
