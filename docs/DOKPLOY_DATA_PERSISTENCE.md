@@ -126,11 +126,30 @@ Read-only inspection:
 docker compose -f docker-compose.yml ps
 docker inspect "$(docker compose -f docker-compose.yml ps -q web)" \
   --format '{{range .Mounts}}{{println .Name .Source .Destination .RW}}{{end}}'
-docker volume ls --filter label=com.dokploy.backup=true
-docker volume inspect <discovered-flowdocs-data-volume>
+docker volume inspect \
+  sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_flowdocs_data \
+  sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_flowdocs_control \
+  sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_redis_data
 docker system df
 df -h /
 ```
+
+## Dokploy volume identity
+
+The root production Compose file treats Redis, application data, and control
+volumes as external and derives their names from the Compose project identity.
+Dokploy must preserve the project name across redeploys. For the current 2026
+stage project, the expected names are:
+
+    sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_redis_data
+    sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_flowdocs_data
+    sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_flowdocs_control
+
+If any required volume is absent, Compose fails instead of creating an empty
+replacement. The local development and CI Compose files retain their
+disposable named volumes and are unaffected.
+Because these are external volumes, Compose does not manage their labels;
+Dokploy backup policy must cover the exact external volume names separately.
 
 ## Required post-deploy evidence
 

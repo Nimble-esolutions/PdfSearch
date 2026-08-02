@@ -503,18 +503,17 @@ services:
       - internal
 
 volumes:
+  # Dokploy provisions these persistent volumes. Keep them external so a
+  # project-name change or a missing volume cannot create a blank replacement.
   redis_data:
-    driver: local
-    labels:
-      com.dokploy.backup: "true"
+    external: true
+    name: ${COMPOSE_PROJECT_NAME}_redis_data
   flowdocs_data:
-    driver: local
-    labels:
-      com.dokploy.backup: "true"
+    external: true
+    name: ${COMPOSE_PROJECT_NAME}_flowdocs_data
   flowdocs_control:
-    driver: local
-    labels:
-      com.dokploy.backup: "true"
+    external: true
+    name: ${COMPOSE_PROJECT_NAME}_flowdocs_control
   prod_flowdocs:
     external: true
 
