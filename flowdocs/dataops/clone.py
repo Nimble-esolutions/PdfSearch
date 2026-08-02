@@ -450,6 +450,11 @@ def clone_rebind_generation(
         "clone_reason": clone_reason,
     }
     rebased.update(lineage)
+    # A clone/rebind is a read-only repack of the source generation.  Preserve
+    # an explicit producer marker so the restore compatibility gate can accept
+    # an intentionally repacked legacy generation without treating arbitrary
+    # release or image mismatches as safe.
+    rebased["repacked_from_generation_id"] = source_generation_id
     rebased["clone"] = {
         "operation": "clone/rebind",
         "source_profile": source.key,
