@@ -1,7 +1,7 @@
 Status: Active
 Audience: Agent operators and maintainers
 Owner: FlowDocs maintainers
-Last verified: 2026-07-25
+Last verified: 2026-08-03
 Canonical source: docs/AGENT_RULE_AUTHORITY.md
 Supersedes: ad hoc Kilo/OpenCode/Codex rule copies when they conflict
 
@@ -93,6 +93,34 @@ authority and fix the lower adapter in a separate docs/rules PR.
   lease, backup policy, object store capabilities, namespace, metrics) is
   implemented and merged. Remaining planned items: automatic artifact
   publishing and cross-environment synchronization.
+
+## Mandatory impact-analysis gate
+
+Before an agent edits or proposes a change to Compose, Dockerfiles, Dokploy,
+volumes, environment contracts, deployment documentation, data custody,
+DNS/proxy labels, image identity, or recovery behavior, it must record this
+minimum analysis in the task notes or PR body:
+
+| Required field | Required content |
+| --- | --- |
+| Scope | Exact files, branch, target environment, and remote service/project |
+| Current contract | Existing Compose/env/image/volume behavior and source evidence |
+| Environment matrix | Dev, stage, and production effect, including unchanged environments |
+| Data risk | Whether databases, media, indexes, control state, secrets, or DNS can change |
+| External state | Whether Docker, Dokploy, RustFS, GitHub, DNS, or running traffic changes |
+| Reversibility | Exact rollback commit/config and volume/generation recovery path |
+| Verification | Rendered config, tests, live checks, image digest, and volume identity evidence |
+| Approval gate | Explicit user approval for destructive, remote, or environment-specific actions |
+
+The agent must not implement a materially different alternative after the user
+rejects an option. A renamed variable or Compose override is still the same
+scope if it changes the same deployment boundary. When the impact analysis
+reveals a new trade-off, pause and present the alternatives before editing.
+
+Before pushing, the agent must report the exact changed-file list, commit SHA,
+base branch, deployment impact, rollback path, and checks run. Local Compose
+rendering does not prove that Dokploy used the intended Compose file, image,
+project name, or volumes.
 
 ## Adapter Maintenance Rules
 
