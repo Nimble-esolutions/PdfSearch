@@ -7,8 +7,9 @@ operations. Existing maintenance services remain the execution authority.
 
 from __future__ import annotations
 
-import secrets
+import hashlib
 import os
+import secrets
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -29,7 +30,12 @@ from .config import resolve_profiles, resolve_selectors, resolve_setting, valida
 from .models import BackupJob, DataOperation, DataProfile, DataOpsAuditEvent, MirrorDeletionPreview, RecoveryPoint
 from .job_scheduler import ScheduleConfigurationError, parse_schedule
 from .profile_service import ProfileMutationError, probe_profile, save_profile, save_selectors
-from .pipeline import DataOpsPipelineError, preflight_operation, resolve_operation_route
+from .pipeline import (
+    DataOpsPipelineError,
+    clone_destination_generation_id,
+    preflight_operation,
+    resolve_operation_route,
+)
 from .readiness import readiness_payload
 from .storage import StorageConfigurationError
 
@@ -206,18 +212,120 @@ def restore(request):
 
 
 @login_required
+@require_POST
+def clone_rebind(request):
+    """Queue the explicit cross-dataset clone behind Advanced Controls."""
+    if not _can_act(request):
+        return HttpResponse("Superadmin approval required", status=403)
+    if not getattr(settings, "DATAOPS_CLONE_REBIND_ENABLED", False):
+        return HttpResponse("Clone/rebind is disabled by deployment policy", status=409)
+    source_key = request.POST.get("source_profile", "").strip().lower()
+    destination_key = request.POST.get("destination_profile", "").strip().lower()
+    source_generation_id = request.POST.get("source_generation_id", "").strip()
+    destination_generation_id = clone_destination_generation_id(
+        source_generation_id,
+        request.POST.get("destination_generation_id", "").strip(),
+    )
+    clone_reason = request.POST.get("clone_reason", "stage-rehearsal").strip() or "stage-rehearsal"
+    confirmation = request.POST.get("confirmation", "")
+    try:
+        resolved, selectors, _issues, error = _resolved_profile_state()
+        if error:
+            return HttpResponse("Clone/rebind blocked by profile configuration", status=409)
+        route = resolve_operation_route(
+            "clone_rebind",
+            resolved,
+            selectors=selectors,
+            source_profile=source_key,
+            destination_profile=destination_key,
+            local_dataset_id=str(getattr(settings, "DATASET_ID", "")),
+        )
+        preview = preflight_operation(
+            "clone_rebind",
+            route.source,
+            route.destination,
+            release_id=destination_generation_id,
+            source_generation_id=source_generation_id,
+            destination_generation_id=destination_generation_id,
+            confirmation=confirmation,
+            clone_reason=clone_reason,
+            local_dataset_id=str(getattr(settings, "DATASET_ID", "")),
+        )
+    except (DataOpsPipelineError, StorageConfigurationError) as exc:
+        return HttpResponse(f"Clone/rebind blocked: {getattr(exc, 'code', str(exc))}", status=409)
+    if not preview.ok:
+        return HttpResponse("Clone/rebind confirmation or profile validation failed", status=409)
+    idempotency_key = request.POST.get("idempotency_key", "").strip() or secrets.token_urlsafe(18)
+    operation, created = DataOperation.objects.using("control").get_or_create(
+        kind=DataOperation.Kind.CLONE_REBIND,
+        idempotency_key=idempotency_key,
+        defaults={
+            "state": DataOperation.State.QUEUED,
+            "profile_key": destination_key,
+            "source_profile_key": source_key,
+            "destination_profile_key": destination_key,
+            "release_id": destination_generation_id,
+            "checkpoint": {
+                "pipeline": "preflight",
+                "source_generation_id": source_generation_id,
+                "destination_generation_id": destination_generation_id,
+                "clone_reason": clone_reason,
+                "confirmation_sha256": hashlib.sha256(confirmation.encode("utf-8")).hexdigest(),
+            },
+        },
+    )
+    if created:
+        DataOpsAuditEvent.objects.using("control").create(
+            actor_id=request.user.pk,
+            actor_name=request.user.get_username(),
+            action="clone_rebind",
+            operation_id=operation.public_id,
+            profile_key=destination_key,
+            outcome="queued",
+            evidence={
+                "source_profile": source_key,
+                "destination_profile": destination_key,
+                "source_generation_id": source_generation_id,
+                "destination_generation_id": destination_generation_id,
+                "clone_reason": clone_reason,
+            },
+        )
+    return redirect("dataops:advanced")
+
+
+@login_required
 @require_GET
 def preflight(request):
     operation = request.GET.get("operation", "restore").strip().lower()
     source_key = request.GET.get("source_profile", "").strip().lower()
     destination_key = request.GET.get("destination_profile", "").strip().lower()
     release_id = request.GET.get("release_id", "").strip()
+    source_generation_id = request.GET.get("source_generation_id", "").strip()
+    destination_generation_id = request.GET.get("destination_generation_id", "").strip()
+    clone_reason = request.GET.get("clone_reason", "stage-rehearsal").strip() or "stage-rehearsal"
+    confirmation = request.GET.get("confirmation", "")
     try:
+        if operation in {"clone_rebind", "clone/rebind"} and not getattr(settings, "DATAOPS_CLONE_REBIND_ENABLED", False):
+            return JsonResponse(
+                {"ok": False, "issues": [{"code": "clone_rebind_disabled", "message": "Clone/rebind is disabled by deployment policy"}]},
+                status=409,
+            )
         resolved, selectors, issues, error = _resolved_profile_state()
         if error:
             return JsonResponse({"ok": False, "issues": [{"code": "dataops_config_invalid", "message": error}]}, status=409)
         route = resolve_operation_route(operation, resolved, selectors=selectors, source_profile=source_key, destination_profile=destination_key, local_dataset_id=str(getattr(settings, "DATASET_ID", "")))
-        result = preflight_operation(operation, route.source, route.destination, release_id=release_id, local_dataset_id=str(getattr(settings, "DATASET_ID", "")), active_root=getattr(settings, "RUNTIME_GENERATIONS_ROOT", None))
+        result = preflight_operation(
+            operation,
+            route.source,
+            route.destination,
+            release_id=release_id,
+            source_generation_id=source_generation_id,
+            destination_generation_id=destination_generation_id,
+            confirmation=confirmation,
+            clone_reason=clone_reason,
+            local_dataset_id=str(getattr(settings, "DATASET_ID", "")),
+            active_root=getattr(settings, "RUNTIME_GENERATIONS_ROOT", None),
+        )
         return JsonResponse(result.redacted(), status=200 if result.ok else 409)
     except (DataOpsPipelineError, StorageConfigurationError) as exc:
         return JsonResponse({"ok": False, "issues": [{"code": getattr(exc, "code", "storage_configuration_invalid"), "message": str(exc)}]}, status=409)
@@ -414,7 +522,25 @@ def advanced(request):
     decorate_operator_state(maintenance)
     state = build_workbench_state()
     state["maintenance"] = maintenance
-    return render(request, "dataops/advanced.html", {"state": state, "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("advanced")})
+    try:
+        resolved = resolve_profiles()
+    except Exception:
+        resolved = ()
+    clone_profiles = [
+        {
+            **profile.redacted(),
+            "can_clone_source": profile.can_restore,
+            "can_clone_destination": profile.can_backup,
+        }
+        for profile in resolved
+        if profile.enabled
+    ]
+    clone_controls = {
+        "enabled": bool(getattr(settings, "DATAOPS_CLONE_REBIND_ENABLED", False)),
+        "profiles": clone_profiles,
+        "confirmation_prefix": "CLONE <source-profile>:<source-generation> -> <destination-profile>:<destination-generation> / <reason>",
+    }
+    return render(request, "dataops/advanced.html", {"state": state, "clone_controls": clone_controls, "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("advanced")})
 
 
 @login_required

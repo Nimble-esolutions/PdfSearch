@@ -13,11 +13,14 @@ from dataops.config import (
 )
 from dataops.pipeline import (
     DataOpsPipelineError,
+    clone_confirmation_phrase,
     preflight_operation,
     publish_local_backup,
     run_operation_pipeline,
+    stage_remote_generation,
     transfer_generation,
 )
+from dataops.clone import clone_rebind_generation
 
 
 class FakeS3:
@@ -150,6 +153,120 @@ class ProfileManifestTests(unittest.TestCase):
 
 
 class ProfileMatrixPipelineTests(unittest.TestCase):
+    @staticmethod
+    def _legacy_manifest(dataset_id, generation_id):
+        database = b"sqlite-copy"
+        pdf = b"pdf-copy"
+        database_entry = {
+            "path": "db.sqlite3",
+            "bytes": len(database),
+            "sha256": hashlib.sha256(database).hexdigest(),
+            "object_key": f"datasets/{dataset_id}/blobs/files/{hashlib.sha256(database).hexdigest()}",
+            "artifact_type": "database",
+        }
+        pdf_entry = {
+            "path": "media/a.pdf",
+            "bytes": len(pdf),
+            "sha256": hashlib.sha256(pdf).hexdigest(),
+            "object_key": f"datasets/{dataset_id}/blobs/pdfs/sha256/{hashlib.sha256(pdf).hexdigest()}.pdf",
+            "artifact_type": "media",
+        }
+        return {
+            "manifest_version": 1,
+            "read_only": True,
+            "release_id": generation_id,
+            "dataset_id": dataset_id,
+            "production_source_id": "production",
+            "app_release": "test",
+            "image_digest": "sha256:" + "a" * 64,
+            "schema": {"inventory_schema": "legacy-volume-port/v2"},
+            "source": {"kind": "legacy-data-root", "root_contract": "read-only-volume"},
+            "database": {"entry": database_entry},
+            "pdf_storage": {"root": "media", "files": [pdf_entry], "file_count": 1},
+            "faiss": {"root": "faiss_indexes", "files": [], "count": 0},
+            "chroma": {"root": "chroma_db", "files": [], "count": 0},
+            "counts": {"files": 2, "pdfs": 1, "faiss": 0, "chroma": 0, "pdf_cache": 0, "staticfiles": 0, "backups": 0},
+            "files": [database_entry, pdf_entry],
+        }, {"db.sqlite3": database, "media/a.pdf": pdf}
+
+    def test_clone_rebind_preserves_source_and_rewrites_lineage(self):
+        source = ResolvedProfile("production_v2_source", "Production", "restore", "https://objects.example.invalid", "source-bucket", "us-east-1", "source-dataset", "production", "OPS", "production-v2")
+        destination = ResolvedProfile("stage_2026", "Stage", "both", "https://objects.example.invalid", "stage-bucket", "us-east-1", "stage-dataset", "stage", "OPS", "stage-2026")
+        source_client = FakeS3()
+        destination_client = FakeS3()
+        generation = "legacy-generation"
+        manifest, files = self._legacy_manifest(source.dataset_id, generation)
+        for entry in manifest["files"]:
+            source_client.put_object(Bucket=source.bucket, Key=entry["object_key"], Body=files[entry["path"]])
+        manifest_key = f"datasets/{source.dataset_id}/generations/{generation}/manifest.json"
+        source_client.put_object(Bucket=source.bucket, Key=manifest_key, Body=(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode())
+        source_before = dict(source_client.objects)
+        destination_generation = "stage-rehearsal-1"
+        confirmation = clone_confirmation_phrase(source.key, generation, destination.key, destination_generation)
+
+        result = clone_rebind_generation(
+            source_client,
+            source,
+            destination_client,
+            destination,
+            generation,
+            destination_generation_id=destination_generation,
+            confirmation=confirmation,
+        )
+
+        self.assertEqual(source_client.objects, source_before)
+        self.assertEqual(result["source_manifest_digest"], hashlib.sha256(source_client.objects[(source.bucket, manifest_key)]).hexdigest())
+        self.assertEqual(result["lineage"]["parent_dataset_id"], source.dataset_id)
+        self.assertEqual(result["lineage"]["parent_generation_id"], generation)
+        self.assertEqual(result["manifest"]["dataset_id"], destination.dataset_id)
+        self.assertTrue(all(entry["object_key"].startswith(f"datasets/{destination.dataset_id}/") for entry in result["manifest"]["files"]))
+        pointer = json.loads(destination_client.objects[(destination.bucket, f"datasets/{destination.dataset_id}/control/authoritative.json")])
+        self.assertEqual(pointer["generation_id"], destination_generation)
+        self.assertEqual(pointer["manifest_sha256"], result["manifest_digest"])
+
+    def test_clone_rebind_rejects_immutable_destination_collision(self):
+        source = ResolvedProfile("source", "Source", "restore", "https://objects.example.invalid", "source-bucket", "us-east-1", "source-dataset", "production", "OPS", "source")
+        destination = ResolvedProfile("destination", "Destination", "both", "https://objects.example.invalid", "destination-bucket", "us-east-1", "stage-dataset", "stage", "OPS", "destination")
+        source_client = FakeS3()
+        destination_client = FakeS3()
+        generation = "collision-generation"
+        manifest, files = self._legacy_manifest(source.dataset_id, generation)
+        for entry in manifest["files"]:
+            source_client.put_object(Bucket=source.bucket, Key=entry["object_key"], Body=files[entry["path"]])
+        manifest_key = f"datasets/{source.dataset_id}/generations/{generation}/manifest.json"
+        source_client.put_object(Bucket=source.bucket, Key=manifest_key, Body=(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode())
+        destination_key = manifest["files"][0]["object_key"].replace(f"datasets/{source.dataset_id}/", f"datasets/{destination.dataset_id}/")
+        destination_client.put_object(Bucket=destination.bucket, Key=destination_key, Body=b"wrong-content")
+
+        with self.assertRaises(DataOpsPipelineError) as caught:
+            clone_rebind_generation(
+                source_client,
+                source,
+                destination_client,
+                destination,
+                generation,
+                confirmation=clone_confirmation_phrase(source.key, generation, destination.key, "clone-" + generation),
+            )
+        self.assertEqual(caught.exception.code, "destination_immutable_conflict")
+        self.assertNotIn((destination.bucket, f"datasets/{destination.dataset_id}/control/authoritative.json"), destination_client.objects)
+
+    def test_legacy_clone_manifest_stages_files_at_application_paths(self):
+        source = ResolvedProfile("source", "Source", "restore", "https://objects.example.invalid", "source-bucket", "us-east-1", "source-dataset", "production", "OPS", "source")
+        source_client = FakeS3()
+        generation = "stage-source"
+        manifest, files = self._legacy_manifest(source.dataset_id, generation)
+        for entry in manifest["files"]:
+            source_client.put_object(Bucket=source.bucket, Key=entry["object_key"], Body=files[entry["path"]])
+        source_client.put_object(
+            Bucket=source.bucket,
+            Key=f"datasets/{source.dataset_id}/generations/{generation}/manifest.json",
+            Body=(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode(),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            staged = stage_remote_generation(source_client, source, release_id=generation, destination_root=temp)
+            self.assertEqual((Path(staged["workspace"]) / "media" / "a.pdf").read_bytes(), files["media/a.pdf"])
+            self.assertEqual(staged["manifest"]["format_version"], 2)
+
     def test_old_to_old_old_to_new_new_to_old_and_new_to_new(self):
         cases = [("old", "old"), ("old", "new"), ("new", "old"), ("new", "new")]
         for source_bucket, destination_bucket in cases:

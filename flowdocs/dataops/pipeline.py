@@ -72,6 +72,8 @@ RETRYABLE_CODES = frozenset(
     }
 )
 
+_OPERATION_ALIASES = {"clone/rebind": "clone_rebind"}
+
 
 class DataOpsPipelineError(RuntimeError):
     """A safe, non-secret pipeline failure."""
@@ -166,6 +168,33 @@ def _safe_release_id(value: str | None = None) -> str:
     return release
 
 
+def clone_destination_generation_id(source_generation_id: str, destination_generation_id: str = "") -> str:
+    """Return the deterministic destination id used by clone/rebind."""
+    supplied = str(destination_generation_id or "").strip()
+    if supplied:
+        return supplied
+    source = str(source_generation_id or "").strip()
+    candidate = f"clone-{source}"
+    if len(candidate) <= 160:
+        return candidate
+    return "clone-" + hashlib.sha256(source.encode("utf-8")).hexdigest()[:32]
+
+
+def clone_confirmation_phrase(
+    source_profile: str,
+    source_generation_id: str,
+    destination_profile: str,
+    destination_generation_id: str,
+    clone_reason: str = "stage-rehearsal",
+) -> str:
+    """Build the exact human confirmation required for a cross-dataset clone."""
+    return (
+        f"CLONE {str(source_profile).strip().lower()}:{str(source_generation_id).strip()} "
+        f"-> {str(destination_profile).strip().lower()}:{str(destination_generation_id).strip()} "
+        f"/ {str(clone_reason or 'stage-rehearsal').strip()}"
+    )
+
+
 def resolve_operation_route(
     operation: str,
     profiles: Iterable[ResolvedProfile],
@@ -178,7 +207,8 @@ def resolve_operation_route(
     values = profile_map(profiles)
     selectors = selectors or resolve_selectors()
     operation = operation.strip().lower()
-    if operation not in {"backup", "restore", "copy", "transfer"}:
+    operation = _OPERATION_ALIASES.get(operation, operation)
+    if operation not in {"backup", "restore", "copy", "transfer", "clone_rebind"}:
         raise DataOpsPipelineError("operation_invalid", stage="preflight")
     if operation == "backup":
         destination_key = (destination_profile or selectors.get("backup_destination") or selectors.get("backup") or "").strip().lower()
@@ -213,12 +243,34 @@ def preflight_operation(
     source_client: Any = None,
     destination_client: Any = None,
     require_permissions: bool = False,
+    source_generation_id: str = "",
+    destination_generation_id: str = "",
+    confirmation: str = "",
+    clone_reason: str = "stage-rehearsal",
 ) -> PreflightResult:
     """Return an exact, secret-free operation preview or typed issues."""
-    route = OperationRoute(operation.strip().lower(), source, destination, source.key if source else "", destination.key if destination else "", local_dataset_id)
+    operation = _OPERATION_ALIASES.get(operation.strip().lower(), operation.strip().lower())
+    route = OperationRoute(operation, source, destination, source.key if source else "", destination.key if destination else "", local_dataset_id)
     issues = list(validate_operation_route(source, destination, operation=route.operation, local_dataset_id=local_dataset_id))
     if route.operation in {"restore", "copy", "transfer"} and not str(release_id or "").strip():
         issues.append(_issue("release_id_missing", "A release ID is required for this operation", "release_id"))
+    if route.operation == "clone_rebind":
+        source_generation_id = str(source_generation_id or "").strip()
+        destination_generation_id = clone_destination_generation_id(source_generation_id, destination_generation_id)
+        if not source_generation_id:
+            issues.append(_issue("source_generation_id_missing", "A source generation is required for clone/rebind", "source_generation_id"))
+        if source and destination and source.dataset_id == destination.dataset_id:
+            issues.append(_issue("clone_requires_distinct_dataset", "Clone/rebind requires distinct source and destination datasets", "dataset_id"))
+        expected = clone_confirmation_phrase(
+            source.key if source else "",
+            source_generation_id,
+            destination.key if destination else "",
+            destination_generation_id,
+            clone_reason,
+        )
+        if confirmation != expected:
+            issues.append(_issue("clone_confirmation_required", "Type the exact clone/rebind confirmation phrase", "confirmation"))
+        release_id = release_id or destination_generation_id
     for profile, field in ((source, "source"), (destination, "destination")):
         if profile and profile.enabled and not profile.endpoint:
             issues.append(_issue("endpoint_missing", f"{field.title()} profile {profile.key} has no endpoint", f"{field}_endpoint"))
@@ -367,7 +419,7 @@ def _manifest_entries(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
         digest = str(item.get("sha256") or "").strip().lower()
         if not key or (payload.get("format_version") == 2 and len(digest) != 64):
             raise DataOpsPipelineError("manifest_files_invalid", stage="manifest_verification")
-        normalized.append({**dict(item), "key": key, "sha256": digest})
+        normalized.append({**dict(item), "key": key, "sha256": digest, "path": str(item.get("path") or "").strip()})
     return normalized
 
 
@@ -545,7 +597,11 @@ def stage_remote_generation(
             data = _read_object(source_client, bucket=source.bucket, key=source_key)
             if item["sha256"] and hashlib.sha256(data).hexdigest() != item["sha256"]:
                 raise DataOpsPipelineError("manifest_checksum_mismatch", stage="manifest_verification", retryable=False)
-            relative = _relative_object_key(source_key, source_prefix)
+            relative = item.get("path") if payload.get("manifest_version") == 1 else ""
+            if not relative:
+                relative = _relative_object_key(source_key, source_prefix)
+            else:
+                relative = _relative_object_key(str(relative), "")
             target = temporary / relative
             target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             target.write_bytes(data)
@@ -702,11 +758,29 @@ def run_operation_pipeline(
     budget: ReindexBudget | None = None,
     max_retries: int = 3,
     require_permissions: bool = False,
+    source_generation_id: str = "",
+    destination_generation_id: str = "",
+    confirmation: str = "",
+    clone_reason: str = "stage-rehearsal",
 ) -> dict[str, Any]:
     profiles = tuple(profiles)
     route = resolve_operation_route(operation, profiles, selectors=selectors, source_profile=source_profile, destination_profile=destination_profile, local_dataset_id=local_dataset_id)
     result: dict[str, Any] = {"operation": route.operation, "source_profile": route.source.key if route.source else "local", "destination_profile": route.destination.key if route.destination else "local", "stages": [], "attempts": 0}
-    preflight = preflight_operation(route.operation, route.source, route.destination, release_id=release_id, local_dataset_id=local_dataset_id, active_root=runtime_root, source_client=source_client, destination_client=destination_client, require_permissions=require_permissions)
+    preflight = preflight_operation(
+        route.operation,
+        route.source,
+        route.destination,
+        release_id=release_id,
+        local_dataset_id=local_dataset_id,
+        active_root=runtime_root,
+        source_client=source_client,
+        destination_client=destination_client,
+        require_permissions=require_permissions,
+        source_generation_id=source_generation_id,
+        destination_generation_id=destination_generation_id,
+        confirmation=confirmation,
+        clone_reason=clone_reason,
+    )
     result["preflight"] = preflight.redacted()
     if not preflight.ok:
         raise DataOpsPipelineError("preflight_failed", stage="preflight", retryable=False, details={"issues": [issue.__dict__ for issue in preflight.issues]})
@@ -724,7 +798,23 @@ def run_operation_pipeline(
                 lease_value = {"lease_id": uuid.uuid4().hex}
             result["lease"] = {"lease_id": str(lease_value.get("lease_id", "")) if isinstance(lease_value, Mapping) else "acquired"}
             result["stages"].append({"stage": "lease", "status": "succeeded"})
-            if route.operation == "backup":
+            if route.operation == "clone_rebind":
+                if source_client is None or destination_client is None or route.source is None or route.destination is None:
+                    raise DataOpsPipelineError("storage_client_missing", stage="transfer", retryable=False)
+                from .clone import clone_rebind_generation
+
+                transfer = clone_rebind_generation(
+                    source_client,
+                    route.source,
+                    destination_client,
+                    route.destination,
+                    source_generation_id,
+                    destination_generation_id=preflight.release_id,
+                    confirmation=confirmation,
+                    clone_reason=clone_reason,
+                )
+                staged = None
+            elif route.operation == "backup":
                 if route.source and route.destination:
                     if source_client is None or destination_client is None:
                         raise DataOpsPipelineError("storage_client_missing", stage="transfer", retryable=False)
@@ -755,13 +845,31 @@ def run_operation_pipeline(
             result["transfer"] = {key: value for key, value in transfer.items() if key != "manifest"} if isinstance(transfer, Mapping) else transfer
             result["stages"].append({"stage": "transfer", "status": "succeeded"})
             manifest = transfer.get("manifest", {}) if isinstance(transfer, Mapping) else {}
-            validate_manifest(manifest)
-            result["manifest_digest"] = manifest_digest(manifest)
+            if route.operation == "clone_rebind":
+                from .clone import _validate_custom_manifest
+
+                _validate_custom_manifest(manifest, route.destination.dataset_id, preflight.release_id)
+                result["manifest_format_version"] = int(manifest.get("manifest_version", 1))
+                result["manifest_digest"] = str(transfer.get("manifest_digest", ""))
+            else:
+                validate_manifest(manifest)
+                result["manifest_digest"] = manifest_digest(manifest)
             result["stages"].append({"stage": "manifest_verification", "status": "succeeded", "manifest_digest": result["manifest_digest"]})
-            reconciliation = reconcile_staged_generation(staged["workspace"], manifest) if staged else {"database": "not_staged", "documents": int(manifest.get("counts", {}).get("documents", 0) or 0), "indexes": int(manifest.get("counts", {}).get("indexes", 0) or 0), "indexing_ratio": 1.0}
+            if route.operation == "clone_rebind":
+                reconciliation = {
+                    "database": "remote_verified",
+                    "documents": int(manifest.get("counts", {}).get("pdfs", 0) or 0),
+                    "indexes": int(manifest.get("counts", {}).get("faiss", 0) or 0),
+                    "indexing_ratio": 1.0,
+                }
+            else:
+                reconciliation = reconcile_staged_generation(staged["workspace"], manifest) if staged else {"database": "not_staged", "documents": int(manifest.get("counts", {}).get("documents", 0) or 0), "indexes": int(manifest.get("counts", {}).get("indexes", 0) or 0), "indexing_ratio": 1.0}
             result["reconciliation"] = reconciliation
             result["stages"].append({"stage": "reconciliation", "status": "succeeded"})
-            result["reindex"] = run_bounded_reindex(reconciliation, reindexer=reindexer, budget=budget, max_retries=max_retries)
+            if route.operation == "clone_rebind":
+                result["reindex"] = {"requested": 0, "allowed": 0, "completed": 0, "attempts": 0, "budget_remaining_run": budget.per_run - budget.used_run, "budget_remaining_day": budget.per_day - budget.used_day}
+            else:
+                result["reindex"] = run_bounded_reindex(reconciliation, reindexer=reindexer, budget=budget, max_retries=max_retries)
             completed_reindex = int(result["reindex"].get("completed", 0) or 0)
             if completed_reindex and int(reconciliation.get("documents", 0) or 0):
                 reconciliation["indexes"] = min(
@@ -814,8 +922,13 @@ def execute_operation_record(
 
     profiles = resolve_profiles(environ)
     selectors = resolve_selectors(environ)
-    source_key = operation.source_profile_key or (selectors.get("backup_source") if operation.kind == "backup" else selectors.get("restore_source")) or ""
-    destination_key = operation.destination_profile_key or (selectors.get("backup_destination") if operation.kind == "backup" else selectors.get("restore_destination")) or ""
+    is_clone = operation.kind in {DataOperation.Kind.CLONE_REBIND, "clone_rebind"}
+    if is_clone:
+        source_key = operation.source_profile_key or ""
+        destination_key = operation.destination_profile_key or ""
+    else:
+        source_key = operation.source_profile_key or (selectors.get("backup_source") if operation.kind == "backup" else selectors.get("restore_source")) or ""
+        destination_key = operation.destination_profile_key or (selectors.get("backup_destination") if operation.kind == "backup" else selectors.get("restore_destination")) or ""
     values = profile_map(profiles)
     source = values.get(source_key) if source_key else None
     destination = values.get(destination_key) if destination_key else values.get(selectors.get("backup", "")) if operation.kind == "backup" else None
@@ -823,9 +936,30 @@ def execute_operation_record(
         source = values.get(operation.profile_key or selectors.get("restore", ""))
     if operation.kind == "backup" and not destination:
         destination = values.get(operation.profile_key or selectors.get("backup", ""))
-    if operation.kind not in {"backup", "restore"}:
+    if operation.kind not in {"backup", "restore", DataOperation.Kind.CLONE_REBIND, "clone_rebind"}:
         raise DataOpsPipelineError("operation_kind_unsupported", stage="preflight", retryable=False)
     credential_environment = dict(os.environ) if environ is None else environ
+
+    clone_options = operation.checkpoint if is_clone and isinstance(operation.checkpoint, Mapping) else {}
+    source_generation_id = str(clone_options.get("source_generation_id", "") or "").strip()
+    destination_generation_id = str(clone_options.get("destination_generation_id", "") or operation.release_id or "").strip()
+    clone_reason = str(clone_options.get("clone_reason", "stage-rehearsal") or "stage-rehearsal").strip()
+    clone_confirmation = ""
+    if is_clone:
+        if not getattr(settings, "DATAOPS_CLONE_REBIND_ENABLED", False):
+            raise DataOpsPipelineError("clone_rebind_disabled", stage="preflight", retryable=False)
+        destination_generation_id = clone_destination_generation_id(source_generation_id, destination_generation_id)
+        expected_confirmation = clone_confirmation_phrase(
+            source.key if source else source_key,
+            source_generation_id,
+            destination.key if destination else destination_key,
+            destination_generation_id,
+            clone_reason,
+        )
+        expected_digest = hashlib.sha256(expected_confirmation.encode("utf-8")).hexdigest()
+        if clone_options.get("confirmation_sha256") != expected_digest:
+            raise DataOpsPipelineError("clone_confirmation_required", stage="preflight", retryable=False)
+        clone_confirmation = expected_confirmation
 
     def make_client(profile):
         if profile is None:
@@ -917,4 +1051,8 @@ def execute_operation_record(
         max_retries=int(getattr(settings, "DATAOPS_AUTO_HEAL_MAX_RETRIES", 3)),
         require_permissions=True,
         lease=lease,
+        source_generation_id=source_generation_id,
+        destination_generation_id=destination_generation_id,
+        confirmation=clone_confirmation,
+        clone_reason=clone_reason,
     )

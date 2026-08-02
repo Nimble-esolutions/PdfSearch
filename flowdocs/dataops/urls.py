@@ -10,6 +10,7 @@ urlpatterns = [
     path("refresh/", views.refresh, name="refresh"),
     path("backup/", views.backup, name="backup"),
     path("restore/", views.restore, name="restore"),
+    path("clone-rebind/", views.clone_rebind, name="clone_rebind"),
     path("preflight/", views.preflight, name="preflight"),
     path("repair/", views.refresh, name="repair"),
     path("configuration/", views.configuration, name="configuration"),

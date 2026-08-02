@@ -42,6 +42,32 @@ def inspect_manifest(payload: Mapping[str, Any]) -> RecoveryInspection:
         )
         from .package import manifest_digest
         return RecoveryInspection(release_id, dataset_id, source_id, manifest_digest(payload), 2, len(keys), keys)
+    # The operator-side legacy-volume publisher uses a deliberately separate
+    # v1 shape: dataset identity is top-level and file entries use
+    # ``object_key``.  Keep this reader read-only, but recognize that shape so
+    # Data Operations can quarantine it before converting it to a v2 package.
+    if payload.get("manifest_version") == 1 and payload.get("dataset_id"):
+        files = payload.get("files")
+        if not isinstance(files, list) or not files:
+            raise RecoveryInspectionError("legacy files must be a non-empty list")
+        release_id = str(payload.get("release_id") or "").strip()
+        dataset_id = str(payload.get("dataset_id") or "").strip()
+        source_id = str(payload.get("production_source_id") or "").strip()
+        if not release_id or not dataset_id:
+            raise RecoveryInspectionError("release_id and dataset_id are required")
+        keys = []
+        for item in files:
+            if not isinstance(item, Mapping):
+                raise RecoveryInspectionError("legacy file entry is invalid")
+            key = _safe_key(str(item.get("object_key") or item.get("key") or ""))
+            keys.append(key)
+        import hashlib
+        import json
+
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return RecoveryInspection(release_id, dataset_id, source_id, digest, 1, len(keys), tuple(keys))
     try:
         legacy: V1Manifest = read_manifest(payload)
     except ValueError as exc:
