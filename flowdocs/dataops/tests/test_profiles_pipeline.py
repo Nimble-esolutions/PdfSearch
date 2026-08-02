@@ -267,6 +267,37 @@ class ProfileMatrixPipelineTests(unittest.TestCase):
             self.assertEqual((Path(staged["workspace"]) / "media" / "a.pdf").read_bytes(), files["media/a.pdf"])
             self.assertEqual(staged["manifest"]["format_version"], 2)
 
+    def test_clone_rebind_pipeline_keeps_normal_mismatch_guard_separate(self):
+        source = ResolvedProfile("source", "Source", "restore", "https://objects.example.invalid", "source-bucket", "us-east-1", "source-dataset", "production", "OPS", "source")
+        destination = ResolvedProfile("destination", "Destination", "both", "https://objects.example.invalid", "destination-bucket", "us-east-1", "stage-dataset", "stage", "OPS", "destination")
+        source_client = FakeS3()
+        destination_client = FakeS3()
+        generation = "pipeline-source"
+        manifest, files = self._legacy_manifest(source.dataset_id, generation)
+        for entry in manifest["files"]:
+            source_client.put_object(Bucket=source.bucket, Key=entry["object_key"], Body=files[entry["path"]])
+        source_client.put_object(
+            Bucket=source.bucket,
+            Key=f"datasets/{source.dataset_id}/generations/{generation}/manifest.json",
+            Body=(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode(),
+        )
+        destination_generation = "pipeline-destination"
+        result = run_operation_pipeline(
+            "clone/rebind",
+            (source, destination),
+            source_profile=source.key,
+            destination_profile=destination.key,
+            source_client=source_client,
+            destination_client=destination_client,
+            source_generation_id=generation,
+            destination_generation_id=destination_generation,
+            release_id=destination_generation,
+            confirmation=clone_confirmation_phrase(source.key, generation, destination.key, destination_generation),
+        )
+        self.assertEqual(result["operation"], "clone_rebind")
+        self.assertEqual(result["receipt"]["manifest_digest"], result["manifest_digest"])
+        self.assertEqual(result["reindex"]["completed"], 0)
+
     def test_old_to_old_old_to_new_new_to_old_and_new_to_new(self):
         cases = [("old", "old"), ("old", "new"), ("new", "old"), ("new", "new")]
         for source_bucket, destination_bucket in cases:
