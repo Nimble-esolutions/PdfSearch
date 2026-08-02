@@ -157,4 +157,35 @@
     </form>
     {% if not state.rollback_capability.enabled %}<div id="dataops-signed-rollback-reason">{% include "components/operator_evidence.html" with presentation=state.rollback_capability.presentation technical_code=state.rollback_capability.reason_code show_action=False only %}</div>{% else %}<p>{% trans "Verified previous runtime:" %} <code>{{ state.rollback_capability.target_generation_id }}</code></p>{% endif %}
   </section>
+
+  <section class="dataops-advanced__section" aria-labelledby="dataops-clone-rebind-heading">
+    <header>
+      <p class="dataops-eyebrow">{% trans "Immutable lineage control" %}</p>
+      <h3 id="dataops-clone-rebind-heading">{% trans "Clone / rebind a verified generation" %}</h3>
+    </header>
+    <p>{% trans "This is the only control that may cross dataset boundaries. It reads the selected source generation, verifies every content-addressed object, rewrites dataset-bound references, and advances the destination pointer with compare-and-swap." %}</p>
+    <div class="dataops-alert" role="note">
+      <strong>{% trans "Production source remains read-only" %}</strong>
+      <p>{% trans "The source pointer is never changed. Public stage authentication remains blocked unless the separately recorded security exception is approved." %}</p>
+    </div>
+    {% if clone_controls.enabled %}
+      <form class="dataops-form" method="post" action="{% url 'dataops:clone_rebind' %}">
+        {% csrf_token %}
+        <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:clone-rebind">
+        <fieldset>
+          <legend>{% trans "Source and destination" %}</legend>
+          <label>{% trans "Source profile" %}<select name="source_profile" required>{% for profile in clone_controls.profiles %}{% if profile.can_clone_source %}<option value="{{ profile.key }}">{{ profile.display_name }} · {{ profile.dataset_id }}</option>{% endif %}{% endfor %}</select></label>
+          <label>{% trans "Source generation" %}<input name="source_generation_id" maxlength="160" required placeholder="legacy-20260802T120000Z-verified"></label>
+          <label>{% trans "Destination profile" %}<select name="destination_profile" required>{% for profile in clone_controls.profiles %}{% if profile.can_clone_destination %}<option value="{{ profile.key }}">{{ profile.display_name }} · {{ profile.dataset_id }}</option>{% endif %}{% endfor %}</select></label>
+          <label>{% trans "Destination generation (optional)" %}<input name="destination_generation_id" maxlength="160" placeholder="Defaults to clone-&lt;source-generation&gt;"></label>
+          <label>{% trans "Clone reason" %}<input name="clone_reason" value="stage-rehearsal" maxlength="80" required></label>
+          <label>{% trans "Exact confirmation" %}<input name="confirmation" autocomplete="off" required aria-describedby="clone-rebind-confirmation-help"></label>
+          <p id="clone-rebind-confirmation-help"><small>{% trans "Type exactly:" %} <code>{{ clone_controls.confirmation_prefix }}</code></small></p>
+        </fieldset>
+        <button type="submit">{% trans "Queue verified clone / rebind" %}</button>
+      </form>
+    {% else %}
+      <p role="status">{% trans "Clone/rebind is disabled by deployment policy. Enable it only for the reviewed, one-time stage rehearsal." %}</p>
+    {% endif %}
+  </section>
 </div>

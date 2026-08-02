@@ -25,8 +25,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
 
-DEFAULT_BUCKET = "ai-sahakar-prod-flowdocs-artifact-vault"
-DEFAULT_DATASET_ID = "ai-sahakar-prod"
+DEFAULT_BUCKET = "ai-sahakar-prod-flowdocs-artifact-vault-v2"
+DEFAULT_DATASET_ID = "ai-sahakar-prod-v2"
 DEFAULT_PRODUCTION_SOURCE_ID = "ai-sahakar-prod"
 APP_IDENTIFIER = "pdfsearch"
 MANIFEST_VERSION = 1
