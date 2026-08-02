@@ -35,6 +35,26 @@ destination and `DATAOPS_RESTORE_PROFILE` selects a restore source;
 `DATAOPS_*_SOURCE_PROFILE` and `DATAOPS_*_DESTINATION_PROFILE` provide
 per-operation overrides.
 
+The 2026 recovery lineage uses two separate datasets and buckets:
+
+```dotenv
+DATAOPS_BACKUP_PROFILE=stage_2026
+DATAOPS_RESTORE_PROFILE=stage_2026
+# production_v2_source remains an explicit source for clone/rebind only.
+```
+
+`clone/rebind` is not an ordinary copy. It is an advanced, typed operation
+that requires an explicit source generation, destination profile, and exact
+confirmation phrase. It verifies every content-addressed object, rewrites
+dataset-bound keys and references, preserves parent manifest lineage, and
+advances only the destination authoritative pointer. Dataset mismatch checks
+remain enforced for normal backup, restore, copy, and transfer operations.
+
+Keep `DATAOPS_CLONE_REBIND_ENABLED=0` until RustFS bucket registration,
+conditional writes, and scoped profile permissions have been proven. The
+reference credential is a secret-provider alias; RustFS root credentials are
+for one-time bucket provisioning only and must not be passed to the app.
+
 Credential values are supplied by the referenced prefix (`*_ACCESS_KEY` and
 `*_SECRET_KEY`) or by an explicitly enabled encrypted database credential. They
 are never part of a backup package.
@@ -61,6 +81,10 @@ The implementation recognises these controls (all have safe defaults):
 | `DATAOPS_CONFIG_ENCRYPTION_KEY` | Key reference for AES-256-GCM fallback values; never log the value. |
 | `DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING` | Auto-activate only after all staging gates pass. |
 | `DATAOPS_RESTORE_STAGING_ROOT` | Isolated quarantine root used by the staging command; never the active data root. |
+| `DATAOPS_CLONE_REBIND_ENABLED` | Enable the reviewed Advanced-only cross-dataset clone/rebind control. |
+| `STAGE_PUBLIC_AUTH_EXCEPTION_REQUIRED` | Declare that restored production authentication data is present on stage. |
+| `STAGE_PUBLIC_AUTH_EXCEPTION_APPROVED` | Security-owner approval switch; defaults to blocked. |
+| `STAGE_PUBLIC_AUTH_EXCEPTION_OWNER` / `..._MONITORING` / `..._INCIDENT_RESPONSE` / `..._ROLLBACK_AUTHORITY` | Non-secret exception record required before public stage authentication can be enabled. |
 
 ## Compatibility window
 

@@ -14,6 +14,12 @@ delete objects, or mutate the source volume. First-time dataset registration
 requires the separate `--register-dataset` acknowledgement. Pointer promotion
 is a later, separately confirmed invocation.
 
+For the 2026 recovery lineage, use only the new immutable source bucket
+`ai-sahakar-prod-flowdocs-artifact-vault-v2` with dataset `ai-sahakar-prod-v2`.
+The historical `ai-sahakar-prod-flowdocs-artifact-vault` bucket and its
+authoritative pointer are evidence from an earlier port and are explicitly
+out of scope: this utility must never write to or promote that pointer.
+
 The source must be mounted read-only, or copied into a disposable workspace.
 Do not point the command at a writable live application directory. The stable
 production source identified during the initial audit is:
@@ -107,7 +113,7 @@ application image:
 ```bash
 python scripts/ops/migrate_legacy_volume_to_vault.py \
   --source-root /source \
-  --dataset-id ai-sahakar-prod \
+  --dataset-id ai-sahakar-prod-v2 \
   --source-label sahakar-dev-frontend-dockerfile-1cubi5-prod-flowdocs \
   --output /tmp/legacy-release.json
 ```
@@ -132,7 +138,7 @@ vehicle and is intentionally draft until that review is complete.
 ```bash
 python scripts/ops/migrate_legacy_volume_to_vault.py \
   --source-root /source \
-  --dataset-id ai-sahakar-prod \
+  --dataset-id ai-sahakar-prod-v2 \
   --generation-id legacy-20260726T120000Z-a1b2c3d4 \
   --source-label sahakar-dev-frontend-dockerfile-1cubi5-prod-flowdocs \
   --checkpoint /operator-state/legacy-20260726T120000Z-a1b2c3d4.json \
@@ -164,10 +170,10 @@ invocation without a source mount:
 
 ```bash
 python scripts/ops/migrate_legacy_volume_to_vault.py \
-  --dataset-id ai-sahakar-prod \
+  --dataset-id ai-sahakar-prod-v2 \
   --production-source-id ai-sahakar-prod \
   --promote-generation legacy-20260726T120000Z-a1b2c3d4 \
-  --confirm-promotion ai-sahakar-prod:legacy-20260726T120000Z-a1b2c3d4
+  --confirm-promotion ai-sahakar-prod-v2:legacy-20260726T120000Z-a1b2c3d4
 ```
 
 The promotion invocation:

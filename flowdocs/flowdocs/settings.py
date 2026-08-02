@@ -448,6 +448,7 @@ PDF_CACHE_DIR = (
 # this release so existing restore workers can finish their compatibility
 # drain; ENV values still remain the source of truth for the new UI.
 DATAOPS_ENABLED = _env_bool('DATAOPS_ENABLED', False)
+DATAOPS_CLONE_REBIND_ENABLED = _env_bool('DATAOPS_CLONE_REBIND_ENABLED', False)
 DATAOPS_BACKUP_MODE = os.getenv('DATAOPS_BACKUP_MODE', 'manual').strip().lower()
 if DATAOPS_BACKUP_MODE not in {'manual', 'scheduled', 'changes'}:
     raise ImproperlyConfigured('DATAOPS_BACKUP_MODE must be manual, scheduled, or changes')
@@ -471,6 +472,16 @@ DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING = _env_bool('DATAOPS_RESTORE_AUTO_ACTIVATE
 DATAOPS_RESTORE_STAGING_ROOT = Path(os.getenv('DATAOPS_RESTORE_STAGING_ROOT', str(DATA_ROOT / 'dataops-restore')))
 DATAOPS_UI_CONFIG_ENABLED = _env_bool('DATAOPS_UI_CONFIG_ENABLED', False)
 DATAOPS_UI_SECRET_ENTRY_ENABLED = _env_bool('DATAOPS_UI_SECRET_ENTRY_ENABLED', False)
+
+# Exact production authentication data must never become public stage auth by
+# accident.  The exception is intentionally a recorded, multi-field approval;
+# the safe stage default is private-only.
+STAGE_PUBLIC_AUTH_EXCEPTION_REQUIRED = _env_bool('STAGE_PUBLIC_AUTH_EXCEPTION_REQUIRED', False)
+STAGE_PUBLIC_AUTH_EXCEPTION_APPROVED = _env_bool('STAGE_PUBLIC_AUTH_EXCEPTION_APPROVED', False)
+STAGE_PUBLIC_AUTH_EXCEPTION_OWNER = os.getenv('STAGE_PUBLIC_AUTH_EXCEPTION_OWNER', '').strip()
+STAGE_PUBLIC_AUTH_EXCEPTION_MONITORING = os.getenv('STAGE_PUBLIC_AUTH_EXCEPTION_MONITORING', '').strip()
+STAGE_PUBLIC_AUTH_EXCEPTION_INCIDENT_RESPONSE = os.getenv('STAGE_PUBLIC_AUTH_EXCEPTION_INCIDENT_RESPONSE', '').strip()
+STAGE_PUBLIC_AUTH_EXCEPTION_ROLLBACK_AUTHORITY = os.getenv('STAGE_PUBLIC_AUTH_EXCEPTION_ROLLBACK_AUTHORITY', '').strip()
 
 # Vault Active Sync remains disabled unless every required switch is explicit.
 VAULT_SYNC_ENABLED = _env_bool('VAULT_SYNC_ENABLED', False)

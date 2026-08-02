@@ -12,6 +12,7 @@ from django.conf import settings
 
 from .config import resolve_profiles, resolve_selectors, validate_profiles
 from .models import DataOperation
+from .public_auth import public_auth_gate
 
 
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -102,9 +103,12 @@ def readiness_payload() -> dict[str, Any]:
     ratio = _indexing_ratio()
     last_backup = _last_operation(DataOperation.Kind.BACKUP)
     last_restore = _last_operation(DataOperation.Kind.RESTORE)
+    public_authentication = public_auth_gate(settings)
     if not enabled:
         status = "not_configured"
     elif config_error or issues:
+        status = "degraded"
+    elif public_authentication["status"] == "blocked":
         status = "degraded"
     elif not signed_generation or ratio < 1.0:
         status = "degraded"
@@ -124,4 +128,5 @@ def readiness_payload() -> dict[str, Any]:
         "last_backup": last_backup,
         "last_restore": last_restore,
         "signed_active_generation": signed_generation,
+        "public_authentication": public_authentication,
     }
