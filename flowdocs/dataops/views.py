@@ -298,6 +298,38 @@ def jobs(request):
 
 
 @login_required
+@require_POST
+def run_job(request, job_slug):
+    if not _can_act(request):
+        return HttpResponse("Superadmin approval required", status=403)
+    job = BackupJob.objects.using("control").filter(slug=job_slug, enabled=True).first()
+    if job is None:
+        return HttpResponse("Backup job not found or disabled", status=404)
+    if job.delete_orphans:
+        return HttpResponse("Mirror deletion requires an independently verified preview", status=409)
+    operation = DataOperation.objects.using("control").create(
+        kind=DataOperation.Kind.SYNC,
+        state=DataOperation.State.QUEUED,
+        profile_key=job.target_profile_key,
+        source_profile_key=job.source_profile_key,
+        destination_profile_key=job.target_profile_key,
+        idempotency_key=f"job:{job.slug}:{secrets.token_urlsafe(12)}",
+        checkpoint={"job_slug": job.slug, "trigger": "manual"},
+    )
+    BackupJob.objects.using("control").filter(pk=job.pk).update(last_run_status="queued")
+    DataOpsAuditEvent.objects.using("control").create(
+        actor_id=request.user.pk,
+        actor_name=request.user.get_username(),
+        action="backup_job_queued",
+        operation_id=operation.public_id,
+        profile_key=job.target_profile_key,
+        outcome="queued",
+        evidence={"job_slug": job.slug, "mode": job.mode, "source_profile": job.source_profile_key},
+    )
+    return redirect("dataops:jobs")
+
+
+@login_required
 def advanced(request):
     try:
         maintenance = workbench_maintenance_state(selected_plan_id=request.GET.get("plan", ""), selected_job_id=request.GET.get("job", ""))

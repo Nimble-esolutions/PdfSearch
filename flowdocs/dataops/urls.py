@@ -15,6 +15,7 @@ urlpatterns = [
     path("configuration/", views.configuration, name="configuration"),
     path("profiles/<slug:profile_key>/probe/", views.profile_probe, name="profile_probe"),
     path("jobs/", views.jobs, name="jobs"),
+    path("jobs/<slug:job_slug>/run/", views.run_job, name="run_job"),
     path("advanced/", views.advanced, name="advanced"),
     path("env-patch/", views.env_patch, name="env_patch"),
 ]

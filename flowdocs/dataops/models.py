@@ -137,6 +137,7 @@ class DataOperation(TimeStampedModel):
         RESTORE = "restore", "Restore"
         REINDEX = "reindex", "Reindex"
         AUTO_HEAL = "auto_heal", "Automatic recovery"
+        SYNC = "sync", "S3 backup and sync job"
 
     class State(models.TextChoices):
         QUEUED = "queued", "Queued"

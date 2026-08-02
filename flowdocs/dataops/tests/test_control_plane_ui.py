@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from dataops.config import resolve_profiles
-from dataops.models import BackupJob, DataCredential, DataProfile
+from dataops.models import BackupJob, DataCredential, DataOperation, DataProfile
 
 
 @override_settings(DATAOPS_UI_CONFIG_ENABLED=True)
@@ -74,3 +74,16 @@ class DataOpsControlPlaneUITests(TestCase):
         destructive = {**safe, "slug": "mirror", "mode": "mirror", "delete_orphans": "1"}
         response = self.client.post(reverse("dataops:jobs"), destructive)
         self.assertEqual(response.status_code, 409)
+
+    def test_run_now_queues_checkpointed_sync_operation(self):
+        job = BackupJob.objects.using("control").create(
+            slug="archive",
+            name="Archive",
+            source_profile_key="env-source",
+            target_profile_key="archive-target",
+        )
+        response = self.client.post(reverse("dataops:run_job", args=[job.slug]))
+        self.assertRedirects(response, reverse("dataops:jobs"))
+        operation = DataOperation.objects.using("control").get(kind=DataOperation.Kind.SYNC)
+        self.assertEqual(operation.checkpoint["job_slug"], "archive")
+        self.assertEqual(operation.source_profile_key, "env-source")
