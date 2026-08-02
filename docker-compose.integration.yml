@@ -72,6 +72,10 @@ services:
       ARTIFACT_VAULT_REGION: us-east-1
       ARTIFACT_VAULT_ACCESS_KEY: integration-local
       ARTIFACT_VAULT_SECRET_KEY: integration-local-secret
+      DATAOPS_ENABLED: "1"
+      DATAOPS_PROFILE_MANIFEST: '[{"name":"integration-source","role":"restore","provider":"generic","endpoint":"http://pdfsearch-objectstore:9000","bucket":"pdfsearch-dataops-test","region":"us-east-1","dataset_id":"integration-test","namespace":"dataops-integration/source","credential_ref":"DATAOPS_INTEGRATION"},{"name":"integration-target","role":"backup","provider":"generic","endpoint":"http://pdfsearch-objectstore:9000","bucket":"pdfsearch-dataops-test","region":"us-east-1","dataset_id":"integration-test","namespace":"dataops-integration/target","credential_ref":"DATAOPS_INTEGRATION"}]'
+      DATAOPS_INTEGRATION_ACCESS_KEY: integration-local
+      DATAOPS_INTEGRATION_SECRET_KEY: integration-local-secret
       VAULT_ALLOWED_S3_ENDPOINTS: http://pdfsearch-objectstore:9000
       VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
       VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
