@@ -3,10 +3,42 @@
 **Status:** Active
 **Audience:** Developer, Operator
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-07-24
+**Last verified:** 2026-08-02
 **Canonical source:** docs/ARCHITECTURE_OVERVIEW.md
 
 Primary knowledge transfer artifact for the PdfSearch system. Read this first.
+
+## Current architecture state
+
+The current system is best understood as four cooperating planes:
+
+| Plane | Responsibility | Durable boundary |
+| --- | --- | --- |
+| Application | Django web, maintenance, SQLite, media, FAISS, Chroma, cache | stage/production data volume |
+| Control | signed activation intent, generation pointer, leases, journals, evidence | paired control volume |
+| Recovery | RustFS profiles, manifests, content-addressed objects, receipts | dataset-scoped buckets |
+| External AI | local OCR first, configured embeddings and answer preparation | side-effect policy and provider boundary |
+
+The 2026 stage clone is quarantine-ready after migration, OCR, embeddings, and
+index reconciliation for all 242 PDFs. It is not yet the signed active
+runtime generation. The first stage backup and isolated round-trip restore are
+also pending. Exact evidence is maintained in
+STATUS-2026-08-02.md and the old/new comparison in
+LEGACY_VS_CURRENT_STATE.md.
+
+### Current custody topology
+
+    legacy prod_flowdocs (read-only)
+      -> v2 source dataset ai-sahakar-prod-v2
+      -> clone/rebind
+      -> stage dataset ai-sahakar-stage-2026
+      -> restore-quarantine
+      -> signed runtime-generations pointer
+      -> stage_2026 backup
+      -> disposable round-trip volumes
+
+The runtime pointer is the authority. A RustFS object, quarantine workspace,
+database row, or container health status cannot activate a generation alone.
 
 ---
 
@@ -42,6 +74,28 @@ or `superadmin`.
 ---
 
 ## 2. Core Module Map
+
+## 2.1 Repository structure
+
+    flowdocs/
+      core/       environment, safety, activation, restore, custody primitives
+      data/       PDF lifecycle, native extraction, OCR, embeddings, indexes
+      dataops/    profile resolution and backup/restore operation contracts
+      vaultops/   control plane, workbench, receipts, activation/read models
+      flowdocs/   Django settings, URLs, WSGI/ASGI, runtime paths
+    scripts/
+      ci/         hosted contract, parity, lifecycle, and release checks
+      ops/        migration and recovery-certification operator tools
+      runtime/    maintenance/runtime helper scripts
+    browser_tests/       Playwright user/admin/workbench gates
+    integration_tests/   RustFS/MinIO, restore, activation, process-death gates
+    docs/                 contracts, runbooks, evidence, and Mermaid sources
+    init/                 declared seed database and image-provided assets
+    docker-compose*.yml  local, CI, integration, recovery, and Dokploy contracts
+
+The repository separates source code, test harnesses, operator tooling, and
+documentation. Runtime data is not committed as application source; it lives
+in named volumes or immutable RustFS generations.
 
 All modules live under `flowdocs/core/`. Grouped by concern:
 

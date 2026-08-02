@@ -16,12 +16,17 @@ Supersedes: None
 - [OPERATIONS_CHANGELOG-2026-08-02.md](OPERATIONS_CHANGELOG-2026-08-02.md) —
   dated timeline, backup-size explanation, current-versus-historical matrix,
   readiness guide, and documentation coverage checklist.
+- [LEGACY_VS_CURRENT_STATE.md](LEGACY_VS_CURRENT_STATE.md) — living old-versus-
+  current comparison and documentation maintenance contract.
 
 This index routes readers by task. The metadata at the top of each maintained
 document identifies its status, audience, owner, verification date, canonical
 source, and supersession relationship.
 
 ## Local Development
+
+- [ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md) — current runtime,
+  repository structure, module boundaries, and data-flow map
 
 - [`README.md`](../README.md) — prerequisites, architecture, and local start
 - [`../AGENTS.md`](../AGENTS.md) — repository-local agent instructions and validation gates

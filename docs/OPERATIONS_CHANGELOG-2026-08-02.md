@@ -121,6 +121,12 @@ an outage to bypass.
   Mermaid sources for custody, recovery state, and OCR/index lifecycle.
 - Generated SVGs were not committed because Kroki timed out and local Mermaid
   CLI lacked Chrome. Source diagrams remain reviewable and reproducible.
+- README badges were limited to Docker CI/release and documentation contract;
+  the README architecture and repository tree were refreshed.
+- ARCHITECTURE_OVERVIEW.md now documents the four-plane topology, current
+  quarantine handoff, and repository structure.
+- LEGACY_VS_CURRENT_STATE.md was added as the living old-versus-new comparison
+  and future update contract.
 
 ## Backup size: what was actually created?
 
