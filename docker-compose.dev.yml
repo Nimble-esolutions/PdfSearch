@@ -157,8 +157,8 @@ services:
       - ARTIFACT_VAULT_ENDPOINT=${ARTIFACT_VAULT_ENDPOINT:-http://rustfs:9000}
       - ARTIFACT_VAULT_BUCKET=${ARTIFACT_VAULT_BUCKET:-pdfsearch-dev}
       - ARTIFACT_VAULT_REGION=${ARTIFACT_VAULT_REGION:-us-east-1}
-      - ARTIFACT_VAULT_ACCESS_KEY=${ARTIFACT_VAULT_ACCESS_KEY:-pdfsearch-dev}
-      - ARTIFACT_VAULT_SECRET_KEY=${ARTIFACT_VAULT_SECRET_KEY:-pdfsearch-dev-secret}
+      - ARTIFACT_VAULT_ACCESS_KEY=${ARTIFACT_VAULT_ACCESS_KEY:-${DEV_RUSTFS_ACCESS_KEY:-pdfsearch-dev}}
+      - ARTIFACT_VAULT_SECRET_KEY=${ARTIFACT_VAULT_SECRET_KEY:-${DEV_RUSTFS_SECRET_KEY:-pdfsearch-dev-secret}}
       - DATAOPS_ENABLED=${DATAOPS_ENABLED:-1}
       - DATAOPS_PROFILE_MANIFEST=${DATAOPS_PROFILE_MANIFEST:-[{"name":"local_restore","role":"restore","endpoint":"http://rustfs:9000","bucket":"pdfsearch-dev","dataset_id":"ai-sahakar-dev","source_id":"local-dev","namespace":"restore","credential_ref":"DATAOPS_LOCAL_RUSTFS","enabled":true},{"name":"local_backup","role":"backup","endpoint":"http://rustfs:9000","bucket":"pdfsearch-dev","dataset_id":"ai-sahakar-dev","source_id":"local-dev","namespace":"backup","credential_ref":"DATAOPS_LOCAL_RUSTFS","enabled":true}]}
       - DATAOPS_ENV_PROFILES=

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
+import subprocess
 import unittest
 
 from scripts.ci.assert_compose_env_parity import (
@@ -203,6 +207,67 @@ class ComposeEnvironmentParityTests(unittest.TestCase):
             services[name]["environment"]["APP_IMAGE_DIGEST"] = services[name]["image"]
         self.assertEqual(find_contract_errors(services, "staging"), [])
         self.assertEqual(find_contract_errors(services, "production"), [])
+
+
+class DevelopmentCredentialWiringTests(unittest.TestCase):
+    compose_file = Path(__file__).resolve().parents[2] / "docker-compose.dev.yml"
+
+    def _render(self, extra_environment):
+        environment = os.environ.copy()
+        environment.update(extra_environment)
+        result = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                str(self.compose_file),
+                "config",
+                "--format",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        if result.returncode:
+            self.fail("development_compose_render_failed")
+        return json.loads(result.stdout)["services"]
+
+    def test_custom_rustfs_credentials_flow_to_every_local_consumer(self):
+        access = "sentinel-custom-access"
+        secret = "sentinel-custom-secret"
+        services = self._render(
+            {
+                "DEV_RUSTFS_ACCESS_KEY": access,
+                "DEV_RUSTFS_SECRET_KEY": secret,
+                "ARTIFACT_VAULT_ACCESS_KEY": "",
+                "ARTIFACT_VAULT_SECRET_KEY": "",
+            }
+        )
+        for service_name in ("web", "maintenance"):
+            environment = services[service_name]["environment"]
+            self.assertTrue(environment["ARTIFACT_VAULT_ACCESS_KEY"] == access)
+            self.assertTrue(environment["ARTIFACT_VAULT_SECRET_KEY"] == secret)
+            self.assertTrue(environment["DATAOPS_LOCAL_RUSTFS_ACCESS_KEY"] == access)
+            self.assertTrue(environment["DATAOPS_LOCAL_RUSTFS_SECRET_KEY"] == secret)
+        self.assertTrue(services["rustfs"]["environment"]["RUSTFS_ACCESS_KEY"] == access)
+        self.assertTrue(services["rustfs"]["environment"]["RUSTFS_SECRET_KEY"] == secret)
+
+    def test_artifact_vault_compatibility_override_remains_explicit(self):
+        services = self._render(
+            {
+                "DEV_RUSTFS_ACCESS_KEY": "sentinel-rustfs-access",
+                "DEV_RUSTFS_SECRET_KEY": "sentinel-rustfs-secret",
+                "ARTIFACT_VAULT_ACCESS_KEY": "sentinel-compat-access",
+                "ARTIFACT_VAULT_SECRET_KEY": "sentinel-compat-secret",
+            }
+        )
+        for service_name in ("web", "maintenance"):
+            environment = services[service_name]["environment"]
+            self.assertTrue(environment["ARTIFACT_VAULT_ACCESS_KEY"] == "sentinel-compat-access")
+            self.assertTrue(environment["ARTIFACT_VAULT_SECRET_KEY"] == "sentinel-compat-secret")
+            self.assertTrue(environment["DATAOPS_LOCAL_RUSTFS_ACCESS_KEY"] == "sentinel-rustfs-access")
+            self.assertTrue(environment["DATAOPS_LOCAL_RUSTFS_SECRET_KEY"] == "sentinel-rustfs-secret")
 
 if __name__ == "__main__":
     unittest.main()
