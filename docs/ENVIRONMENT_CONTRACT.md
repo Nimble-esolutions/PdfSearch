@@ -238,6 +238,14 @@ OPENAI_EMBED_MODEL=text-embedding-3-small
 OPENAI_CHAT_MODEL=gpt-4o-mini
 PDF_CHUNK_SIZE=1200
 PDF_CHUNK_OVERLAP=200
+PDF_OCR_FALLBACK_ENABLED=1
+PDF_OCR_BINARY=tesseract
+PDF_OCR_LANGUAGES=eng+mar
+PDF_OCR_DPI=200
+PDF_OCR_MAX_PAGES=50
+PDF_OCR_PAGE_TIMEOUT_SECONDS=180
+PDF_OCR_MAX_SECONDS=900
+PDF_OCR_MAX_PIXELS=25000000
 MAX_CONTEXT_WORDS=2500
 TOP_K_CHUNKS=5
 EMBEDDING_TTL=604800
@@ -261,6 +269,17 @@ for read-only inventory, candidate, activation, and recovery verification of
 canonical media already in custody. Its 64 MiB default accommodates reviewed
 legacy PDFs while keeping verification bounded. It does not change
 `MAX_FILE_SIZE_MB`, Django request limits, or the policy for new uploads.
+
+### OCR fallback policy
+
+Native PDF text extraction remains the first path. When a PDF has blank pages,
+the application renders only those pages and invokes the immutable image's
+Tesseract binary with the configured language packs. OCR is bounded by page,
+time, and pixel caps; the subprocess receives an argument list and never a
+shell command. Missing language packs, timeouts, or unreadable OCR output do
+not mark a PDF indexed. Operators must rebuild the affected FAISS folder and
+record the OCR configuration with the generation evidence after changing any
+OCR setting.
 
 See [`ENVIRONMENT_CONFIGURATION_GUIDE.md`](ENVIRONMENT_CONFIGURATION_GUIDE.md)
 for the complete variable impact matrix and edge-case playbook.
