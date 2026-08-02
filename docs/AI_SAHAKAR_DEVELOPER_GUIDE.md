@@ -151,15 +151,15 @@ visual assumption. Prove references and record cleanup separately; see
 ```text
 VAULT_DEFAULT_PROFILE=local-development
 ARTIFACT_VAULT_ENABLED=1
-ARTIFACT_VAULT_ENDPOINT=http://minio:9000
+ARTIFACT_VAULT_ENDPOINT=http://rustfs:9000
 ARTIFACT_VAULT_BUCKET=pdfsearch-dev
 ARTIFACT_VAULT_REGION=us-east-1
-VAULT_ALLOWED_S3_ENDPOINTS=http://minio:9000
+VAULT_ALLOWED_S3_ENDPOINTS=http://rustfs:9000
 VAULT_ALLOW_HTTP_S3_ENDPOINTS=1
 VAULT_BLOCK_PRIVATE_S3_ENDPOINTS=0
 ```
 
-The development access and secret keys are disposable Compose defaults and
+The development access and secret keys are disposable RustFS Compose defaults and
 must never be reused outside local development. Production secrets remain
 server-managed and must be inspected only as set/unset posture.
 
