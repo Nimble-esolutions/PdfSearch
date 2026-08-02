@@ -5,6 +5,9 @@ Last verified: 2026-08-02
 Canonical source: docs/ENVIRONMENT_CONTRACT.md
 Supersedes: env.minimal, env.template
 
+Use docs/ENVIRONMENT_REFERENCE.md for the complete variable-by-variable
+reference and reviewed dev/stage/production examples.
+
 # Environment Contract
 
 ## 2026 stage applied posture (2026-08-02)
@@ -12,11 +15,11 @@ Supersedes: env.minimal, env.template
 The current stage deployment is intentionally fail-closed before activation:
 
     APP_ENV=staging
-    DATA_MODE=local
+    DATA_MODE=empty
     DATA_BOOTSTRAP_MODE=empty
     DATASET_ID=ai-sahakar-stage-2026
     AUTHORITATIVE_DATASET_ID=ai-sahakar-stage-2026
-    DATAOPS_ENV_PROFILES=production,stage_2026
+    DATAOPS_ENV_PROFILES=production_v2_source,stage_2026
     DATAOPS_RESTORE_PROFILE=stage_2026
     DATAOPS_BACKUP_PROFILE=stage_2026
     BACKUP_ROLE=reader
@@ -166,12 +169,13 @@ All three must agree for a release to be accepted.
 ## Artifact Vault Configuration
 
 ```text
-ARTIFACT_VAULT_ENDPOINT=<S3-compatible-endpoint>
-ARTIFACT_VAULT_ACCESS_KEY=<access-key>
-ARTIFACT_VAULT_SECRET_KEY=<secret-key>
-ARTIFACT_VAULT_BUCKET=ai-sahakar-prod-flowdocs-data-volume
-ARTIFACT_VAULT_REGION=us-east-1
-ARTIFACT_VAULT_ENABLED=1
+# Legacy compatibility adapter; profile-based DATAOPS_* is canonical.
+ARTIFACT_VAULT_ENDPOINT=<legacy-compatibility-endpoint>
+ARTIFACT_VAULT_ACCESS_KEY=<secret-provider-reference>
+ARTIFACT_VAULT_SECRET_KEY=<secret-provider-reference>
+ARTIFACT_VAULT_BUCKET=<legacy-compatibility-bucket>
+ARTIFACT_VAULT_REGION=<legacy-compatibility-region>
+ARTIFACT_VAULT_ENABLED=0
 BACKUP_SYNC_MODE=manual
 MAINTENANCE_SCHEDULER_ENABLED=0
 ```

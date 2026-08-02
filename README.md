@@ -45,6 +45,9 @@ Use the route that matches the work:
 
 ## Prerequisites
 
+For the complete environment-variable reference, see
+[docs/ENVIRONMENT_REFERENCE.md](docs/ENVIRONMENT_REFERENCE.md).
+
 Current operational references:
 
 - [2026-08-02 migration status](docs/STATUS-2026-08-02.md)

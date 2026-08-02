@@ -5,10 +5,10 @@
 The applied stage posture is a private, reader-only recovery rehearsal:
 
     APP_ENV=staging
-    DATA_MODE=local
+    DATA_MODE=empty
     DATA_BOOTSTRAP_MODE=empty
     DATASET_ID=ai-sahakar-stage-2026
-    DATAOPS_ENV_PROFILES=production,stage_2026
+    DATAOPS_ENV_PROFILES=production_v2_source,stage_2026
     DATAOPS_RESTORE_PROFILE=stage_2026
     DATAOPS_BACKUP_PROFILE=stage_2026
     BACKUP_ROLE=reader
@@ -24,7 +24,7 @@ boundary are documented in STATUS-2026-08-02.md.
 
 **Status:** Active
 **Audience:** Developers, release operators, and reviewers
-**Last audited:** 2026-07-26
+**Last audited:** 2026-08-02
 **Canonical contract:** [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md)
 
 This guide explains the runtime effect of the environment variables. It does

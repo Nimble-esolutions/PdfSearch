@@ -18,10 +18,16 @@ Supersedes: None
   readiness guide, and documentation coverage checklist.
 - [LEGACY_VS_CURRENT_STATE.md](LEGACY_VS_CURRENT_STATE.md) — living old-versus-
   current comparison and documentation maintenance contract.
+- [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md) — categorized reference
+  for every reviewed environment variable, its dev/stage/production posture,
+  impact, examples, and safe-change recipes.
 
 This index routes readers by task. The metadata at the top of each maintained
 document identifies its status, audience, owner, verification date, canonical
 source, and supersession relationship.
+
+The complete environment variable tables and environment-specific examples are
+maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
 
 ## Local Development
 
