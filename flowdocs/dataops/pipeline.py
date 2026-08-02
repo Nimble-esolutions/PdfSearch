@@ -648,7 +648,15 @@ def reconcile_staged_generation(workspace: str | os.PathLike[str], manifest: Map
             raise DataOpsPipelineError("database_reconciliation_failed", stage="reconciliation", retryable=False) from exc
         if database_check != "ok":
             raise DataOpsPipelineError("database_reconciliation_failed", stage="reconciliation", retryable=False)
-    documents = len(list((root / "media").rglob("*.pdf"))) if (root / "media").is_dir() else 0
+    documents = (
+        sum(
+            1
+            for path in (root / "media").rglob("*")
+            if path.is_file() and path.suffix.lower() == ".pdf"
+        )
+        if (root / "media").is_dir()
+        else 0
+    )
     indexes = len(list((root / "faiss_indexes").glob("*.index"))) if (root / "faiss_indexes").is_dir() else 0
     expected = manifest.get("counts", {}) if isinstance(manifest.get("counts"), Mapping) else {}
     expected_documents = expected.get("documents")

@@ -6,8 +6,10 @@ they remain useful while the new control plane is built in parallel.
 
 import json
 from pathlib import Path
+import tempfile
 import unittest
 
+from dataops.pipeline import reconcile_staged_generation
 from dataops.package import PackageContractError, build_manifest, validate_manifest
 from dataops.router import DataOpsControlRouter
 from vaultops.router import VaultControlRouter
@@ -57,6 +59,17 @@ class DataOpsEnvironmentContractTests(unittest.TestCase):
         self.assertIsNone(dataops.allow_migrate("control", "vaultops"))
         self.assertFalse(vault.allow_migrate("control", "core"))
         self.assertFalse(dataops.allow_migrate("control", "core"))
+
+    def test_staged_reconciliation_counts_case_insensitive_pdf_extensions(self):
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            (root / "media" / "pdfs").mkdir(parents=True)
+            (root / "media" / "pdfs" / "mixed.PDF").write_bytes(b"%PDF")
+            result = reconcile_staged_generation(
+                root,
+                {"counts": {}},
+            )
+        self.assertEqual(result["documents"], 1)
 
     def test_environment_always_wins_over_database_fallback(self):
         for vector in self.vectors["env_precedence"]:
