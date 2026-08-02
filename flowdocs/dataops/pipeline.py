@@ -764,6 +764,7 @@ def run_operation_pipeline(
     clone_reason: str = "stage-rehearsal",
 ) -> dict[str, Any]:
     profiles = tuple(profiles)
+    budget = budget or ReindexBudget()
     route = resolve_operation_route(operation, profiles, selectors=selectors, source_profile=source_profile, destination_profile=destination_profile, local_dataset_id=local_dataset_id)
     result: dict[str, Any] = {"operation": route.operation, "source_profile": route.source.key if route.source else "local", "destination_profile": route.destination.key if route.destination else "local", "stages": [], "attempts": 0}
     preflight = preflight_operation(
