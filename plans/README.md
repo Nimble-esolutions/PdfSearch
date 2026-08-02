@@ -38,6 +38,7 @@ run its drift check, and stop when a stated assumption is false.
 | 021 | Strengthen rendered/accessibility anti-slop gates | P1 | M | 018, 019, 020 | DONE |
 | 022 | Reconcile roadmap and stacked-PR readiness | P2 | S | 018, 019, 020, 021 | DONE |
 | 023 | Separate Documents & Search from advanced Vault & Recovery | P1 | M | 013–022 | DONE |
+| 024 | Establish RustFS-backed deployment parity and native development images | P1 | L | 006 gate | RECONCILE |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -76,6 +77,7 @@ run its drift check, and stop when a stated assumption is false.
                                                      └─> 020 Marathi parity
 018 + 019 + 020 ─> 021 enforcement ─> 022 stack reconciliation
 022 ─> 023 Documents & Search / Vault & Recovery journey boundary
+006 recurring verification gate ─> 024 RustFS/deployment parity
 ```
 
 Plan 011 comes before database replacement because recovery must not depend on
@@ -83,6 +85,11 @@ the migration succeeding. Plan 012 comes before provider changes because the
 current public API needs a compatibility adapter. Plans 008 and 009 are
 separate decisions: object custody can change without PostgreSQL, and retrieval
 can improve without changing the relational database.
+
+Plan 024 is independent of Plans 008–012's database/retrieval decisions. It
+preserves the current S3-compatible DataOps API while making RustFS the
+canonical development and CI provider, retaining MinIO only as a compatibility
+target, and enforcing environment-specific application image policy.
 
 ## Universal execution contract
 
