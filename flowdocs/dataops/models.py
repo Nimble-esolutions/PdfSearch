@@ -157,6 +157,7 @@ class DataOperation(TimeStampedModel):
         HEALTH_REFRESH = "health_refresh", "Health refresh"
         BACKUP = "backup", "Backup"
         RESTORE = "restore", "Restore"
+        CLONE_REBIND = "clone_rebind", "Clone / rebind"
         REINDEX = "reindex", "Reindex"
         AUTO_HEAL = "auto_heal", "Automatic recovery"
         SYNC = "sync", "S3 backup and sync job"

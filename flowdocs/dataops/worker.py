@@ -63,7 +63,7 @@ def _claim_pipeline_operation(operation_id):
 
 
 def _finish_pipeline_operation(operation, *, lease_token=""):
-    """Run one backup/restore outside the row-lock and persist a safe result."""
+    """Run one remote pipeline outside the row-lock and persist a safe result."""
     operation.attempt = int(operation.attempt or 0) + 1
     operation.state = DataOperation.State.RUNNING
     operation.pipeline_stage = "preflight"
@@ -246,7 +246,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     changed = 0
     for operation in DataOperation.objects.using("control").filter(
         state=DataOperation.State.QUEUED,
-    ).exclude(kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.SYNC}).order_by("created_at")[:limit]:
+    ).exclude(kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC}).order_by("created_at")[:limit]:
         with transaction.atomic(using="control"):
             current = DataOperation.objects.using("control").select_for_update().get(pk=operation.pk)
             if current.state != DataOperation.State.QUEUED:
@@ -281,7 +281,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     claims = []
     queued_ids = DataOperation.objects.using("control").filter(
         state=DataOperation.State.QUEUED,
-        kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.SYNC},
+        kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
     ).order_by("created_at").values_list("pk", flat=True)[:limit]
     for operation_id in queued_ids:
         claim = _claim_pipeline_operation(operation_id)
@@ -291,7 +291,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     if remaining:
         stale_ids = DataOperation.objects.using("control").filter(
             state=DataOperation.State.RUNNING,
-            kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.SYNC},
+            kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
         ).filter(Q(lease_expires_at__isnull=True) | Q(lease_expires_at__lte=timezone.now())).order_by("created_at").values_list("pk", flat=True)[:remaining]
         for operation_id in stale_ids:
             claim = _claim_pipeline_operation(operation_id)

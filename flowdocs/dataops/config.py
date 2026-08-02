@@ -503,16 +503,19 @@ def validate_profiles(
 
 
 def validate_operation_route(source: ResolvedProfile | None, destination: ResolvedProfile | None, *, operation: str, local_dataset_id: str = "") -> tuple[ConfigurationIssue, ...]:
+    operation = str(operation or "").strip().lower().replace("/", "_")
     issues: list[ConfigurationIssue] = []
-    if operation in {"restore", "copy", "transfer"} and source is None:
+    source_required = operation in {"restore", "copy", "transfer", "clone_rebind"}
+    destination_required = operation in {"backup", "copy", "transfer", "clone_rebind"}
+    if source_required and source is None:
         issues.append(ConfigurationIssue("source_profile_missing", "A source profile is required", "source_profile"))
-    if operation in {"backup", "copy", "transfer"} and destination is None:
+    if destination_required and destination is None:
         issues.append(ConfigurationIssue("destination_profile_missing", "A destination profile is required", "destination_profile"))
-    if source and operation in {"restore", "copy", "transfer"} and not source.can_restore:
+    if source and source_required and not source.can_restore:
         issues.append(ConfigurationIssue("profile_role_disallows_restore", f"Profile {source.key} cannot be used as a source", "role"))
     if source and operation == "backup" and not source.can_restore:
         issues.append(ConfigurationIssue("profile_role_disallows_source", f"Profile {source.key} cannot be used as a backup source", "role"))
-    if destination and operation in {"backup", "copy", "transfer"} and not destination.can_backup:
+    if destination and destination_required and not destination.can_backup:
         issues.append(ConfigurationIssue("profile_role_disallows_backup", f"Profile {destination.key} cannot be used as a destination", "role"))
     if destination and operation == "restore" and not destination.can_backup:
         issues.append(ConfigurationIssue("profile_role_disallows_backup", f"Profile {destination.key} cannot receive a restore", "role"))
