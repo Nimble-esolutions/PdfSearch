@@ -299,6 +299,10 @@ def _wants_json(request):
 
 
 def _form_redirect(section):
+    if section == "maintenance":
+        response = HttpResponseRedirect(reverse("dataops:advanced"))
+        response.status_code = 303
+        return response
     response = HttpResponseRedirect(
         f"{reverse('operations_panel')}?section={section}"
     )
@@ -471,7 +475,7 @@ def maintenance_plan_create(request):
             f"{plan.preview['folder_count']} folder(s).",
         )
         return HttpResponseRedirect(
-            f"{reverse('operations_panel')}?section=maintenance"
+            f"{reverse('dataops:advanced')}?section=maintenance"
             f"&plan={plan.public_id}"
         )
     except Exception as exc:

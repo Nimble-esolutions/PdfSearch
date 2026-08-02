@@ -34,7 +34,7 @@
     <form class="dataops-form" method="post" action="{% url 'vaultops:maintenance_plan_create' %}">
       {% csrf_token %}
       <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:maintenance">
-      <fieldset>
+      <fieldset class="maintenance-scope">
         <legend>{% trans "Categories" %}</legend>
         {% for folder in state.maintenance.folders %}<label><input type="checkbox" name="folder_ids" value="{{ folder.id }}"> {{ folder.name }} ({{ folder.pdf_count }})</label>{% empty %}<p>{% trans "No categories are available." %}</p>{% endfor %}
       </fieldset>
@@ -61,19 +61,100 @@
   <section class="dataops-advanced__section" aria-labelledby="dataops-maintenance-preview-heading">
     <header><p class="dataops-eyebrow">{% trans "15-minute confirmation authority" %}</p><h3 id="dataops-maintenance-preview-heading">{% trans "Maintenance previews" %}</h3></header>
     {% if state.maintenance.selected_plan %}
-      <article><p>{% trans "Selected preview" %}</p><h4>{{ state.maintenance.selected_plan.operation_label|default:_('Maintenance') }}</h4><code>{{ state.maintenance.selected_plan.public_id }}</code></article>
-    {% else %}<p>{% trans "No maintenance previews are recorded." %}</p>{% endif %}
+      <article class="maintenance-selected-plan" aria-labelledby="dataops-selected-plan-heading">
+        <p>{% trans "Selected preview" %}</p>
+        <h4 id="dataops-selected-plan-heading">{{ state.maintenance.selected_plan.operation_label|default:_('Maintenance') }}</h4>
+        <code>{{ state.maintenance.selected_plan.public_id }}</code>
+        <p>{% trans "Source runtime and manifest identities are embedded in the selection plan and revalidated at queue time." %}</p>
+        <dl class="maintenance-preview-facts">
+          <div><dt>{% trans "Documents" %}</dt><dd>{{ state.maintenance.selected_plan.preview.pdf_count }}</dd></div>
+          <div><dt>{% trans "Folders" %}</dt><dd>{{ state.maintenance.selected_plan.preview.folder_count }}</dd></div>
+          <div><dt>{% trans "Estimated work" %}</dt><dd>{{ state.maintenance.selected_plan.preview.estimated_work_units }}</dd></div>
+          <div><dt>{% trans "External embeddings" %}</dt><dd>{{ state.maintenance.selected_plan.external_embeddings_required|yesno:_("Required,Not required") }}</dd></div>
+        </dl>
+      </article>
+    {% endif %}
+    <div role="list">
+      {% for plan in state.maintenance.plans %}
+        <article role="listitem">
+          <h4>{{ plan.operation_label }}</h4>
+          <p>{{ plan.state_label }} · {{ plan.preview.pdf_count }} {% trans "documents" %} · {{ plan.preview.folder_count }} {% trans "folders" %}</p>
+          <p>{% trans "Estimated work" %}: {{ plan.preview.estimated_work_units }} · {% trans "Expires" %}: {{ plan.expires_at|date:"Y-m-d H:i:s T" }}</p>
+          {% if plan.state == "previewed" %}
+            <form class="dataops-form" method="post" action="{% url 'vaultops:maintenance_plan_queue' plan.public_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="state_version" value="{{ plan.state_version }}">
+              {% if plan.operation == "reindex_selected" %}
+                <label>{% blocktrans with phrase=state.maintenance.confirmation_phrase %}Type {{ phrase }} to confirm external reprocessing{% endblocktrans %}<input name="typed_confirmation" autocomplete="off" required></label>
+              {% endif %}
+              <button type="submit">{% trans "Confirm and queue local maintenance" %}</button>
+            </form>
+          {% elif plan.job__public_id %}<p><code>{{ plan.job__public_id }}</code> · {{ plan.job__status }}</p>{% endif %}
+        </article>
+      {% empty %}<p role="listitem">{% trans "No maintenance previews are recorded." %}</p>{% endfor %}
+    </div>
   </section>
 
   <section class="dataops-advanced__section" aria-labelledby="dataops-maintenance-jobs-heading">
     <header><p class="dataops-eyebrow">{% trans "Progress and audit" %}</p><h3 id="dataops-maintenance-jobs-heading">{% trans "Local maintenance jobs" %}</h3></header>
     {% for job in state.maintenance.jobs %}
-      <article class="dataops-advanced__job">
+      <article class="dataops-advanced__job" id="maintenance-job-{{ job.public_id }}">
         <h4>{{ job.kind_label }} · <code>{{ job.public_id }}</code></h4>
         <p>{{ job.status_label }} · {{ job.completed_items }}/{{ job.total_items }} {% trans "completed" %} · {{ job.failed_items }} {% trans "failed" %}</p>
+        {% widthratio job.completed_items job.total_items 100 as maintenance_progress %}
+        <div class="maintenance-progress" role="progressbar" aria-label="{% trans 'Maintenance job progress' %}" aria-valuemin="0" aria-valuemax="{{ job.total_items }}" aria-valuenow="{{ job.completed_items }}"><span style="width: {{ maintenance_progress|default:0 }}%"></span></div>
+        {% if job.safe_error_code %}{% include "components/operator_evidence.html" with presentation=job.error_presentation technical_code=job.safe_error_code evidence_id=job.public_id show_action=False only %}{% endif %}
+        {% if job.options.candidate_workspace_id %}<p>{% trans "Candidate workspace" %}: <code>{{ job.options.candidate_workspace_id }}</code> · {{ job.options.candidate_state_label }}</p>{% endif %}
         {% if job.allowed_actions.cancel %}<form method="post" action="{% url 'vaultops:maintenance_job_cancel' job.public_id %}">{% csrf_token %}<input type="hidden" name="state_version" value="{{ job.state_version }}"><button type="submit">{% trans "Cancel job" %}</button></form>{% endif %}
         {% if job.allowed_actions.retry %}<form method="post" action="{% url 'vaultops:maintenance_job_retry' job.public_id %}">{% csrf_token %}<input type="hidden" name="state_version" value="{{ job.state_version }}"><button type="submit">{% trans "Retry from checkpoints" %}</button></form>{% endif %}
+        {% if job.options.candidate_state == "activation_ready" %}
+          {% if job.allowed_actions.prepare_activation %}
+            <form method="post" action="{% url 'vaultops:maintenance_candidate_prepare' job.public_id %}">
+              {% csrf_token %}
+              <input type="hidden" name="state_version" value="{{ job.state_version }}">
+              <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+              <button type="submit">{% trans "Prepare for activation" %}</button>
+            </form>
+          {% elif job.allowed_actions.review_activation %}
+            <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
+              {% csrf_token %}
+              <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+              <input type="hidden" name="action" value="activate_workspace">
+              <input type="hidden" name="target" value="{{ job.prepared_workspace_id }}">
+              <button type="submit">{% trans "Review typed activation" %}</button>
+            </form>
+          {% else %}<span aria-disabled="true">{% trans "Prepare for activation" %}</span>{% endif %}
+        {% endif %}
       </article>
     {% empty %}<p>{% trans "No local maintenance jobs are recorded." %}</p>{% endfor %}
+  </section>
+
+  <section class="dataops-advanced__section" aria-labelledby="dataops-runtime-recovery-heading">
+    <header><p class="dataops-eyebrow">{% trans "Signed runtime control" %}</p><h3 id="dataops-runtime-recovery-heading">{% trans "Runtime activation and recovery" %}</h3></header>
+    <p>{% trans "These controls activate only verified runtime candidates and retain the signed previous generation for rollback." %}</p>
+    <div role="list">
+      {% for workspace in state.workspaces %}
+        <article role="listitem">
+          <h4>{{ workspace.generation_id }}</h4>
+          <p>{{ workspace.state_label }} · {{ workspace.downloaded_objects }} {% trans "objects" %}</p>
+          {% if workspace.safe_error_code %}{% include "components/operator_evidence.html" with presentation=workspace.error_presentation technical_code=workspace.safe_error_code evidence_id=workspace.public_id show_action=False only %}{% endif %}
+          {% if workspace.activation_allowed and state.feature_flags.admin_mutations_enabled %}
+            <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
+              {% csrf_token %}
+              <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:workspace:{{ forloop.counter }}">
+              <input type="hidden" name="action" value="activate_workspace">
+              <input type="hidden" name="target" value="{{ workspace.public_id }}">
+              <button type="submit">{% trans "Prepare staging activation" %}</button>
+            </form>
+          {% endif %}
+        </article>
+      {% empty %}<p role="listitem">{% trans "No restore workspaces are projected." %}</p>{% endfor %}
+    </div>
+    <form method="post" action="{% url 'vaultops:rollback_confirmation_issue' %}">
+      {% csrf_token %}
+      <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:signed-rollback">
+      <button type="submit"{% if not state.rollback_capability.enabled %} disabled aria-describedby="dataops-signed-rollback-reason"{% endif %}>{% trans "Review signed rollback" %}</button>
+    </form>
+    {% if not state.rollback_capability.enabled %}<div id="dataops-signed-rollback-reason">{% include "components/operator_evidence.html" with presentation=state.rollback_capability.presentation technical_code=state.rollback_capability.reason_code show_action=False only %}</div>{% else %}<p>{% trans "Verified previous runtime:" %} <code>{{ state.rollback_capability.target_generation_id }}</code></p>{% endif %}
   </section>
 </div>
