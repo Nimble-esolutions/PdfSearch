@@ -59,6 +59,14 @@ must not become an authoritative writer.
 | `OPENAI_CHAT_MODEL` | `gpt-4o-mini` | Model used to prepare the grounded answer | Medium-high; answer quality, latency, and cost |
 | `PDF_CHUNK_SIZE` | `1200` | Approximate text chunk size for indexing | High; changes retrieval boundaries and requires reindex review |
 | `PDF_CHUNK_OVERLAP` | `200` | Repeated boundary context between chunks | Medium; increases index size and context overlap |
+| `PDF_OCR_FALLBACK_ENABLED` | `1` | OCR blank PDF pages when native text extraction returns no text | Medium-high; adds CPU and derived-text work for scanned PDFs |
+| `PDF_OCR_BINARY` | `tesseract` | OCR executable resolved inside the immutable image | High; missing or mismatched binaries fail scanned-document indexing closed |
+| `PDF_OCR_LANGUAGES` | `eng+mar` | Tesseract language packs used for OCR | High; changing languages requires OCR/reindex review |
+| `PDF_OCR_DPI` | `200` | Rasterization resolution for OCR pages | Medium-high; raises CPU and memory use as it increases |
+| `PDF_OCR_MAX_PAGES` | `50` | Maximum blank pages OCR will process per PDF | High; exceeding the cap leaves the PDF unindexed rather than partial |
+| `PDF_OCR_PAGE_TIMEOUT_SECONDS` | `180` | Per-page OCR subprocess timeout | Medium; bounds worker occupancy |
+| `PDF_OCR_MAX_SECONDS` | `900` | Total OCR timeout per PDF | Medium-high; bounds a single maintenance item |
+| `PDF_OCR_MAX_PIXELS` | `25000000` | Maximum rendered pixels for one OCR page | High; prevents oversized scans from exhausting worker memory |
 | `MAX_CONTEXT_WORDS` | `2500` | Maximum retrieved context sent to answer preparation | High; changes grounding coverage, latency, and token cost |
 | `TOP_K_CHUNKS` | `5` | Number of top chunks selected for answer context | Medium-high; affects recall, noise, and answer length |
 | `EMBEDDING_TTL` | `604800` seconds | Redis/cache lifetime for embeddings | Low; affects API cost and freshness |
@@ -89,6 +97,15 @@ receive bytes because Django requires byte limits.
 
 Do not increase this value without checking proxy limits, Gunicorn request
 timeouts, worker memory, PDF parsing time, and maintenance queue capacity.
+
+### OCR fallback policy
+
+Native PDF extraction remains the first path. When a PDF contains pages without
+native text, the application renders only those pages and invokes Tesseract
+inside the immutable application image. OCR is bounded by language, page,
+time, and pixel settings; failures leave the document unindexed instead of
+creating an unverified search artifact. Any OCR configuration change requires
+an explicit reindex review because it changes derived text and FAISS output.
 
 ## Public search and product controls
 

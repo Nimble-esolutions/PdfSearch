@@ -6,9 +6,13 @@ import os
 import json
 import math
 import pathlib
+import re
+import shutil
+import subprocess
 import traceback
 import logging
 import tempfile
+import time
 from typing import List, Tuple, Optional, Dict, Any
 
 import fitz  # PyMuPDF
@@ -123,25 +127,128 @@ def truncate_context(text: str, max_words: int = MAX_CONTEXT_WORDS) -> str:
 
 
 # ------------------ PDF extraction (cached per model) ------------------
+def _ocr_languages() -> str:
+    raw = str(getattr(settings, "PDF_OCR_LANGUAGES", "eng+mar") or "").strip()
+    languages = [part for part in raw.split("+") if part]
+    if not languages or any(not re.fullmatch(r"[A-Za-z0-9_]+", part) for part in languages):
+        raise SearchDataIntegrityError("PDF OCR language configuration is invalid")
+    return "+".join(languages)
+
+
+def _ocr_page_text(page, *, page_number: int, temp_dir: pathlib.Path, deadline: float) -> str:
+    binary_name = str(getattr(settings, "PDF_OCR_BINARY", "tesseract") or "tesseract")
+    binary = shutil.which(binary_name)
+    if not binary:
+        raise SearchDataIntegrityError("PDF OCR engine is unavailable")
+
+    dpi = int(getattr(settings, "PDF_OCR_DPI", 200))
+    scale = dpi / 72.0
+    rect = page.rect
+    estimated_pixels = int(rect.width * scale * rect.height * scale)
+    max_pixels = int(getattr(settings, "PDF_OCR_MAX_PIXELS", 25_000_000))
+    if estimated_pixels > max_pixels:
+        raise SearchDataIntegrityError("PDF OCR page exceeds the pixel budget")
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise SearchDataIntegrityError("PDF OCR document timeout exceeded")
+    page_timeout = int(getattr(settings, "PDF_OCR_PAGE_TIMEOUT_SECONDS", 180))
+    timeout = max(1, min(page_timeout, int(remaining)))
+    image_path = temp_dir / f"page-{page_number}.png"
+    try:
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+        pixmap.save(str(image_path))
+        result = subprocess.run(
+            [
+                binary,
+                str(image_path),
+                "stdout",
+                "-l",
+                _ocr_languages(),
+                "--psm",
+                "3",
+            ],
+            capture_output=True,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise SearchDataIntegrityError("PDF OCR page timeout exceeded") from exc
+    except OSError as exc:
+        raise SearchDataIntegrityError("PDF OCR process could not start") from exc
+    finally:
+        image_path.unlink(missing_ok=True)
+
+    if result.returncode != 0:
+        logger.warning(
+            "PDF OCR page failed without indexing the document: page=%s return_code=%s",
+            page_number,
+            result.returncode,
+        )
+        raise SearchDataIntegrityError("PDF OCR process failed")
+    return (result.stdout or "").strip()
+
+
+def _ocr_blank_pages(blank_pages: list[tuple[int, object]]) -> dict[int, str]:
+    if not blank_pages or not getattr(settings, "PDF_OCR_FALLBACK_ENABLED", True):
+        return {}
+    max_pages = int(getattr(settings, "PDF_OCR_MAX_PAGES", 50))
+    if len(blank_pages) > max_pages:
+        raise SearchDataIntegrityError("PDF OCR page cap exceeded")
+    deadline = time.monotonic() + int(getattr(settings, "PDF_OCR_MAX_SECONDS", 900))
+    results: dict[int, str] = {}
+    with tempfile.TemporaryDirectory(prefix="pdf-ocr-") as temporary:
+        temp_dir = pathlib.Path(temporary)
+        for page_number, page in blank_pages:
+            results[page_number] = _ocr_page_text(
+                page,
+                page_number=page_number,
+                temp_dir=temp_dir,
+                deadline=deadline,
+            )
+    logger.info(
+        "PDF OCR fallback completed: pages=%s extracted_chars=%s",
+        len(blank_pages),
+        sum(len(value) for value in results.values()),
+    )
+    return results
+
+
 def extract_text_from_pdf_path(path: str) -> str:
-    """
-    Extract text using PyMuPDF. Lightweight: no OCR.
-    This function is used to build extracted text on upload; search reads cached values in the DB.
+    """Extract native PDF text and OCR only pages without native text.
+
+    OCR is bounded by deployment settings and runs through an argument-list
+    subprocess invocation, never a shell command. If OCR is unavailable or
+    fails, the caller receives no fabricated text and normal indexing fails
+    closed for an image-only document.
     """
     if not os.path.exists(path):
         return ""
-    text_parts = []
+    page_texts: list[str] = []
+    blank_pages: list[tuple[int, object]] = []
+    doc = None
     try:
         doc = fitz.open(path)
-        for page in doc:
-            page_text = page.get_text("text")
-            if page_text and page_text.strip():
-                text_parts.append(page_text)
-        doc.close()
-    except Exception:
-        traceback.print_exc()
+        for page_number, page in enumerate(doc):
+            page_text = (page.get_text("text") or "").strip()
+            page_texts.append(page_text)
+            if not page_text:
+                blank_pages.append((page_number, page))
+        ocr_text = _ocr_blank_pages(blank_pages)
+        for page_number, text in ocr_text.items():
+            page_texts[page_number] = text
+    except SearchDataIntegrityError as exc:
+        logger.warning("PDF text extraction failed closed: %s", exc)
         return ""
-    return "\n".join(text_parts).strip()
+    except Exception:
+        logger.exception("PDF text extraction failed closed")
+        return ""
+    finally:
+        if doc is not None:
+            doc.close()
+    return "\n".join(text for text in page_texts if text).strip()
 
 
 # ---------------- Embeddings ----------------

@@ -65,6 +65,14 @@ def _env_nonnegative_int(name, default=0):
     return value
 
 
+def _env_bounded_int(name, default, minimum=1, maximum=None):
+    value = _env_positive_int(name, default)
+    if value < minimum or (maximum is not None and value > maximum):
+        bound = f'{minimum}..{maximum}' if maximum is not None else f'>={minimum}'
+        raise ImproperlyConfigured(f'{name} must be in the range {bound}')
+    return value
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -367,6 +375,21 @@ MAX_CONTEXT_WORDS = _env_positive_int('MAX_CONTEXT_WORDS', 2500)
 TOP_K_CHUNKS = _env_positive_int('TOP_K_CHUNKS', 5)
 EMBEDDING_TTL = _env_positive_int('EMBEDDING_TTL', 60 * 60 * 24 * 7)
 SEARCH_CACHE_TTL = _env_positive_int('SEARCH_CACHE_TTL', 60 * 10)
+
+# Image-only PDFs are common in the legacy corpus. OCR is deliberately
+# bounded and only runs for pages where native PDF text is absent.
+PDF_OCR_FALLBACK_ENABLED = _env_bool('PDF_OCR_FALLBACK_ENABLED', True)
+PDF_OCR_BINARY = os.getenv('PDF_OCR_BINARY', 'tesseract').strip() or 'tesseract'
+PDF_OCR_LANGUAGES = os.getenv('PDF_OCR_LANGUAGES', 'eng+mar').strip() or 'eng+mar'
+PDF_OCR_DPI = _env_bounded_int('PDF_OCR_DPI', 200, 72, 400)
+PDF_OCR_MAX_PAGES = _env_bounded_int('PDF_OCR_MAX_PAGES', 50, 1, 200)
+PDF_OCR_PAGE_TIMEOUT_SECONDS = _env_bounded_int(
+    'PDF_OCR_PAGE_TIMEOUT_SECONDS', 180, 1, 600
+)
+PDF_OCR_MAX_SECONDS = _env_bounded_int('PDF_OCR_MAX_SECONDS', 900, 1, 3600)
+PDF_OCR_MAX_PIXELS = _env_bounded_int(
+    'PDF_OCR_MAX_PIXELS', 25_000_000, 1_000_000, 100_000_000
+)
 
 # WhiteNoise configuration for static files
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
