@@ -13,6 +13,7 @@ from dataops.models import DataConnection
 from dataops.v3_connection import (
     V3ConnectionError,
     connection_is_ready,
+    ensure_connection_readable,
     probe_owned_connection,
 )
 
@@ -136,3 +137,31 @@ class V3ConnectionTests(TestCase):
             update_fields=["capabilities", "last_probed_at", "updated_at"],
         )
         self.assertFalse(connection_is_ready(self.connection))
+
+    def test_read_only_check_does_not_claim_backup_capabilities(self):
+        client = FakeS3()
+        ensure_connection_readable(
+            self.connection,
+            client_factory=lambda _connection: client,
+        )
+        self.connection.refresh_from_db(using="control")
+        self.assertTrue(self.connection.capabilities["read"])
+        self.assertTrue(self.connection.capabilities["read_probed"])
+        self.assertFalse(self.connection.capabilities["probed"])
+        self.assertFalse(connection_is_ready(self.connection))
+
+    def test_failed_read_check_persists_only_typed_failure(self):
+        with self.assertRaisesRegex(
+            V3ConnectionError,
+            "source_connection_not_readable",
+        ):
+            ensure_connection_readable(
+                self.connection,
+                client_factory=lambda _connection: FakeS3(accessible=False),
+            )
+        self.connection.refresh_from_db(using="control")
+        self.assertEqual(
+            self.connection.observation["failure_codes"],
+            ["source_connection_not_readable"],
+        )
+        self.assertNotIn("forbidden detail", str(self.connection.observation))

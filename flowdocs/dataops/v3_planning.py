@@ -300,7 +300,7 @@ def action_status(config: RuntimeConfig) -> Mapping[str, str]:
     return {
         "backup": (
             "ready"
-            if config.enabled and writable
+            if config.enabled and probed and writable
             else "check_required"
             if config.enabled and config.connection and not probed
             else "blocked"

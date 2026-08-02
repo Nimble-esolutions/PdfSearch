@@ -194,11 +194,48 @@ class DataOpsV3APITests(TestCase):
         self.assertEqual(response.json()["error"]["code"], "bucket_access_failed")
         self.assertFalse(DataOperation.objects.using("control").exists())
 
-    def test_unimplemented_executor_cannot_create_a_doomed_operation(self):
-        response = self.post_operation({"action": "restore"})
+    def test_activation_is_not_queued_until_signed_executor_is_available(self):
+        point = self.recovery_point(
+            dataset_id="ai-sahakar-stage-2026",
+            release_id="stage-backup-activation",
+            digest="e" * 64,
+        )
+        response = self.post_operation(
+            {
+                "action": "restore",
+                "recovery_point_id": str(point.public_id),
+                "activate": True,
+            }
+        )
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["code"], "executor_not_available")
+        self.assertEqual(
+            response.json()["error"]["code"],
+            "signed_activation_executor_not_available",
+        )
         self.assertFalse(DataOperation.objects.using("control").exists())
+
+    def test_restore_start_queues_exact_source_without_profile_selectors(self):
+        point = self.recovery_point(
+            dataset_id="ai-sahakar-stage-2026",
+            release_id="stage-backup-restore",
+            digest="f" * 64,
+        )
+        response = self.post_operation(
+            {
+                "action": "restore",
+                "recovery_point_id": str(point.public_id),
+                "idempotency_key": "restore-once",
+            }
+        )
+        self.assertEqual(response.status_code, 202)
+        operation = DataOperation.objects.using("control").get(
+            public_id=response.json()["operation_id"]
+        )
+        self.assertEqual(operation.kind, DataOperation.Kind.RESTORE)
+        self.assertEqual(
+            operation.checkpoint["recovery_point_id"],
+            str(point.public_id),
+        )
 
     def test_same_dataset_point_routes_to_normal_restore(self):
         point = self.recovery_point(

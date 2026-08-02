@@ -10,9 +10,24 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
-from dataops.models import DataConnection, RecoveryPoint
+from dataops.lifecycle import (
+    ArtifactPassport,
+    ArtifactTrust,
+    InstanceIdentity,
+    LifecycleCapabilities,
+    LifecycleIntent,
+    LifecycleRequest,
+    SourceKind,
+    compile_lifecycle_plan,
+)
+from dataops.models import (
+    DataConnection,
+    DataOperation,
+    RecoveryPoint,
+    RestoreCandidate,
+)
 from dataops.package_v3 import canonical_json_bytes
 from dataops.tests.test_v3_backup import FakeS3
 from dataops.v3_backup import blob_key, publish_snapshot
@@ -24,6 +39,7 @@ from dataops.v3_restore import (
     materialize_quarantine,
     rehearse_quarantine,
 )
+from dataops.v3_restore_executor import execute_restore_operation
 
 
 class V3RestoreTests(TestCase):
@@ -101,6 +117,7 @@ class V3RestoreTests(TestCase):
             included_epoch=1,
             evidence_sha256=evidence["evidence_sha256"],
         )
+        self.snapshot = snapshot
         manifest, receipt = publish_snapshot(
             snapshot=snapshot,
             connection=connection_from_model(self.connection),
@@ -137,6 +154,49 @@ class V3RestoreTests(TestCase):
             self.point,
             signing_key=self.signing_key,
             client_factory=lambda _connection: self.client,
+        )
+
+    def operation_for(self, point, *, intent=LifecycleIntent.RESTORE):
+        plan = compile_lifecycle_plan(
+            LifecycleRequest(intent),
+            InstanceIdentity(
+                environment="staging",
+                deployment_id="stage-2026",
+                dataset_id=self.connection.dataset_id,
+            ),
+            LifecycleCapabilities(
+                owned_store_readable=True,
+                owned_store_writable=True,
+                source_readable=True,
+                quarantine_writable=True,
+                isolated_restore_available=True,
+            ),
+            ArtifactPassport(
+                source_kind=SourceKind.RECOVERY_POINT,
+                dataset_id=point.dataset_id,
+                generation_id=point.release_id,
+                manifest_sha256=point.manifest_digest,
+                format_version=3,
+                trust=ArtifactTrust.VERIFIED,
+                complete=True,
+                read_only=True,
+                signature_valid=True,
+            ),
+        )
+        return DataOperation.objects.using("control").create(
+            kind=(
+                DataOperation.Kind.TEST_RECOVERY
+                if intent is LifecycleIntent.TEST_RECOVERY
+                else DataOperation.Kind.RESTORE
+            ),
+            state=DataOperation.State.RUNNING,
+            connection=self.connection,
+            release_id="import-prod-001" if point.dataset_id != self.connection.dataset_id else "",
+            lifecycle_route=plan.route,
+            lifecycle_plan=plan.as_dict(),
+            lifecycle_plan_digest=plan.plan_digest,
+            checkpoint={"recovery_point_id": str(point.public_id)},
+            idempotency_key=str(uuid.uuid4()),
         )
 
     def test_materializes_complete_verified_generation_and_reuses_it(self):
@@ -316,3 +376,114 @@ class V3RestoreTests(TestCase):
                 signing_key=self.signing_key,
                 signing_key_id="stage-manifest-1",
             )
+
+    def test_queued_same_dataset_restore_builds_verified_candidate(self):
+        operation = self.operation_for(self.point)
+
+        def migration_runner(*_args, **_kwargs):
+            return {"success": True, "migration_leaf_after": "0029"}
+
+        with override_settings(
+            ACTIVATION_INTENT_SIGNING_KEY=self.signing_key.decode(),
+            DATAOPS_RESTORE_STAGING_ROOT=self.root / "executor-quarantine",
+        ):
+            result = execute_restore_operation(
+                operation,
+                client_factory=lambda _connection: self.client,
+                migration_runner=migration_runner,
+            )
+        candidate = RestoreCandidate.objects.using("control").get(
+            operation=operation
+        )
+        self.assertEqual(result["status"], "verified_rehearsal")
+        self.assertEqual(result["indexing_ratio"], 1.0)
+        self.assertEqual(candidate.state, RestoreCandidate.State.VERIFIED)
+        self.assertFalse(result["activation_performed"])
+
+    def test_queued_isolated_recovery_never_imports_or_activates(self):
+        operation = self.operation_for(
+            self.point,
+            intent=LifecycleIntent.TEST_RECOVERY,
+        )
+        with override_settings(
+            ACTIVATION_INTENT_SIGNING_KEY=self.signing_key.decode(),
+            DATAOPS_RESTORE_STAGING_ROOT=self.root / "isolated-quarantine",
+        ):
+            result = execute_restore_operation(
+                operation,
+                client_factory=lambda _connection: self.client,
+                migration_runner=lambda *_args, **_kwargs: {"success": True},
+            )
+        self.assertEqual(result["route"], "isolated_rehearsal")
+        self.assertEqual(
+            result["source_recovery_point_id"],
+            result["effective_recovery_point_id"],
+        )
+        self.assertFalse(result["activation_performed"])
+
+    def test_queued_foreign_restore_imports_then_rehearses_owned_point(self):
+        source_model = DataConnection.objects.using("control").create(
+            name="Production source",
+            provider="rustfs",
+            endpoint="https://rustfs.example.invalid",
+            bucket="prod-source",
+            dataset_id="ai-sahakar-prod-v2",
+            credential_ref="secret://dataops/prod-source",
+            capabilities={"read": True, "write": True, "conditional_write": True},
+        )
+        source_client = FakeS3()
+        source_manifest, source_receipt = publish_snapshot(
+            snapshot=self.snapshot,
+            connection=connection_from_model(source_model),
+            client=source_client,
+            recovery_point_id="prod-rp-001",
+            source_instance_id="legacy-production",
+            source_environment="production",
+            image_digest="repo@example.invalid/app@sha256:" + "a" * 64,
+            release_version="2026.08.03",
+            signing_key=self.signing_key,
+            signing_key_id="stage-manifest-1",
+        )
+        source_point = RecoveryPoint.objects.using("control").create(
+            connection=source_model,
+            dataset_id=source_model.dataset_id,
+            release_id=source_receipt.recovery_point_id,
+            format_version=3,
+            prefix=source_receipt.recovery_point_key,
+            manifest_digest=source_receipt.manifest_sha256,
+            signature_key_id="stage-manifest-1",
+            data_complete=True,
+            state=RecoveryPoint.State.VERIFIED,
+            counts=source_manifest["counts"],
+            evidence={"signature_valid": True},
+        )
+        operation = self.operation_for(source_point)
+
+        def clients(connection):
+            return (
+                source_client
+                if connection.dataset_id == source_model.dataset_id
+                else self.client
+            )
+
+        with override_settings(
+            ACTIVATION_INTENT_SIGNING_KEY=self.signing_key.decode(),
+            DATAOPS_RESTORE_STAGING_ROOT=self.root / "foreign-quarantine",
+        ):
+            result = execute_restore_operation(
+                operation,
+                client_factory=clients,
+                migration_runner=lambda *_args, **_kwargs: {"success": True},
+            )
+        effective = RecoveryPoint.objects.using("control").get(
+            public_id=result["effective_recovery_point_id"]
+        )
+        self.assertEqual(effective.dataset_id, self.connection.dataset_id)
+        self.assertEqual(
+            effective.identity["parent_dataset_id"],
+            source_model.dataset_id,
+        )
+        self.assertNotEqual(
+            result["source_recovery_point_id"],
+            result["effective_recovery_point_id"],
+        )

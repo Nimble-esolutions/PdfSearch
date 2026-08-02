@@ -41,7 +41,11 @@ from .pipeline import (
 from .readiness import readiness_payload
 from .storage import StorageConfigurationError
 from .v3_config import V3ConfigurationError
-from .v3_connection import V3ConnectionError, ensure_owned_connection_ready
+from .v3_connection import (
+    V3ConnectionError,
+    ensure_connection_readable,
+    ensure_owned_connection_ready,
+)
 from .v3_planning import action_status, compile_requested_plan, materialize_primary_connection, runtime_config
 
 
@@ -187,21 +191,30 @@ def v3_operation_start(request):
         if _contains_forbidden_v3_field(payload):
             raise ValueError("secret_fields_forbidden")
         action = str(payload.get("action") or "").strip().lower()
-        if action != "backup":
+        if action not in {"backup", "restore", "test_recovery"}:
             raise ValueError("executor_not_available")
+        activate = _v3_bool(payload.get("activate"), field="activate")
+        if activate:
+            raise ValueError("signed_activation_executor_not_available")
+        point = _v3_recovery_point(payload.get("recovery_point_id"))
         initial_config = runtime_config()
         connection = materialize_primary_connection(initial_config)
-        ensure_owned_connection_ready(
-            connection,
-            deployment_id=initial_config.deployment_id,
-        )
+        if action == "backup" or (
+            point is not None and point.dataset_id != initial_config.dataset_id
+        ):
+            ensure_owned_connection_ready(
+                connection,
+                deployment_id=initial_config.deployment_id,
+            )
+        if point is not None and point.connection_id:
+            ensure_connection_readable(point.connection)
         config, plan = compile_requested_plan(
             action=action,
-            activate=_v3_bool(payload.get("activate"), field="activate"),
+            activate=activate,
             confirmation_present=bool(
                 str(payload.get("confirmation") or "").strip()
             ),
-            point=_v3_recovery_point(payload.get("recovery_point_id")),
+            point=point,
             source_kind=str(payload.get("source_kind") or "").strip().lower(),
         )
         if not plan.allowed:
@@ -212,8 +225,16 @@ def v3_operation_start(request):
         idempotency_key = str(payload.get("idempotency_key") or "").strip()
         if not idempotency_key:
             idempotency_key = secrets.token_urlsafe(18)
+        operation_kind = {
+            "backup": DataOperation.Kind.BACKUP,
+            "restore": DataOperation.Kind.RESTORE,
+            "test_recovery": DataOperation.Kind.TEST_RECOVERY,
+        }[action]
+        checkpoint = {"configuration_digest": config.digest}
+        if point is not None:
+            checkpoint["recovery_point_id"] = str(point.public_id)
         operation, created = DataOperation.objects.using("control").get_or_create(
-            kind=DataOperation.Kind.BACKUP,
+            kind=operation_kind,
             idempotency_key=idempotency_key,
             defaults={
                 "state": DataOperation.State.QUEUED,
@@ -223,7 +244,7 @@ def v3_operation_start(request):
                 "lifecycle_route": plan.route,
                 "lifecycle_plan": plan.as_dict(),
                 "lifecycle_plan_digest": plan.plan_digest,
-                "checkpoint": {"configuration_digest": config.digest},
+                "checkpoint": checkpoint,
             },
         )
         if not created and operation.lifecycle_plan_digest != plan.plan_digest:
@@ -232,7 +253,7 @@ def v3_operation_start(request):
             DataOpsAuditEvent.objects.using("control").create(
                 actor_id=request.user.pk,
                 actor_name=request.user.get_username(),
-                action="backup",
+                action=action,
                 operation_id=operation.public_id,
                 outcome="queued",
                 evidence={

@@ -135,3 +135,67 @@ def ensure_owned_connection_ready(
         deployment_id=deployment_id,
         client_factory=client_factory,
     )
+
+
+def ensure_connection_readable(
+    connection: DataConnection,
+    *,
+    client_factory=client_for_connection,
+) -> DataConnection:
+    """Refresh only the read prerequisite; object reads are proven by restore."""
+
+    capabilities = dict(connection.capabilities or {})
+    if connection.enabled and capabilities.get("read") is True:
+        return connection
+    checked_at = timezone.now()
+    try:
+        view = connection_from_model(connection)
+        client = client_factory(view)
+        client.head_bucket(Bucket=view.bucket)
+    except V3StorageError as exc:
+        code = exc.code
+    except Exception:
+        code = "source_connection_not_readable"
+    else:
+        capabilities.update(
+            {
+                "probed": False,
+                "read_probed": True,
+                "read": True,
+            }
+        )
+        connection.capabilities = capabilities
+        connection.last_probed_at = checked_at
+        connection.observation = {
+            "status": "readable",
+            "failure_codes": [],
+            "checked_at": checked_at.isoformat(),
+        }
+        connection.save(
+            using="control",
+            update_fields=[
+                "capabilities",
+                "last_probed_at",
+                "observation",
+                "updated_at",
+            ],
+        )
+        return connection
+    capabilities.update({"probed": False, "read_probed": True, "read": False})
+    connection.capabilities = capabilities
+    connection.last_probed_at = checked_at
+    connection.observation = {
+        "status": "blocked",
+        "failure_codes": [code],
+        "checked_at": checked_at.isoformat(),
+    }
+    connection.save(
+        using="control",
+        update_fields=[
+            "capabilities",
+            "last_probed_at",
+            "observation",
+            "updated_at",
+        ],
+    )
+    raise V3ConnectionError(code)

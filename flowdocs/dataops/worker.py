@@ -75,13 +75,23 @@ def _finish_pipeline_operation(operation, *, lease_token=""):
     lease = (lambda: _renew_operation_lease(operation.pk, operation.lease_token)) if operation.lease_token else None
     try:
         if (
-            operation.kind == DataOperation.Kind.BACKUP
+            operation.kind
+            in {
+                DataOperation.Kind.BACKUP,
+                DataOperation.Kind.RESTORE,
+                DataOperation.Kind.TEST_RECOVERY,
+            }
             and (operation.lifecycle_plan or {}).get("contract_version") == 3
         ):
             from .v3_executor import V3ExecutionError, execute_backup_operation
+            from .v3_restore_executor import execute_restore_operation
 
             try:
-                result = execute_backup_operation(operation, lease=lease)
+                result = (
+                    execute_backup_operation(operation, lease=lease)
+                    if operation.kind == DataOperation.Kind.BACKUP
+                    else execute_restore_operation(operation, lease=lease)
+                )
             except V3ExecutionError as exc:
                 raise DataOpsPipelineError(
                     exc.code,
