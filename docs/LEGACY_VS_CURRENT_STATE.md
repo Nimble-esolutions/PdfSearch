@@ -1,0 +1,153 @@
+---
+Status: Active, living comparison
+Audience: Maintainer, Operator, Reviewer
+Owner: FlowDocs maintainers
+Last verified: 2026-08-02
+Canonical source: docs/LEGACY_VS_CURRENT_STATE.md
+Update trigger: every verified migration, release, activation, backup, or rollback
+---
+
+# Legacy state versus current 2026 state
+
+This document is the short comparison for operators who need to understand
+what changed. It is intentionally maintained alongside
+STATUS-2026-08-02.md. The status page carries exact evidence; this page
+explains the transition.
+
+## At a glance
+
+| Dimension | Legacy / before rehearsal | Current 2026 state |
+| --- | --- | --- |
+| Authority | www.ai-sahakar.net production | legacy remains authoritative; stage is rehearsal |
+| Source volume | prod_flowdocs at /app/flowdocs | preserved read-only; stage also sees /mnt/legacy:ro |
+| Dataset identity | legacy production namespace | ai-sahakar-prod-v2 source and ai-sahakar-stage-2026 destination |
+| Storage model | live mutable volume plus historical vault evidence | immutable RustFS generations plus isolated local quarantine/runtime targets |
+| Backup shape | local/legacy snapshots and prior vault material | manifest + SQLite + PDFs/media + derived indexes/cache as content-addressed objects |
+| Cross-dataset copy | ordinary transfers correctly rejected | explicit clone/rebind with confirmation, collision checks, digest verification, and lineage |
+| Search extraction | native PDF extraction only for many documents | native extraction first; bounded local Tesseract OCR for blank/scanned pages |
+| OCR languages | not consistently available in the old path | English + Marathi + Hindi, eng+mar+hin |
+| Index readiness metric | folder-index count could under-report document readiness | document-scoped searchable-PDF ratio; target 1.0 |
+| Runtime activation | no signed active generation in stage | signed atomic pointer mechanism prepared; stage activation still pending |
+| Backup profile | stage backup selector was missing in the degraded state | stage_2026 selected for both restore and backup |
+| Stage route | earlier route returned 404 | HTTPS route is served; /readyz remains 503 until data authority exists |
+| Image identity | mutable or older deployment references | exact repository@sha256 digest; current stage is b71 pending security release |
+| Security release | cryptography 45.0.7 findings | PR #169 upgrades to 48.0.1; post-merge image/Trivy still pending |
+| Public authentication | production accounts requested for stage | public auth/admin exception blocked pending security-owner approval |
+
+## Data and recovery comparison
+
+### Before
+
+The live production volume was the source of truth. A restore target could be
+mistaken for an active target if operators relied on a container health check,
+an HTTP 200, or a volume name without recording its identity. RustFS data,
+application data, indexes, and control evidence were easy to confuse.
+
+### Now
+
+The migration has separate custody boundaries:
+
+    Legacy production
+      prod_flowdocs (read-only source)
+        -> stable snapshot and source manifest
+    RustFS source
+      ai-sahakar-prod-v2
+        -> immutable generation legacy-20260802T085639Z-86288855
+    RustFS stage
+      ai-sahakar-stage-2026
+        -> clone-legacy-20260802T085639Z-86288855
+    Stage local custody
+      restore-quarantine/
+        -> 242 PDFs ready and indexed
+      runtime-generations/
+        -> empty authoritative pointer until signed activation
+
+The stage quarantine is therefore evidence and prepared data, not active
+runtime authority.
+
+## Search and OCR comparison
+
+Before accepting a restored document, native extraction was assumed to be
+enough. Scanned PDFs could appear present while lacking searchable text.
+
+The current flow is:
+
+1. extract native text;
+2. detect pages without usable text;
+3. render only those pages within pixel/page/time limits;
+4. run local Tesseract with English, Marathi, and Hindi packs;
+5. record OCR provenance and extracted text;
+6. chunk and embed using the existing configured workflow;
+7. build/update FAISS and require document readiness;
+8. fail closed if any step is unsafe, incomplete, or unverifiable.
+
+The original PDFs remain the source artifacts. OCR output, chunks, embeddings,
+and FAISS indexes are derived and reproducible state.
+
+## Backup comparison: why the new generation is larger
+
+The new generation is a recovery set, not just a database dump. It includes:
+
+- SQLite database;
+- 242 original PDFs/media artifacts;
+- FAISS and optional Chroma derived artifacts;
+- PDF cache/index metadata where present;
+- a manifest containing counts, schema, hashes, and lineage.
+
+The verified stage clone is 416 objects and 1,093,501,777 bytes. A first
+generation is expected to be larger than SQLite because it preserves the
+documents and search artifacts needed for a usable restore. Later generations
+can deduplicate identical content-addressed objects, but they must still
+publish a complete manifest and verify every referenced object.
+
+## Runtime comparison
+
+| Check | Unsafe interpretation | Current required interpretation |
+| --- | --- | --- |
+| Root route 200 | application is ready | only proxy/web reachability |
+| Container healthy | data is restored | process health only |
+| Quarantine files exist | stage is active | restore evidence only |
+| Profile is configured | backup succeeded | destination selected; receipt still required |
+| Pointer file exists | generation is trusted | verify signature, digest, and readiness |
+| PDF row count | search works | verify extracted text, chunks, embeddings, and indexed state |
+
+## Current pending transition
+
+The next safe sequence is:
+
+    PR #169 merge
+      -> immutable dev image build
+      -> Trivy scan of exact digest
+      -> deploy certified image, retaining b71 rollback
+      -> register activation-ready generation
+      -> signed atomic activation
+      -> verify /readyz and representative searches
+      -> first stage_2026 backup receipt
+      -> isolated data/control round-trip restore
+
+Public authentication remains a separate security decision after technical
+validation. No DNS or production traffic change is part of this transition.
+
+## Living-document maintenance contract
+
+Update this page and STATUS-2026-08-02.md together when any of these changes:
+
+- source volume, source generation, clone generation, dataset, bucket, or
+  manifest evidence;
+- application image digest or release revision;
+- OCR language, engine, bounds, embedding model, or index readiness rule;
+- stage profile, backup receipt, runtime pointer, activation, or rollback;
+- public exposure, authentication, or security-owner decision.
+
+Every update must:
+
+1. change Last verified to the evidence date;
+2. add a dated entry to OPERATIONS_CHANGELOG-2026-08-02.md or its successor;
+3. distinguish observed facts, pending gates, and proposed plans;
+4. preserve previous evidence rather than rewriting it as current;
+5. avoid secrets, document bodies, private credentials, and shortened digests;
+6. update docs/INDEX.md if a new canonical page or diagram is introduced;
+7. run the documentation contract and link/path checks before publication.
+
+When the next dated record is created, rename this page's update trigger to
+point to that successor only after the successor is committed and indexed.
