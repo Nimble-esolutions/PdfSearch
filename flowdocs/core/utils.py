@@ -13,6 +13,7 @@ import traceback
 import logging
 import tempfile
 import time
+from dataclasses import dataclass
 from typing import List, Tuple, Optional, Dict, Any
 
 import fitz  # PyMuPDF
@@ -127,6 +128,12 @@ def truncate_context(text: str, max_words: int = MAX_CONTEXT_WORDS) -> str:
 
 
 # ------------------ PDF extraction (cached per model) ------------------
+@dataclass(frozen=True)
+class PDFExtractionResult:
+    text: str
+    metadata: dict[str, Any]
+
+
 def _ocr_languages() -> str:
     raw = str(getattr(settings, "PDF_OCR_LANGUAGES", "eng+mar") or "").strip()
     languages = [part for part in raw.split("+") if part]
@@ -224,32 +231,58 @@ def extract_text_from_pdf_path(path: str) -> str:
     fails, the caller receives no fabricated text and normal indexing fails
     closed for an image-only document.
     """
+    return extract_pdf_content(path).text
+
+
+def extract_pdf_content(path: str) -> PDFExtractionResult:
+    """Extract text and secret-free OCR provenance for one PDF.
+
+    The metadata records processing posture and page counts only; it never
+    contains document text, OCR output, or provider credentials.
+    """
+    empty = PDFExtractionResult(text="", metadata={"schema_version": 1})
     if not os.path.exists(path):
-        return ""
+        return empty
     page_texts: list[str] = []
     blank_pages: list[tuple[int, object]] = []
     doc = None
     try:
         doc = fitz.open(path)
+        native_text_pages = 0
         for page_number, page in enumerate(doc):
             page_text = (page.get_text("text") or "").strip()
             page_texts.append(page_text)
+            native_text_pages += bool(page_text)
             if not page_text:
                 blank_pages.append((page_number, page))
         ocr_text = _ocr_blank_pages(blank_pages)
         for page_number, text in ocr_text.items():
             page_texts[page_number] = text
+        metadata = {
+            "schema_version": 1,
+            "native_text_page_count": native_text_pages,
+            "page_count": len(page_texts),
+            "ocr_page_count": len(ocr_text),
+            "ocr_pages": sorted(ocr_text),
+            "ocr_languages": _ocr_languages() if blank_pages else "",
+            "ocr_engine": str(getattr(settings, "PDF_OCR_BINARY", "tesseract") or "tesseract"),
+            "ocr_engine_version": str(getattr(settings, "PDF_OCR_ENGINE_VERSION", "runtime") or "runtime"),
+            "ocr_fallback_enabled": bool(getattr(settings, "PDF_OCR_FALLBACK_ENABLED", True)),
+            "confidence_available": False,
+        }
     except SearchDataIntegrityError as exc:
         logger.warning("PDF text extraction failed closed: %s", exc)
-        return ""
+        return empty
     except Exception:
         logger.exception("PDF text extraction failed closed")
-        return ""
+        return empty
     finally:
         if doc is not None:
             doc.close()
-    return "\n".join(text for text in page_texts if text).strip()
-
+    return PDFExtractionResult(
+        text="\n".join(text for text in page_texts if text).strip(),
+        metadata=metadata,
+    )
 
 # ---------------- Embeddings ----------------
 def create_embeddings_for_texts(texts: List[str], batch_size: int = 16) -> List[List[float]]:
@@ -531,7 +564,8 @@ def _precompute_pdf_embeddings(
     Requires PDFFile to have fields: extracted_text (TextField), page_chunks (JSONField), chunk_embeddings (JSONField).
     """
     path = pdf.file.path
-    extracted = extract_text_from_pdf_path(path)
+    extraction = extract_pdf_content(path)
+    extracted = extraction.text
     if not extracted:
         raise SearchDataIntegrityError(f"PDF {pdf.pk} has no extractable text")
 
@@ -550,7 +584,8 @@ def _precompute_pdf_embeddings(
     pdf.text_content = extracted
     pdf.page_chunks = chunks
     pdf.chunk_embeddings = embeddings
-    pdf.save(update_fields=["extracted_text", "text_content", "page_chunks", "chunk_embeddings"])
+    pdf.ocr_metadata = extraction.metadata
+    pdf.save(update_fields=["extracted_text", "text_content", "page_chunks", "chunk_embeddings", "ocr_metadata"])
 
     if not rebuild_index:
         pdf.indexed = False

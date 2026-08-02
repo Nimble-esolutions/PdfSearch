@@ -20,12 +20,18 @@ _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
 def _indexing_ratio() -> float:
     try:
-        from core.models import PDFFile
+        from core.models import PDFFile, SEARCHABLE_PDF_LIFECYCLES
 
-        total = PDFFile.objects.count()
+        total = PDFFile.objects.filter(
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        ).count()
         if total == 0:
             return 1.0
-        indexed = PDFFile.objects.filter(indexed=True).count()
+        indexed = PDFFile.objects.filter(
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+            indexed=True,
+            processing_status="ready",
+        ).count()
         return round(indexed / total, 4)
     except Exception:
         return 0.0
