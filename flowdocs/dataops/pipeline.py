@@ -658,6 +658,20 @@ def reconcile_staged_generation(workspace: str | os.PathLike[str], manifest: Map
         else 0
     )
     indexes = len(list((root / "faiss_indexes").glob("*.index"))) if (root / "faiss_indexes").is_dir() else 0
+    # FAISS artifacts are folder-scoped, while readiness is document-scoped.
+    # Prefer the restored database's searchable-row evidence when the current
+    # schema is present; legacy snapshots fall back to the artifact count.
+    if database.exists():
+        try:
+            with sqlite3.connect(database) as connection:
+                indexed_row_count = connection.execute(
+                    "SELECT COUNT(*) FROM core_pdffile "
+                    "WHERE indexed = 1 AND processing_status = 'ready'"
+                ).fetchone()[0]
+        except sqlite3.DatabaseError:
+            indexed_row_count = None
+        if indexed_row_count is not None:
+            indexes = int(indexed_row_count)
     expected = manifest.get("counts", {}) if isinstance(manifest.get("counts"), Mapping) else {}
     expected_documents = expected.get("documents")
     if isinstance(expected_documents, int) and expected_documents >= 0 and documents != expected_documents:

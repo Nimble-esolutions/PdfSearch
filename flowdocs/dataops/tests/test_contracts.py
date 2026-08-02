@@ -6,6 +6,7 @@ they remain useful while the new control plane is built in parallel.
 
 import json
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 
@@ -70,6 +71,26 @@ class DataOpsEnvironmentContractTests(unittest.TestCase):
                 {"counts": {}},
             )
         self.assertEqual(result["documents"], 1)
+
+    def test_staged_reconciliation_uses_document_searchability_evidence(self):
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            (root / "media" / "pdfs").mkdir(parents=True)
+            (root / "media" / "pdfs" / "one.pdf").write_bytes(b"%PDF")
+            (root / "media" / "pdfs" / "two.PDF").write_bytes(b"%PDF")
+            with sqlite3.connect(root / "db.sqlite3") as connection:
+                connection.execute(
+                    "CREATE TABLE core_pdffile "
+                    "(indexed INTEGER, processing_status TEXT)"
+                )
+                connection.executemany(
+                    "INSERT INTO core_pdffile VALUES (?, ?)",
+                    [(1, "ready"), (0, "queued")],
+                )
+            result = reconcile_staged_generation(root, {"counts": {}})
+        self.assertEqual(result["documents"], 2)
+        self.assertEqual(result["indexes"], 1)
+        self.assertEqual(result["indexing_ratio"], 0.5)
 
     def test_environment_always_wins_over_database_fallback(self):
         for vector in self.vectors["env_precedence"]:
