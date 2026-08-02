@@ -1,5 +1,23 @@
 # Internal legacy data → artifact vault migration
 
+## Current 2026-08-02 execution record
+
+The current migration is not the older 2026-07-25 port described in the
+historical section below. The live legacy source was read-only snapshotted into
+the v2 bucket and dataset, then cloned through the explicit stage rebind path.
+
+    source generation:      legacy-20260802T085639Z-86288855
+    stage generation:       clone-legacy-20260802T085639Z-86288855
+    destination objects:    416
+    destination bytes:      1,093,501,777
+
+The clone was restored to stage quarantine, migrated through
+0027_pdffile_processing_evidence, and reconciled to 242 ready/indexed PDFs.
+Nine PDFs used bounded local OCR fallback with English, Marathi, and Hindi
+language packs. The stage runtime pointer has not been activated and the first
+stage backup has not been published. The authoritative as-of record is
+STATUS-2026-08-02.md.
+
 This runbook describes the developer/operator tool for importing a legacy
 PdfSearch data root into the S3-compatible artifact vault. It is intentionally
 an AI-agent/dev-side repository utility, separate from application startup,

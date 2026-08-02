@@ -1,11 +1,31 @@
 Status: Active
 Audience: Recovery, Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-30
+Last verified: 2026-08-02
 Canonical source: docs/DATA_CUSTODY_AND_PROMOTION.md
 Supersedes: None
 
 # Data Custody and Promotion
+
+## Current 2026-08-02 custody record
+
+The legacy boundary remains authoritative and unchanged: service
+sahakar-dev-frontend-dockerfile-1cubi5, volume prod_flowdocs, and read-only
+application mount /app/flowdocs. The current migration inventory is 242 PDFs,
+46 folders, 7 users, and 29 migrations. Do not confuse these values with the
+older 2026-07-22 active-custody inventory documented below.
+
+The v2 source generation legacy-20260802T085639Z-86288855 was cloned through
+the explicit rebind operation into stage generation
+clone-legacy-20260802T085639Z-86288855. The clone contains 416 verified objects
+totalling 1,093,501,777 bytes. It was restored to quarantine and all 242 PDFs
+were ultimately ready and indexed after bounded OCR processing. The generation
+is not yet the signed active runtime generation; activation, first stage backup,
+and isolated round trip remain separate gates.
+
+Do not record the full manifest digest, object keys, or document contents in
+this page. Use the receipt and the current status record for exact evidence:
+[STATUS-2026-08-02.md](STATUS-2026-08-02.md).
 
 ## Boundary
 

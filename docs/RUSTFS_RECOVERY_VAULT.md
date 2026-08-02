@@ -1,11 +1,29 @@
 Status: Active, constrained
 Audience: Recovery, Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-30
+Last verified: 2026-08-02
 Canonical source: docs/RUSTFS_RECOVERY_VAULT.md
 Supersedes: Earlier claims that S3 restore or scheduled backup is automatic
 
 # RustFS Recovery Vault
+
+## Current rehearsal status
+
+The 2026 recovery lineage has now been exercised against the live legacy
+volume's read-only snapshot. The verified source generation is
+legacy-20260802T085639Z-86288855 in dataset ai-sahakar-prod-v2. The explicit
+clone/rebind destination is clone-legacy-20260802T085639Z-86288855 in dataset
+ai-sahakar-stage-2026, with 416 verified objects totalling 1,093,501,777 bytes.
+
+That clone has been restored into stage quarantine, migrated through
+0027_pdffile_processing_evidence, OCR-processed where native extraction was
+blank, and reconciled so all 242 PDFs are ready and indexed. It has not yet
+been made the signed active runtime generation. The first stage-owned backup
+and isolated round-trip restore are still pending.
+
+For the exact boundary inventory, environment posture, OCR evidence, Compose
+project-name warning, and remaining checklist, see
+[STATUS-2026-08-02.md](STATUS-2026-08-02.md).
 
 ## Audited verdict
 

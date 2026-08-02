@@ -1,5 +1,20 @@
 # Vault Multi-Source Restore
 
+## Current 2026 clone/rebind evidence
+
+The production-v2 source generation
+legacy-20260802T085639Z-86288855 was cloned to the stage dataset as
+clone-legacy-20260802T085639Z-86288855. The operation verified 416 objects and
+1,093,501,777 bytes, rewrote dataset-bound keys and references, and retained
+parent lineage. Source immutability and normal dataset-mismatch protection
+remain required.
+
+The destination restore is quarantine-ready after migrations, bilingual OCR,
+embeddings, and indexing for all 242 PDFs. Clone/rebind does not activate a
+runtime pointer, and restore does not publish a stage backup. Those remain
+explicit signed activation and backup operations. See
+STATUS-2026-08-02.md for current state and exact pending gates.
+
 The vault restore path prepares a verified runtime generation; it never
 activates it. Runtime activation remains a separate, disabled-by-default
 control-plane operation.

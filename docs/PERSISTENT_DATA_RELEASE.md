@@ -6,6 +6,21 @@ Canonical source: docs/PERSISTENT_DATA_RELEASE.md
 Supersedes: None
 
 # Persistent Data Release Contract
+## Current-state pointer
+
+For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
+Earlier dated sections in this page remain historical evidence and must not
+be used as current deployment state without reconciling them to that record.
+
+## 2026 stage handoff
+
+The current release candidate is the cloned stage generation, not the older
+reconciled active-custody dataset described in the historical sections below.
+The source generation is legacy-20260802T085639Z-86288855 and the stage clone is
+clone-legacy-20260802T085639Z-86288855. It is quarantine-ready after migration,
+OCR fallback, embeddings, and indexing for 242 PDFs, but it has no signed
+runtime activation or stage backup receipt yet.
+
 
 ## Scope
 

@@ -1,11 +1,18 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-25
+Last verified: 2026-08-02
 Canonical source: docs/INDEX.md
 Supersedes: None
 
 # Documentation Index
+
+## Current operational status
+
+- [STATUS-2026-08-02.md](STATUS-2026-08-02.md) — canonical as-of record for
+  the legacy snapshot, RustFS v2 publication and clone, stage quarantine/OCR
+  evidence, current environment posture, security remediation, and remaining
+  activation/backup/round-trip gates.
 
 This index routes readers by task. The metadata at the top of each maintained
 document identifies its status, audience, owner, verification date, canonical
@@ -124,6 +131,12 @@ Historical documents remain for context and are not deployment instructions:
 - [`admin-operator-workflow.mmd`](diagrams/admin-operator-workflow.mmd) — admin document-to-search readiness flow
 
 ## Document Lifecycle
+
+Current operational diagrams:
+
+- [legacy-to-stage-2026.mmd](diagrams/legacy-to-stage-2026.mmd)
+- [stage-recovery-state.mmd](diagrams/stage-recovery-state.mmd)
+- [ocr-index-lifecycle.mmd](diagrams/ocr-index-lifecycle.mmd)
 
 - `Active` is the current operational or user-facing source.
 - `Proposed` describes a target that is not emitted or enforced by current tooling.

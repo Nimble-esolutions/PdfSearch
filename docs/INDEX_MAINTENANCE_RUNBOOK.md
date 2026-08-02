@@ -4,11 +4,25 @@ Status: Active
 
 Owner: Operations
 
-Last reviewed: 2026-07-28
+Last reviewed: 2026-08-02
 
 Use **Vault Operations → Documents & Indexes**. This section changes or checks
 local content/search artifacts; it never publishes, promotes, restores, or
 moves remote Vault authority.
+
+## 2026 migration indexing evidence
+
+The cloned stage quarantine generation contained 242 PDFs. Native extraction
+was retained as the first path; nine PDFs initially needed the bounded OCR
+fallback. The configured local OCR languages are English, Marathi, and Hindi
+(eng+mar+hin). After OCR, chunking, embedding, and index reconciliation, all
+242 PDFs were processing-ready and indexed. The document-scoped readiness ratio
+is 1.0; folder-index count must not be used as the denominator for this metric.
+
+OCR or embedding work is derived state. It never replaces the original PDF,
+never mutates the legacy source, and must not be treated as a runtime
+activation. See STATUS-2026-08-02.md for the full quarantine and activation
+handoff.
 
 | Operation | When to use | External embeddings |
 |---|---|---|

@@ -1,11 +1,34 @@
 Status: Active
 Audience: Developer, Release
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-08-02
 Canonical source: docs/SECURITY_SCAN.md
 Supersedes: None
 
 # Image Security Scanning
+
+## Current 2026-08-02 remediation
+
+Trivy reported two HIGH findings against cryptography 45.0.7:
+
+| Finding | Fixed version |
+| --- | ---: |
+| CVE-2026-26007 | 46.0.5 |
+| GHSA-537c-gmf6-5ccf | 48.0.1 |
+
+The repository remediation is PR #169. It constrains the application to
+cryptography >=48.0.1,<49.0.0 and refreshes only the corresponding
+requirements-web.lock entry and hashes. The hash-enforced resolver passed.
+PR contract, source/deployment contract, and pre-merge certification passed.
+
+The immutable candidate and Trivy scan intentionally run only after a push to
+dev, so they are skipped on the pull request. Do not call PR green proof that
+the new image is clean; merge, build the digest, scan that exact digest, and
+record the result before stage deployment.
+
+The stage currently remains on the previous certified b71 image and is not
+activated by this dependency change. Retain that digest as the rollback
+reference until the new image passes smoke, lifecycle, and Trivy gates.
 
 ## Current CI Behavior
 

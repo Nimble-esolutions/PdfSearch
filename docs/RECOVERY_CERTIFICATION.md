@@ -1,10 +1,23 @@
 Status: Active, operator-controlled
 Audience: Recovery, Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-30
+Last verified: 2026-08-02
 Canonical source: docs/RECOVERY_CERTIFICATION.md
 
 # Isolated Recovery Certification
+
+## Current rehearsal handoff
+
+The stage quarantine preparation has passed the local data gates for the
+cloned generation: migrations through 0027, SQLite integrity, case-insensitive
+PDF inventory, bilingual OCR fallback, extracted text, chunks, embeddings, and
+indexed readiness for all 242 PDFs. This is preparation evidence only.
+
+The isolated round-trip certification has not yet run because stage activation
+and the first stage_2026 backup receipt are still pending. The round-trip target
+must use separate disposable data and control volumes and must never reuse the
+active stage volumes. The complete as-of record is
+[STATUS-2026-08-02.md](STATUS-2026-08-02.md).
 
 This procedure proves recovery mechanics without mounting or changing the live
 application, control, Redis, or legacy volumes. It is a certification drill,

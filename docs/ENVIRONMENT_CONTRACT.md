@@ -1,11 +1,35 @@
 Status: Active
 Audience: Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-07-25
+Last verified: 2026-08-02
 Canonical source: docs/ENVIRONMENT_CONTRACT.md
 Supersedes: env.minimal, env.template
 
 # Environment Contract
+
+## 2026 stage applied posture (2026-08-02)
+
+The current stage deployment is intentionally fail-closed before activation:
+
+    APP_ENV=staging
+    DATA_MODE=local
+    DATA_BOOTSTRAP_MODE=empty
+    DATASET_ID=ai-sahakar-stage-2026
+    AUTHORITATIVE_DATASET_ID=ai-sahakar-stage-2026
+    DATAOPS_ENV_PROFILES=production,stage_2026
+    DATAOPS_RESTORE_PROFILE=stage_2026
+    DATAOPS_BACKUP_PROFILE=stage_2026
+    BACKUP_ROLE=reader
+    BACKUP_SYNC_MODE=manual
+    STAGING_INITIAL_ACTIVATION_ENABLED=0
+    STAGING_RUNTIME_ACTIVATION_ENABLED=0
+
+The production source profile points to the v2 bucket/dataset and the stage
+profile points to the stage-owned bucket/dataset. Credential and signing-key
+values are secret-provider material and must never appear in examples.
+Environment edits require a controlled Compose recreate; the Dokploy project
+name must be preserved so named data/control volumes cannot be replaced by
+timestamp-derived blank volumes. See STATUS-2026-08-02.md.
 
 `.env.example` is the only tracked environment example. Deleted duplicate
 templates (`env.minimal`, `env.template`) had stale PostgreSQL and loopback

@@ -4,6 +4,12 @@ Source conversion: workspace `.kilo` and `.opencode` rules
 Last updated: 2026-07-24
 
 # Codex Operations Guide
+## Current-state pointer
+
+For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
+Earlier dated sections in this page remain historical evidence and must not
+be used as current deployment state without reconciling them to that record.
+
 
 This guide converts the workspace Kilo/OpenCode operations bundle into a
 Codex-friendly runbook for the tracked PdfSearch repository. Repository-local

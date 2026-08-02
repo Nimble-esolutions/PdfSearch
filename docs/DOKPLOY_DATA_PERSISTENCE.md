@@ -6,6 +6,12 @@ Canonical source: This document
 Supersedes: None
 
 # Dokploy Deployments and Data Persistence
+## Current-state pointer
+
+For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
+Earlier dated sections in this page remain historical evidence and must not
+be used as current deployment state without reconciling them to that record.
+
 
 ## Short answer
 
