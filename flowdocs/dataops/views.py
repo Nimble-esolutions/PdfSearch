@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import secrets
 import os
-import hashlib
 from datetime import datetime, timezone
 
 from django.contrib.auth.decorators import login_required
@@ -61,7 +60,7 @@ def _profile_state():
     return [profile.redacted() for profile in resolved], "; ".join(issue.message for issue in issues) if issues else error
 
 
-def _state(request):
+def _state(request, *, include_legacy_advanced=False):
     resolved, selectors, configuration_issues, config_error = _resolved_profile_state()
     profiles = [profile.redacted() for profile in resolved]
     pending = MaintenanceJob.objects.filter(status__in=("queued", "running", "retrying")).count()
@@ -87,7 +86,7 @@ def _state(request):
             "health": "configured" if not configuration_issues else "attention",
             "last_successful_operation": next(({"id": str(item.public_id), "kind": item.kind, "finished_at": item.finished_at} for item in recent if item.state == DataOperation.State.SUCCEEDED and item.profile_key == key), None),
         })
-    return {
+    state = {
         "posture": "ready" if readiness.get("status") in {"ok", "not_configured"} and not issues else "attention",
         "status_label": "Data is ready" if readiness.get("status") in {"ok", "not_configured"} and not issues else "Configuration needs review",
         "condition": "The automatic pipeline is available." if not issues else (config_error or "Review the highlighted profile configuration."),
@@ -107,12 +106,22 @@ def _state(request):
         "profiles": profiles,
         "permissions": {"can_refresh": _can_act(request), "can_backup": _can_act(request), "can_restore": _can_act(request), "can_configure": _can_act(request), "can_export_env": _can_act(request)},
     }
+    if include_legacy_advanced:
+        try:
+            maintenance = workbench_maintenance_state(selected_plan_id=request.GET.get("plan", ""), selected_job_id=request.GET.get("job", ""))
+        except Exception:
+            maintenance = {"state_version": "", "capabilities": {}, "folders": [], "plans": [], "jobs": [], "selected_plan": None, "selected_job": None}
+        decorate_operator_state(maintenance)
+        state["maintenance"] = maintenance
+        state["state_version"] = maintenance.get("state_version", "")
+    return state
 
 
 @login_required
 def workbench(request):
-    state = _state(request)
-    return render(request, "dataops/workbench.html", {"state": state, "state_url": reverse("dataops:state"), "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("overview")})
+    legacy_advanced = bool(request.GET.get("section"))
+    state = _state(request, include_legacy_advanced=legacy_advanced)
+    return render(request, "dataops/workbench.html", {"state": state, "state_url": reverse("dataops:state"), "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("overview"), "legacy_advanced": legacy_advanced})
 
 
 @login_required

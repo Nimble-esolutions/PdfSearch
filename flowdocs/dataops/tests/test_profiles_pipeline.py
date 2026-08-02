@@ -111,6 +111,10 @@ class ProfileManifestTests(unittest.TestCase):
         self.assertEqual(profiles[0].namespace, "prod")
         self.assertNotIn("secret_key", profiles[0].redacted())
 
+    def test_provider_is_inferred_for_legacy_self_hosted_manifest(self):
+        profiles = resolve_profiles({"DATAOPS_PROFILE_MANIFEST": '[{"name":"local","role":"both","endpoint":"http://rustfs:9000","bucket":"data","dataset_id":"dataset","namespace":"local","credential_ref":"LOCAL"}]'})
+        self.assertEqual(profiles[0].provider, "rustfs")
+
     def test_stored_profile_is_used_when_environment_manifest_is_absent(self):
         profiles = resolve_profiles(
             {},

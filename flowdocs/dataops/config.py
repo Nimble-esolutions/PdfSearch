@@ -18,6 +18,7 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
+from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -30,6 +31,27 @@ ROLES = frozenset({"backup", "restore", "both"})
 SOURCES = frozenset({"environment", "stored", "default"})
 PROVIDERS = frozenset({"aws", "cloudflare_r2", "backblaze_b2", "wasabi", "digitalocean", "gcs", "rustfs", "minio", "ceph", "garage", "seaweedfs", "generic"})
 ADDRESSING_STYLES = frozenset({"auto", "virtual", "path"})
+
+
+def infer_provider(endpoint: str) -> str:
+    host = (urlparse(endpoint).hostname or "").lower()
+    if host == "rustfs" or "rustfs" in host:
+        return "rustfs"
+    if host == "minio" or "minio" in host:
+        return "minio"
+    if host.endswith("amazonaws.com"):
+        return "aws"
+    if host.endswith("r2.cloudflarestorage.com"):
+        return "cloudflare_r2"
+    if host.endswith("backblazeb2.com"):
+        return "backblaze_b2"
+    if host.endswith("wasabisys.com"):
+        return "wasabi"
+    if host.endswith("digitaloceanspaces.com"):
+        return "digitalocean"
+    if host.endswith("storage.googleapis.com"):
+        return "gcs"
+    return "generic"
 
 
 def _env_bool(name: str, default: bool = False, environ: Mapping[str, str] | None = None) -> bool:
@@ -257,7 +279,7 @@ def _profile_from_entry(entry: Mapping[str, Any], env: Mapping[str, str], *, sou
     namespace = _namespace(value("namespace", "prefix"), fallback=key)
     credential = value("credential_ref", "credential_prefix")
     enabled = _as_bool(entry.get("enabled", env.get(prefix + "ENABLED")), field=f"{prefix}ENABLED")
-    provider = value("provider", default="generic").lower()
+    provider = value("provider", default=infer_provider(value("endpoint"))).lower()
     if provider not in PROVIDERS:
         raise ImproperlyConfigured(f"{prefix}PROVIDER is unsupported")
     addressing_style = value("addressing_style", default="auto").lower()
