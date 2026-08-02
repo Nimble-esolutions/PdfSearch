@@ -106,6 +106,36 @@ Visual sources:
 [stage-recovery-state.mmd](docs/diagrams/stage-recovery-state.mmd), and
 [ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd).
 
+### Repository map: where to start
+
+| Area | Owns | Start with |
+| --- | --- | --- |
+| Django shell | settings, URLs, WSGI/ASGI, runtime paths | flowdocs/flowdocs/ |
+| Safety and lifecycle | environment identity, side-effect policy, restore, activation, leases | flowdocs/core/ |
+| Document intelligence | PDF extraction, OCR fallback, chunking, embeddings, FAISS/Chroma | flowdocs/data/ |
+| Data Operations | profile selection, backup/restore routes, operation contracts, readiness | flowdocs/dataops/ |
+| Vault Operations | control database, workbench, receipts, signed activation, supervisors | flowdocs/vaultops/ |
+| Delivery and operations | migration, recovery certification, CI contracts, parity checks | scripts/ |
+| Verification | browser behavior, RustFS/MinIO lifecycle, restore and process-death gates | browser_tests/ and integration_tests/ |
+| Documentation | contracts, runbooks, evidence, architecture and lifecycle diagrams | docs/ |
+
+For a change, identify the owning row first, then trace callers and tests
+before editing. The graph-backed architecture query is the source for this
+grouping; the tree below is a navigation aid, not a claim that every file has
+the same runtime role.
+
+```mermaid
+flowchart LR
+  U["Users / operators"] --> W["Django web + workbench"]
+  W --> D["flowdocs/data<br/>PDF, OCR, embeddings, indexes"]
+  W --> O["flowdocs/dataops<br/>profiles + operations"]
+  O --> V["flowdocs/vaultops<br/>receipts + signed activation"]
+  V --> R["RustFS<br/>immutable datasets"]
+  D --> Q["SQLite + media + FAISS + Chroma"]
+  W --> C["Redis<br/>cache + queue"]
+  T["scripts + browser_tests + integration_tests"] --> W
+```
+
 ### Project structure
 
     flowdocs/
