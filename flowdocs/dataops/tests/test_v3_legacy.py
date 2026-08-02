@@ -33,6 +33,7 @@ from dataops.tests.test_v3_backup import FakeS3
 from dataops.v3_config import ConnectionView
 from dataops.v3_legacy import (
     V3LegacyImportError,
+    _database_evidence,
     discover_legacy_generations,
     import_legacy_generation,
     legacy_manifest_key,
@@ -210,9 +211,45 @@ class LegacyV3ImportTests(unittest.TestCase):
         self.assertEqual(manifest["counts"]["documents"], 2)
         self.assertEqual(manifest["counts"]["folders"], 1)
         self.assertEqual(manifest["counts"]["users"], 1)
+        self.assertEqual(manifest["counts"]["migrations"], 1)
         self.assertTrue(manifest["components"]["faiss"]["rebuild_required"])
         self.assertFalse(receipt.dataset_id == self.source_dataset)
         self.assertEqual(self.source.objects, source_before)
+
+    def test_database_evidence_counts_the_custom_user_table(self):
+        database = self.root / "custom-users.sqlite3"
+        with sqlite3.connect(database) as db:
+            db.execute("CREATE TABLE core_pdffile (id INTEGER PRIMARY KEY)")
+            db.execute("CREATE TABLE core_folder (id INTEGER PRIMARY KEY)")
+            db.execute("CREATE TABLE core_customuser (id INTEGER PRIMARY KEY)")
+            db.executemany(
+                "INSERT INTO core_customuser DEFAULT VALUES",
+                [(), (), ()],
+            )
+            db.execute("CREATE TABLE django_migrations (app TEXT, name TEXT)")
+        evidence = _database_evidence(database)
+        self.assertEqual(evidence["users"], 3)
+
+    def test_reuse_refreshes_stale_evidence_without_redownloading(self):
+        generation = self.load()
+        first = materialize_legacy_generation(
+            generation,
+            client=self.source,
+            quarantine_root=self.root / "quarantine-refresh",
+        )
+        receipt_path = Path(first["workspace"]) / ".dataops-legacy-import.json"
+        stale = json.loads(receipt_path.read_text())
+        stale.pop("evidence_version")
+        stale["database"]["users"] = 0
+        receipt_path.write_text(json.dumps(stale))
+        second = materialize_legacy_generation(
+            generation,
+            client=self.source,
+            quarantine_root=self.root / "quarantine-refresh",
+        )
+        self.assertTrue(second["reused"])
+        self.assertEqual(second["evidence_version"], 2)
+        self.assertEqual(second["database"]["users"], 1)
 
     def test_materialization_and_destination_publication_are_idempotent(self):
         generation = self.load()

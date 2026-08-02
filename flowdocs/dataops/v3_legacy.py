@@ -23,6 +23,7 @@ from .v3_storage import put_file_immutable, verify_remote_object
 
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 MAX_DISCOVERED_GENERATIONS = 1_000
+LEGACY_EVIDENCE_VERSION = 2
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SAFE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 LEGACY_KIND_MAP = {
@@ -374,7 +375,11 @@ def _database_evidence(path: Path) -> dict[str, Any]:
             )
             documents = count("core_pdffile")
             folders = count("core_folder")
-            users = count("auth_user")
+            users = count(
+                "core_customuser"
+                if "core_customuser" in tables
+                else "auth_user"
+            )
     except sqlite3.Error as exc:
         raise V3LegacyImportError("legacy_database_invalid") from exc
     if integrity != "ok":
@@ -423,7 +428,31 @@ def _existing_materialization(
                 size += len(chunk)
         if size != item["size"] or hasher.hexdigest() != item["sha256"]:
             return None
-    return receipt
+    database = _database_evidence(final / "db.sqlite3")
+    pdf_count = sum(
+        item["kind"] == "media" and item["path"].lower().endswith(".pdf")
+        for item in generation.manifest["files"]
+    )
+    if database["documents"] != pdf_count:
+        raise V3LegacyImportError("legacy_document_count_mismatch")
+    refreshed = {
+        "schema_version": 3,
+        "evidence_version": LEGACY_EVIDENCE_VERSION,
+        "verified": True,
+        "legacy_dataset_id": generation.dataset_id,
+        "legacy_generation_id": generation.generation_id,
+        "legacy_manifest_sha256": generation.manifest_sha256,
+        "object_count": len(generation.manifest["files"]),
+        "byte_count": sum(item["size"] for item in generation.manifest["files"]),
+        "database": database,
+        "pdf_count": pdf_count,
+    }
+    if receipt != refreshed:
+        temporary = receipt_path.with_name(f".{receipt_path.name}.partial")
+        temporary.write_bytes(canonical_json_bytes(refreshed) + b"\n")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, receipt_path)
+    return refreshed
 
 
 def materialize_legacy_generation(
@@ -472,6 +501,7 @@ def materialize_legacy_generation(
             raise V3LegacyImportError("legacy_document_count_mismatch")
         receipt = {
             "schema_version": 3,
+            "evidence_version": LEGACY_EVIDENCE_VERSION,
             "verified": True,
             "legacy_dataset_id": generation.dataset_id,
             "legacy_generation_id": generation.generation_id,
@@ -601,6 +631,7 @@ def import_legacy_generation(
             "documents": int(database.get("documents", 0)),
             "folders": int(database.get("folders", 0)),
             "users": int(database.get("users", 0)),
+            "migrations": int(database.get("migration_count", 0)),
             "objects": len(files),
         },
         lineage={
