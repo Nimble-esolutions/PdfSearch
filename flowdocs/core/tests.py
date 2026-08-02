@@ -1238,6 +1238,7 @@ class DashboardTests(TestCase):
             self.assertEqual(response.status_code, 302)
             pdf = PDFFile.objects.get(title="Unavailable embedding service")
             self.assertEqual(pdf.lifecycle, "processing")
+            self.assertEqual(pdf.processing_status, "queued")
             self.assertFalse(pdf.indexed)
             queue.assert_called_once()
             self.assertEqual(queue.call_args.kwargs["kind"], "process_pdf")

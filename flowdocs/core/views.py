@@ -1208,7 +1208,18 @@ def dashboard(request, folder_id=None):
                         pdf.save()
                         pdf.lifecycle = "processing"
                         pdf.indexed = False
-                        pdf.save(update_fields=["lifecycle", "indexed"])
+                        pdf.processing_status = "queued"
+                        pdf.processing_error_code = ""
+                        pdf.processing_error_message = ""
+                        pdf.save(
+                            update_fields=[
+                                "lifecycle",
+                                "indexed",
+                                "processing_status",
+                                "processing_error_code",
+                                "processing_error_message",
+                            ]
+                        )
                         queue_job(
                             kind="process_pdf",
                             requested_by=request.user,

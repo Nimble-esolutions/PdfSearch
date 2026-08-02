@@ -728,10 +728,37 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
                 if item.pdf is None:
                     raise SearchDataIntegrityError("PDF no longer exists")
                 prior_lifecycle = item.pdf.lifecycle
-                PDFFile.objects.filter(pk=item.pdf.pk).update(lifecycle="processing")
+                PDFFile.objects.filter(pk=item.pdf.pk).update(
+                    lifecycle="processing",
+                    processing_status="running",
+                    processing_attempts=item.attempts,
+                    processing_started_at=timezone.now(),
+                    processing_error_code="",
+                    processing_error_message="",
+                )
                 item.pdf.refresh_from_db()
                 precompute_pdf_embeddings(item.pdf, rebuild_index=False)
+                item.pdf.refresh_from_db(fields=["chunk_embeddings"])
+                embeddings = item.pdf.chunk_embeddings or []
+                embedding_dimension = (
+                    len(embeddings[0])
+                    if embeddings and isinstance(embeddings[0], list)
+                    else None
+                )
+                PDFFile.objects.filter(pk=item.pdf.pk).update(
+                    embedding_provider="openai",
+                    embedding_model=getattr(
+                        settings, "OPENAI_EMBED_MODEL", "text-embedding-3-small"
+                    ),
+                    embedding_dimension=embedding_dimension,
+                )
                 PDFFile.objects.filter(pk=item.pdf.pk).update(lifecycle="ready")
+                PDFFile.objects.filter(pk=item.pdf.pk).update(
+                    processing_status="ready",
+                    processing_finished_at=timezone.now(),
+                    processing_error_code="",
+                    processing_error_message="",
+                )
                 item.pdf.refresh_from_db()
             elif job.kind == "repair_indexes":
                 if item.folder is None:
@@ -749,7 +776,11 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
                 and item.pdf_id
             ):
                 PDFFile.objects.filter(pk=item.pdf_id, lifecycle="processing").update(
-                    lifecycle=locals().get("prior_lifecycle", "uploaded")
+                    lifecycle=locals().get("prior_lifecycle", "uploaded"),
+                    processing_status="failed",
+                    processing_finished_at=timezone.now(),
+                    processing_error_code=_error_code(exc),
+                    processing_error_message=str(exc)[:2000],
                 )
             if (
                 job.kind in PDF_PROCESSING_JOB_KINDS
