@@ -1218,32 +1218,54 @@ class DashboardTests(TestCase):
         self.assertContains(response, 'class="btn-close"')
         self.assertContains(response, 'aria-label="Close"')
 
-    def test_upload_failure_rolls_back_row_and_stored_file(self):
+    @patch("core.views.queue_job")
+    def test_upload_queues_processing_and_keeps_pdf_persisted(self, queue):
         folder = Folder.objects.create(name="Upload failures", created_by=self.user)
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
-            with patch(
-                "core.views.precompute_pdf_embeddings",
-                side_effect=RuntimeError("embedding service unavailable"),
-            ):
-                self.client.force_login(self.user)
-                response = self.client.post(
-                    reverse("dashboard_folder", args=[folder.pk]),
-                    {
-                        "title": "Unavailable embedding service",
-                        "file": SimpleUploadedFile(
-                            "unavailable.pdf",
-                            b"%PDF-1.7\nvalid upload fixture",
-                            content_type="application/pdf",
-                        ),
-                    },
-                )
+            self.client.force_login(self.user)
+            response = self.client.post(
+                reverse("dashboard_folder", args=[folder.pk]),
+                {
+                    "title": "Unavailable embedding service",
+                    "file": SimpleUploadedFile(
+                        "unavailable.pdf",
+                        b"%PDF-1.7\nvalid upload fixture",
+                        content_type="application/pdf",
+                    ),
+                },
+            )
+
+            self.assertEqual(response.status_code, 302)
+            pdf = PDFFile.objects.get(title="Unavailable embedding service")
+            self.assertEqual(pdf.lifecycle, "processing")
+            self.assertFalse(pdf.indexed)
+            queue.assert_called_once()
+            self.assertEqual(queue.call_args.kwargs["kind"], "process_pdf")
+            self.assertEqual(queue.call_args.kwargs["pdfs"], [pdf])
+            self.assertTrue(any(path.is_file() for path in Path(media_root).rglob("*")))
+
+    @patch("core.views.queue_job", side_effect=RuntimeError("queue unavailable"))
+    def test_upload_queue_failure_rolls_back_row_and_stored_file(self, queue):
+        folder = Folder.objects.create(name="Queue failures", created_by=self.user)
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self.client.force_login(self.user)
+            response = self.client.post(
+                reverse("dashboard_folder", args=[folder.pk]),
+                {
+                    "title": "Queue unavailable",
+                    "file": SimpleUploadedFile(
+                        "queue-failure.pdf",
+                        b"%PDF-1.7\nvalid upload fixture",
+                        content_type="application/pdf",
+                    ),
+                },
+            )
 
             self.assertEqual(response.status_code, 400)
             self.assertContains(response, "No document was saved", status_code=400)
-            self.assertFalse(
-                PDFFile.objects.filter(title="Unavailable embedding service").exists()
-            )
+            self.assertFalse(PDFFile.objects.filter(title="Queue unavailable").exists())
             self.assertFalse(any(path.is_file() for path in Path(media_root).rglob("*")))
+            queue.assert_called_once()
 
     def test_malformed_upload_is_rejected_before_persistence(self):
         folder = Folder.objects.create(name="Malformed uploads", created_by=self.user)

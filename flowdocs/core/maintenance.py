@@ -25,6 +25,13 @@ from .utils import SearchDataIntegrityError, build_or_load_faiss_index_for_folde
 from .namespace import KeyBuilder
 from .registration import RegistrationError
 
+PDF_PROCESSING_JOB_KINDS = {
+    "process_pdf",
+    "reindex_needed",
+    "reindex_all",
+    "reindex_selected",
+}
+
 MEDIA_QUARANTINE_REASONS = {
     "missing_after_inventory",
     "custody_restore_pending",
@@ -717,7 +724,7 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
         item.error_message = ""
         item.save(update_fields=["status", "attempts", "started_at", "error_code", "error_message"])
         try:
-            if job.kind in {"reindex_needed", "reindex_all", "reindex_selected"}:
+            if job.kind in PDF_PROCESSING_JOB_KINDS:
                 if item.pdf is None:
                     raise SearchDataIntegrityError("PDF no longer exists")
                 prior_lifecycle = item.pdf.lifecycle
@@ -738,14 +745,14 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
                 )
         except Exception as exc:
             if (
-                job.kind in {"reindex_needed", "reindex_all", "reindex_selected"}
+                job.kind in PDF_PROCESSING_JOB_KINDS
                 and item.pdf_id
             ):
                 PDFFile.objects.filter(pk=item.pdf_id, lifecycle="processing").update(
                     lifecycle=locals().get("prior_lifecycle", "uploaded")
                 )
             if (
-                job.kind in {"reindex_needed", "reindex_all", "reindex_selected"}
+                job.kind in PDF_PROCESSING_JOB_KINDS
                 and item.pdf is not None
                 and _has_stored_artifacts(item.pdf)
             ):
@@ -778,7 +785,7 @@ def run_job(job: MaintenanceJob) -> MaintenanceJob:
 
         job.save(update_fields=["completed_items", "failed_items", "updated_at"])
 
-    if job.kind in {"reindex_needed", "reindex_all", "reindex_selected"}:
+    if job.kind in PDF_PROCESSING_JOB_KINDS:
         completed_folder_ids = set(job.options.get("completed_folder_ids", []))
         all_folder_ids = set(
             job.items.exclude(folder_id=None).values_list("folder_id", flat=True)

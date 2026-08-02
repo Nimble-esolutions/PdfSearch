@@ -175,6 +175,7 @@ class MaintenanceJob(models.Model):
         ("reindex_needed", "Reindex needed"),
         ("reindex_all", "Reindex all"),
         ("reindex_selected", "Reindex selected"),
+        ("process_pdf", "Process uploaded PDF"),
         ("repair_indexes", "Repair stored indexes"),
         ("sync_generation", "Sync generation"),
         ("restore_generation", "Restore generation"),

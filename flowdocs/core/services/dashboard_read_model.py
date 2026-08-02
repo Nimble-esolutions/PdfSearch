@@ -14,6 +14,7 @@ from core.models import (
     SEARCHABLE_PDF_LIFECYCLES,
 )
 from core.maintenance_plans import LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS
+from core.maintenance import PDF_PROCESSING_JOB_KINDS
 from core.operator_presentation import decorate_dashboard_state
 
 
@@ -21,6 +22,7 @@ CATEGORY_PAGE_SIZE = 24
 ATTENTION_LIMIT = 6
 ACTIVE_JOB_LIMIT = 5
 RECENT_INTAKE_LIMIT = 5
+LOCAL_DASHBOARD_JOB_KINDS = set(LOCAL_MAINTENANCE_JOB_KINDS) | PDF_PROCESSING_JOB_KINDS
 
 
 @dataclass(frozen=True)
@@ -261,13 +263,13 @@ def build_dashboard_state(*, user, data):
         jobs = list(
             MaintenanceJob.objects.select_related("requested_by")
             .filter(
-                kind__in=LOCAL_MAINTENANCE_JOB_KINDS,
+                kind__in=LOCAL_DASHBOARD_JOB_KINDS,
                 status__in={"queued", "running", "cancel_requested"},
             )
             .order_by("-updated_at", "-pk")[:ACTIVE_JOB_LIMIT]
         )
         failed_job_count = MaintenanceJob.objects.filter(
-            kind__in=LOCAL_MAINTENANCE_JOB_KINDS,
+            kind__in=LOCAL_DASHBOARD_JOB_KINDS,
             status="failed",
         ).count()
         vault_posture = authority_summary

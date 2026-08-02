@@ -84,7 +84,6 @@ from .operator_presentation import present_reason
 from datetime import datetime
 from .utils import (
     detect_language,
-    precompute_pdf_embeddings,
     build_or_load_faiss_index_for_folder,
     search_pdfs_fast,
     is_general_query,
@@ -1184,7 +1183,7 @@ def disclaimer_view(request):
     return render(request, "disclaimer.html", {"title": "Disclaimer", "legal_navigation": LEGAL_NAVIGATION})
 
 
-# -------------- Dashboard upload: call precompute on upload --------------
+# -------------- Dashboard upload: queue durable processing --------------
 @login_required
 def dashboard(request, folder_id=None):
     role = getattr(request.user, "role", "user")
@@ -1207,11 +1206,17 @@ def dashboard(request, folder_id=None):
                 try:
                     with transaction.atomic():
                         pdf.save()
-                        # Keep extraction, embeddings, and index construction in
-                        # the same transaction as the PDF row.
-                        precompute_pdf_embeddings(pdf)
+                        pdf.lifecycle = "processing"
+                        pdf.indexed = False
+                        pdf.save(update_fields=["lifecycle", "indexed"])
+                        queue_job(
+                            kind="process_pdf",
+                            requested_by=request.user,
+                            pdfs=[pdf],
+                            options={"trigger": "dashboard_upload"},
+                        )
                 except Exception:
-                    logger.exception("PDF upload preprocessing or indexing failed")
+                    logger.exception("PDF upload queueing failed")
                     try:
                         if pdf.pk:
                             pdf.delete()
@@ -1221,7 +1226,7 @@ def dashboard(request, folder_id=None):
                         logger.exception("Failed to clean up PDF after preprocessing failure")
                     form.add_error(
                         None,
-                        "PDF upload failed during preprocessing or indexing. "
+                        "PDF upload could not be queued. "
                         "No document was saved; please try again.",
                     )
                     pdfs, folder_stats = folder_cockpit_context(request.user, folder)

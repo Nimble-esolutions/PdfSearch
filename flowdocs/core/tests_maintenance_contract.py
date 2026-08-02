@@ -802,6 +802,20 @@ class MaintenanceWorkerGroupingTests(TestCase):
             {str(self.folder.pk): 1},
         )
 
+    @patch("core.maintenance._repair_folder")
+    @patch("core.maintenance.precompute_pdf_embeddings")
+    def test_process_pdf_uses_the_durable_worker_path(self, precompute, repair):
+        pdf = self.pdfs[0]
+        pdf.lifecycle = "processing"
+        pdf.save(update_fields=["lifecycle"])
+        job = queue_job(kind="process_pdf", requested_by=self.user, pdfs=[pdf])
+
+        finished = run_job(job)
+
+        self.assertEqual(finished.status, "completed")
+        precompute.assert_called_once_with(pdf, rebuild_index=False)
+        repair.assert_called_once_with(self.folder)
+
     @patch(
         "core.maintenance.precompute_pdf_embeddings",
         side_effect=RuntimeError("embedding unavailable"),
