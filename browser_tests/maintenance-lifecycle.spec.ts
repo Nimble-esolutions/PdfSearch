@@ -2,13 +2,16 @@ import { test, expect, type Page } from '@playwright/test';
 
 const phase = process.env.MAINTENANCE_E2E_PHASE || 'queue';
 
-async function login(page: Page, next = '/dashboard/operations/?section=maintenance') {
+async function login(page: Page, next = '/dashboard/data-operations/advanced/') {
   await page.goto(`/login/?next=${encodeURIComponent(next)}`);
   const form = page.locator('input[name="username"]').locator('xpath=ancestor::form');
   await form.locator('input[name="username"]').fill('ci-admin');
   await form.locator('input[name="password"]').fill('ci-only-password-not-for-production');
+  const destination = next.startsWith('/dashboard/data-operations/')
+    ? '**/dashboard/data-operations/**'
+    : '**/dashboard/operations/**';
   await Promise.all([
-    page.waitForURL('**/dashboard/operations/**'),
+    page.waitForURL(destination),
     form.locator('button[type="submit"]').click(),
   ]);
 }
@@ -39,7 +42,11 @@ async function previewAndQueue(
   previewButton: string,
   typedConfirmation?: string,
 ) {
-  await page.locator('fieldset.maintenance-scope input[type="checkbox"]').first().check();
+  await page
+    .getByRole('group', { name: 'Categories' })
+    .getByRole('checkbox')
+    .first()
+    .check();
   await page.locator('select[name="filter_indexed"]').selectOption('true');
   await page.locator('input[name="filter_category"]').fill('audit');
   await page.locator('input[name="filter_subject"]').fill('cooperation');
@@ -154,7 +161,8 @@ test.describe('disposable maintenance lifecycle', () => {
       await page.getByRole('button', { name: 'Retry from checkpoints' }).click();
       await waitForJob(page, /completed/);
       await page
-        .locator('.vault-panel:has(#maintenance-jobs-heading) article')
+        .getByRole('region', { name: 'Local maintenance jobs' })
+        .locator('article')
         .first()
         .getByRole('button', { name: 'Prepare for activation' })
         .click();
@@ -171,9 +179,10 @@ test.describe('disposable maintenance lifecycle', () => {
         'VAULT_E2E_TARGET_MANIFEST_DIGEST is required',
       ).toMatch(/^[0-9a-f]{64}$/);
 
-      await login(page, '/dashboard/operations/?section=restore');
+      await login(page, '/dashboard/data-operations/advanced/');
       const activationForm = page
-        .locator('.vault-record', {
+        .getByRole('region', { name: 'Runtime activation and recovery' })
+        .getByRole('listitem', {
           has: page.getByRole('heading', {
             name: generationId,
             exact: true,
@@ -212,7 +221,7 @@ test.describe('disposable maintenance lifecycle', () => {
       await page.unroute('**/activations/*/schedule/');
 
       await waitForRuntimeIdentity(page, generationId, manifestDigest);
-      await login(page, '/dashboard/operations/?section=restore');
+      await login(page, '/dashboard/data-operations/advanced/');
       await waitForActivationSettlement(page);
       await page.reload();
 
@@ -225,9 +234,8 @@ test.describe('disposable maintenance lifecycle', () => {
       return;
     }
 
-    await login(page, '/dashboard/operations/?section=restore');
-    const activationForm = page.locator('form:has(button:has-text("Prepare staging activation"))').last();
-    await activationForm.getByRole('button', { name: 'Prepare staging activation' }).click();
+    await login(page, '/dashboard/data-operations/advanced/');
+    await page.getByRole('button', { name: 'Review typed activation' }).click();
     await page.locator('input[name="confirmation_phrase"]').fill(
       (await page.getByLabel('Required confirmation phrase').textContent())?.trim() || '',
     );
@@ -240,7 +248,7 @@ test.describe('disposable maintenance lifecycle', () => {
         return '';
       }
     }, { timeout: 120_000 }).toMatch(/^lm-/);
-    await login(page, '/dashboard/operations/?section=restore');
+    await login(page, '/dashboard/data-operations/advanced/');
     await waitForActivationSettlement(page);
     await page.reload();
 
@@ -251,7 +259,7 @@ test.describe('disposable maintenance lifecycle', () => {
       await assertExpectedSearch(page, query, language);
     }
 
-    await page.goto('/dashboard/operations/?section=restore');
+    await page.goto('/dashboard/data-operations/advanced/');
     await page.getByRole('button', { name: 'Review signed rollback' }).click();
     await page.locator('input[name="confirmation_phrase"]').fill(
       (await page.getByLabel('Required confirmation phrase').textContent())?.trim() || '',
@@ -265,7 +273,7 @@ test.describe('disposable maintenance lifecycle', () => {
         return '';
       }
     }, { timeout: 120_000 }).toBe('maintenance-e2e-parent');
-    await login(page, '/dashboard/operations/?section=restore');
+    await login(page, '/dashboard/data-operations/advanced/');
     await waitForActivationSettlement(page);
     await page.reload();
     for (const [query, language] of [

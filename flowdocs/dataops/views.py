@@ -23,6 +23,7 @@ from core.maintenance import queue_job
 from core.maintenance_plans import workbench_maintenance_state
 from core.models import MaintenanceJob, PDFFile
 from core.operator_presentation import decorate_operator_state
+from vaultops.services.read_model import build_workbench_state
 
 from .config import resolve_profiles, resolve_selectors, resolve_setting, validate_profiles
 from .models import BackupJob, DataOperation, DataProfile, DataOpsAuditEvent, MirrorDeletionPreview, RecoveryPoint
@@ -411,7 +412,9 @@ def advanced(request):
     except Exception:
         maintenance = {"state_version": "", "capabilities": {}, "folders": [], "plans": [], "jobs": [], "selected_plan": None, "selected_job": None}
     decorate_operator_state(maintenance)
-    return render(request, "dataops/advanced.html", {"state": {"maintenance": maintenance}, "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("advanced")})
+    state = build_workbench_state()
+    state["maintenance"] = maintenance
+    return render(request, "dataops/advanced.html", {"state": state, "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("advanced")})
 
 
 @login_required
