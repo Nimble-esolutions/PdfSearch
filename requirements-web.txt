@@ -17,4 +17,4 @@ indic-transliteration>=2.3.0
 # Used only by the explicit artifact-vault management command; the adapter is
 # lazy-loaded and disabled by default.
 boto3>=1.40.0,<2.0.0
-cryptography>=45.0.0,<46.0.0
+cryptography>=48.0.1,<49.0.0
