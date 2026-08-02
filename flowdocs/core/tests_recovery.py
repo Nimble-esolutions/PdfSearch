@@ -24,6 +24,8 @@ from core.emergency_recovery import (
     validate_workspace,
     verify_set,
 )
+from core import emergency_recovery
+from core.database_ownership import database_alias_for_app
 
 
 def _database(path: Path, *, migration: tuple[str, str], recovery_user=False):
@@ -66,6 +68,30 @@ def _database(path: Path, *, migration: tuple[str, str], recovery_user=False):
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+class MigrationOwnershipTests(SimpleTestCase):
+    def test_migration_leaves_use_canonical_database_ownership(self):
+        graph = SimpleNamespace(
+            leaf_nodes=lambda: [
+                ("core", "0020"),
+                ("dataops", "0008"),
+                ("vaultops", "0011"),
+            ]
+        )
+        loader = SimpleNamespace(graph=graph)
+        with patch.object(
+            emergency_recovery,
+            "MigrationLoader",
+            return_value=loader,
+        ):
+            self.assertEqual(
+                emergency_recovery.migration_leaves(),
+                {
+                    "default": ["core.0020"],
+                    "control": ["dataops.0008", "vaultops.0011"],
+                },
+            )
 
 
 class EmergencyRecoveryTests(SimpleTestCase):
@@ -146,6 +172,12 @@ class EmergencyRecoveryTests(SimpleTestCase):
             set(first["databases"]), {"application", "control"}
         )
         self.assertFalse(list(self.recovery.glob(".*-")))
+
+    def test_control_database_ownership_includes_dataops_and_vaultops(self):
+        self.assertEqual(database_alias_for_app("dataops"), "control")
+        self.assertEqual(database_alias_for_app("vaultops"), "control")
+        self.assertEqual(database_alias_for_app("core"), "default")
+        self.assertEqual(database_alias_for_app("auth"), "default")
 
     def test_concurrent_creators_publish_one_matching_set(self):
         with ThreadPoolExecutor(max_workers=2) as executor:
