@@ -218,6 +218,7 @@ class ProfileMatrixPipelineTests(unittest.TestCase):
         self.assertEqual(result["source_manifest_digest"], hashlib.sha256(source_client.objects[(source.bucket, manifest_key)]).hexdigest())
         self.assertEqual(result["lineage"]["parent_dataset_id"], source.dataset_id)
         self.assertEqual(result["lineage"]["parent_generation_id"], generation)
+        self.assertEqual(result["manifest"]["repacked_from_generation_id"], generation)
         self.assertEqual(result["manifest"]["dataset_id"], destination.dataset_id)
         self.assertTrue(all(entry["object_key"].startswith(f"datasets/{destination.dataset_id}/") for entry in result["manifest"]["files"]))
         pointer = json.loads(destination_client.objects[(destination.bucket, f"datasets/{destination.dataset_id}/control/authoritative.json")])
