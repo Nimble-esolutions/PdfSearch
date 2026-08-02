@@ -15,6 +15,12 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from core.recovery_snapshot import (
+    SnapshotCaptureError,
+    capture_consistency_snapshot,
+    cleanup_consistency_snapshot,
+)
+
 from .models import DataOperation, RecoveryPoint
 from .v3_backup import publish_snapshot
 from .v3_config import connection_from_model
@@ -72,46 +78,54 @@ def _source_roots() -> dict[str, Path]:
 
 
 def create_snapshot_for_operation(operation: DataOperation, *, lease=None):
-    """Adapter to the current proven snapshot primitive; no Vault UI/profile."""
+    """Capture or resume a neutral two-scan snapshot bound to this operation."""
 
-    from vaultops.models import SourceSnapshot, VaultJob
-    from vaultops.services.snapshot import create_consistent_snapshot
+    snapshot_id = str(operation.public_id)
+    checkpoint = dict(operation.checkpoint or {})
+    checkpoint["snapshot"] = {
+        "snapshot_id": snapshot_id,
+        "status": "capturing",
+    }
+    operation.checkpoint = checkpoint
+    operation.save(using="control", update_fields=["checkpoint", "updated_at"])
 
-    idempotency_key = f"dataops-v3:{operation.public_id}:attempt:{operation.attempt}"
-    job, _ = VaultJob.objects.using("control").get_or_create(
-        operation="dataops_v3_snapshot",
-        idempotency_key=idempotency_key,
-        defaults={
-            "status": VaultJob.Status.RUNNING,
-            "phase": "snapshot",
-            "dataset_id": operation.connection.dataset_id,
-            "requested_by_id": None,
-            "requested_by_name": "dataops-v3",
-        },
-    )
-    finalized = (
-        SourceSnapshot.objects.using("control")
-        .filter(job=job, state=SourceSnapshot.State.FINALIZED)
-        .first()
-    )
-    if finalized:
-        return finalized
-
-    def progress_callback(**_kwargs):
+    def progress_callback(_stage):
         if lease:
             lease()
-
-    snapshot = create_consistent_snapshot(
-        job,
-        progress_callback=progress_callback,
+    identity = getattr(settings, "ENV_IDENTITY", None)
+    snapshot = capture_consistency_snapshot(
+        snapshot_id=snapshot_id,
         source_roots=_source_roots(),
         database_path=Path(settings.DATABASES["default"]["NAME"]),
-        snapshot_root=Path(settings.DATA_CONTROL_ROOT) / "v3-snapshots",
+        workspace_root=Path(settings.DATA_CONTROL_ROOT) / "v3-snapshots",
+        configuration={
+            "app_release_version": str(
+                getattr(identity, "app_release_version", "") or ""
+            ),
+            "app_image_digest": str(
+                getattr(identity, "app_image_digest", "") or ""
+            ),
+            "pdf_chunk_size": int(getattr(settings, "PDF_CHUNK_SIZE", 1200)),
+            "pdf_chunk_overlap": int(
+                getattr(settings, "PDF_CHUNK_OVERLAP", 200)
+            ),
+            "openai_embed_model": str(
+                getattr(settings, "OPENAI_EMBED_MODEL", "") or ""
+            ),
+        },
+        progress_callback=progress_callback,
     )
-    job.status = VaultJob.Status.SUCCEEDED
-    job.phase = "snapshot_complete"
-    job.finished_at = timezone.now()
-    job.save(update_fields=["status", "phase", "finished_at", "updated_at"])
+    checkpoint = dict(operation.checkpoint or {})
+    checkpoint["snapshot"] = {
+        "snapshot_id": snapshot.public_id,
+        "status": "finalized",
+        "evidence_sha256": snapshot.evidence_sha256,
+        "database_sha256": snapshot.database_sha256,
+        "configuration_sha256": snapshot.configuration_sha256,
+        "workspace": snapshot.workspace_path,
+    }
+    operation.checkpoint = checkpoint
+    operation.save(using="control", update_fields=["checkpoint", "updated_at"])
     return snapshot
 
 
@@ -152,6 +166,12 @@ def execute_backup_operation(
         snapshot = snapshot_factory(operation, lease=lease)
     except V3ExecutionError:
         raise
+    except SnapshotCaptureError as exc:
+        raise V3ExecutionError(
+            exc.code,
+            stage="snapshot",
+            retryable=exc.retryable,
+        ) from exc
     except Exception as exc:
         raise V3ExecutionError(
             getattr(exc, "reason_code", "consistent_snapshot_unproven"),
@@ -224,6 +244,20 @@ def execute_backup_operation(
                 "recovery_point_projection_conflict",
                 stage="publish_receipt",
             )
+    cleanup_status = "not_applicable"
+    try:
+        cleanup_consistency_snapshot(snapshot)
+        cleanup_status = "removed"
+        checkpoint = dict(operation.checkpoint or {})
+        checkpoint["snapshot"] = {
+            **dict(checkpoint.get("snapshot") or {}),
+            "status": "cleaned",
+            "workspace": "",
+        }
+        operation.checkpoint = checkpoint
+        operation.save(using="control", update_fields=["checkpoint", "updated_at"])
+    except Exception:
+        cleanup_status = "retained_for_review"
     return {
         "contract_version": 3,
         "release_id": receipt.recovery_point_id,
@@ -239,4 +273,5 @@ def execute_backup_operation(
             "total_bytes": receipt.total_bytes,
         },
         "plan_digest": operation.lifecycle_plan_digest,
+        "local_snapshot_cleanup": cleanup_status,
     }

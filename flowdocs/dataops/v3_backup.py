@@ -44,6 +44,7 @@ class SnapshotBundle:
     workspace: Path
     included_epoch: int
     evidence: Mapping[str, Any]
+    evidence_sha256: str
 
 
 @dataclass(frozen=True)
@@ -100,11 +101,33 @@ def load_snapshot_bundle(snapshot) -> SnapshotBundle:
     snapshot_id = str(snapshot.public_id)
     if evidence.get("snapshot_id") != snapshot_id:
         raise V3BackupError("snapshot_identity_mismatch")
+    declared_evidence_sha256 = str(evidence.get("evidence_sha256") or "")
+    unsigned_evidence = dict(evidence)
+    unsigned_evidence.pop("evidence_sha256", None)
+    observed_evidence_sha256 = hashlib.sha256(
+        canonical_json_bytes(unsigned_evidence)
+    ).hexdigest()
+    if (
+        declared_evidence_sha256 != observed_evidence_sha256
+        or str(getattr(snapshot, "evidence_sha256", ""))
+        != observed_evidence_sha256
+    ):
+        raise V3BackupError("snapshot_evidence_digest_mismatch")
+    if evidence.get("source_stable") is not True:
+        raise V3BackupError("snapshot_source_not_stable")
+    consistency = evidence.get("consistency")
+    if (
+        not isinstance(consistency, Mapping)
+        or consistency.get("sqlite_integrity") != "ok"
+        or consistency.get("foreign_keys") != "ok"
+    ):
+        raise V3BackupError("snapshot_database_evidence_invalid")
     return SnapshotBundle(
         snapshot_id=snapshot_id,
         workspace=root,
         included_epoch=int(snapshot.included_epoch),
         evidence=evidence,
+        evidence_sha256=observed_evidence_sha256,
     )
 
 
@@ -389,9 +412,9 @@ def publish_snapshot(
             "index_configuration_sha256": index_digest,
         },
         consistency={
-            "sqlite_integrity": "ok",
-            "foreign_keys": "ok",
-            "source_stable": True,
+            "sqlite_integrity": bundle.evidence["consistency"]["sqlite_integrity"],
+            "foreign_keys": bundle.evidence["consistency"]["foreign_keys"],
+            "source_stable": bundle.evidence["source_stable"],
         },
         components=_components(files, bundle.evidence),
         files=[

@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from django.test import TestCase
 
 from dataops.models import DataConnection, RecoveryPoint
+from dataops.package_v3 import canonical_json_bytes
 from dataops.tests.test_v3_backup import FakeS3
 from dataops.v3_backup import blob_key, publish_snapshot
 from dataops.v3_config import connection_from_model
@@ -72,25 +73,32 @@ class V3RestoreTests(TestCase):
                 }
             )
         snapshot_id = uuid.uuid4()
+        evidence = {
+            "snapshot_id": str(snapshot_id),
+            "source_stable": True,
+            "consistency": {
+                "sqlite_integrity": "ok",
+                "foreign_keys": "ok",
+            },
+            "files": records,
+            "inventory": {
+                "database": {"migrations": {"latest": "0027"}},
+                "counts": {"pdf_rows": 2, "folders": 1, "users": 1},
+            },
+            "faiss": {"unavailable_documents": {"count": 0}},
+            "configuration_fingerprint": {"sha256": "f" * 64},
+        }
+        evidence["evidence_sha256"] = hashlib.sha256(
+            canonical_json_bytes(evidence)
+        ).hexdigest()
         (workspace / "snapshot-evidence.json").write_text(
-            json.dumps(
-                {
-                    "snapshot_id": str(snapshot_id),
-                    "files": records,
-                    "inventory": {
-                        "database": {"migrations": {"latest": "0027"}},
-                        "counts": {"pdf_rows": 2, "folders": 1, "users": 1},
-                    },
-                    "faiss": {"unavailable_documents": {"count": 0}},
-                    "configuration_fingerprint": {"sha256": "f" * 64},
-                }
-            ),
-            encoding="utf-8",
+            json.dumps(evidence), encoding="utf-8"
         )
         snapshot = SimpleNamespace(
             public_id=snapshot_id,
             workspace_path=str(workspace),
             included_epoch=1,
+            evidence_sha256=evidence["evidence_sha256"],
         )
         manifest, receipt = publish_snapshot(
             snapshot=snapshot,

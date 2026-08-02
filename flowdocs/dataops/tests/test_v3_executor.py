@@ -1,14 +1,17 @@
-"""DataOps-authoritative execution tests around the transitional snapshot adapter."""
+"""DataOps-authoritative backup execution and neutral snapshot tests."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import tempfile
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
+from django.conf import settings
 from django.test import TestCase, override_settings
 
 from dataops.lifecycle import (
@@ -19,8 +22,13 @@ from dataops.lifecycle import (
     compile_lifecycle_plan,
 )
 from dataops.models import DataConnection, DataOperation, RecoveryPoint
+from dataops.package_v3 import canonical_json_bytes
 from dataops.tests.test_v3_backup import FakeS3
-from dataops.v3_executor import V3ExecutionError, execute_backup_operation
+from dataops.v3_executor import (
+    V3ExecutionError,
+    create_snapshot_for_operation,
+    execute_backup_operation,
+)
 
 
 @override_settings(
@@ -95,20 +103,26 @@ class V3BackupExecutorTests(TestCase):
                     "sha256": hashlib.sha256(body).hexdigest(),
                 }
             )
+        evidence = {
+            "snapshot_id": str(snapshot_id),
+            "source_stable": True,
+            "consistency": {
+                "sqlite_integrity": "ok",
+                "foreign_keys": "ok",
+            },
+            "files": files,
+            "inventory": {
+                "database": {"migrations": {"latest": "0027"}},
+                "counts": {"pdf_rows": 242, "folders": 46, "users": 7},
+            },
+            "faiss": {"unavailable_documents": {"count": 0}},
+            "configuration_fingerprint": {"sha256": "f" * 64},
+        }
+        evidence["evidence_sha256"] = hashlib.sha256(
+            canonical_json_bytes(evidence)
+        ).hexdigest()
         (workspace / "snapshot-evidence.json").write_text(
-            json.dumps(
-                {
-                    "snapshot_id": str(snapshot_id),
-                    "files": files,
-                    "inventory": {
-                        "database": {"migrations": {"latest": "0027"}},
-                        "counts": {"pdf_rows": 242, "folders": 46, "users": 7},
-                    },
-                    "faiss": {"unavailable_documents": {"count": 0}},
-                    "configuration_fingerprint": {"sha256": "f" * 64},
-                }
-            ),
-            encoding="utf-8",
+            json.dumps(evidence), encoding="utf-8"
         )
         if lease:
             lease()
@@ -116,6 +130,7 @@ class V3BackupExecutorTests(TestCase):
             public_id=snapshot_id,
             workspace_path=str(workspace),
             included_epoch=3,
+            evidence_sha256=evidence["evidence_sha256"],
         )
 
     def test_executor_publishes_projection_and_binds_plan_receipt(self):
@@ -169,3 +184,36 @@ class V3BackupExecutorTests(TestCase):
             )
         point = RecoveryPoint.objects.using("control").get(release_id=recovery_id)
         self.assertEqual(point.manifest_digest, "0" * 64)
+
+    def test_real_snapshot_factory_resumes_without_creating_vaultops_rows(self):
+        from vaultops.models import SourceSnapshot, VaultJob
+
+        source = self.root / "real-source"
+        media = source / "media"
+        media.mkdir(parents=True)
+        (media / "one.pdf").write_bytes(b"pdf")
+        database = source / "db.sqlite3"
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "CREATE TABLE core_pdffile "
+                "(indexed INTEGER, processing_status TEXT)"
+            )
+        original_database = settings.DATABASES["default"]["NAME"]
+        settings.DATABASES["default"]["NAME"] = str(database)
+        try:
+            with override_settings(DATA_CONTROL_ROOT=self.root / "control"), patch(
+                "dataops.v3_executor._source_roots",
+                return_value={"media": media},
+            ):
+                first = create_snapshot_for_operation(self.operation)
+                second = create_snapshot_for_operation(self.operation)
+        finally:
+            settings.DATABASES["default"]["NAME"] = original_database
+        self.operation.refresh_from_db(using="control")
+        self.assertEqual(first.evidence_sha256, second.evidence_sha256)
+        self.assertEqual(
+            self.operation.checkpoint["snapshot"]["status"],
+            "finalized",
+        )
+        self.assertFalse(VaultJob.objects.using("control").exists())
+        self.assertFalse(SourceSnapshot.objects.using("control").exists())

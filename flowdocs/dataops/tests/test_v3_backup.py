@@ -11,7 +11,11 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
-from dataops.package_v3 import validate_manifest, verify_manifest_signature
+from dataops.package_v3 import (
+    canonical_json_bytes,
+    validate_manifest,
+    verify_manifest_signature,
+)
 from dataops.v3_backup import V3BackupError, blob_key, publish_snapshot
 from dataops.v3_config import ConnectionView
 from dataops.v3_storage import V3StorageError
@@ -114,6 +118,11 @@ class V3BackupPublicationTests(unittest.TestCase):
         snapshot_id = uuid.uuid4()
         evidence = {
             "snapshot_id": str(snapshot_id),
+            "source_stable": True,
+            "consistency": {
+                "sqlite_integrity": "ok",
+                "foreign_keys": "ok",
+            },
             "files": records,
             "inventory": {
                 "database": {"migrations": {"latest": "0027"}},
@@ -122,6 +131,9 @@ class V3BackupPublicationTests(unittest.TestCase):
             "faiss": {"unavailable_documents": {"count": 0}},
             "configuration_fingerprint": {"sha256": "f" * 64},
         }
+        evidence["evidence_sha256"] = hashlib.sha256(
+            canonical_json_bytes(evidence)
+        ).hexdigest()
         (workspace / "snapshot-evidence.json").write_text(
             json.dumps(evidence),
             encoding="utf-8",
@@ -130,6 +142,7 @@ class V3BackupPublicationTests(unittest.TestCase):
             public_id=snapshot_id,
             workspace_path=str(workspace),
             included_epoch=epoch,
+            evidence_sha256=evidence["evidence_sha256"],
         )
 
     def publish(self, snapshot, recovery_point_id):
@@ -222,6 +235,11 @@ class V3BackupPublicationTests(unittest.TestCase):
                 "sha256": hashlib.sha256(b"css").hexdigest(),
             }
         )
+        evidence.pop("evidence_sha256")
+        evidence["evidence_sha256"] = hashlib.sha256(
+            canonical_json_bytes(evidence)
+        ).hexdigest()
+        snapshot.evidence_sha256 = evidence["evidence_sha256"]
         evidence_path.write_text(json.dumps(evidence))
         manifest, receipt = self.publish(snapshot, "rp-001")
         self.assertEqual(receipt.total_objects, 2)
