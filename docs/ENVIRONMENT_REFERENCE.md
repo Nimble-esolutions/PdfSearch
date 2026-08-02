@@ -246,6 +246,7 @@ automatic activation.
 | Variable | Purpose | Safe posture | Notes |
 | --- | --- | --- | --- |
 | VAULT_RESTORE_ENABLED | Enables controlled restore | 0 by default | Enable only for an explicit operation |
+| STAGE_SAME_DATASET_RESTORE_ENABLED | Allows an explicitly gated stage recovery point to be restored back into the same stage dataset | 0 by default | Stage-only rehearsal switch; keep disabled in production and retain admin/confirmation gates |
 | VAULT_ADMIN_MUTATIONS_ENABLED | Allows operator mutations | 0 by default | UI visibility is not mutation authority |
 | VAULT_MUTATION_TRACKING_ENABLED | Tracks source mutations | 0 unless sync is enabled | Required before source publication |
 | VAULT_ALLOWED_S3_ENDPOINTS | Exact permitted origins | Approved HTTPS origins only | Prevents endpoint substitution |
