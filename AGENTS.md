@@ -47,6 +47,24 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
 
 ## Repository Rules
 
+- MANDATORY impact-analysis gate: Before changing Compose, Dockerfiles,
+  Dokploy configuration, volumes, environment contracts, deployment docs, data
+  custody, DNS/proxy labels, image identity, or recovery behavior, write a
+  short impact analysis before editing. It must name the exact files and
+  runtime targets, compare dev/stage/production effects, identify data-loss
+  and external-state risks, state rollback steps, and list the rendered-config
+  and test evidence required. Do not push or deploy until that analysis is
+  complete and the user has confirmed any destructive, remote, or
+  environment-specific action.
+- Treat a rejected option as rejected scope. Do not reintroduce it under a
+  different filename, variable name, Compose override, or implementation
+  mechanism. If the requested outcome requires a materially different
+  trade-off, stop and present the impact analysis and alternatives first.
+- Before opening a PR, report the exact changed-file list, commit SHA, base
+  branch, deployment impact, rollback path, and checks run. A clean local
+  render is not proof that a remote Dokploy deployment used the intended
+  Compose file, image, project name, or volumes.
+
 - **MANDATORY:** Follow `~/.agent-workflow-rules.md` for every code-changing
   task. Branch from `dev`, commit locally in cherry-pickable chunks, verify
   before pushing, open a PR into `dev`, merge only when green. No uncommitted
