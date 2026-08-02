@@ -114,7 +114,13 @@ jobs:
           SECRET_KEY: ci-only-secret
           OPENAI_API_KEY: ci-only-key
           PDFSEARCH_IMAGE: ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:0000000000000000000000000000000000000000000000000000000000000000
-        run: python3 scripts/ci/assert_compose_env_parity.py
+        run: python3 scripts/ci/assert_compose_env_parity.py --deployment-mode production
+
+      - name: Validate native development deployment contract
+        run: |
+          docker compose -f docker-compose.dev.yml config --quiet
+          python3 scripts/ci/assert_compose_env_parity.py --compose-file docker-compose.dev.yml --deployment-mode development
+          python3 -m unittest scripts.ci.test_compose_env_parity scripts.runtime.test_init_local_rustfs
 
       - name: Validate isolated recovery certification contract
         env:
@@ -142,7 +148,7 @@ jobs:
         env:
           PDFSEARCH_IMAGE: pdfsearch-ci:source
           REDIS_IMAGE: redis@sha256:0000000000000000000000000000000000000000000000000000000000000000
-          MINIO_IMAGE: minio/minio@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          OBJECT_STORE_IMAGE: rustfs/rustfs@sha256:0000000000000000000000000000000000000000000000000000000000000000
         run: docker compose -f docker-compose.integration.yml config --quiet
 
       - name: Validate disposable maintenance lifecycle Compose
@@ -168,6 +174,12 @@ jobs:
         env:
           PDFSEARCH_IMAGE: pdfsearch-ci:source
         run: bash scripts/ci/test_startup_restore_entrypoints.sh
+
+      - name: Run native development image and RustFS smoke
+        env:
+          PDFSEARCH_DEV_IMAGE: pdfsearch-ci:source
+          LOCAL_BUILD_REVISION: ${{ github.sha }}
+        run: bash scripts/ci/run_dev_maintenance_smoke.sh --no-build
 
       - name: Install browser gate dependencies
         run: |
@@ -198,6 +210,14 @@ jobs:
           esac
           echo "image=$minio_ref" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve immutable RustFS lifecycle image
+        id: ci_rustfs
+        run: |
+          set -euo pipefail
+          rustfs_ref="rustfs/rustfs:1.0.0-beta.2@sha256:6bd08dc511cebe0a4b5c35c266db465c7eb92cf3df4321c69967be66fe4cb395"
+          docker pull "$rustfs_ref" >/dev/null
+          echo "image=$rustfs_ref" >> "$GITHUB_OUTPUT"
+
       - name: Run disposable entrypoint and runtime gates
         env:
           PDFSEARCH_IMAGE: pdfsearch-ci:source
@@ -221,13 +241,23 @@ jobs:
           WEB_PORT: 18081
         run: bash scripts/ci/run_maintenance_lifecycle_e2e.sh
 
-      - name: Run vault lifecycle and process-death gates
+      - name: Run required RustFS lifecycle and process-death gates
+        env:
+          PDFSEARCH_IMAGE: pdfsearch-ci:source
+          REDIS_IMAGE: ${{ steps.ci_redis.outputs.image }}
+          OBJECT_STORE_IMAGE: ${{ steps.ci_rustfs.outputs.image }}
+          OBJECT_STORE_PROVIDER: rustfs
+          COMPOSE_PROJECT_NAME: pdfsearch-vault-rustfs
+        run: bash scripts/ci/run_vault_integration.sh
+
+      - name: Run MinIO S3 compatibility lifecycle
         if: github.event_name != 'pull_request'
         env:
           PDFSEARCH_IMAGE: pdfsearch-ci:source
           REDIS_IMAGE: ${{ steps.ci_redis.outputs.image }}
-          MINIO_IMAGE: ${{ steps.ci_minio.outputs.image }}
-          COMPOSE_PROJECT_NAME: pdfsearch-vault-source
+          OBJECT_STORE_IMAGE: ${{ steps.ci_minio.outputs.image }}
+          OBJECT_STORE_PROVIDER: minio
+          COMPOSE_PROJECT_NAME: pdfsearch-vault-minio-compat
         run: bash scripts/ci/run_vault_integration.sh
 
   candidate:

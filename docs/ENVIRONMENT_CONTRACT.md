@@ -33,6 +33,16 @@ CREATE_SUPERUSER=0
 ```
 
 `PDFSEARCH_IMAGE` must be an immutable GHCR digest tied to the approved Git SHA.
+This requirement applies to staging and production. Development uses
+`PDFSEARCH_DEV_IMAGE` (default `pdfsearch-dev:local`) plus an identical local
+build definition for web and maintenance. `APP_RELEASE_VERSION` records the
+local revision and `APP_IMAGE_DIGEST` remains empty for a native local build.
+
+The application-plane contract is common across modes: web, maintenance,
+Redis, `/app/data`, `/app/data-control`, health/dependency semantics, and all
+critical environment keys. Development supplies an in-stack RustFS capability;
+staging and production connect to externally operated RustFS. Configuration
+validation emits reason codes and key names only, never rendered values.
 Tags such as `latest` or `dev` are compatibility aliases, not release identity.
 
 ## Environment Identity (New — 2026-07-24)

@@ -29,10 +29,17 @@ evidence.
 Use:
 
 ```bash
-docker compose -f docker-compose.dev.yml up --build
+LOCAL_BUILD_REVISION="$(git rev-parse --short HEAD)" \
+  docker compose -f docker-compose.dev.yml up -d --build --wait
 ```
 
 Development uses its own named volumes and must not reference `prod_flowdocs`.
+It builds one shared local application image and runs an isolated pinned RustFS
+service with a bounded boto3 bucket initializer. Stage/production have the same
+web, maintenance, Redis, data/control mount, and critical-environment shape,
+but pull one immutable `repository@sha256:digest` and use external RustFS.
+Never use `down -v` for retained development data; rollback preserves both the
+legacy MinIO volume and the new RustFS volumes.
 
 ## Production Principles
 
