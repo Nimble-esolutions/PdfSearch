@@ -62,7 +62,14 @@ def _guard_restore_direction(profile):
     direction = EnvironmentDirectionPolicy.from_identity(
         settings.ENV_IDENTITY
     ).decision(Operation.RESTORE, remote_dataset_id=profile.dataset_id)
-    if not direction.allowed:
+    stage_same_dataset_recovery = (
+        settings.STAGE_SAME_DATASET_RESTORE_ENABLED
+        and settings.ENV_IDENTITY.app_env.value == "staging"
+        and not settings.ENV_IDENTITY.is_production
+        and profile.key == settings.DATAOPS_RESTORE_PROFILE
+        and profile.dataset_id == settings.ENV_IDENTITY.dataset_id
+    )
+    if not direction.allowed and not stage_same_dataset_recovery:
         raise RestoreError(direction.reason_code)
 
 
