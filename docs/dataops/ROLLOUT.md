@@ -1,5 +1,32 @@
 # Data Operations rollout
 
+> Current evidence and exact pending gates are maintained in
+> [STATUS-2026-08-02.md](../STATUS-2026-08-02.md). This page is the
+> procedure; it is not evidence that every step below has completed.
+
+## As-of 2026-08-02
+
+Completed:
+
+- v2 source bucket and dataset were used for a verified legacy snapshot.
+- Clone/rebind created clone-legacy-20260802T085639Z-86288855 in the separate
+  stage dataset with 416 objects and 1,093,501,777 bytes.
+- Quarantine restore, migrations through 0027, bilingual OCR fallback, and
+  document-scoped indexing completed for all 242 PDFs.
+- The 2026 HTTPS route is live and web, maintenance, and Redis are healthy.
+- Stage environment selectors now use stage_2026 for both restore and backup;
+  activation remains disabled.
+
+Still pending:
+
+- Merge and certify the cryptography remediation PR #169, including the
+  post-merge immutable image build and Trivy scan.
+- Register/schedule the signed runtime activation and verify exact generation,
+  manifest digest, and readiness evidence.
+- Publish the first stage backup, then prove isolated round-trip recovery.
+- Obtain the public-authentication exception approval before any public login
+  or admin exposure.
+
 The replacement is intentionally additive until the restore and reindex gates
 are green. For the 2026 stage recovery rollout:
 
@@ -33,12 +60,13 @@ are green. For the 2026 stage recovery rollout:
    volumes and compare manifests, lineage, checksums, database checks, index
    ratio, readiness, and representative searches.
 
-The stage remains private (`PUBLIC_SEARCH_ENABLED=0`) throughout this run. A
-request to expose production password hashes and the full login/admin surface
-requires an explicit security owner, monitoring, incident response, and
-rollback-authority record. Without that approval the technical work stops
-after private activation and round-trip evidence; no DNS or production traffic
-is changed.
+The stage HTTPS route is reachable and its current environment has
+PUBLIC_SEARCH_ENABLED=1, but this does not approve production-derived
+authentication or the full login/admin surface. A request to expose production
+password hashes and the full login/admin surface requires an explicit security
+owner, monitoring, incident response, and rollback-authority record. Without
+that approval the technical work stops after private data activation and
+round-trip evidence; no DNS or production traffic is changed.
 
 The old control-plane records are not migrated into Data Operations. Keep the
 pre-cutover snapshot until the post-restore search and document-count checks are

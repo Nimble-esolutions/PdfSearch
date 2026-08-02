@@ -1,5 +1,27 @@
 # Environment Configuration Guide
 
+## Current 2026 stage example
+
+The applied stage posture is a private, reader-only recovery rehearsal:
+
+    APP_ENV=staging
+    DATA_MODE=local
+    DATA_BOOTSTRAP_MODE=empty
+    DATASET_ID=ai-sahakar-stage-2026
+    DATAOPS_ENV_PROFILES=production,stage_2026
+    DATAOPS_RESTORE_PROFILE=stage_2026
+    DATAOPS_BACKUP_PROFILE=stage_2026
+    BACKUP_ROLE=reader
+    BACKUP_SYNC_MODE=manual
+    STAGING_INITIAL_ACTIVATION_ENABLED=0
+    STAGING_RUNTIME_ACTIVATION_ENABLED=0
+
+This is a non-secret example only. Do not copy credential, API-key, signing-key,
+or recovery-password values into Git or support records. Environment changes
+must be applied through the preserved Dokploy Compose project and verified
+inside both web and maintenance containers. The current status and volume
+boundary are documented in STATUS-2026-08-02.md.
+
 **Status:** Active
 **Audience:** Developers, release operators, and reviewers
 **Last audited:** 2026-07-26

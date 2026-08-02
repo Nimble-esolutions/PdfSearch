@@ -6,6 +6,12 @@ Canonical source: docs/PRODUCTION_OPERATING_RULES.md
 Supersedes: None
 
 # Production Operating Rules
+## Current-state pointer
+
+For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
+Earlier dated sections in this page remain historical evidence and must not
+be used as current deployment state without reconciling them to that record.
+
 
 These rules apply to every PdfSearch production change.
 

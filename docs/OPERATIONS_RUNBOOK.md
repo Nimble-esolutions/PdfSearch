@@ -1,11 +1,27 @@
 Status: Active
 Audience: Recovery
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-08-02
 Canonical source: docs/OPERATIONS_RUNBOOK.md
 Supersedes: None
 
 # FlowDocs Operations Runbook
+
+## Current 2026 stage note
+
+The 2026 recovery rehearsal now has a verified RustFS v2 source and a
+quarantine-ready stage clone, but it is not an active runtime generation. The
+stage route is https://2026.ai-sahakar.net; a healthy root response does not
+replace /readyz evidence. Until signed activation and the first stage_2026
+backup succeed, a 503 readiness response is expected and should not be
+worked around by enabling startup restore or copying quarantine data over the
+active volume.
+
+The stage Compose project name is
+sahakar-ai-sahakar-frontend-2026-prod-ruhj6z. Preserve it when operating from
+a timestamped Dokploy backup directory. Omitting it creates a different
+Compose namespace and can allocate blank volumes. See
+STATUS-2026-08-02.md for the exact evidence and safe command shape.
 
 This runbook is for a Dokploy Compose deployment of FlowDocs. It uses the
 repository Compose file, the web service on container port `8000`, the

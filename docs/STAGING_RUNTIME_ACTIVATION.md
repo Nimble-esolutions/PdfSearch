@@ -1,5 +1,20 @@
 # Staging Runtime Activation
 
+## Current stage state (2026-08-02)
+
+The cloned legacy generation is quarantine-ready but not active. The current
+stage route is healthy at the container level while /readyz remains 503 because
+there is no signed active generation and no stage backup receipt. Keep both
+activation flags at zero until the control database contains the prepared
+generation, exact canonical manifest digest, validation evidence, and an
+approved signed activation request.
+
+The stage environment uses DATAOPS_RESTORE_PROFILE=stage_2026 and
+DATAOPS_BACKUP_PROFILE=stage_2026. The legacy prod_flowdocs mount remains
+read-only at /mnt/legacy and is never an activation target. See
+[STATUS-2026-08-02.md](STATUS-2026-08-02.md) for the verified generation,
+OCR/indexing evidence, and remaining gates.
+
 This runbook covers the staging-only runtime cutover protocol introduced by the
 vault control plane. Production activation is hard-disabled in Django settings,
 the coordinator, the legacy activation helper, and the process supervisor.

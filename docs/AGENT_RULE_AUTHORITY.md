@@ -6,6 +6,12 @@ Canonical source: docs/AGENT_RULE_AUTHORITY.md
 Supersedes: ad hoc Kilo/OpenCode/Codex rule copies when they conflict
 
 # Agent Rule Authority
+## Current-state pointer
+
+For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
+Earlier dated sections in this page remain historical evidence and must not
+be used as current deployment state without reconciling them to that record.
+
 
 This document defines how agent-facing instructions are maintained for
 PdfSearch. It exists because the local operations workspace also contains
