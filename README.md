@@ -46,7 +46,8 @@ Never copy production secrets or production data into a local environment.
 ```bash
 cp .env.example .env
 # Set local values; never use production secrets.
-docker compose -f docker-compose.dev.yml up --build
+LOCAL_BUILD_REVISION="$(git rev-parse --short HEAD)" \
+  docker compose -f docker-compose.dev.yml up -d --build --wait
 ```
 
 The development Compose file uses `flowdocs_data_dev` and `redis_data_dev`.
@@ -196,3 +197,12 @@ official decision.
 
 Update the client manual in the same change as user-visible behavior changes;
 keep deployment and operator procedures out of it.
+
+The canonical local stack builds one `pdfsearch-dev:local` application image
+for web, maintenance, and bucket initialization, and starts pinned RustFS on
+localhost-only ports. Stage and production instead pull one immutable image
+digest and use externally operated RustFS. MinIO is retained only as a
+separately named S3 compatibility test; it is not RustFS certification. Native
+local builds set `APP_RELEASE_VERSION` from `LOCAL_BUILD_REVISION` and leave
+`APP_IMAGE_DIGEST` empty. Existing MinIO and RustFS volumes are never reused or
+removed automatically.

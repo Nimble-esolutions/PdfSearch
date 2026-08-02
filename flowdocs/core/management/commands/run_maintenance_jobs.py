@@ -222,6 +222,7 @@ class Command(BaseCommand):
             )
 
         last_scheduler_eval = 0
+        last_dataops_eval = 0
 
         while not _shutdown_flag:
             now = time.time()
@@ -232,6 +233,19 @@ class Command(BaseCommand):
                         self.style.SUCCESS("Scheduled backup queued.")
                     )
                 last_scheduler_eval = now
+
+            if (
+                getattr(settings, "DATAOPS_ENABLED", False)
+                and now - last_dataops_eval >= SCHEDULER_INTERVAL_SECONDS
+            ):
+                try:
+                    from dataops.worker import queue_backup_if_due, reconcile_receipts
+
+                    queue_backup_if_due(trigger="scheduler")
+                    reconcile_receipts(limit=10)
+                except Exception as exc:
+                    logger.warning("Data Operations reconciliation failed: %s", getattr(exc, "reason_code", "dataops_reconcile_failed"))
+                last_dataops_eval = now
 
             vault_claim = None
             if (

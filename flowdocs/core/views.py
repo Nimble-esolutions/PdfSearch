@@ -375,6 +375,7 @@ def livez(request):
 
 def readyz(request):
     checks = {}
+    dataops_readiness = None
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
@@ -408,6 +409,14 @@ def readyz(request):
     except Exception:
         checks["backup"] = "error"
 
+    try:
+        from dataops.readiness import readiness_payload
+
+        dataops_readiness = readiness_payload()
+        checks["dataops"] = dataops_readiness["status"]
+    except Exception:
+        checks["dataops"] = "error"
+
     ready = all(value in ("ok", "not_configured", "empty") for value in checks.values())
     response = {"status": "ready" if ready else "not_ready", "checks": checks}
     response["runtime_generation_id"] = getattr(
@@ -416,6 +425,15 @@ def readyz(request):
     response["runtime_manifest_digest"] = getattr(
         settings, "RUNTIME_MANIFEST_DIGEST", ""
     )
+    if dataops_readiness is not None:
+        response["dataops"] = dataops_readiness
+        response["active_generation"] = dataops_readiness.get("active_generation", response.get("runtime_generation_id", ""))
+        response["source_profile"] = dataops_readiness.get("source_profile", "")
+        response["destination_profile"] = dataops_readiness.get("destination_profile", "")
+        response["manifest_digest"] = dataops_readiness.get("manifest_digest", response.get("runtime_manifest_digest", ""))
+        response["indexing_ratio"] = dataops_readiness.get("indexing_ratio", 0.0)
+        response["last_backup"] = dataops_readiness.get("last_backup")
+        response["last_restore"] = dataops_readiness.get("last_restore")
 
     env_identity = getattr(settings, "ENV_IDENTITY", None)
     if env_identity is not None:

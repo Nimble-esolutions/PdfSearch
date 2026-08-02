@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from dataops.config import resolve_profiles
-from dataops.executor import RestoreExecutionError, stage_restore
+from dataops.executor import RestoreExecutionError, execute_restore
 from dataops.storage import StorageConfigurationError, client_for_profile
 
 
@@ -32,7 +32,7 @@ class Command(BaseCommand):
         )
         try:
             client = client_for_profile(profile, os.environ)
-            receipt = stage_restore(client, profile, options["release_id"], destination)
+            receipt = execute_restore(client, profile, release_id=options["release_id"], destination_root=destination)
         except (StorageConfigurationError, RestoreExecutionError) as exc:
             raise CommandError(str(exc)) from exc
         self.stdout.write(self.style.SUCCESS(json.dumps(receipt, sort_keys=True)))

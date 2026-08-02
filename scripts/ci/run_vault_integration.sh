@@ -2,8 +2,18 @@
 set -euo pipefail
 
 : "${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE is required}"
-: "${MINIO_IMAGE:?MINIO_IMAGE is required}"
 : "${REDIS_IMAGE:?REDIS_IMAGE is required}"
+: "${OBJECT_STORE_IMAGE:?OBJECT_STORE_IMAGE is required}"
+provider="${OBJECT_STORE_PROVIDER:-rustfs}"
+case "$provider" in
+  rustfs)
+    export OBJECT_STORE_COMMAND="${OBJECT_STORE_COMMAND:-/data}"
+    ;;
+  minio)
+    export OBJECT_STORE_COMMAND="${OBJECT_STORE_COMMAND:-server /data}"
+    ;;
+  *) echo "object_store_provider_invalid" >&2; exit 2 ;;
+esac
 
 compose_project="${COMPOSE_PROJECT_NAME:-pdfsearch-vault-ci}"
 case "$compose_project" in
@@ -24,7 +34,7 @@ cleanup() {
 trap cleanup EXIT
 
 "${compose[@]}" config --quiet
-"${compose[@]}" up --detach minio redis
+"${compose[@]}" up --detach objectstore redis
 "${compose[@]}" run --rm lifecycle
 
 "${compose[@]}" --profile process-death up \
@@ -57,4 +67,4 @@ test "$(docker inspect --format '{{.State.ExitCode}}' "$cutover_container")" != 
 "${compose[@]}" --profile process-death run \
   --rm --no-deps runtime-verify
 
-echo "[vault-integration] MinIO/Redis lifecycle and container process-death gates passed"
+echo "vault_integration_passed:$provider"

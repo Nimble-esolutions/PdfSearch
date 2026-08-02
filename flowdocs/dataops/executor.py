@@ -18,21 +18,52 @@ from typing import Any
 
 from .config import ResolvedProfile
 from .recovery import RecoveryInspection, RecoveryInspectionError, inspect_manifest
+from .storage import generation_manifest_key, generation_prefix
 
 
 class RestoreExecutionError(RuntimeError):
     """A restore could not be staged safely."""
 
 
+def execute_backup(client, profile, *, source_root, release_id, files=None):
+    """Publish a local source snapshot through the shared pipeline executor."""
+    from .pipeline import publish_local_backup
+
+    return publish_local_backup(
+        client,
+        profile,
+        source_root=source_root,
+        release_id=release_id,
+        files=files,
+    )
+
+
+def execute_restore(client, profile, *, release_id, destination_root):
+    """Stage a verified remote generation through the shared pipeline executor."""
+    from .pipeline import stage_remote_generation
+
+    try:
+        return stage_remote_generation(
+            client,
+            profile,
+            release_id=release_id,
+            destination_root=destination_root,
+        )
+    except Exception as exc:
+        if isinstance(exc, RestoreExecutionError):
+            raise
+        raise RestoreExecutionError(getattr(exc, "code", "restore_execution_failed")) from exc
+
+
 def manifest_key(profile: ResolvedProfile, release_id: str) -> str:
-    release = str(release_id).strip()
-    if not release or "/" in release or release in {".", ".."}:
-        raise RestoreExecutionError("release_id_invalid")
-    return f"datasets/{profile.dataset_id}/generations/{release}/manifest.json"
+    try:
+        return generation_manifest_key(profile, release_id, legacy=not bool(profile.namespace))
+    except ValueError as exc:
+        raise RestoreExecutionError(str(exc)) from exc
 
 
 def _safe_relative(key: str, profile: ResolvedProfile, release_id: str) -> Path:
-    prefix = f"datasets/{profile.dataset_id}/generations/{release_id}/"
+    prefix = generation_prefix(profile, release_id, legacy=not bool(profile.namespace))
     relative = key[len(prefix):] if key.startswith(prefix) else posixpath.basename(key)
     normalized = posixpath.normpath(relative.lstrip("/"))
     if normalized in {"", ".", ".."} or normalized.startswith("../"):

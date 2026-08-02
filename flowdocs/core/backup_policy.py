@@ -27,6 +27,16 @@ def mark_data_dirty() -> None:
     """Record that data has changed since the last backup."""
     from django.core.cache import cache
     cache.set(DIRTY_STATE_KEY, int(datetime.now(timezone.utc).timestamp()), timeout=None)
+    try:
+        from django.conf import settings
+        if getattr(settings, "DATAOPS_ENABLED", False) and str(getattr(settings, "DATAOPS_BACKUP_MODE", "manual")).lower() == "changes":
+            from dataops.worker import queue_backup_if_due
+
+            queue_backup_if_due(trigger="change")
+    except Exception:
+        # A mutation must not fail merely because the optional Data Operations
+        # control database is unavailable; the dirty marker remains durable.
+        pass
 
 
 def is_data_dirty() -> bool:

@@ -11,8 +11,8 @@ import time
 import boto3
 from django.test import TestCase
 
-BUCKET = "pdfsearch-test"
-ENDPOINT = "http://pdfsearch-minio:9000"
+BUCKET = os.environ.get("ARTIFACT_VAULT_BUCKET", "pdfsearch-test")
+ENDPOINT = os.environ.get("ARTIFACT_VAULT_ENDPOINT", "http://pdfsearch-objectstore:9000")
 REGION = "us-east-1"
 
 
@@ -21,8 +21,8 @@ def _client():
         "s3",
         endpoint_url=ENDPOINT,
         region_name=REGION,
-        aws_access_key_id="minioadmin",
-        aws_secret_access_key="minioadmin",
+        aws_access_key_id=os.environ.get("ARTIFACT_VAULT_ACCESS_KEY", "integration-local"),
+        aws_secret_access_key=os.environ.get("ARTIFACT_VAULT_SECRET_KEY", "integration-local-secret"),
     )
 
 

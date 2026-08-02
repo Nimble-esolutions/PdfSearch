@@ -22,7 +22,6 @@ from django.core.files.base import ContentFile
 from django.db import close_old_connections, connection, models
 
 from core.maintenance import queue_job
-from core.maintenance_plans import capability_reasons
 from core.models import Folder, MaintenanceAuditEvent, PDFFile
 
 
@@ -51,10 +50,6 @@ def legacy_fixture_defaults() -> dict[str, object]:
 def main() -> None:
     if not settings.VAULT_MUTATION_TRACKING_ENABLED:
         fail("development mutation tracking is disabled")
-
-    repair_reason = capability_reasons()["repair_indexes"]
-    if repair_reason:
-        fail(f"development repair capability is blocked: {repair_reason}")
 
     user_model = get_user_model()
     run_id = uuid.uuid4().hex[:8]

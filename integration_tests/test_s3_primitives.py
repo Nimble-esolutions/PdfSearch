@@ -1,4 +1,4 @@
-"""Real S3 CAS primitives against MinIO — prove conditional operations work.
+"""Real S3 CAS primitives against the selected S3 provider.
 
 Usage: docker exec pdfsearch-web-1 python -m pytest /app/integration_tests/test_s3_primitives.py -v
 """
@@ -11,8 +11,8 @@ import unittest
 
 import boto3
 
-BUCKET = "pdfsearch-test"
-ENDPOINT = "http://pdfsearch-minio:9000"
+BUCKET = os.environ.get("ARTIFACT_VAULT_BUCKET", "pdfsearch-test")
+ENDPOINT = os.environ.get("ARTIFACT_VAULT_ENDPOINT", "http://pdfsearch-objectstore:9000")
 REGION = "us-east-1"
 
 
@@ -21,8 +21,8 @@ def _client():
         "s3",
         endpoint_url=ENDPOINT,
         region_name=REGION,
-        aws_access_key_id="minioadmin",
-        aws_secret_access_key="minioadmin",
+        aws_access_key_id=os.environ.get("ARTIFACT_VAULT_ACCESS_KEY", "integration-local"),
+        aws_secret_access_key=os.environ.get("ARTIFACT_VAULT_SECRET_KEY", "integration-local-secret"),
     )
 
 
