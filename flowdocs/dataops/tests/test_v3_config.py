@@ -90,7 +90,8 @@ class V3ConfigurationTests(unittest.TestCase):
         self.assertNotIn("do-not-copy-access", serialized)
         self.assertNotIn("do-not-copy-secret", serialized)
         self.assertEqual(connection.credential_ref, "env://ARTIFACT_VAULT")
-        self.assertTrue(connection.capabilities["conditional_write"])
+        self.assertFalse(connection.capabilities["conditional_write"])
+        self.assertFalse(connection.capabilities["probed"])
 
     def test_incomplete_transition_bootstrap_fails_with_typed_code(self):
         with self.assertRaisesRegex(V3ConfigurationError, "owned_connection_bucket_missing"):

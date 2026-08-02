@@ -41,6 +41,7 @@ from .pipeline import (
 from .readiness import readiness_payload
 from .storage import StorageConfigurationError
 from .v3_config import V3ConfigurationError
+from .v3_connection import V3ConnectionError, ensure_owned_connection_ready
 from .v3_planning import action_status, compile_requested_plan, materialize_primary_connection, runtime_config
 
 
@@ -188,6 +189,12 @@ def v3_operation_start(request):
         action = str(payload.get("action") or "").strip().lower()
         if action != "backup":
             raise ValueError("executor_not_available")
+        initial_config = runtime_config()
+        connection = materialize_primary_connection(initial_config)
+        ensure_owned_connection_ready(
+            connection,
+            deployment_id=initial_config.deployment_id,
+        )
         config, plan = compile_requested_plan(
             action=action,
             activate=_v3_bool(payload.get("activate"), field="activate"),
@@ -202,7 +209,6 @@ def v3_operation_start(request):
                 {"configuration_digest": config.digest, "plan": plan.as_dict()},
                 status=409,
             )
-        connection = materialize_primary_connection(config)
         idempotency_key = str(payload.get("idempotency_key") or "").strip()
         if not idempotency_key:
             idempotency_key = secrets.token_urlsafe(18)
@@ -234,7 +240,7 @@ def v3_operation_start(request):
                     "configuration_digest": config.digest,
                 },
             )
-    except (ValueError, V3ConfigurationError) as exc:
+    except (ValueError, V3ConfigurationError, V3ConnectionError) as exc:
         code = getattr(exc, "code", str(exc))
         return JsonResponse({"error": {"code": code}}, status=400)
     return JsonResponse(

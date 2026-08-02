@@ -135,7 +135,11 @@ def materialize_primary_connection(config: RuntimeConfig):
             enabled=True,
             is_primary=True,
             capabilities=dict(config.connection.capabilities),
-            observation={"source": "environment_bootstrap"},
+            observation={
+                "source": "environment_bootstrap",
+                "status": "check_required",
+                "failure_codes": [],
+            },
         )
 
 
@@ -287,13 +291,26 @@ def compile_requested_plan(
 
 
 def action_status(config: RuntimeConfig) -> Mapping[str, str]:
+    probed = _connection_capability(config.connection, "probed")
     readable = _connection_capability(config.connection, "read")
     writable = _connection_capability(config.connection, "write") and _connection_capability(
         config.connection,
         "conditional_write",
     )
     return {
-        "backup": "ready" if config.enabled and writable else "blocked",
-        "restore": "ready" if config.enabled and readable else "blocked",
+        "backup": (
+            "ready"
+            if config.enabled and writable
+            else "check_required"
+            if config.enabled and config.connection and not probed
+            else "blocked"
+        ),
+        "restore": (
+            "ready"
+            if config.enabled and readable
+            else "check_required"
+            if config.enabled and config.connection and not probed
+            else "blocked"
+        ),
         "import": "ready" if config.enabled else "blocked",
     }

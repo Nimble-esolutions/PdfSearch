@@ -160,9 +160,11 @@ def bootstrap_connection_from_environment(
         dataset_id=str(dataset_id or "").strip(),
         credential_ref=credential_ref,
         capabilities={
-            "read": credential_present,
-            "write": credential_present,
-            "conditional_write": credential_present,
+            "probed": False,
+            "credential_available": credential_present or bool(credential_ref),
+            "read": False,
+            "write": False,
+            "conditional_write": False,
         },
         source="environment_bootstrap",
     )

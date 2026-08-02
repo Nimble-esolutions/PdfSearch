@@ -6,12 +6,15 @@ import json
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from dataops.models import DataConnection, DataOperation, RecoveryPoint
+from dataops.v3_connection import V3ConnectionError
 
 
 @override_settings(
@@ -59,7 +62,13 @@ class DataOpsV3APITests(TestCase):
             dataset_id="ai-sahakar-stage-2026",
             credential_ref="secret://dataops/stage",
             is_primary=True,
-            capabilities={"read": True, "write": True, "conditional_write": True},
+            capabilities={
+                "probed": True,
+                "read": True,
+                "write": True,
+                "conditional_write": True,
+            },
+            last_probed_at=timezone.now(),
         )
 
     def tearDown(self):
@@ -136,6 +145,54 @@ class DataOpsV3APITests(TestCase):
             operation.lifecycle_plan_digest,
         )
         self.assertEqual(operation.connection, self.connection)
+
+    def test_backup_start_automatically_refreshes_unproven_connection(self):
+        self.connection.capabilities = {"probed": False}
+        self.connection.last_probed_at = None
+        self.connection.save(
+            using="control",
+            update_fields=["capabilities", "last_probed_at", "updated_at"],
+        )
+
+        def mark_ready(connection, **_kwargs):
+            connection.capabilities = {
+                "probed": True,
+                "read": True,
+                "write": True,
+                "conditional_write": True,
+            }
+            connection.last_probed_at = timezone.now()
+            connection.save(
+                using="control",
+                update_fields=["capabilities", "last_probed_at", "updated_at"],
+            )
+            return connection
+
+        with patch(
+            "dataops.views.ensure_owned_connection_ready",
+            side_effect=mark_ready,
+        ) as probe:
+            response = self.post_operation(
+                {"action": "backup", "idempotency_key": "auto-probe"}
+            )
+        self.assertEqual(response.status_code, 202)
+        probe.assert_called_once()
+
+    def test_failed_automatic_connection_check_creates_no_operation(self):
+        self.connection.capabilities = {"probed": False}
+        self.connection.last_probed_at = None
+        self.connection.save(
+            using="control",
+            update_fields=["capabilities", "last_probed_at", "updated_at"],
+        )
+        with patch(
+            "dataops.views.ensure_owned_connection_ready",
+            side_effect=V3ConnectionError("bucket_access_failed"),
+        ):
+            response = self.post_operation({"action": "backup"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "bucket_access_failed")
+        self.assertFalse(DataOperation.objects.using("control").exists())
 
     def test_unimplemented_executor_cannot_create_a_doomed_operation(self):
         response = self.post_operation({"action": "restore"})
