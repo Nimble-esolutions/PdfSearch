@@ -87,3 +87,11 @@ class DataOpsControlPlaneUITests(TestCase):
         operation = DataOperation.objects.using("control").get(kind=DataOperation.Kind.SYNC)
         self.assertEqual(operation.checkpoint["job_slug"], "archive")
         self.assertEqual(operation.source_profile_key, "env-source")
+
+    def test_invalid_job_schedule_is_rejected(self):
+        response = self.client.post(
+            reverse("dataops:jobs"),
+            {"slug": "bad", "name": "Bad", "source_profile": "env-source", "target_profile": "archive-target", "mode": "incremental", "schedule": "75 2 * * *", "timezone": "UTC"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(BackupJob.objects.using("control").filter(slug="bad").exists())

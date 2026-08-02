@@ -10,6 +10,7 @@ from __future__ import annotations
 import secrets
 import os
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
@@ -25,6 +26,7 @@ from core.operator_presentation import decorate_operator_state
 
 from .config import resolve_profiles, resolve_selectors, resolve_setting, validate_profiles
 from .models import BackupJob, DataOperation, DataProfile, DataOpsAuditEvent, RecoveryPoint
+from .job_scheduler import ScheduleConfigurationError, parse_schedule
 from .profile_service import ProfileMutationError, probe_profile, save_profile, save_selectors
 from .pipeline import DataOpsPipelineError, preflight_operation, resolve_operation_route
 from .readiness import readiness_payload
@@ -278,6 +280,14 @@ def jobs(request):
             return HttpResponse("Invalid transfer mode", status=400)
         if mode == "mirror" and request.POST.get("delete_orphans"):
             return HttpResponse("Mirror deletion requires an independently verified preview", status=409)
+        schedule = request.POST.get("schedule", "").strip()
+        timezone_name = request.POST.get("timezone", "UTC").strip()
+        try:
+            if schedule:
+                parse_schedule(schedule)
+            ZoneInfo(timezone_name)
+        except (ScheduleConfigurationError, ZoneInfoNotFoundError) as exc:
+            return HttpResponse(f"Invalid schedule: {exc}", status=400)
         BackupJob.objects.using("control").update_or_create(
             slug=request.POST.get("slug", "").strip().lower(),
             defaults={
@@ -287,8 +297,8 @@ def jobs(request):
                 "source_prefix": request.POST.get("source_prefix", "").strip().strip("/"),
                 "target_prefix": request.POST.get("target_prefix", "").strip().strip("/"),
                 "mode": mode,
-                "schedule": request.POST.get("schedule", "").strip(),
-                "timezone": request.POST.get("timezone", "UTC").strip(),
+                "schedule": schedule,
+                "timezone": timezone_name,
                 "enabled": request.POST.get("enabled", "1") in {"1", "on", "true"},
             },
         )
