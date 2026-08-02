@@ -25,6 +25,7 @@ from .models import DataOperation, RecoveryPoint
 from .v3_backup import publish_snapshot
 from .v3_config import connection_from_model
 from .v3_storage import client_for_connection
+from .v3_signing import V3SigningError, manifest_signing_material
 
 
 class V3ExecutionError(RuntimeError):
@@ -140,13 +141,10 @@ def execute_backup_operation(
     if operation.kind != DataOperation.Kind.BACKUP:
         raise V3ExecutionError("operation_kind_invalid", stage="preflight")
     connection = connection_from_model(operation.connection)
-    signing_key_text = str(
-        getattr(settings, "ACTIVATION_INTENT_SIGNING_KEY", "") or ""
-    )
-    if not signing_key_text:
-        raise V3ExecutionError("manifest_signing_key_missing", stage="preflight")
-    signing_key = signing_key_text.encode("utf-8")
-    signing_key_id = "dataops-manifest-" + hashlib.sha256(signing_key).hexdigest()[:12]
+    try:
+        signing_key, signing_key_id = manifest_signing_material()
+    except V3SigningError as exc:
+        raise V3ExecutionError(exc.code, stage="preflight") from exc
     identity = getattr(settings, "ENV_IDENTITY", None)
     image_digest = str(
         getattr(identity, "app_image_digest", "")

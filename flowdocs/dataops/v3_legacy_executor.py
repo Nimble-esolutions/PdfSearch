@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 from django.conf import settings
@@ -22,18 +21,8 @@ from .v3_restore import (
     materialize_quarantine,
     rehearse_quarantine,
 )
+from .v3_signing import V3SigningError, manifest_signing_material
 from .v3_storage import client_for_connection
-
-
-def _signing_material() -> tuple[bytes, str]:
-    value = str(getattr(settings, "ACTIVATION_INTENT_SIGNING_KEY", "") or "")
-    if not value:
-        raise V3ExecutionError(
-            "manifest_signing_key_missing",
-            stage="preflight",
-        )
-    key = value.encode("utf-8")
-    return key, "dataops-manifest-" + hashlib.sha256(key).hexdigest()[:12]
 
 
 def _source_connection(operation: DataOperation) -> DataConnection:
@@ -128,7 +117,10 @@ def execute_legacy_import_operation(
         or source_generation != operation.lifecycle_plan.get("source_generation_id")
     ):
         raise V3ExecutionError("legacy_source_plan_mismatch", stage="preflight")
-    signing_key, signing_key_id = _signing_material()
+    try:
+        signing_key, signing_key_id = manifest_signing_material()
+    except V3SigningError as exc:
+        raise V3ExecutionError(exc.code, stage="preflight") from exc
     try:
         source_client = client_factory(source)
         destination_client = client_factory(destination)
