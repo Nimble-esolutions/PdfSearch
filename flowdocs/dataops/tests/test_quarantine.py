@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from dataops.models import BackupJob, DataOperation, MirrorDeletionPreview
-from dataops.quarantine import cleanup_mirror_quarantines
+from dataops.quarantine import cleanup_mirror_quarantines, quarantine_inventory, recover_mirror_quarantine
 from dataops.tests.test_job_executor import FakeS3, resolved
 
 
@@ -50,3 +50,26 @@ class MirrorQuarantineCleanupTests(TestCase):
         with patch("dataops.quarantine.resolve_profiles", return_value=()):
             receipt = cleanup_mirror_quarantines(now=now, clients={})
         self.assertEqual(receipt["removed"], 0)
+
+    def test_recovery_restores_missing_objects_without_overwriting_conflicts(self):
+        now = timezone.now()
+        operation = DataOperation.objects.using("control").create(
+            kind=DataOperation.Kind.SYNC, state=DataOperation.State.SUCCEEDED,
+            destination_profile_key="target", finished_at=now,
+        )
+        prefix = f"target/.dataops-quarantine/{operation.public_id}/"
+        operation.result = {"deletion": {"quarantine_prefix": prefix, "deleted": 2}}
+        operation.save(update_fields=["result", "updated_at"])
+        client = FakeS3({
+            ("target-bucket", prefix + "backups/recover.pdf"): b"recover",
+            ("target-bucket", prefix + "backups/conflict.pdf"): b"old",
+            ("target-bucket", "target/backups/conflict.pdf"): b"new",
+        })
+        profiles = (resolved("target", "backup", "target-bucket"),)
+        with patch("dataops.quarantine.resolve_profiles", return_value=profiles):
+            receipt = recover_mirror_quarantine(operation, client=client)
+        self.assertEqual(receipt, {"restored": 1, "conflicts": 1, "recovered_at": receipt["recovered_at"]})
+        self.assertEqual(client.objects[("target-bucket", "target/backups/recover.pdf")], b"recover")
+        self.assertEqual(client.objects[("target-bucket", "target/backups/conflict.pdf")], b"new")
+        self.assertIn(("target-bucket", prefix + "backups/conflict.pdf"), client.objects)
+        self.assertEqual(len(quarantine_inventory()), 1)

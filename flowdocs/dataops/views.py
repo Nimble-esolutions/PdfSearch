@@ -313,7 +313,8 @@ def jobs(request):
     jobs = list(BackupJob.objects.using("control").all())
     for job in jobs:
         job.latest_deletion_preview = job.deletion_previews.filter(state=MirrorDeletionPreview.State.READY).order_by("-created_at").first()
-    return render(request, "dataops/jobs.html", {"jobs": jobs, "profiles": profiles, "dataops_nav": _navigation("jobs")})
+    from .quarantine import quarantine_inventory
+    return render(request, "dataops/jobs.html", {"jobs": jobs, "profiles": profiles, "quarantines": quarantine_inventory(), "dataops_nav": _navigation("jobs")})
 
 
 @login_required
@@ -382,6 +383,24 @@ def confirm_job_deletions(request, job_slug, preview_id):
     )
     preview.confirmed_operation = operation
     preview.save(update_fields=["confirmed_operation", "updated_at"])
+    return redirect("dataops:jobs")
+
+
+@login_required
+@require_POST
+def recover_job_quarantine(request, operation_id):
+    if not _can_act(request):
+        return HttpResponse("Superadmin approval required", status=403)
+    operation = DataOperation.objects.using("control").filter(public_id=operation_id, kind=DataOperation.Kind.SYNC, state=DataOperation.State.SUCCEEDED).first()
+    if operation is None:
+        return HttpResponse("Quarantine operation not found", status=404)
+    try:
+        from .quarantine import recover_mirror_quarantine
+        recover_mirror_quarantine(operation, actor=request.user)
+    except (ValueError, StorageConfigurationError) as exc:
+        return HttpResponse(f"Quarantine recovery blocked: {exc}", status=409)
+    except Exception:
+        return HttpResponse("Quarantine recovery blocked: storage operation failed", status=409)
     return redirect("dataops:jobs")
 
 
