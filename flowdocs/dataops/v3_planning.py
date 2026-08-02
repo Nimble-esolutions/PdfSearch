@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from django.conf import settings
+from django.db import transaction
 
 from .lifecycle import (
     ArtifactPassport,
@@ -96,6 +97,46 @@ def runtime_config() -> RuntimeConfig:
         connection=connection,
         policy=policy,
     )
+
+
+def materialize_primary_connection(config: RuntimeConfig):
+    """Persist only non-secret bootstrap metadata on explicit operator action."""
+
+    if config.connection is None:
+        raise ValueError("owned_connection_missing")
+    if config.connection.source == "control_database":
+        return DataConnection.objects.using("control").get(
+            public_id=config.connection.public_id
+        )
+    with transaction.atomic(using="control"):
+        existing = (
+            DataConnection.objects.using("control")
+            .select_for_update()
+            .filter(dataset_id=config.dataset_id, is_primary=True)
+            .first()
+        )
+        if existing:
+            if (
+                existing.endpoint != config.connection.endpoint
+                or existing.bucket != config.connection.bucket
+                or existing.prefix != config.connection.prefix
+            ):
+                raise ValueError("owned_connection_bootstrap_conflict")
+            return existing
+        return DataConnection.objects.using("control").create(
+            name=config.connection.name,
+            provider=config.connection.provider,
+            endpoint=config.connection.endpoint,
+            bucket=config.connection.bucket,
+            region=config.connection.region,
+            prefix=config.connection.prefix,
+            dataset_id=config.dataset_id,
+            credential_ref=config.connection.credential_ref,
+            enabled=True,
+            is_primary=True,
+            capabilities=dict(config.connection.capabilities),
+            observation={"source": "environment_bootstrap"},
+        )
 
 
 def passport_from_recovery_point(point: RecoveryPoint) -> ArtifactPassport:

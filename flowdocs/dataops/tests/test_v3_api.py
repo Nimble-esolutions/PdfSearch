@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from dataops.models import DataConnection, RecoveryPoint
+from dataops.models import DataConnection, DataOperation, RecoveryPoint
 
 
 @override_settings(
@@ -73,6 +73,13 @@ class DataOpsV3APITests(TestCase):
             content_type="application/json",
         )
 
+    def post_operation(self, payload):
+        return self.client.post(
+            reverse("dataops:v3_operation_start"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
     def recovery_point(self, *, dataset_id, release_id, digest):
         connection = self.connection if dataset_id == self.connection.dataset_id else DataConnection.objects.using("control").create(
             name="Read-only source",
@@ -112,6 +119,29 @@ class DataOpsV3APITests(TestCase):
         plan = response.json()["plan"]
         self.assertEqual(plan["route"], "backup")
         self.assertEqual(plan["transfer_mode"], "full_upload")
+
+    def test_backup_start_persists_exact_plan_and_is_idempotent(self):
+        payload = {"action": "backup", "idempotency_key": "backup-once"}
+        first = self.post_operation(payload)
+        second = self.post_operation(payload)
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["operation_id"], second.json()["operation_id"])
+        operation = DataOperation.objects.using("control").get(
+            public_id=first.json()["operation_id"]
+        )
+        self.assertEqual(operation.lifecycle_route, "backup")
+        self.assertEqual(
+            operation.lifecycle_plan["plan_digest"],
+            operation.lifecycle_plan_digest,
+        )
+        self.assertEqual(operation.connection, self.connection)
+
+    def test_unimplemented_executor_cannot_create_a_doomed_operation(self):
+        response = self.post_operation({"action": "restore"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "executor_not_available")
+        self.assertFalse(DataOperation.objects.using("control").exists())
 
     def test_same_dataset_point_routes_to_normal_restore(self):
         point = self.recovery_point(

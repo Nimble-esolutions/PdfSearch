@@ -41,7 +41,7 @@ from .pipeline import (
 from .readiness import readiness_payload
 from .storage import StorageConfigurationError
 from .v3_config import V3ConfigurationError
-from .v3_planning import action_status, compile_requested_plan, runtime_config
+from .v3_planning import action_status, compile_requested_plan, materialize_primary_connection, runtime_config
 
 
 _FORBIDDEN_V3_REQUEST_FIELDS = frozenset(
@@ -85,6 +85,32 @@ def _v3_bool(value, *, field):
     raise ValueError(f"{field}_invalid")
 
 
+def _v3_recovery_point(value):
+    recovery_point_id = str(value or "").strip()
+    if not recovery_point_id:
+        return None
+    try:
+        public_id = uuid.UUID(recovery_point_id)
+    except ValueError:
+        public_id = None
+    point = None
+    if public_id:
+        point = (
+            RecoveryPoint.objects.using("control")
+            .filter(public_id=public_id)
+            .first()
+        )
+    if point is None:
+        point = (
+            RecoveryPoint.objects.using("control")
+            .filter(release_id=recovery_point_id)
+            .first()
+        )
+    if point is None:
+        raise ValueError("recovery_point_not_found")
+    return point
+
+
 @login_required
 @require_GET
 def v3_status(request):
@@ -126,27 +152,7 @@ def v3_operation_preview(request):
         payload = _v3_request_payload(request)
         if _contains_forbidden_v3_field(payload):
             raise ValueError("secret_fields_forbidden")
-        recovery_point_id = str(payload.get("recovery_point_id") or "").strip()
-        point = None
-        if recovery_point_id:
-            try:
-                public_id = uuid.UUID(recovery_point_id)
-            except ValueError:
-                public_id = None
-            if public_id:
-                point = (
-                    RecoveryPoint.objects.using("control")
-                    .filter(public_id=public_id)
-                    .first()
-                )
-            if point is None:
-                point = (
-                    RecoveryPoint.objects.using("control")
-                    .filter(release_id=recovery_point_id)
-                    .first()
-                )
-            if point is None:
-                raise ValueError("recovery_point_not_found")
+        point = _v3_recovery_point(payload.get("recovery_point_id"))
         config, plan = compile_requested_plan(
             action=str(payload.get("action") or ""),
             activate=_v3_bool(payload.get("activate"), field="activate"),
@@ -166,6 +172,79 @@ def v3_operation_preview(request):
             "active_data_unchanged_until_activation": True,
         },
         status=200 if plan.allowed else 409,
+    )
+
+
+@login_required
+@require_POST
+def v3_operation_start(request):
+    """Persist an approved v3 plan and queue its resumable executor."""
+    if not _can_act(request):
+        return JsonResponse({"error": {"code": "superadmin_required"}}, status=403)
+    try:
+        payload = _v3_request_payload(request)
+        if _contains_forbidden_v3_field(payload):
+            raise ValueError("secret_fields_forbidden")
+        action = str(payload.get("action") or "").strip().lower()
+        if action != "backup":
+            raise ValueError("executor_not_available")
+        config, plan = compile_requested_plan(
+            action=action,
+            activate=_v3_bool(payload.get("activate"), field="activate"),
+            confirmation_present=bool(
+                str(payload.get("confirmation") or "").strip()
+            ),
+            point=_v3_recovery_point(payload.get("recovery_point_id")),
+            source_kind=str(payload.get("source_kind") or "").strip().lower(),
+        )
+        if not plan.allowed:
+            return JsonResponse(
+                {"configuration_digest": config.digest, "plan": plan.as_dict()},
+                status=409,
+            )
+        connection = materialize_primary_connection(config)
+        idempotency_key = str(payload.get("idempotency_key") or "").strip()
+        if not idempotency_key:
+            idempotency_key = secrets.token_urlsafe(18)
+        operation, created = DataOperation.objects.using("control").get_or_create(
+            kind=DataOperation.Kind.BACKUP,
+            idempotency_key=idempotency_key,
+            defaults={
+                "state": DataOperation.State.QUEUED,
+                "connection": connection,
+                "release_id": str(payload.get("recovery_point_name") or "").strip(),
+                "pipeline_stage": "planned",
+                "lifecycle_route": plan.route,
+                "lifecycle_plan": plan.as_dict(),
+                "lifecycle_plan_digest": plan.plan_digest,
+                "checkpoint": {"configuration_digest": config.digest},
+            },
+        )
+        if not created and operation.lifecycle_plan_digest != plan.plan_digest:
+            raise ValueError("idempotency_key_conflict")
+        if created:
+            DataOpsAuditEvent.objects.using("control").create(
+                actor_id=request.user.pk,
+                actor_name=request.user.get_username(),
+                action="backup",
+                operation_id=operation.public_id,
+                outcome="queued",
+                evidence={
+                    "plan_digest": plan.plan_digest,
+                    "configuration_digest": config.digest,
+                },
+            )
+    except (ValueError, V3ConfigurationError) as exc:
+        code = getattr(exc, "code", str(exc))
+        return JsonResponse({"error": {"code": code}}, status=400)
+    return JsonResponse(
+        {
+            "operation_id": str(operation.public_id),
+            "state": operation.state,
+            "plan_digest": operation.lifecycle_plan_digest,
+            "created": created,
+        },
+        status=202 if created else 200,
     )
 
 
