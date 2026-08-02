@@ -47,6 +47,9 @@ from .v3_connection import (
     ensure_owned_connection_ready,
 )
 from .v3_planning import action_status, compile_requested_plan, materialize_primary_connection, runtime_config
+from .v3_config import connection_from_model
+from .v3_legacy import V3LegacyImportError, load_legacy_generation
+from .v3_storage import client_for_connection
 
 
 _FORBIDDEN_V3_REQUEST_FIELDS = frozenset(
@@ -116,6 +119,37 @@ def _v3_recovery_point(value):
     return point
 
 
+def _v3_legacy_source(payload, *, require_ready: bool):
+    source_id = str(payload.get("source_connection_id") or "").strip()
+    generation_id = str(payload.get("source_generation_id") or "").strip()
+    if not source_id or not generation_id:
+        raise ValueError("legacy_source_selection_required")
+    try:
+        source = DataConnection.objects.using("control").get(public_id=source_id)
+    except (DataConnection.DoesNotExist, ValueError) as exc:
+        raise ValueError("source_connection_not_found") from exc
+    if not source.enabled:
+        raise ValueError("source_connection_disabled")
+    if require_ready:
+        ensure_connection_readable(source)
+    elif not (source.capabilities or {}).get("read"):
+        raise ValueError("source_connection_check_required")
+    view = connection_from_model(source)
+    generation = load_legacy_generation(
+        client_for_connection(view),
+        bucket=view.bucket,
+        dataset_id=view.dataset_id,
+        generation_id=generation_id,
+    )
+    return source, view, generation
+
+
+def _v3_confirmation_token(configuration_digest: str, plan_digest: str) -> str:
+    return hashlib.sha256(
+        f"dataops-v3:{configuration_digest}:{plan_digest}".encode("utf-8")
+    ).hexdigest()
+
+
 @login_required
 @require_GET
 def v3_status(request):
@@ -157,25 +191,46 @@ def v3_operation_preview(request):
         payload = _v3_request_payload(request)
         if _contains_forbidden_v3_field(payload):
             raise ValueError("secret_fields_forbidden")
+        action = str(payload.get("action") or "").strip().lower()
         point = _v3_recovery_point(payload.get("recovery_point_id"))
+        source_model = source_view = legacy_generation = None
+        requested_source_kind = str(payload.get("source_kind") or "").strip().lower()
+        if action == "import" and requested_source_kind != "legacy_mount":
+            source_model, source_view, legacy_generation = _v3_legacy_source(
+                payload,
+                require_ready=False,
+            )
         config, plan = compile_requested_plan(
-            action=str(payload.get("action") or ""),
+            action=action,
             activate=_v3_bool(payload.get("activate"), field="activate"),
             confirmation_present=bool(
                 str(payload.get("confirmation") or "").strip()
             ),
             point=point,
-            source_kind=str(payload.get("source_kind") or "").strip().lower(),
+            source_kind=(
+                "legacy_object_store"
+                if legacy_generation is not None
+                else requested_source_kind
+            ),
+            legacy_generation=legacy_generation,
+            source_connection=source_view,
         )
-    except (ValueError, V3ConfigurationError) as exc:
+    except (ValueError, V3ConfigurationError, V3LegacyImportError) as exc:
         code = getattr(exc, "code", str(exc))
         return JsonResponse({"error": {"code": code}}, status=400)
+    response = {
+        "configuration_digest": config.digest,
+        "plan": plan.as_dict(),
+        "active_data_unchanged_until_activation": True,
+    }
+    if action == "import" and plan.allowed:
+        response["confirmation"] = {
+            "required": True,
+            "token": _v3_confirmation_token(config.digest, plan.plan_digest),
+            "binds_exact_plan": True,
+        }
     return JsonResponse(
-        {
-            "configuration_digest": config.digest,
-            "plan": plan.as_dict(),
-            "active_data_unchanged_until_activation": True,
-        },
+        response,
         status=200 if plan.allowed else 409,
     )
 
@@ -191,7 +246,7 @@ def v3_operation_start(request):
         if _contains_forbidden_v3_field(payload):
             raise ValueError("secret_fields_forbidden")
         action = str(payload.get("action") or "").strip().lower()
-        if action not in {"backup", "restore", "test_recovery"}:
+        if action not in {"backup", "restore", "test_recovery", "import"}:
             raise ValueError("executor_not_available")
         activate = _v3_bool(payload.get("activate"), field="activate")
         if activate:
@@ -199,7 +254,16 @@ def v3_operation_start(request):
         point = _v3_recovery_point(payload.get("recovery_point_id"))
         initial_config = runtime_config()
         connection = materialize_primary_connection(initial_config)
-        if action == "backup" or (
+        source_model = source_view = legacy_generation = None
+        requested_source_kind = str(payload.get("source_kind") or "").strip().lower()
+        if action == "import" and requested_source_kind == "legacy_mount":
+            raise ValueError("legacy_mount_executor_not_available")
+        if action == "import":
+            source_model, source_view, legacy_generation = _v3_legacy_source(
+                payload,
+                require_ready=True,
+            )
+        if action in {"backup", "import"} or (
             point is not None and point.dataset_id != initial_config.dataset_id
         ):
             ensure_owned_connection_ready(
@@ -215,13 +279,23 @@ def v3_operation_start(request):
                 str(payload.get("confirmation") or "").strip()
             ),
             point=point,
-            source_kind=str(payload.get("source_kind") or "").strip().lower(),
+            source_kind=(
+                "legacy_object_store"
+                if legacy_generation is not None
+                else requested_source_kind
+            ),
+            legacy_generation=legacy_generation,
+            source_connection=source_view,
         )
         if not plan.allowed:
             return JsonResponse(
                 {"configuration_digest": config.digest, "plan": plan.as_dict()},
                 status=409,
             )
+        if action == "import" and str(payload.get("confirmation") or "") != (
+            _v3_confirmation_token(config.digest, plan.plan_digest)
+        ):
+            raise ValueError("confirmation_mismatch")
         idempotency_key = str(payload.get("idempotency_key") or "").strip()
         if not idempotency_key:
             idempotency_key = secrets.token_urlsafe(18)
@@ -229,17 +303,34 @@ def v3_operation_start(request):
             "backup": DataOperation.Kind.BACKUP,
             "restore": DataOperation.Kind.RESTORE,
             "test_recovery": DataOperation.Kind.TEST_RECOVERY,
+            "import": DataOperation.Kind.IMPORT,
         }[action]
         checkpoint = {"configuration_digest": config.digest}
         if point is not None:
             checkpoint["recovery_point_id"] = str(point.public_id)
+        if legacy_generation is not None and source_model is not None:
+            checkpoint.update(
+                {
+                    "source_connection_id": str(source_model.public_id),
+                    "source_dataset_id": legacy_generation.dataset_id,
+                    "source_generation_id": legacy_generation.generation_id,
+                    "source_manifest_sha256": legacy_generation.manifest_sha256,
+                }
+            )
         operation, created = DataOperation.objects.using("control").get_or_create(
             kind=operation_kind,
             idempotency_key=idempotency_key,
             defaults={
                 "state": DataOperation.State.QUEUED,
                 "connection": connection,
-                "release_id": str(payload.get("recovery_point_name") or "").strip(),
+                "release_id": (
+                    str(payload.get("recovery_point_name") or "").strip()
+                    or (
+                        f"import-{legacy_generation.generation_id}"[:160]
+                        if legacy_generation is not None
+                        else ""
+                    )
+                ),
                 "pipeline_stage": "planned",
                 "lifecycle_route": plan.route,
                 "lifecycle_plan": plan.as_dict(),
@@ -261,7 +352,12 @@ def v3_operation_start(request):
                     "configuration_digest": config.digest,
                 },
             )
-    except (ValueError, V3ConfigurationError, V3ConnectionError) as exc:
+    except (
+        ValueError,
+        V3ConfigurationError,
+        V3ConnectionError,
+        V3LegacyImportError,
+    ) as exc:
         code = getattr(exc, "code", str(exc))
         return JsonResponse({"error": {"code": code}}, status=400)
     return JsonResponse(

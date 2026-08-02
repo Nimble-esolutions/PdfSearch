@@ -278,6 +278,94 @@ class DataOpsV3APITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["plan"]["route"], "legacy_import")
 
+    def test_legacy_object_store_import_binds_preview_confirmation_and_queue(self):
+        source = DataConnection.objects.using("control").create(
+            name="Legacy production source",
+            provider="rustfs",
+            endpoint="https://rustfs.example.invalid",
+            bucket="legacy-production-v2",
+            dataset_id="ai-sahakar-prod-v2",
+            credential_ref="secret://dataops/legacy-source",
+            capabilities={"read": True},
+        )
+        generation = SimpleNamespace(
+            dataset_id=source.dataset_id,
+            generation_id="legacy-20260802T085639Z",
+            manifest_sha256="d" * 64,
+        )
+        request = {
+            "action": "import",
+            "source_connection_id": str(source.public_id),
+            "source_generation_id": generation.generation_id,
+        }
+        with patch("dataops.views.client_for_connection"), patch(
+            "dataops.views.load_legacy_generation",
+            return_value=generation,
+        ):
+            preview = self.post_preview(request)
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.json()["plan"]["route"], "legacy_import")
+        token = preview.json()["confirmation"]["token"]
+        with patch("dataops.views.client_for_connection"), patch(
+            "dataops.views.load_legacy_generation",
+            return_value=generation,
+        ):
+            started = self.post_operation(
+                {
+                    **request,
+                    "confirmation": token,
+                    "idempotency_key": "legacy-import-once",
+                }
+            )
+        self.assertEqual(started.status_code, 202)
+        operation = DataOperation.objects.using("control").get(
+            public_id=started.json()["operation_id"]
+        )
+        self.assertEqual(operation.kind, DataOperation.Kind.IMPORT)
+        self.assertEqual(operation.lifecycle_route, "legacy_import")
+        self.assertEqual(
+            operation.checkpoint["source_connection_id"],
+            str(source.public_id),
+        )
+        self.assertEqual(
+            operation.checkpoint["source_manifest_sha256"],
+            generation.manifest_sha256,
+        )
+
+    def test_legacy_object_store_import_rejects_unbound_confirmation(self):
+        source = DataConnection.objects.using("control").create(
+            name="Legacy source",
+            endpoint="https://rustfs.example.invalid",
+            bucket="legacy-source",
+            dataset_id="legacy-source-v2",
+            credential_ref="secret://dataops/legacy-source",
+            capabilities={"read": True},
+        )
+        generation = SimpleNamespace(
+            dataset_id=source.dataset_id,
+            generation_id="legacy-explicit",
+            manifest_sha256="e" * 64,
+        )
+        with patch("dataops.views.client_for_connection"), patch(
+            "dataops.views.load_legacy_generation",
+            return_value=generation,
+        ):
+            response = self.post_operation(
+                {
+                    "action": "import",
+                    "source_connection_id": str(source.public_id),
+                    "source_generation_id": generation.generation_id,
+                    "confirmation": "stale-or-unbound",
+                }
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "confirmation_mismatch")
+        self.assertFalse(
+            DataOperation.objects.using("control")
+            .filter(kind=DataOperation.Kind.IMPORT)
+            .exists()
+        )
+
     def test_secret_fields_are_rejected_without_echoing_values(self):
         response = self.post_preview(
             {"action": "backup", "secret_key": "do-not-echo"}
