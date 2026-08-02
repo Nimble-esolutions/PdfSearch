@@ -1,26 +1,30 @@
-# Disposable vault lifecycle and runtime process-death proof.
+# Disposable RustFS lifecycle and runtime process-death proof. Set
+# OBJECT_STORE_COMMAND="server /data" for the MinIO compatibility target.
 #
 # The caller must resolve every dependency image to an immutable digest before
 # starting this stack. No production volume, network, or container is reused.
 services:
-  minio:
-    image: ${MINIO_IMAGE:?MINIO_IMAGE must be an immutable digest reference}
+  objectstore:
+    image: ${OBJECT_STORE_IMAGE:?OBJECT_STORE_IMAGE must be an immutable digest reference}
     pull_policy: never
-    command: server /data
+    command: ${OBJECT_STORE_COMMAND:-/data}
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: integration-local
+      MINIO_ROOT_PASSWORD: integration-local-secret
+      RUSTFS_ACCESS_KEY: integration-local
+      RUSTFS_SECRET_KEY: integration-local-secret
+      RUSTFS_VOLUMES: /data
     volumes:
-      - minio_data:/data
+      - objectstore_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-sS", "http://localhost:9000/minio/health/live"]
       interval: 2s
       timeout: 3s
       retries: 60
     networks:
       integration:
         aliases:
-          - pdfsearch-minio
+          - pdfsearch-objectstore
 
   redis:
     image: ${REDIS_IMAGE:?REDIS_IMAGE must be an immutable digest reference}
@@ -63,12 +67,12 @@ services:
       ALLOW_INSECURE_DEFAULTS: "1"
       SECRET_KEY: integration-only-secret-key-with-more-than-fifty-characters-not-for-production
       ARTIFACT_VAULT_ENABLED: "1"
-      ARTIFACT_VAULT_ENDPOINT: http://pdfsearch-minio:9000
+      ARTIFACT_VAULT_ENDPOINT: http://pdfsearch-objectstore:9000
       ARTIFACT_VAULT_BUCKET: pdfsearch-test
       ARTIFACT_VAULT_REGION: us-east-1
-      ARTIFACT_VAULT_ACCESS_KEY: minioadmin
-      ARTIFACT_VAULT_SECRET_KEY: minioadmin
-      VAULT_ALLOWED_S3_ENDPOINTS: http://pdfsearch-minio:9000
+      ARTIFACT_VAULT_ACCESS_KEY: integration-local
+      ARTIFACT_VAULT_SECRET_KEY: integration-local-secret
+      VAULT_ALLOWED_S3_ENDPOINTS: http://pdfsearch-objectstore:9000
       VAULT_ALLOW_HTTP_S3_ENDPOINTS: "1"
       VAULT_BLOCK_PRIVATE_S3_ENDPOINTS: "0"
       VAULT_SYNC_ENABLED: "1"
@@ -85,7 +89,7 @@ services:
       - lifecycle_data:/app/integration-data
       - lifecycle_control:/app/data-control
     depends_on:
-      minio:
+      objectstore:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -142,7 +146,7 @@ services:
       - integration
 
 volumes:
-  minio_data:
+  objectstore_data:
   lifecycle_data:
   lifecycle_control:
   runtime_data:

@@ -1,3 +1,11 @@
+x-development-image: &development-image
+  image: ${PDFSEARCH_DEV_IMAGE:-pdfsearch-dev:local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      OCI_REVISION: ${LOCAL_BUILD_REVISION:-local-dev}
+
 services:
   redis:
     image: redis:7-alpine
@@ -15,46 +23,41 @@ services:
     networks:
       - internal
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: server /data
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.2@sha256:6bd08dc511cebe0a4b5c35c266db465c7eb92cf3df4321c69967be66fe4cb395
     environment:
-      MINIO_ROOT_USER: ${DEV_VAULT_ACCESS_KEY:-pdfsearch-dev}
-      MINIO_ROOT_PASSWORD: ${DEV_VAULT_SECRET_KEY:-pdfsearch-dev-secret}
+      RUSTFS_ACCESS_KEY: ${DEV_RUSTFS_ACCESS_KEY:-pdfsearch-dev}
+      RUSTFS_SECRET_KEY: ${DEV_RUSTFS_SECRET_KEY:-pdfsearch-dev-secret}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_VOLUMES: /data
     volumes:
-      - minio_data_dev:/data
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
+      - rustfs_data_dev:/data
+      - rustfs_logs_dev:/logs
+    ports:
+      - "127.0.0.1:${RUSTFS_S3_PORT:-19000}:9000"
+      - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-19001}:9001"
     restart: unless-stopped
     networks:
       - internal
 
-  minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - >-
-        mc alias set dev http://minio:9000
-        "$${DEV_VAULT_ACCESS_KEY}" "$${DEV_VAULT_SECRET_KEY}" &&
-        mc mb --ignore-existing dev/"$${DEV_VAULT_BUCKET}"
+  rustfs-init:
+    <<: *development-image
+    entrypoint: ["python", "/app/scripts/runtime/init_local_rustfs.py"]
     environment:
-      DEV_VAULT_ACCESS_KEY: ${DEV_VAULT_ACCESS_KEY:-pdfsearch-dev}
-      DEV_VAULT_SECRET_KEY: ${DEV_VAULT_SECRET_KEY:-pdfsearch-dev-secret}
-      DEV_VAULT_BUCKET: ${DEV_VAULT_BUCKET:-pdfsearch-dev}
+      DEV_RUSTFS_ENDPOINT: http://rustfs:9000
+      DEV_RUSTFS_ACCESS_KEY: ${DEV_RUSTFS_ACCESS_KEY:-pdfsearch-dev}
+      DEV_RUSTFS_SECRET_KEY: ${DEV_RUSTFS_SECRET_KEY:-pdfsearch-dev-secret}
+      DEV_RUSTFS_BUCKET: ${DEV_RUSTFS_BUCKET:-pdfsearch-dev}
+      DEV_RUSTFS_INIT_TIMEOUT_SECONDS: ${DEV_RUSTFS_INIT_TIMEOUT_SECONDS:-120}
     depends_on:
-      minio:
-        condition: service_healthy
+      rustfs:
+        condition: service_started
     restart: "no"
     networks:
       - internal
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *development-image
     volumes:
       - flowdocs_data_dev:/app/data
       - flowdocs_control_dev:/app/data-control
@@ -77,18 +80,30 @@ services:
       - DECLARED_SEED_DB=${DECLARED_SEED_DB:-/app/init/db.sqlite3}
       - DECLARED_SEED_MEDIA=${DECLARED_SEED_MEDIA:-/app/init/media}
       - APP_ENV=${APP_ENV:-development}
+      - APP_RELEASE_VERSION=${LOCAL_BUILD_REVISION:-local-dev}
+      - APP_IMAGE_DIGEST=
       - DEPLOYMENT_ID=${DEPLOYMENT_ID:-local-dev}
       - DATASET_ID=${DATASET_ID:-ai-sahakar-dev}
       - AUTHORITATIVE_DATASET_ID=${AUTHORITATIVE_DATASET_ID:-ai-sahakar-dev}
       - PRODUCTION_SOURCE_ID=${PRODUCTION_SOURCE_ID:-local-dev}
       - DATA_MODE=${DATA_MODE:-empty}
+      - DATA_PINNED_GENERATION=${DATA_PINNED_GENERATION:-}
+      - RESTORE_SOURCE_DATASET_ID=${RESTORE_SOURCE_DATASET_ID:-}
+      - RESTORE_POLICY=${RESTORE_POLICY:-manual}
+      - NONPROD_DATA_POLICY=${NONPROD_DATA_POLICY:-synthetic-only}
       - BACKUP_ROLE=${BACKUP_ROLE:-disabled}
       - BACKUP_SYNC_MODE=${BACKUP_SYNC_MODE:-manual}
       - VAULT_SYNC_ENABLED=${VAULT_SYNC_ENABLED:-0}
       - VAULT_SYNC_MODE=${VAULT_SYNC_MODE:-manual}
       - VAULT_SYNC_PROMOTION_MODE=${VAULT_SYNC_PROMOTION_MODE:-manual}
+      - VAULT_SYNC_INTERVAL_SECONDS=${VAULT_SYNC_INTERVAL_SECONDS:-900}
+      - VAULT_SYNC_QUIET_PERIOD_SECONDS=${VAULT_SYNC_QUIET_PERIOD_SECONDS:-120}
+      - VAULT_SYNC_MAX_LAG_SECONDS=${VAULT_SYNC_MAX_LAG_SECONDS:-3600}
+      - VAULT_SYNC_MAX_PARALLEL_UPLOADS=${VAULT_SYNC_MAX_PARALLEL_UPLOADS:-4}
+      - VAULT_SYNC_MAX_PARALLEL_HASHERS=${VAULT_SYNC_MAX_PARALLEL_HASHERS:-2}
       - VAULT_MUTATION_TRACKING_ENABLED=${VAULT_MUTATION_TRACKING_ENABLED:-1}
       - VAULT_SNAPSHOT_ROOT=/app/data-control/snapshots
+      - VAULT_SNAPSHOT_BARRIER_TIMEOUT_SECONDS=${VAULT_SNAPSHOT_BARRIER_TIMEOUT_SECONDS:-30}
       - VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS=${VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS:-120}
       - VAULT_SNAPSHOT_CLEANUP_MAX_ITEMS=${VAULT_SNAPSHOT_CLEANUP_MAX_ITEMS:-8}
       - VAULT_SNAPSHOT_CLEANUP_MAX_SCAN_ITEMS=${VAULT_SNAPSHOT_CLEANUP_MAX_SCAN_ITEMS:-64}
@@ -97,21 +112,32 @@ services:
       - VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES=${VAULT_SNAPSHOT_FAISS_MAX_PDF_JSON_BYTES:-134217728}
       - VAULT_DEFAULT_PROFILE=${VAULT_DEFAULT_PROFILE:-local-development}
       - VAULT_RESTORE_ENABLED=${VAULT_RESTORE_ENABLED:-0}
+      - VAULT_RESTORE_MIN_FREE_BYTES=${VAULT_RESTORE_MIN_FREE_BYTES:-0}
+      - VAULT_RESTORE_MIN_FREE_INODES=${VAULT_RESTORE_MIN_FREE_INODES:-0}
+      - VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH=${VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH:-0}
       - VAULT_ADMIN_MUTATIONS_ENABLED=${VAULT_ADMIN_MUTATIONS_ENABLED:-0}
+      - VAULT_JOB_HEARTBEAT_SECONDS=${VAULT_JOB_HEARTBEAT_SECONDS:-15}
+      - VAULT_JOB_STALE_SECONDS=${VAULT_JOB_STALE_SECONDS:-90}
+      - VAULT_VALIDATION_MAX_AGE_SECONDS=${VAULT_VALIDATION_MAX_AGE_SECONDS:-1800}
       - LOCAL_INDEX_MAINTENANCE_ENABLED=${LOCAL_INDEX_MAINTENANCE_ENABLED:-1}
       - FORCE_REINDEX_ENABLED=${FORCE_REINDEX_ENABLED:-1}
       - EXTERNAL_EMBEDDINGS_ENABLED=${EXTERNAL_EMBEDDINGS_ENABLED:-1}
       - MAINTENANCE_WORKSPACE_ROOT=/app/data-control/maintenance-workspaces
       - MAINTENANCE_JOB_TIMEOUT_SECONDS=${MAINTENANCE_JOB_TIMEOUT_SECONDS:-7200}
+      - MAINTENANCE_SCHEDULER_ENABLED=${MAINTENANCE_SCHEDULER_ENABLED:-0}
+      - MAINTENANCE_WORKER_READINESS_REQUIRED=${MAINTENANCE_WORKER_READINESS_REQUIRED:-1}
+      - MAINTENANCE_CANDIDATE_WRITER_MODE=${MAINTENANCE_CANDIDATE_WRITER_MODE:-0}
       - MAINTENANCE_WORKER_HEARTBEAT_PATH=/app/data-control/runtime/maintenance-worker.heartbeat
       - MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS=${MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS:-30}
       - VAULT_UI_PROFILE_CONFIGURATION_ENABLED=${VAULT_UI_PROFILE_CONFIGURATION_ENABLED:-1}
-      - VAULT_ALLOWED_S3_ENDPOINTS=${VAULT_ALLOWED_S3_ENDPOINTS:-http://minio:9000}
+      - VAULT_UI_SECRET_ENTRY_ENABLED=${VAULT_UI_SECRET_ENTRY_ENABLED:-0}
+      - VAULT_ALLOWED_S3_ENDPOINTS=${VAULT_ALLOWED_S3_ENDPOINTS:-http://rustfs:9000}
       - VAULT_CREDENTIAL_ALIASES=${VAULT_CREDENTIAL_ALIASES:-}
       - VAULT_BLOCK_PRIVATE_S3_ENDPOINTS=${VAULT_BLOCK_PRIVATE_S3_ENDPOINTS:-0}
       - VAULT_ALLOW_HTTP_S3_ENDPOINTS=${VAULT_ALLOW_HTTP_S3_ENDPOINTS:-1}
       - VAULT_RESTORE_REQUIRE_SANITIZATION=${VAULT_RESTORE_REQUIRE_SANITIZATION:-1}
       - STAGING_RUNTIME_ACTIVATION_ENABLED=${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}
+      - STAGING_INITIAL_ACTIVATION_ENABLED=${STAGING_INITIAL_ACTIVATION_ENABLED:-0}
       - MAINTENANCE_CANDIDATE_PREPARATION_ENABLED=${MAINTENANCE_CANDIDATE_PREPARATION_ENABLED:-0}
       - STAGING_ACTIVATION_APPLY_MODE=${STAGING_ACTIVATION_APPLY_MODE:-auto}
       - ACTIVATION_INTENT_SIGNING_KEY=${ACTIVATION_INTENT_SIGNING_KEY:-}
@@ -128,11 +154,35 @@ services:
       - OPENAI_EMBED_MODEL=${OPENAI_EMBED_MODEL:-text-embedding-3-small}
       - OPENAI_CHAT_MODEL=${OPENAI_CHAT_MODEL:-gpt-4o-mini}
       - ARTIFACT_VAULT_ENABLED=${ARTIFACT_VAULT_ENABLED:-1}
-      - ARTIFACT_VAULT_ENDPOINT=${ARTIFACT_VAULT_ENDPOINT:-http://minio:9000}
+      - ARTIFACT_VAULT_ENDPOINT=${ARTIFACT_VAULT_ENDPOINT:-http://rustfs:9000}
       - ARTIFACT_VAULT_BUCKET=${ARTIFACT_VAULT_BUCKET:-pdfsearch-dev}
       - ARTIFACT_VAULT_REGION=${ARTIFACT_VAULT_REGION:-us-east-1}
       - ARTIFACT_VAULT_ACCESS_KEY=${ARTIFACT_VAULT_ACCESS_KEY:-pdfsearch-dev}
       - ARTIFACT_VAULT_SECRET_KEY=${ARTIFACT_VAULT_SECRET_KEY:-pdfsearch-dev-secret}
+      - DATAOPS_ENABLED=${DATAOPS_ENABLED:-1}
+      - DATAOPS_PROFILE_MANIFEST=${DATAOPS_PROFILE_MANIFEST:-[{"name":"local_restore","role":"restore","endpoint":"http://rustfs:9000","bucket":"pdfsearch-dev","dataset_id":"ai-sahakar-dev","source_id":"local-dev","namespace":"restore","credential_ref":"DATAOPS_LOCAL_RUSTFS","enabled":true},{"name":"local_backup","role":"backup","endpoint":"http://rustfs:9000","bucket":"pdfsearch-dev","dataset_id":"ai-sahakar-dev","source_id":"local-dev","namespace":"backup","credential_ref":"DATAOPS_LOCAL_RUSTFS","enabled":true}]}
+      - DATAOPS_ENV_PROFILES=
+      - DATAOPS_BACKUP_PROFILE=${DATAOPS_BACKUP_PROFILE:-local_backup}
+      - DATAOPS_RESTORE_PROFILE=${DATAOPS_RESTORE_PROFILE:-local_restore}
+      - DATAOPS_LOCAL_RUSTFS_ACCESS_KEY=${DEV_RUSTFS_ACCESS_KEY:-pdfsearch-dev}
+      - DATAOPS_LOCAL_RUSTFS_SECRET_KEY=${DEV_RUSTFS_SECRET_KEY:-pdfsearch-dev-secret}
+      - DATAOPS_BACKUP_MODE=${DATAOPS_BACKUP_MODE:-manual}
+      - DATAOPS_BACKUP_INTERVAL_SECONDS=${DATAOPS_BACKUP_INTERVAL_SECONDS:-900}
+      - DATAOPS_BACKUP_SOURCE_PROFILE=${DATAOPS_BACKUP_SOURCE_PROFILE:-}
+      - DATAOPS_BACKUP_DESTINATION_PROFILE=${DATAOPS_BACKUP_DESTINATION_PROFILE:-}
+      - DATAOPS_RESTORE_SOURCE_PROFILE=${DATAOPS_RESTORE_SOURCE_PROFILE:-}
+      - DATAOPS_RESTORE_DESTINATION_PROFILE=${DATAOPS_RESTORE_DESTINATION_PROFILE:-}
+      - DATAOPS_BACKUP_QUIET_PERIOD_SECONDS=${DATAOPS_BACKUP_QUIET_PERIOD_SECONDS:-120}
+      - DATAOPS_AUTO_HEAL_ENABLED=${DATAOPS_AUTO_HEAL_ENABLED:-0}
+      - DATAOPS_AUTO_HEAL_MAX_RETRIES=${DATAOPS_AUTO_HEAL_MAX_RETRIES:-3}
+      - DATAOPS_OPERATION_LEASE_SECONDS=${DATAOPS_OPERATION_LEASE_SECONDS:-3600}
+      - DATAOPS_AUTO_HEAL_REINDEX_PER_RUN=${DATAOPS_AUTO_HEAL_REINDEX_PER_RUN:-500}
+      - DATAOPS_AUTO_HEAL_REINDEX_PER_DAY=${DATAOPS_AUTO_HEAL_REINDEX_PER_DAY:-5000}
+      - DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING=${DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING:-0}
+      - DATAOPS_RESTORE_STAGING_ROOT=/app/data/restore-quarantine
+      - DATAOPS_UI_CONFIG_ENABLED=${DATAOPS_UI_CONFIG_ENABLED:-1}
+      - DATAOPS_UI_SECRET_ENTRY_ENABLED=${DATAOPS_UI_SECRET_ENTRY_ENABLED:-0}
+      - DATAOPS_CONFIG_ENCRYPTION_KEY=${DATAOPS_CONFIG_ENCRYPTION_KEY:-}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
       - REDIS_URL=redis://redis:6379/1
@@ -154,7 +204,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      minio-init:
+      rustfs-init:
         condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
@@ -167,9 +217,7 @@ services:
       - internal
 
   maintenance:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *development-image
     entrypoint: ["/app/worker-entrypoint.sh"]
     volumes:
       - flowdocs_data_dev:/app/data
@@ -178,7 +226,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      minio-init:
+      rustfs-init:
         condition: service_completed_successfully
       web:
         condition: service_healthy
@@ -207,7 +255,9 @@ volumes:
     driver: local
   flowdocs_control_dev:
     driver: local
-  minio_data_dev:
+  rustfs_data_dev:
+    driver: local
+  rustfs_logs_dev:
     driver: local
 
 networks:
