@@ -53,6 +53,19 @@ class PdfOcrFallbackTests(SimpleTestCase):
         self.assertEqual(text, "native searchable text")
         run.assert_not_called()
 
+    def test_default_ocr_languages_include_english_marathi_and_hindi(self):
+        document = _FakeDocument([_FakePage()])
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="संस्था", stderr=""
+        )
+        with patch("core.utils.shutil.which", return_value="/usr/bin/tesseract"):
+            with patch("core.utils.subprocess.run", return_value=completed) as run:
+                text = self._extract(document, PDF_OCR_FALLBACK_ENABLED=True)
+
+        self.assertEqual(text, "संस्था")
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("-l") + 1], "eng+mar+hin")
+
     def test_image_only_page_uses_configured_tesseract_languages(self):
         document = _FakeDocument([_FakePage()])
         completed = subprocess.CompletedProcess(
