@@ -69,6 +69,16 @@ class BackupReceipt:
         }
 
 
+@dataclass(frozen=True)
+class ManifestPublication:
+    recovery_point_id: str
+    dataset_id: str
+    manifest_sha256: str
+    manifest_key: str
+    recovery_point_key: str
+    activation_ready: bool
+
+
 def _safe_segment(value: str, code: str) -> str:
     value = str(value or "").strip()
     if not SAFE_SEGMENT.fullmatch(value):
@@ -319,6 +329,117 @@ def _publish_latest_pointer(
         raise V3BackupError("latest_pointer_verify_failed")
 
 
+def publish_manifest_contract(
+    *,
+    connection: ConnectionView,
+    client,
+    manifest: Mapping[str, Any],
+    signing_key: bytes,
+    signing_key_id: str,
+) -> tuple[dict[str, Any], ManifestPublication]:
+    """Publish one signed manifest, immutable descriptor, and fenced latest ref."""
+
+    if not connection.capabilities.get("write") or not connection.capabilities.get(
+        "conditional_write"
+    ):
+        raise V3BackupError("owned_connection_not_writable")
+    recovery_point_id = _safe_segment(
+        manifest.get("recovery_point_id"),
+        "recovery_point_id_invalid",
+    )
+    if manifest.get("dataset_id") != connection.dataset_id:
+        raise V3BackupError("manifest_dataset_mismatch")
+    descriptor = {
+        "schema_version": 3,
+        "dataset_id": connection.dataset_id,
+    }
+    descriptor_body = canonical_json_bytes(descriptor)
+    descriptor_digest = hashlib.sha256(descriptor_body).hexdigest()
+    put_bytes_immutable(
+        client,
+        bucket=connection.bucket,
+        key=f"{dataset_root(connection)}/dataset.json",
+        body=descriptor_body,
+        sha256=descriptor_digest,
+        content_type="application/json",
+    )
+    signed_manifest = sign_manifest(
+        manifest,
+        key=signing_key,
+        key_id=signing_key_id,
+    )
+    manifest_body = canonical_json_bytes(signed_manifest)
+    manifest_bytes_digest = hashlib.sha256(manifest_body).hexdigest()
+    manifest_key = (
+        f"{dataset_root(connection)}/manifests/"
+        f"{signed_manifest['manifest_sha256']}.json"
+    )
+    put_bytes_immutable(
+        client,
+        bucket=connection.bucket,
+        key=manifest_key,
+        body=manifest_body,
+        sha256=manifest_bytes_digest,
+        content_type="application/json",
+    )
+    verify_remote_object(
+        client,
+        bucket=connection.bucket,
+        key=manifest_key,
+        sha256=manifest_bytes_digest,
+        size=len(manifest_body),
+    )
+    activation_ready = all(
+        not component.get("rebuild_required", False)
+        for component in signed_manifest["components"].values()
+    )
+    recovery_point = {
+        "schema_version": 3,
+        "dataset_id": connection.dataset_id,
+        "recovery_point_id": recovery_point_id,
+        "manifest_sha256": signed_manifest["manifest_sha256"],
+        "manifest_key": manifest_key,
+        "signature_key_id": signing_key_id,
+        "data_complete": True,
+        "activation_ready": activation_ready,
+    }
+    recovery_point_body = canonical_json_bytes(recovery_point)
+    recovery_point_digest = hashlib.sha256(recovery_point_body).hexdigest()
+    recovery_point_key = (
+        f"{dataset_root(connection)}/recovery-points/{recovery_point_id}.json"
+    )
+    put_bytes_immutable(
+        client,
+        bucket=connection.bucket,
+        key=recovery_point_key,
+        body=recovery_point_body,
+        sha256=recovery_point_digest,
+        content_type="application/json",
+    )
+    verify_remote_object(
+        client,
+        bucket=connection.bucket,
+        key=recovery_point_key,
+        sha256=recovery_point_digest,
+        size=len(recovery_point_body),
+    )
+    _publish_latest_pointer(
+        client,
+        connection,
+        recovery_point_id=recovery_point_id,
+        manifest_sha256=signed_manifest["manifest_sha256"],
+        recovery_point_key=recovery_point_key,
+    )
+    return signed_manifest, ManifestPublication(
+        recovery_point_id=recovery_point_id,
+        dataset_id=connection.dataset_id,
+        manifest_sha256=signed_manifest["manifest_sha256"],
+        manifest_key=manifest_key,
+        recovery_point_key=recovery_point_key,
+        activation_ready=activation_ready,
+    )
+
+
 def publish_snapshot(
     *,
     snapshot,
@@ -348,21 +469,6 @@ def publish_snapshot(
     files = _verified_snapshot_files(bundle)
     parent_recovery_point_id, base_digest = _latest_lineage(client, connection)
     uploaded_objects = uploaded_bytes = reused_objects = reused_bytes = 0
-
-    descriptor = {
-        "schema_version": 3,
-        "dataset_id": connection.dataset_id,
-    }
-    descriptor_body = canonical_json_bytes(descriptor)
-    descriptor_digest = hashlib.sha256(descriptor_body).hexdigest()
-    put_bytes_immutable(
-        client,
-        bucket=connection.bucket,
-        key=f"{dataset_root(connection)}/dataset.json",
-        body=descriptor_body,
-        sha256=descriptor_digest,
-        content_type="application/json",
-    )
 
     for item in files:
         key = blob_key(connection, item["sha256"])
@@ -430,79 +536,19 @@ def publish_snapshot(
         },
         base_manifest_sha256=base_digest,
     )
-    signed_manifest = sign_manifest(
-        manifest,
-        key=signing_key,
-        key_id=signing_key_id,
-    )
-    manifest_body = canonical_json_bytes(signed_manifest)
-    manifest_bytes_digest = hashlib.sha256(manifest_body).hexdigest()
-    manifest_key = (
-        f"{dataset_root(connection)}/manifests/"
-        f"{signed_manifest['manifest_sha256']}.json"
-    )
-    put_bytes_immutable(
-        client,
-        bucket=connection.bucket,
-        key=manifest_key,
-        body=manifest_body,
-        sha256=manifest_bytes_digest,
-        content_type="application/json",
-    )
-    verify_remote_object(
-        client,
-        bucket=connection.bucket,
-        key=manifest_key,
-        sha256=manifest_bytes_digest,
-        size=len(manifest_body),
-    )
-
-    recovery_point = {
-        "schema_version": 3,
-        "dataset_id": connection.dataset_id,
-        "recovery_point_id": recovery_point_id,
-        "manifest_sha256": signed_manifest["manifest_sha256"],
-        "manifest_key": manifest_key,
-        "signature_key_id": signing_key_id,
-        "data_complete": True,
-        "activation_ready": all(
-            not component.get("rebuild_required", False)
-            for component in signed_manifest["components"].values()
-        ),
-    }
-    recovery_point_body = canonical_json_bytes(recovery_point)
-    recovery_point_digest = hashlib.sha256(recovery_point_body).hexdigest()
-    recovery_point_key = (
-        f"{dataset_root(connection)}/recovery-points/{recovery_point_id}.json"
-    )
-    put_bytes_immutable(
-        client,
-        bucket=connection.bucket,
-        key=recovery_point_key,
-        body=recovery_point_body,
-        sha256=recovery_point_digest,
-        content_type="application/json",
-    )
-    verify_remote_object(
-        client,
-        bucket=connection.bucket,
-        key=recovery_point_key,
-        sha256=recovery_point_digest,
-        size=len(recovery_point_body),
-    )
-    _publish_latest_pointer(
-        client,
-        connection,
-        recovery_point_id=recovery_point_id,
-        manifest_sha256=signed_manifest["manifest_sha256"],
-        recovery_point_key=recovery_point_key,
+    signed_manifest, publication = publish_manifest_contract(
+        connection=connection,
+        client=client,
+        manifest=manifest,
+        signing_key=signing_key,
+        signing_key_id=signing_key_id,
     )
     receipt = BackupReceipt(
         recovery_point_id=recovery_point_id,
         dataset_id=connection.dataset_id,
         manifest_sha256=signed_manifest["manifest_sha256"],
-        manifest_key=manifest_key,
-        recovery_point_key=recovery_point_key,
+        manifest_key=publication.manifest_key,
+        recovery_point_key=publication.recovery_point_key,
         uploaded_objects=uploaded_objects,
         uploaded_bytes=uploaded_bytes,
         reused_objects=reused_objects,

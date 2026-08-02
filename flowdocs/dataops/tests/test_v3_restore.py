@@ -17,6 +17,7 @@ from dataops.package_v3 import canonical_json_bytes
 from dataops.tests.test_v3_backup import FakeS3
 from dataops.v3_backup import blob_key, publish_snapshot
 from dataops.v3_config import connection_from_model
+from dataops.v3_import import V3ImportError, import_rebind_recovery_point
 from dataops.v3_restore import (
     V3RestoreError,
     load_verified_recovery_point,
@@ -228,3 +229,90 @@ class V3RestoreTests(TestCase):
         workspace = Path(restored["workspace"])
         self.assertTrue(workspace.is_dir())
         self.assertFalse((workspace / ".dataops-rehearsal.json").exists())
+
+    def test_foreign_import_rebinds_dataset_and_preserves_parent_lineage(self):
+        restored = materialize_quarantine(
+            self.verified(),
+            quarantine_root=self.root / "quarantine",
+        )
+        destination_model = DataConnection.objects.using("control").create(
+            name="Destination",
+            provider="rustfs",
+            endpoint="https://rustfs.example.invalid",
+            bucket="destination",
+            dataset_id="ai-sahakar-stage-owned",
+            credential_ref="secret://dataops/destination",
+            capabilities={"read": True, "write": True, "conditional_write": True},
+        )
+        destination = connection_from_model(destination_model)
+        destination_client = FakeS3()
+        source_before = {
+            key: dict(value) for key, value in self.client.objects.items()
+        }
+        manifest, receipt = import_rebind_recovery_point(
+            source=self.verified(),
+            quarantine_receipt=restored,
+            destination=destination,
+            destination_client=destination_client,
+            recovery_point_id="import-prod-001",
+            destination_instance_id="stage-2026",
+            destination_environment="staging",
+            signing_key=self.signing_key,
+            signing_key_id="stage-manifest-1",
+        )
+        self.assertEqual(manifest["dataset_id"], destination.dataset_id)
+        self.assertEqual(manifest["lineage"]["transition"], "import_rebind")
+        self.assertEqual(
+            manifest["lineage"]["parent_manifest_sha256"],
+            self.point.manifest_digest,
+        )
+        self.assertEqual(receipt.uploaded_objects, 3)
+        self.assertEqual(self.client.objects, source_before)
+
+    def test_import_rebind_reuses_destination_blobs_on_retry(self):
+        restored = materialize_quarantine(
+            self.verified(), quarantine_root=self.root / "quarantine"
+        )
+        destination_model = DataConnection.objects.using("control").create(
+            name="Destination",
+            provider="rustfs",
+            endpoint="https://rustfs.example.invalid",
+            bucket="destination",
+            dataset_id="ai-sahakar-stage-owned",
+            credential_ref="secret://dataops/destination",
+            capabilities={"read": True, "write": True, "conditional_write": True},
+        )
+        destination = connection_from_model(destination_model)
+        destination_client = FakeS3()
+        arguments = {
+            "source": self.verified(),
+            "quarantine_receipt": restored,
+            "destination": destination,
+            "destination_client": destination_client,
+            "recovery_point_id": "import-prod-001",
+            "destination_instance_id": "stage-2026",
+            "destination_environment": "staging",
+            "signing_key": self.signing_key,
+            "signing_key_id": "stage-manifest-1",
+        }
+        import_rebind_recovery_point(**arguments)
+        _, second = import_rebind_recovery_point(**arguments)
+        self.assertEqual(second.uploaded_objects, 0)
+        self.assertEqual(second.reused_objects, 3)
+
+    def test_same_dataset_import_is_refused(self):
+        restored = materialize_quarantine(
+            self.verified(), quarantine_root=self.root / "quarantine"
+        )
+        with self.assertRaisesRegex(V3ImportError, "import_rebind_dataset_unchanged"):
+            import_rebind_recovery_point(
+                source=self.verified(),
+                quarantine_receipt=restored,
+                destination=connection_from_model(self.connection),
+                destination_client=FakeS3(),
+                recovery_point_id="invalid",
+                destination_instance_id="stage-2026",
+                destination_environment="staging",
+                signing_key=self.signing_key,
+                signing_key_id="stage-manifest-1",
+            )
