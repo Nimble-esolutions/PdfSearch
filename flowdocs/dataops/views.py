@@ -8,8 +8,10 @@ operations. Existing maintenance services remain the execution authority.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
+import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -27,7 +29,7 @@ from core.operator_presentation import decorate_operator_state
 from vaultops.services.read_model import build_workbench_state
 
 from .config import resolve_profiles, resolve_selectors, resolve_setting, validate_profiles
-from .models import BackupJob, DataOperation, DataProfile, DataOpsAuditEvent, MirrorDeletionPreview, RecoveryPoint
+from .models import BackupJob, DataConnection, DataOperation, DataProfile, DataOpsAuditEvent, MirrorDeletionPreview, RecoveryPoint
 from .job_scheduler import ScheduleConfigurationError, parse_schedule
 from .profile_service import ProfileMutationError, probe_profile, save_profile, save_selectors
 from .pipeline import (
@@ -38,6 +40,133 @@ from .pipeline import (
 )
 from .readiness import readiness_payload
 from .storage import StorageConfigurationError
+from .v3_config import V3ConfigurationError
+from .v3_planning import action_status, compile_requested_plan, runtime_config
+
+
+_FORBIDDEN_V3_REQUEST_FIELDS = frozenset(
+    {"access_key", "credential", "credentials", "password", "secret", "secret_key", "token"}
+)
+
+
+def _contains_forbidden_v3_field(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized = str(key).strip().lower()
+            if normalized in _FORBIDDEN_V3_REQUEST_FIELDS or any(
+                normalized.endswith(f"_{part}")
+                for part in _FORBIDDEN_V3_REQUEST_FIELDS
+            ):
+                return True
+            if _contains_forbidden_v3_field(item):
+                return True
+    elif isinstance(value, (list, tuple)):
+        return any(_contains_forbidden_v3_field(item) for item in value)
+    return False
+
+
+def _v3_request_payload(request):
+    if request.content_type == "application/json":
+        try:
+            payload = json.loads(request.body or b"{}")
+        except (TypeError, ValueError, UnicodeDecodeError) as exc:
+            raise ValueError("request_json_invalid") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("request_object_required")
+        return payload
+    return request.POST.dict()
+
+
+def _v3_bool(value, *, field):
+    if value in (True, "1", "true", "yes", "on"):
+        return True
+    if value in (False, None, "", "0", "false", "no", "off"):
+        return False
+    raise ValueError(f"{field}_invalid")
+
+
+@login_required
+@require_GET
+def v3_status(request):
+    """Return one secret-free DataOps readiness and configuration summary."""
+    if not _can_act(request):
+        return JsonResponse({"error": {"code": "superadmin_required"}}, status=403)
+    try:
+        config = runtime_config()
+    except V3ConfigurationError as exc:
+        return JsonResponse(
+            {
+                "contract_version": 3,
+                "status": "action_required",
+                "issue": {"code": exc.code},
+            },
+            status=409,
+        )
+    return JsonResponse(
+        {
+            "contract_version": 3,
+            "status": "ready" if config.enabled else "disabled",
+            "environment": config.environment,
+            "deployment_id": config.deployment_id,
+            "dataset_id": config.dataset_id,
+            "configuration_digest": config.digest,
+            "connection": config.connection.redacted() if config.connection else None,
+            "actions": action_status(config),
+        }
+    )
+
+
+@login_required
+@require_POST
+def v3_operation_preview(request):
+    """Compile the exact safe route without queuing or mutating anything."""
+    if not _can_act(request):
+        return JsonResponse({"error": {"code": "superadmin_required"}}, status=403)
+    try:
+        payload = _v3_request_payload(request)
+        if _contains_forbidden_v3_field(payload):
+            raise ValueError("secret_fields_forbidden")
+        recovery_point_id = str(payload.get("recovery_point_id") or "").strip()
+        point = None
+        if recovery_point_id:
+            try:
+                public_id = uuid.UUID(recovery_point_id)
+            except ValueError:
+                public_id = None
+            if public_id:
+                point = (
+                    RecoveryPoint.objects.using("control")
+                    .filter(public_id=public_id)
+                    .first()
+                )
+            if point is None:
+                point = (
+                    RecoveryPoint.objects.using("control")
+                    .filter(release_id=recovery_point_id)
+                    .first()
+                )
+            if point is None:
+                raise ValueError("recovery_point_not_found")
+        config, plan = compile_requested_plan(
+            action=str(payload.get("action") or ""),
+            activate=_v3_bool(payload.get("activate"), field="activate"),
+            confirmation_present=bool(
+                str(payload.get("confirmation") or "").strip()
+            ),
+            point=point,
+            source_kind=str(payload.get("source_kind") or "").strip().lower(),
+        )
+    except (ValueError, V3ConfigurationError) as exc:
+        code = getattr(exc, "code", str(exc))
+        return JsonResponse({"error": {"code": code}}, status=400)
+    return JsonResponse(
+        {
+            "configuration_digest": config.digest,
+            "plan": plan.as_dict(),
+            "active_data_unchanged_until_activation": True,
+        },
+        status=200 if plan.allowed else 409,
+    )
 
 
 def _can_act(request):

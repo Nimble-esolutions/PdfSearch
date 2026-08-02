@@ -5,6 +5,8 @@ from . import views
 app_name = "dataops"
 
 urlpatterns = [
+    path("v3/status/", views.v3_status, name="v3_status"),
+    path("v3/operations/preview/", views.v3_operation_preview, name="v3_operation_preview"),
     path("", views.workbench, name="workbench"),
     path("state/", views.state_api, name="state"),
     path("refresh/", views.refresh, name="refresh"),
