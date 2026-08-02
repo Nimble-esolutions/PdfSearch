@@ -25,7 +25,7 @@ from core.models import MaintenanceJob, PDFFile
 from core.operator_presentation import decorate_operator_state
 
 from .config import resolve_profiles, resolve_selectors, resolve_setting, validate_profiles
-from .models import BackupJob, DataOperation, DataProfile, DataOpsAuditEvent, RecoveryPoint
+from .models import BackupJob, DataOperation, DataProfile, DataOpsAuditEvent, MirrorDeletionPreview, RecoveryPoint
 from .job_scheduler import ScheduleConfigurationError, parse_schedule
 from .profile_service import ProfileMutationError, probe_profile, save_profile, save_selectors
 from .pipeline import DataOpsPipelineError, preflight_operation, resolve_operation_route
@@ -278,8 +278,6 @@ def jobs(request):
         mode = request.POST.get("mode", "incremental")
         if mode not in {"incremental", "archive", "mirror"}:
             return HttpResponse("Invalid transfer mode", status=400)
-        if mode == "mirror" and request.POST.get("delete_orphans"):
-            return HttpResponse("Mirror deletion requires an independently verified preview", status=409)
         schedule = request.POST.get("schedule", "").strip()
         timezone_name = request.POST.get("timezone", "UTC").strip()
         try:
@@ -288,6 +286,11 @@ def jobs(request):
             ZoneInfo(timezone_name)
         except (ScheduleConfigurationError, ZoneInfoNotFoundError) as exc:
             return HttpResponse(f"Invalid schedule: {exc}", status=400)
+        try:
+            delete_max_objects = min(10000, max(1, int(request.POST.get("mirror_delete_max_objects", "100"))))
+            delete_max_percent = min(100, max(1, int(request.POST.get("mirror_delete_max_percent", "10"))))
+        except ValueError:
+            return HttpResponse("Invalid mirror deletion budget", status=400)
         BackupJob.objects.using("control").update_or_create(
             slug=request.POST.get("slug", "").strip().lower(),
             defaults={
@@ -300,11 +303,17 @@ def jobs(request):
                 "schedule": schedule,
                 "timezone": timezone_name,
                 "enabled": request.POST.get("enabled", "1") in {"1", "on", "true"},
+                "delete_orphans": mode == "mirror" and request.POST.get("delete_orphans") in {"1", "on", "true"},
+                "mirror_delete_max_objects": delete_max_objects,
+                "mirror_delete_max_percent": delete_max_percent,
             },
         )
         return redirect("dataops:jobs")
     profiles = [profile.redacted() for profile in resolve_profiles() if profile.enabled]
-    return render(request, "dataops/jobs.html", {"jobs": BackupJob.objects.using("control").all(), "profiles": profiles, "dataops_nav": _navigation("jobs")})
+    jobs = list(BackupJob.objects.using("control").all())
+    for job in jobs:
+        job.latest_deletion_preview = job.deletion_previews.filter(state=MirrorDeletionPreview.State.READY).order_by("-created_at").first()
+    return render(request, "dataops/jobs.html", {"jobs": jobs, "profiles": profiles, "dataops_nav": _navigation("jobs")})
 
 
 @login_required
@@ -336,6 +345,43 @@ def run_job(request, job_slug):
         outcome="queued",
         evidence={"job_slug": job.slug, "mode": job.mode, "source_profile": job.source_profile_key},
     )
+    return redirect("dataops:jobs")
+
+
+@login_required
+@require_POST
+def preview_job_deletions(request, job_slug):
+    if not _can_act(request):
+        return HttpResponse("Superadmin approval required", status=403)
+    job = BackupJob.objects.using("control").filter(slug=job_slug, enabled=True).first()
+    if job is None:
+        return HttpResponse("Backup job not found or disabled", status=404)
+    try:
+        from .mirror import create_deletion_preview
+
+        create_deletion_preview(job)
+    except DataOpsPipelineError as exc:
+        return HttpResponse(f"Deletion preview blocked: {exc.code}", status=409)
+    return redirect("dataops:jobs")
+
+
+@login_required
+@require_POST
+def confirm_job_deletions(request, job_slug, preview_id):
+    if not _can_act(request):
+        return HttpResponse("Superadmin approval required", status=403)
+    preview = MirrorDeletionPreview.objects.using("control").filter(public_id=preview_id, job__slug=job_slug, state=MirrorDeletionPreview.State.READY, confirmed_operation__isnull=True).first()
+    if preview is None:
+        return HttpResponse("Deletion preview not found", status=404)
+    operation = DataOperation.objects.using("control").create(
+        kind=DataOperation.Kind.SYNC, state=DataOperation.State.QUEUED,
+        profile_key=preview.job.target_profile_key, source_profile_key=preview.job.source_profile_key,
+        destination_profile_key=preview.job.target_profile_key,
+        idempotency_key=f"mirror:{preview.public_id}",
+        checkpoint={"job_slug": preview.job.slug, "trigger": "confirmed_mirror", "mirror_preview_id": str(preview.public_id)},
+    )
+    preview.confirmed_operation = operation
+    preview.save(update_fields=["confirmed_operation", "updated_at"])
     return redirect("dataops:jobs")
 
 

@@ -46,6 +46,11 @@ class FakeS3:
         self.objects[(bucket, key)] = body.read()
         self.metadata[(bucket, key)] = ExtraArgs["Metadata"]
 
+    def copy_object(self, *, Bucket, Key, CopySource):
+        source = (CopySource["Bucket"], CopySource["Key"])
+        self.objects[(Bucket, Key)] = self.objects[source]
+        return {}
+
 
 def resolved(key, role, bucket):
     return ResolvedProfile(
@@ -108,3 +113,26 @@ class BackupJobExecutorTests(TestCase):
             receipt = execute_backup_job(self.operation, source_client=source, target_client=target)
         self.assertEqual(receipt["copied"], 0)
         self.assertEqual(receipt["skipped"], 1)
+
+    def test_confirmed_mirror_quarantines_before_deleting_orphans(self):
+        from dataops.mirror import create_deletion_preview
+
+        self.job.mode = BackupJob.Mode.MIRROR
+        self.job.delete_orphans = True
+        self.job.mirror_delete_max_percent = 100
+        self.job.save(update_fields=["mode", "delete_orphans", "mirror_delete_max_percent", "updated_at"])
+        source = FakeS3({("source-bucket", "source/documents/a.pdf"): b"current"})
+        target = FakeS3({
+            ("target-bucket", "target/backups/a.pdf"): b"old",
+            ("target-bucket", "target/backups/orphan.pdf"): b"orphan",
+        })
+        with patch("dataops.mirror.resolve_profiles", return_value=self.profiles):
+            preview = create_deletion_preview(self.job, source_client=source, target_client=target)
+        self.operation.checkpoint = {"job_slug": self.job.slug, "mirror_preview_id": str(preview.public_id)}
+        self.operation.save(update_fields=["checkpoint", "updated_at"])
+        with patch("dataops.job_executor.resolve_profiles", return_value=self.profiles), patch("dataops.mirror.resolve_profiles", return_value=self.profiles):
+            receipt = execute_backup_job(self.operation, source_client=source, target_client=target)
+        self.assertNotIn(("target-bucket", "target/backups/orphan.pdf"), target.objects)
+        quarantine_key = f"target/.dataops-quarantine/{self.operation.public_id}/backups/orphan.pdf"
+        self.assertEqual(target.objects[("target-bucket", quarantine_key)], b"orphan")
+        self.assertEqual(receipt["deletion"]["deleted"], 1)

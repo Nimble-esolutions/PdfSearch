@@ -123,11 +123,33 @@ class BackupJob(TimeStampedModel):
     multipart_threshold_bytes = models.PositiveBigIntegerField(default=67108864)
     multipart_chunk_size_bytes = models.PositiveBigIntegerField(default=16777216)
     retry_limit = models.PositiveSmallIntegerField(default=5)
+    mirror_delete_max_objects = models.PositiveIntegerField(default=100)
+    mirror_delete_max_percent = models.PositiveSmallIntegerField(default=10)
     last_run_at = models.DateTimeField(null=True, blank=True)
     last_run_status = models.CharField(max_length=24, blank=True, default="")
 
     class Meta:
         ordering = ["name"]
+
+
+class MirrorDeletionPreview(TimeStampedModel):
+    class State(models.TextChoices):
+        READY = "ready", "Ready for confirmation"
+        APPLIED = "applied", "Applied"
+        EXPIRED = "expired", "Expired"
+        REJECTED = "rejected", "Rejected"
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    job = models.ForeignKey(BackupJob, on_delete=models.CASCADE, related_name="deletion_previews")
+    state = models.CharField(max_length=16, choices=State.choices, default=State.READY)
+    digest = models.CharField(max_length=64)
+    object_keys = models.JSONField(default=list)
+    target_object_count = models.PositiveIntegerField(default=0)
+    total_bytes = models.PositiveBigIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    confirmed_operation = models.OneToOneField(
+        "DataOperation", null=True, blank=True, on_delete=models.PROTECT, related_name="mirror_deletion_preview"
+    )
 
 
 class DataOperation(TimeStampedModel):

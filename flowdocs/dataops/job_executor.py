@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 
 from .config import profile_map, resolve_profiles
-from .models import BackupJob
+from .models import BackupJob, MirrorDeletionPreview
 from .pipeline import DataOpsPipelineError
 from .storage import client_for_profile, probe_profile_access
 
@@ -56,8 +56,12 @@ def execute_backup_job(
     job = BackupJob.objects.using("control").filter(slug=slug, enabled=True).first()
     if job is None:
         raise DataOpsPipelineError("backup_job_missing_or_disabled", stage="preflight", retryable=False)
+    preview = None
     if job.delete_orphans:
-        raise DataOpsPipelineError("mirror_deletion_not_enabled", stage="preflight", retryable=False)
+        preview_id = str(checkpoint.get("mirror_preview_id", ""))
+        preview = MirrorDeletionPreview.objects.using("control").filter(public_id=preview_id, job=job).first()
+        if preview is None:
+            raise DataOpsPipelineError("mirror_preview_required", stage="preflight", retryable=False)
     if job.bandwidth_limit_bps:
         raise DataOpsPipelineError("bandwidth_limit_not_supported", stage="preflight", retryable=False)
 
@@ -154,7 +158,7 @@ def execute_backup_job(
         "skipped": skipped,
         "bytes_copied": bytes_copied,
         "verified": copied + skipped,
-        "delete_orphans": False,
+        "delete_orphans": bool(preview),
         "published_at": now().isoformat(),
         "stages": [
             {"stage": "preflight", "status": "succeeded"},
@@ -163,5 +167,9 @@ def execute_backup_job(
             {"stage": "publish_receipt", "status": "succeeded"},
         ],
     }
+    if preview:
+        from .mirror import apply_confirmed_deletions
+
+        receipt["deletion"] = apply_confirmed_deletions(operation, job, source_client, target_client, target, preview)
     BackupJob.objects.using("control").filter(pk=job.pk).update(last_run_at=now(), last_run_status="succeeded")
     return receipt

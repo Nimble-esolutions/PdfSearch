@@ -66,13 +66,17 @@ class DataOpsControlPlaneUITests(TestCase):
         self.assertNotEqual(credential.access_key_nonce, credential.secret_nonce)
         self.assertNotIn("test-secret", credential.secret_ciphertext)
 
-    def test_job_records_route_but_refuses_destructive_mirror_submission(self):
+    def test_job_records_route_and_requires_preview_for_destructive_mirror(self):
         safe = {"slug": "archive", "name": "Archive", "source_profile": "env-source", "target_profile": "archive-target", "mode": "archive", "timezone": "UTC"}
         response = self.client.post(reverse("dataops:jobs"), safe)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(BackupJob.objects.using("control").filter(slug="archive").exists())
         destructive = {**safe, "slug": "mirror", "mode": "mirror", "delete_orphans": "1"}
         response = self.client.post(reverse("dataops:jobs"), destructive)
+        self.assertEqual(response.status_code, 302)
+        mirror = BackupJob.objects.using("control").get(slug="mirror")
+        self.assertTrue(mirror.delete_orphans)
+        response = self.client.post(reverse("dataops:run_job", args=[mirror.slug]))
         self.assertEqual(response.status_code, 409)
 
     def test_run_now_queues_checkpointed_sync_operation(self):
