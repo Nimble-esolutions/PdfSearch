@@ -256,7 +256,10 @@ def preflight_operation(
             root.mkdir(parents=True, exist_ok=True)
             stat = os.statvfs(root)
             capacity = {"free_bytes": stat.f_bavail * stat.f_frsize, "free_inodes": stat.f_favail}
-            if capacity["free_bytes"] <= 0 or capacity["free_inodes"] <= 0:
+            # Some container-backed filesystems report f_files=f_favail=0 to
+            # mean inode accounting is unavailable, not exhausted.
+            inodes_exhausted = stat.f_files > 0 and stat.f_favail <= 0
+            if capacity["free_bytes"] <= 0 or inodes_exhausted:
                 issues.append(_issue("destination_capacity_insufficient", "Destination has no free space or inodes", "capacity"))
         except OSError:
             issues.append(_issue("destination_capacity_unavailable", "Destination capacity could not be measured", "capacity"))

@@ -9,6 +9,7 @@ from typing import Mapping
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from django.core.exceptions import ImproperlyConfigured
+from django.utils import timezone
 
 
 class CredentialConfigurationError(ImproperlyConfigured):
@@ -97,8 +98,33 @@ def resolve_profile_credentials(
         raise CredentialConfigurationError("credential_reference_unavailable")
     aad = f"profile:{profile.key}"
     return ResolvedCredentials(
-        decrypt(record.access_key_ciphertext, record.nonce, aad=aad),
-        decrypt(record.secret_ciphertext, record.nonce, aad=aad),
+        decrypt(record.access_key_ciphertext, getattr(record, "access_key_nonce", "") or record.nonce, aad=aad),
+        decrypt(record.secret_ciphertext, getattr(record, "secret_nonce", "") or record.nonce, aad=aad),
         "stored",
         reference,
     )
+
+
+def store_profile_credentials(profile, access_key: str, secret_key: str, *, key=None):
+    """Replace encrypted fallback credentials without ever returning plaintext."""
+    if not access_key.strip() or not secret_key.strip():
+        raise CredentialConfigurationError("credential_values_incomplete")
+    from django.apps import apps
+
+    model = apps.get_model("dataops", "DataCredential")
+    aad = f"profile:{profile.key}"
+    access_ciphertext, access_nonce = encrypt(access_key.strip(), aad=aad, key=key)
+    secret_ciphertext, secret_nonce = encrypt(secret_key.strip(), aad=aad, key=key)
+    record, _ = model.objects.using("control").update_or_create(
+        profile_id=profile.pk,
+        defaults={
+            "access_key_ciphertext": access_ciphertext,
+            "secret_ciphertext": secret_ciphertext,
+            "access_key_nonce": access_nonce,
+            "secret_nonce": secret_nonce,
+            "nonce": "",
+            "enabled": True,
+            "last_rotated_at": timezone.now(),
+        },
+    )
+    return record

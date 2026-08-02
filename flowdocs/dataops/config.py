@@ -28,6 +28,8 @@ _SAFE_NAMESPACE_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,199}$")
 _BOOLS = {"1": True, "true": True, "yes": True, "on": True, "0": False, "false": False, "no": False, "off": False}
 ROLES = frozenset({"backup", "restore", "both"})
 SOURCES = frozenset({"environment", "stored", "default"})
+PROVIDERS = frozenset({"aws", "cloudflare_r2", "backblaze_b2", "wasabi", "digitalocean", "gcs", "rustfs", "minio", "ceph", "garage", "seaweedfs", "generic"})
+ADDRESSING_STYLES = frozenset({"auto", "virtual", "path"})
 
 
 def _env_bool(name: str, default: bool = False, environ: Mapping[str, str] | None = None) -> bool:
@@ -120,6 +122,7 @@ def _stored_profile_entries(stored_profiles: Iterable[object] | None) -> tuple[M
             {
                 "name": getattr(profile, "key", ""),
                 "display_name": getattr(profile, "display_name", ""),
+                "provider": getattr(profile, "provider", "generic"),
                 "role": getattr(profile, "role", "both"),
                 "endpoint": getattr(profile, "endpoint", ""),
                 "bucket": getattr(profile, "bucket", ""),
@@ -127,6 +130,10 @@ def _stored_profile_entries(stored_profiles: Iterable[object] | None) -> tuple[M
                 "dataset_id": getattr(profile, "dataset_id", ""),
                 "source_id": getattr(profile, "source_id", ""),
                 "namespace": getattr(profile, "namespace", "") or getattr(profile, "prefix", ""),
+                "addressing_style": getattr(profile, "addressing_style", "auto"),
+                "signature_version": getattr(profile, "signature_version", "s3v4"),
+                "verify_tls": getattr(profile, "verify_tls", True),
+                "custom_ca_reference": getattr(profile, "custom_ca_reference", ""),
                 "credential_ref": getattr(profile, "credential_ref", "") or getattr(profile, "credential_prefix", ""),
                 "enabled": getattr(profile, "enabled", True),
                 "source": getattr(profile, "source", "stored"),
@@ -150,6 +157,11 @@ class ResolvedProfile:
     enabled: bool = True
     effective_source: str = "environment"
     environment_locked: bool = True
+    provider: str = "generic"
+    addressing_style: str = "auto"
+    signature_version: str = "s3v4"
+    verify_tls: bool = True
+    custom_ca_reference: str = ""
 
     @property
     def name(self) -> str:
@@ -183,6 +195,10 @@ class ResolvedProfile:
                 self.source_id,
                 self.namespace,
                 self.credential_prefix,
+                self.provider,
+                self.addressing_style,
+                self.signature_version,
+                str(self.verify_tls),
                 str(self.enabled),
             )
         )
@@ -206,6 +222,11 @@ class ResolvedProfile:
             "effective_source": self.effective_source,
             "environment_locked": self.environment_locked,
             "fingerprint": self.fingerprint,
+            "provider": self.provider,
+            "addressing_style": self.addressing_style,
+            "signature_version": self.signature_version,
+            "verify_tls": self.verify_tls,
+            "custom_ca_reference": self.custom_ca_reference,
         }
 
 
@@ -236,6 +257,12 @@ def _profile_from_entry(entry: Mapping[str, Any], env: Mapping[str, str], *, sou
     namespace = _namespace(value("namespace", "prefix"), fallback=key)
     credential = value("credential_ref", "credential_prefix")
     enabled = _as_bool(entry.get("enabled", env.get(prefix + "ENABLED")), field=f"{prefix}ENABLED")
+    provider = value("provider", default="generic").lower()
+    if provider not in PROVIDERS:
+        raise ImproperlyConfigured(f"{prefix}PROVIDER is unsupported")
+    addressing_style = value("addressing_style", default="auto").lower()
+    if addressing_style not in ADDRESSING_STYLES:
+        raise ImproperlyConfigured(f"{prefix}ADDRESSING_STYLE must be auto, virtual or path")
     return ResolvedProfile(
         key=key,
         display_name=value("display_name", default=key.replace("_", " ").title()),
@@ -250,6 +277,11 @@ def _profile_from_entry(entry: Mapping[str, Any], env: Mapping[str, str], *, sou
         enabled=enabled,
         effective_source=source if source in SOURCES else "default",
         environment_locked=source == "environment",
+        provider=provider,
+        addressing_style=addressing_style,
+        signature_version=value("signature_version", default="s3v4"),
+        verify_tls=_as_bool(entry.get("verify_tls", env.get(prefix + "VERIFY_TLS")), field=f"{prefix}VERIFY_TLS", default=True),
+        custom_ca_reference=value("custom_ca_reference"),
     )
 
 
@@ -281,10 +313,18 @@ def resolve_profiles(
     """
     env = os.environ if environ is None else environ
     raw = env.get("DATAOPS_PROFILE_MANIFEST", "").strip() or env.get("DATAOPS_ENV_PROFILES", "").strip()
-    source = "environment" if raw else "stored"
-    entries = _manifest_entries(raw) if raw else _stored_profile_entries(
+    stored_entries = _stored_profile_entries(
         stored_profiles if stored_profiles is not None else (_stored_profiles_from_database() if include_stored and environ is None else ())
     )
+    environment_entries = _manifest_entries(raw) if raw else ()
+    stored_resolved = tuple(_profile_from_entry(entry, {}, source="stored") for entry in stored_entries)
+    environment_resolved = tuple(_profile_from_entry(entry, env, source="environment") for entry in environment_entries)
+    merged = {profile.key: profile for profile in stored_resolved}
+    merged.update({profile.key: profile for profile in environment_resolved})
+    if merged:
+        return tuple(sorted(merged.values(), key=lambda profile: profile.key))
+    source = "stored"
+    entries = ()
     if not entries:
         # Compatibility for the single ARTIFACT_VAULT_* deployment contract.
         legacy_bucket = env.get("ARTIFACT_VAULT_BUCKET", "").strip()
@@ -306,6 +346,14 @@ def profile_map(profiles: Iterable[ResolvedProfile]) -> dict[str, ResolvedProfil
 def resolve_selectors(environ: Mapping[str, str] | None = None, *, stored: Mapping[str, object] | None = None) -> dict[str, str]:
     """Return explicit direction selectors and optional per-operation overrides."""
     env = os.environ if environ is None else environ
+    if stored is None and environ is None:
+        try:
+            from django.apps import apps
+
+            model = apps.get_model("dataops", "DataOpsSetting")
+            stored = dict(model.objects.using("control").values_list("key", "value"))
+        except Exception:
+            stored = {}
     stored = stored or {}
 
     def pick(name: str) -> str:
