@@ -9,6 +9,7 @@
 
 {% block content %}
 <div class="dataops-workbench" data-state-url="{{ state_url|default:'' }}">
+  {% include "dataops/_navigation.html" %}
   <header class="dataops-heading">
     <div>
       <p class="dataops-kicker">{% trans "Operations" %}</p>
@@ -167,6 +168,15 @@
     {% else %}<p class="dataops-empty">{% trans "No operations recorded yet." %}</p>{% endif %}
   </details>
 
+  {% if legacy_advanced %}
   {% include "dataops/_advanced_maintenance.html" %}
+  {% else %}
+  <section class="dataops-panel dataops-advanced-entry" aria-labelledby="dataops-advanced-entry-heading">
+    <header><p class="dataops-eyebrow">{% trans "Expert control plane" %}</p><h3 id="dataops-advanced-entry-heading">{% trans "Advanced manual controls" %}</h3></header>
+    <p>{% trans "Validation, selective reindexing, maintenance previews, retries, and recovery diagnostics are isolated from routine backup and restore workflows." %}</p>
+    <p><strong>{{ state.active_maintenance_jobs }}</strong> {% trans "active maintenance jobs" %}</p>
+    <a class="dataops-button dataops-button--secondary" href="{% url 'dataops:advanced' %}">{% trans "Open advanced controls" %}</a>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

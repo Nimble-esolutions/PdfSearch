@@ -74,7 +74,12 @@ def _finish_pipeline_operation(operation, *, lease_token=""):
 
     lease = (lambda: _renew_operation_lease(operation.pk, operation.lease_token)) if operation.lease_token else None
     try:
-        result = execute_operation_record(operation, lease=lease)
+        if operation.kind == DataOperation.Kind.SYNC:
+            from .job_executor import execute_backup_job
+
+            result = execute_backup_job(operation, lease=lease)
+        else:
+            result = execute_operation_record(operation, lease=lease)
     except DataOpsPipelineError as exc:
         if operation.lease_token and not DataOperation.objects.using("control").filter(
             pk=operation.pk, state=DataOperation.State.RUNNING, lease_token=operation.lease_token
@@ -241,7 +246,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     changed = 0
     for operation in DataOperation.objects.using("control").filter(
         state=DataOperation.State.QUEUED,
-    ).exclude(kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE}).order_by("created_at")[:limit]:
+    ).exclude(kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.SYNC}).order_by("created_at")[:limit]:
         with transaction.atomic(using="control"):
             current = DataOperation.objects.using("control").select_for_update().get(pk=operation.pk)
             if current.state != DataOperation.State.QUEUED:
@@ -272,11 +277,11 @@ def reconcile_receipts(*, limit: int = 50) -> int:
             current.save(update_fields=["state", "error_code", "result", "started_at", "finished_at", "updated_at"])
             DataOpsAuditEvent.objects.using("control").create(operation_id=current.public_id, action="receipt_reconciled", outcome=current.state, evidence={"error_code": current.error_code})
             changed += 1
-    # Backup/restore claims are executed after all short database transactions.
+    # Transfer pipelines are executed after all short database transactions.
     claims = []
     queued_ids = DataOperation.objects.using("control").filter(
         state=DataOperation.State.QUEUED,
-        kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE},
+        kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.SYNC},
     ).order_by("created_at").values_list("pk", flat=True)[:limit]
     for operation_id in queued_ids:
         claim = _claim_pipeline_operation(operation_id)
@@ -286,7 +291,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     if remaining:
         stale_ids = DataOperation.objects.using("control").filter(
             state=DataOperation.State.RUNNING,
-            kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE},
+            kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.SYNC},
         ).filter(Q(lease_expires_at__isnull=True) | Q(lease_expires_at__lte=timezone.now())).order_by("created_at").values_list("pk", flat=True)[:remaining]
         for operation_id in stale_ids:
             claim = _claim_pipeline_operation(operation_id)

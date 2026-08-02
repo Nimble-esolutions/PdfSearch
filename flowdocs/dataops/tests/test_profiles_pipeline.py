@@ -72,6 +72,22 @@ def profile(name, role, bucket, namespace):
 
 
 class ProfileManifestTests(unittest.TestCase):
+    def test_environment_overrides_matching_stored_profile_without_hiding_others(self):
+        stored = [
+            {"name": "archive", "role": "backup", "endpoint": "https://archive.example", "bucket": "archive", "dataset_id": "dataset", "namespace": "stored/archive", "credential_ref": "ARCHIVE"},
+            {"name": "primary", "role": "backup", "endpoint": "https://stale.example", "bucket": "stale", "dataset_id": "dataset", "namespace": "stored/primary", "credential_ref": "STALE"},
+        ]
+        environ = {
+            "DATAOPS_PROFILE_MANIFEST": '[{"name":"primary","role":"backup","provider":"aws","endpoint":"https://s3.us-east-1.amazonaws.com","bucket":"current","dataset_id":"dataset","namespace":"env/primary","credential_ref":"CURRENT"}]'
+        }
+
+        profiles = resolve_profiles(environ, stored_profiles=stored)
+
+        self.assertEqual([profile.key for profile in profiles], ["archive", "primary"])
+        self.assertEqual(profiles[0].effective_source, "stored")
+        self.assertEqual(profiles[1].effective_source, "environment")
+        self.assertEqual(profiles[1].bucket, "current")
+        self.assertTrue(profiles[1].environment_locked)
     def test_structured_manifest_and_effective_source_are_deterministic(self):
         profiles = resolve_profiles(
             {
@@ -94,6 +110,10 @@ class ProfileManifestTests(unittest.TestCase):
         self.assertEqual(profiles[0].effective_source, "environment")
         self.assertEqual(profiles[0].namespace, "prod")
         self.assertNotIn("secret_key", profiles[0].redacted())
+
+    def test_provider_is_inferred_for_legacy_self_hosted_manifest(self):
+        profiles = resolve_profiles({"DATAOPS_PROFILE_MANIFEST": '[{"name":"local","role":"both","endpoint":"http://rustfs:9000","bucket":"data","dataset_id":"dataset","namespace":"local","credential_ref":"LOCAL"}]'})
+        self.assertEqual(profiles[0].provider, "rustfs")
 
     def test_stored_profile_is_used_when_environment_manifest_is_absent(self):
         profiles = resolve_profiles(

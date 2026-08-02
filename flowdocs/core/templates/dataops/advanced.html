@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% load static i18n %}
+{% block title %}{% trans "Advanced manual controls — Data Operations" %}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'main/css/data-operations.css' %}">{% endblock %}
+{% block content %}
+<main class="dataops-workbench">
+  {% include "dataops/_navigation.html" %}
+  <header class="dataops-heading">
+    <div><p class="dataops-kicker">{% trans "Expert control plane" %}</p><h2>{% trans "Advanced manual controls" %}</h2><p>{% trans "Preview and supervise validation, index repair, selective reprocessing, and checkpointed maintenance without changing remote authority implicitly." %}</p></div>
+  </header>
+  {% include "dataops/_advanced_maintenance.html" %}
+</main>
+{% endblock %}

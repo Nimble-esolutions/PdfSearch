@@ -63,6 +63,7 @@ def client_for_profile(profile: ResolvedProfile, environ: Mapping[str, str], *, 
         raise StorageConfigurationError(str(exc)) from exc
     try:
         import boto3
+        from botocore.config import Config
     except ImportError as exc:
         raise StorageConfigurationError("boto3 is not installed") from exc
     return boto3.client(
@@ -71,6 +72,8 @@ def client_for_profile(profile: ResolvedProfile, environ: Mapping[str, str], *, 
         region_name=profile.region or None,
         aws_access_key_id=credentials.access_key,
         aws_secret_access_key=credentials.secret_key,
+        verify=profile.custom_ca_reference or profile.verify_tls,
+        config=Config(signature_version=profile.signature_version, s3={"addressing_style": profile.addressing_style}),
     )
 
 

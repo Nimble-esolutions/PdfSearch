@@ -33,5 +33,6 @@ PY
 
 python manage.py test \
   integration_tests.test_s3_primitives \
+  integration_tests.test_dataops_mirror_recovery \
   integration_tests.test_vaultops_lifecycle \
   --noinput --verbosity=2

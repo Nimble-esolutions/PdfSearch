@@ -109,7 +109,7 @@ def main():
         )
         require("cdn.jsdelivr.net" not in operations.text, "external Bootstrap dependency found")
         configuration = client.get("/dashboard/data-operations/configuration/")
-        require(configuration.status_code == 200 and "Storage and automation" in configuration.text, "configuration page missing")
+        require(configuration.status_code == 200 and "Storage profiles" in configuration.text, "configuration page missing")
         maintenance = client.get("/dashboard/operations/?section=maintenance")
         require(maintenance.status_code == 200, "maintenance workbench GET failed")
         for expected in (

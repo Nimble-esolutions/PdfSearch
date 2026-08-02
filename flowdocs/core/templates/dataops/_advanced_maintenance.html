@@ -1,6 +1,6 @@
 {% load i18n %}
-<details class="dataops-advanced" aria-labelledby="dataops-advanced-heading">
-  <summary id="dataops-advanced-heading">{% trans "Advanced manual controls" %}</summary>
+<div class="dataops-advanced" aria-labelledby="dataops-advanced-heading">
+  <h2 class="visually-hidden" id="dataops-advanced-heading">{% trans "Advanced manual controls" %}</h2>
   <section class="dataops-advanced__section" aria-labelledby="dataops-maintenance-heading">
     <header>
       <p class="dataops-eyebrow">{% trans "Daily document care" %}</p>
@@ -76,4 +76,4 @@
       </article>
     {% empty %}<p>{% trans "No local maintenance jobs are recorded." %}</p>{% endfor %}
   </section>
-</details>
+</div>
