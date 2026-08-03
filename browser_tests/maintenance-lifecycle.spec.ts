@@ -55,7 +55,20 @@ async function previewAndQueue(
   const today = new Date().toISOString().slice(0, 10);
   await page.locator('input[name="filter_uploaded_after"]').fill(today);
   await page.locator('input[name="filter_uploaded_before"]').fill(today);
-  await page.getByRole('button', { name: previewButton }).click();
+  const [previewResponse] = await Promise.all([
+    page.waitForResponse((response) => {
+      const request = response.request();
+      return request.method() === 'POST'
+        && new URL(response.url()).pathname
+          === '/dashboard/operations/api/v1/maintenance/plans/';
+    }),
+    page.getByRole('button', { name: previewButton }).click(),
+  ]);
+  const refusal = previewResponse.headers()['x-dataops-reason-code'];
+  expect(
+    previewResponse.status(),
+    `maintenance preview refused: ${refusal || 'missing reason code'}`,
+  ).toBe(302);
   await expect(page.getByText('Selected preview', { exact: true })).toBeVisible();
   const selected = page.locator('.maintenance-selected-plan');
   await expect(

@@ -701,6 +701,25 @@ class MaintenancePlanningTests(TestCase):
         self.assertIn(queued.status_code, {302, 403})
         self.assertFalse(MaintenanceJob.objects.exists())
 
+    def test_form_preview_refusal_exposes_only_stable_reason_code(self):
+        self.client.force_login(self.superadmin)
+        with patch(
+            "vaultops.views.create_maintenance_plan",
+            side_effect=MaintenancePlanError("empty_scope"),
+        ):
+            response = self.client.post(
+                reverse("vaultops:maintenance_plan_create"),
+                {
+                    "operation": "validate",
+                    "folder_ids": [self.folder.pk],
+                    "idempotency_key": f"test:{uuid.uuid4()}",
+                },
+            )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response["X-DataOps-Reason-Code"], "empty_scope")
+        self.assertNotIn("exception", response.headers)
+
     def test_dataops_workbench_renders_capabilities_and_disabled_reasons(self):
         self.client.force_login(self.superadmin)
         response = self.client.get(reverse("dataops:advanced"))
