@@ -3,7 +3,7 @@
 **Status:** Active
 **Audience:** Developer, Operator
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-08-02
+**Last verified:** 2026-08-03
 **Canonical source:** docs/ARCHITECTURE_OVERVIEW.md
 
 Primary knowledge transfer artifact for the PdfSearch system. Read this first.
@@ -19,12 +19,12 @@ The current system is best understood as four cooperating planes:
 | Recovery | RustFS profiles, manifests, content-addressed objects, receipts | dataset-scoped buckets |
 | External AI | local OCR first, configured embeddings and answer preparation | side-effect policy and provider boundary |
 
-The 2026 stage clone is quarantine-ready after migration, OCR, embeddings, and
-index reconciliation for all 242 PDFs. It is not yet the signed active
-runtime generation. The first stage backup and isolated round-trip restore are
-also pending. Exact evidence is maintained in
-STATUS-2026-08-02.md and the old/new comparison in
-LEGACY_VS_CURRENT_STATE.md.
+The 2026 stage clone has been migrated, reconciled, and activated through a
+verified signed control pointer. Stage serves 242/242 indexed documents.
+Manual stage backup and isolated recovery rehearsal have succeeded, while final
+acceptance waits for the immutable PR 176 image, corrected v3 readiness
+projection, and one repeatable disposable restore. Exact evidence is maintained
+in STATUS-2026-08-03.md and the old/new comparison in LEGACY_VS_CURRENT_STATE.md.
 
 ### Current custody topology
 

@@ -10,7 +10,8 @@ Canonical source: docs/OPERATIONS_CHANGELOG-2026-08-02.md
 
 This page answers one question: what changed since the last documentation
 verification date, and what evidence proves each change? It complements the
-full current-state record in STATUS-2026-08-02.md.
+dated state record in STATUS-2026-08-02.md. Current evidence moved to
+STATUS-2026-08-03.md.
 
 ## Executive summary
 

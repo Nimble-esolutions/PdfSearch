@@ -1,4 +1,4 @@
-Status: Local real-data certification passed; stage activation pending
+Status: Local and stage rehearsal passed; final immutable release pending
 Audience: operators, developers, reviewers
 Owner: FlowDocs maintainers
 Last verified: 2026-08-03
@@ -87,6 +87,12 @@ and Chroma may be reused only when their recorded configuration is compatible;
 otherwise DataOps rebuilds them in quarantine. Static files, Redis, local
 backup history, control databases, credentials, and restore workspaces are not
 backup payloads.
+
+An absent optional derived tree is signed explicitly as coherent and empty.
+The publisher must prove that its inventory contains no files for that tree,
+and restore creates an empty directory only when the target is absent or empty.
+A present Chroma tree is currently preserved as rebuild-required and remains
+fail-closed until a supported compatibility/rebuild implementation exists.
 
 ## Lifecycle planning
 

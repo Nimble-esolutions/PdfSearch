@@ -24,3 +24,18 @@ OPENAI_API_KEY=<secret-manager-value>
 Never put the key in a committed `.env` file or expose it in configuration
 screenshots/logs. A missing key must remain a visible, fail-closed readiness
 failure rather than silently returning a fake answer.
+
+## Troubleshooting sandbox answers
+
+Check policy propagation before rotating a valid API key:
+
+| Observation | Meaning | Correction |
+| --- | --- | --- |
+| Key configured, web policy `sandbox` | Web omitted the AI-only override | Pass `EXTERNAL_AI_MODE` to web and maintenance |
+| Web `enabled`, maintenance `sandbox` | Search may work but indexing jobs can create fake vectors | Fail deployment parity; make both values identical |
+| AI `enabled`, broad effects `sandbox` | Expected stage least-privilege posture | No broad-policy change required |
+| AI `enabled`, key missing | Real provider was requested but cannot start | Install the secret; do not fall back silently |
+
+After deployment, verify the policy without printing credentials, then run one
+representative search that requires references. Reject any acceptance response
+containing `[SANDBOX]`, an empty answer, or an empty reference set.

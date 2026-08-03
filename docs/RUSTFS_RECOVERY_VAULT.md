@@ -1,7 +1,7 @@
 Status: Active, constrained
 Audience: Recovery, Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-02
+Last verified: 2026-08-03
 Canonical source: docs/RUSTFS_RECOVERY_VAULT.md
 Supersedes: Earlier claims that S3 restore or scheduled backup is automatic
 
@@ -17,13 +17,14 @@ ai-sahakar-stage-2026, with 416 verified objects totalling 1,093,501,777 bytes.
 
 That clone has been restored into stage quarantine, migrated through
 0027_pdffile_processing_evidence, OCR-processed where native extraction was
-blank, and reconciled so all 242 PDFs are ready and indexed. It has not yet
-been made the signed active runtime generation. The first stage-owned backup
-and isolated round-trip restore are still pending.
+blank, and reconciled so all 242 PDFs are ready and indexed. It is now bound to
+a signature-verified stage runtime pointer. Manual stage backup and isolated
+recovery rehearsal have succeeded; final acceptance remains pending the final
+immutable image and one repeatable fresh-volume restore.
 
 For the exact boundary inventory, environment posture, OCR evidence, Compose
 project-name warning, and remaining checklist, see
-[STATUS-2026-08-02.md](STATUS-2026-08-02.md).
+[STATUS-2026-08-03.md](STATUS-2026-08-03.md).
 
 ## Audited verdict
 

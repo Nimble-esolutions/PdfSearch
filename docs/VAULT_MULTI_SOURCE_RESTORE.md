@@ -9,15 +9,15 @@ clone-legacy-20260802T085639Z-86288855. The operation verified 416 objects and
 parent lineage. Source immutability and normal dataset-mismatch protection
 remain required.
 
-The destination restore is quarantine-ready after migrations, bilingual OCR,
-embeddings, and indexing for all 242 PDFs. Clone/rebind does not activate a
-runtime pointer, and restore does not publish a stage backup. Those remain
-explicit signed activation and backup operations. See
-STATUS-2026-08-02.md for current state and exact pending gates.
+The destination restore passed migrations, bilingual OCR, embeddings, and
+indexing for all 242 PDFs. Clone/rebind itself did not activate anything; a
+separate signed operation later committed the stage runtime pointer, followed
+by manual backup and isolated recovery rehearsal. See STATUS-2026-08-03.md for
+current state and exact pending gates.
 
 The vault restore path prepares a verified runtime generation; it never
-activates it. Runtime activation remains a separate, disabled-by-default
-control-plane operation.
+activates it by itself. Runtime activation remains a separate,
+disabled-by-default control-plane operation.
 
 ## Trust chain
 
