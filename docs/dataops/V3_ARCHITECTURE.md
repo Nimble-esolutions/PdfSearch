@@ -1,4 +1,4 @@
-Status: Proposed and under implementation
+Status: Local real-data certification passed; stage activation pending
 Audience: operators, developers, reviewers
 Owner: FlowDocs maintainers
 Last verified: 2026-08-03
@@ -256,3 +256,42 @@ round-trip restore, obsolete selectors, jobs, public VaultOps routes, duplicate
 profile models, and special-case environment flags can be removed in reviewed
 commits.
 
+## Real local certification — 2026-08-03
+
+The exact read-only production-v2 generation
+`legacy-20260802T085639Z-86288855` was imported from RustFS into the local
+development recovery bucket and restored into an isolated candidate. Neither
+the production source nor the active local application volume was a write
+target.
+
+| Evidence | Observed result |
+| --- | --- |
+| Source dataset | `ai-sahakar-prod-v2` |
+| Source manifest SHA-256 | `b59593fbc3f772b331110bdc6b1a590c1bd944c6f40900b2caf8e01a03cf8843` |
+| Source unique objects / bytes | 280 / 1,052,817,195 |
+| Source before/after inventory | Identical |
+| Imported logical objects / bytes | 416 / 1,093,501,777 |
+| Destination v3 manifest SHA-256 | `4b8b2ef7b3089c44416fb8217bd2edc9f0ac03bc828b4cf060312f2ce34d7cf8` |
+| Idempotent publication retry | 416 objects and all bytes reused; zero uploaded |
+| Legacy database | 242 documents, 46 folders, 7 users, 29 migrations |
+| SQLite | Integrity `ok`; foreign keys `ok`; current migrations rehearsed |
+| Candidate repair | 9 image-only PDFs OCRed/embedded; 45 searchable folder indexes rebuilt |
+| Candidate index | 7,615 vectors, dimension 1,536, indexing ratio `1.0` |
+| Text coverage | 242 with text; 239 Latin-script; 206 Devanagari; 9 with OCR evidence |
+| Candidate database SHA-256 | `faf5779846138abc06de780791cba54b118788a9b4e92d43df9bec10c8c207c9` |
+| Activation | Not performed; active pointer and active volumes unchanged |
+
+The exercise found and fixed four real defects before stage: the legacy user
+table was incorrectly assumed to be `auth_user`; cached import evidence did not
+refresh after adapter upgrades; candidate retries lost cumulative repair
+evidence; and the all-folder repair query used the wrong Django relation name.
+It also proved that local OCR was healthy while the first embedding attempt was
+correctly blocked by the external-side-effect policy. The approved retry
+enabled embeddings only for the isolated candidate.
+
+The certified image contains Tesseract English, Marathi, and Hindi language
+packs, `cryptography` 48.0.1, and no runtime `setuptools` or `wheel` package.
+Stage remains the next gate: publish the branch image by immutable digest,
+repeat import/candidate preparation, run representative searches, activate
+with signed evidence, publish one stage backup, and restore it into disposable
+volumes.

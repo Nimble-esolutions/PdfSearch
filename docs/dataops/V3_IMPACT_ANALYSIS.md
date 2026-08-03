@@ -25,6 +25,15 @@ flags.
 This evidence permits an aggressive v3 simplification on stage, but not an
 untested deletion of the primitives that protect data and runtime activation.
 
+Real local certification on 2026-08-03 has now proved the production-v2
+read-only importer, destination-owned signed v3 publication, idempotent object
+reuse, isolated current-schema migration, local English/Marathi/Hindi OCR,
+selective embedding repair, complete FAISS reconstruction, and candidate
+validation against all 242 documents. The active local and production runtimes
+were not changed. Signed activation, one real stage backup, and isolated stage
+round-trip restore remain release gates; compatibility surfaces must stay
+read-only until those gates pass.
+
 ## Keep, adapt, replace, remove
 
 | Existing area | Decision | Reason and required proof |
@@ -185,4 +194,3 @@ candidates, and audit evidence remain until review is complete.
 - Stage activates 242 documents with signed generation/manifest evidence.
 - Stage backup restores successfully into disposable volumes.
 - Legacy production remains unchanged throughout.
-
