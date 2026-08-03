@@ -14,6 +14,7 @@ from urllib.request import HTTPRedirectHandler, HTTPCookieProcessor, Request, bu
 sys.path.insert(0, "/app/flowdocs")
 
 import django
+from django.conf import settings
 from django.core.files.base import ContentFile
 
 
@@ -63,6 +64,7 @@ def create_fixtures():
     django.setup()
     from django.contrib.auth import get_user_model
 
+    from core.embedding_contract import embedding_dimension_for_model
     from core.models import Folder, PDFFile
 
     user, _ = get_user_model().objects.get_or_create(username=USERNAME)
@@ -80,13 +82,15 @@ def create_fixtures():
     folder.save(update_fields=["created_by", "keywords"])
     PDFFile.objects.filter(folder=folder).delete()
 
+    embedding_dimension = embedding_dimension_for_model(settings.OPENAI_EMBED_MODEL)
+    embedding = [1.0] + [0.0] * (embedding_dimension - 1)
     pdf = PDFFile(
         title=PDF_TITLE,
         uploaded_by=user,
         folder=folder,
         extracted_text=SEARCH_CONTEXT,
         page_chunks=[SEARCH_CONTEXT],
-        chunk_embeddings=[[1.0, 0.0]],
+        chunk_embeddings=[embedding],
         text_content=SEARCH_CONTEXT,
         indexed=True,
     )
