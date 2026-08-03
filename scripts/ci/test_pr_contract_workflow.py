@@ -91,6 +91,19 @@ class FastPullRequestWorkflowTests(unittest.TestCase):
             r"    branches: \[dev\]",
         )
 
+    def test_authoritative_lifecycle_runs_before_merge(self):
+        lifecycle_step = re.search(
+            r"(?ms)^      - name: Prove one authoritative generation "
+            r"through runtime activation\n(?P<body>.*?)(?=^      - name:)",
+            self.full,
+        )
+        self.assertIsNotNone(lifecycle_step)
+        self.assertIn(
+            "run: bash scripts/ci/run_maintenance_lifecycle_e2e.sh",
+            lifecycle_step.group("body"),
+        )
+        self.assertNotIn("github.event_name", lifecycle_step.group("body"))
+
 
 if __name__ == "__main__":
     unittest.main()
