@@ -318,6 +318,7 @@ services:
       DATA_ROOT: /app/data
       DATA_CONTROL_ROOT: /app/data-control
       CONTROL_DB_PATH: /app/data-control/control.sqlite3
+      SECRET_KEY: ${SECRET_KEY}
       VAULT_RESTORE_ROOT: /app/data/restore-quarantine
       RUNTIME_GENERATIONS_ROOT: /app/data/runtime-generations
       SQLITE_DB_PATH: /app/data/db.sqlite3
