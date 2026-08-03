@@ -9,6 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import DataConnection, DataOperation, RecoveryPoint, RestoreCandidate
+from .v3_candidate import prepare_recovery_candidate
 from .v3_config import connection_from_model
 from .v3_executor import V3ExecutionError, validate_operation_plan
 from .v3_legacy import (
@@ -93,6 +94,7 @@ def execute_legacy_import_operation(
     lease=None,
     client_factory=client_for_connection,
     migration_runner=None,
+    candidate_preparer=prepare_recovery_candidate,
 ) -> dict:
     validate_operation_plan(operation)
     if operation.kind != DataOperation.Kind.IMPORT:
@@ -210,13 +212,29 @@ def execute_legacy_import_operation(
     )
     observed_ratio = float(restored.get("evidence", {}).get("indexing_ratio", 0.0))
     effective_ratio = 0.0 if derived_rebuild_required else observed_ratio
+    candidate_preparation = {}
+    if derived_rebuild_required or effective_ratio < 1.0:
+        try:
+            candidate_preparation = candidate_preparer(restored)
+        except Exception as exc:
+            raise V3ExecutionError(
+                getattr(exc, "code", "candidate_preparation_failed"),
+                stage="candidate_preparation",
+                retryable=bool(getattr(exc, "retryable", False)),
+            ) from exc
+        effective_ratio = float(candidate_preparation.get("indexing_ratio", 0.0))
+    candidate_ready = effective_ratio == 1.0
     candidate, created = RestoreCandidate.objects.using("control").get_or_create(
         operation=operation,
         defaults={
             "recovery_point": point,
             "environment": str(operation.lifecycle_plan.get("environment") or ""),
             "workspace": str(restored["workspace"]),
-            "state": RestoreCandidate.State.VERIFIED,
+            "state": (
+                RestoreCandidate.State.READY
+                if candidate_ready
+                else RestoreCandidate.State.VERIFIED
+            ),
             "manifest_digest": point.manifest_digest,
             "evidence": {
                 "legacy_materialization": {
@@ -231,7 +249,12 @@ def execute_legacy_import_operation(
                 "rehearsal": rehearsal,
                 "observed_indexing_ratio": observed_ratio,
                 "indexing_ratio": effective_ratio,
-                "requires_reindex": derived_rebuild_required or effective_ratio < 1.0,
+                "requires_reindex": not candidate_ready,
+                "candidate_preparation": {
+                    key: value
+                    for key, value in candidate_preparation.items()
+                    if key != "workspace"
+                },
             },
         },
     )
@@ -246,14 +269,14 @@ def execute_legacy_import_operation(
         )
     return {
         "contract_version": 3,
-        "status": "verified_rehearsal",
+        "status": "ready_for_activation" if candidate_ready else "verified_rehearsal",
         "route": "legacy_import",
         "effective_recovery_point_id": str(point.public_id),
         "candidate_id": candidate.pk,
         "manifest_digest": point.manifest_digest,
         "workspace": str(restored["workspace"]),
         "indexing_ratio": effective_ratio,
-        "requires_reindex": derived_rebuild_required or effective_ratio < 1.0,
+        "requires_reindex": not candidate_ready,
         "activation_performed": False,
         "legacy_import_receipt": import_receipt.as_dict(),
         "plan_digest": operation.lifecycle_plan_digest,

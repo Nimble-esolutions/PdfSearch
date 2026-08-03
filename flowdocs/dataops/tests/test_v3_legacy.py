@@ -500,6 +500,12 @@ class LegacyV3ExecutorTests(DjangoTestCase):
                 operation,
                 client_factory=client_factory,
                 migration_runner=migration_runner,
+                candidate_preparer=lambda restored: {
+                    "success": True,
+                    "manifest_sha256": restored["manifest_sha256"],
+                    "indexing_ratio": 1.0,
+                    "workspace": restored["workspace"],
+                },
             )
         point = RecoveryPoint.objects.using("control").get(
             public_id=result["effective_recovery_point_id"]
@@ -507,8 +513,8 @@ class LegacyV3ExecutorTests(DjangoTestCase):
         candidate = RestoreCandidate.objects.using("control").get(operation=operation)
         self.assertEqual(point.dataset_id, self.destination_connection.dataset_id)
         self.assertEqual(point.identity["parent_dataset_id"], self.source_dataset)
-        self.assertEqual(candidate.state, RestoreCandidate.State.VERIFIED)
-        self.assertTrue(result["requires_reindex"])
+        self.assertEqual(candidate.state, RestoreCandidate.State.READY)
+        self.assertFalse(result["requires_reindex"])
         self.assertFalse(result["activation_performed"])
 
 
