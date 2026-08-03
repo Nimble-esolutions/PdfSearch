@@ -28,11 +28,14 @@ explains the transition.
 | OCR languages | not consistently available in the old path | English + Marathi + Hindi, eng+mar+hin |
 | Index readiness metric | folder-index count could under-report document readiness | document-scoped searchable-PDF ratio; target 1.0 |
 | Runtime activation | no signed active generation in stage | signed pointer verifies and serves the 242-document v3 runtime |
-| Backup profile | stage backup selector was missing in the degraded state | manual stage backup and isolated rehearsal succeeded; automatic backup remains off |
-| Stage route | earlier route returned 404 | HTTPS and real English/Marathi search work; final `/readyz` projection awaits PR 176 image |
-| Image identity | mutable or older deployment references | immutable digest required; stage still needs the final PR 176 candidate |
+| Backup profile | stage backup selector was missing in the degraded state | manual stage backup and isolated rehearsal succeeded; backup evidence is separate from web readiness |
+| Stage route | earlier route returned 404 | HTTPS, signed runtime readiness, and real English/Marathi search work |
+| Image identity | mutable or older deployment references without evidence | stage intentionally tracks `:latest` and records the resolved digest; production requires an immutable digest |
 | Security release | cryptography 45.0.7 findings | runtime dependency is 48.0.1; final image still passes Trivy/release certification |
 | Public authentication | production accounts requested for stage | exception explicitly approved for stage; unrelated external effects stay sandboxed |
+| Dashboard readiness | legacy Vault projection could disagree with `/readyz` | Dashboard and `/readyz` use the same bounded DataOps v3 runtime authority |
+| Search maintenance UI | repeated blockers, malformed checkboxes, and every job/category shown at once | unique blockers, 46+ category filtering, valid controls, and active/attention/history lanes |
+| PDF workbench | six-column 720px table and six or more visible actions per document | 25-document pages, responsive records, one View action, and an explicit Manage disclosure |
 
 ## Data and recovery comparison
 
@@ -111,22 +114,41 @@ publish a complete manifest and verify every referenced object.
 | Pointer file exists | generation is trusted | verify signature, digest, and readiness |
 | PDF row count | search works | verify extracted text, chunks, embeddings, and indexed state |
 
-## Current pending transition
+## Current operating sequence
 
-The next safe sequence is:
+The stage runtime and recovery rehearsal are already proven. Routine changes
+now follow this smaller sequence:
 
-    PR #169 merge
-      -> immutable dev image build
-      -> Trivy scan of exact digest
-      -> deploy certified image, retaining b71 rollback
-      -> register activation-ready generation
-      -> signed atomic activation
+    merge green PR
+      -> publish/update the stage :latest channel
+      -> Dokploy pulls and recreates web + maintenance
+      -> record the resolved running digest
       -> verify /readyz and representative searches
-      -> first stage_2026 backup receipt
-      -> isolated data/control round-trip restore
+      -> run backup/isolated restore only when recovery behavior changes
 
-Public authentication remains a separate security decision after technical
-validation. No DNS or production traffic change is part of this transition.
+Production promotion is a separate workflow: certify and pin an immutable
+digest, retain a rollback digest, and verify the same signed data/runtime
+evidence before any traffic change. No production DNS or traffic change is
+part of the stage workflow.
+
+## Operator workbench decision model
+
+```mermaid
+flowchart LR
+  R["DataOps v3 readiness"] --> D["Dashboard truth strip"]
+  R --> Z["/readyz"]
+  C["Maintenance capabilities"] --> U["Unique blocker guidance"]
+  C --> A["Active work"]
+  C --> N["Needs attention"]
+  C --> H["Bounded history"]
+  F["Authorized category documents"] --> P["25-document page"]
+  P --> V["View"]
+  P --> M["Manage disclosure"]
+```
+
+The UI does not bypass capability, confirmation, idempotency, source-digest,
+or superadmin checks. It projects those controls into fewer, task-oriented
+decisions and keeps technical evidence available on demand.
 
 ## Living-document maintenance contract
 

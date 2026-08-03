@@ -216,10 +216,10 @@ Canonical production is `https://ai-sahakar.net` with
 `https://www.ai-sahakar.net` as the canonical alias. It is deployed through
 Dokploy as the Compose application defined by [`docker-compose.yml`](docker-compose.yml).
 The current non-production rehearsal host is
-https://2026.ai-sahakar.net. Its route is reachable, but it is not production
-traffic and it is not ready until a signed data generation and first stage
-backup receipt exist. The exact image digest is always the release identity and
-must be recorded from the running container.
+https://2026.ai-sahakar.net. It serves a signed 242-document runtime and remains
+outside production traffic. Runtime/search readiness and the separate backup
+rehearsal are reported independently: a disposable stage backup receipt is
+valuable recovery evidence, but it is not an availability prerequisite.
 
 - Container port: `8000`
 - Liveness: `/livez` proves process liveness
@@ -230,13 +230,16 @@ must be recorded from the running container.
 - Persistent state: Compose volume `flowdocs_data` at `/app/data`
 - Legacy data: external `prod_flowdocs` at `/mnt/legacy:ro`, read-only quarantine only
 - Secrets: Dokploy protected environment values
-- Release identity: `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<digest>`
+- Stage image channel: `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest`
+- Stage evidence: record the resolved running digest after every pull/deploy
+- Production release identity: `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<digest>`
 - Pull policy: the effective Dokploy Compose configuration must use `pull_policy: always`
 
-The repository keeps tag defaults for compatibility, but production must set
-`PDFSEARCH_IMAGE` to the exact digest and verify the running container's digest.
-Tags such as `:latest` are never release identity and must not be reused from a
-stale local cache.
+The 2026 stage deliberately tracks `:latest` for both `PDFSEARCH_IMAGE` and
+`APP_IMAGE_DIGEST`; `pull_policy: always` plus the resolved container digest
+provides its deployment evidence. Production must instead set
+`PDFSEARCH_IMAGE` to an approved immutable digest. Never infer the running
+artifact from a tag alone.
 
 Deploying a new image normally recreates the container while retaining the
 Compose-managed `/app/data` named volume. This is conditional on preserving the

@@ -104,10 +104,12 @@ decision.
 Before pressing Deploy, enabling an autodeploy, changing a Compose file, or
 changing environment values:
 
-1. Record the Git SHA, immutable web image digest, previous image digest,
+1. Record the Git SHA, resolved web image digest, previous image digest,
    Compose hash, Dokploy deployment ID, and data-generation identity.
-2. Confirm the intended `PDFSEARCH_IMAGE` is a
-   `repo@sha256:<digest>`, not only `:latest`, `:dev`, or another mutable tag.
+2. For production, confirm `PDFSEARCH_IMAGE` is a `repo@sha256:<digest>`.
+   For the operator-approved 2026 stage channel, confirm it is the intended
+   `:latest` reference and record the digest that the recreated container
+   actually resolved.
 3. Discover the actual volume from the running web container; do not infer its
    host name from the logical Compose key.
 4. Confirm `/app/data` is read-write, `/mnt/legacy` is read-only, and no volume
@@ -208,10 +210,13 @@ Autodeploy does not make a mutable tag immutable. With `:latest`, the same
 displayed desired image can refer to different bytes over time, or a recreated
 container can continue using an older local image. A tag can also move between
 CI certification and deployment. `pull_policy: always` reduces stale-cache
-risk but cannot prove which certified commit was selected. Set the existing
-`PDFSEARCH_IMAGE` value to the certified `repo@sha256:<digest>` in Dokploy and
-use the actual-container verifier above. Do not add Dokploy project IDs,
-generated labels, or Compose-project variables to the checked-in Compose file.
+risk but cannot prove which certified commit was selected. The 2026 stage
+accepts that tradeoff by policy: keep `PDFSEARCH_IMAGE` and `APP_IMAGE_DIGEST`
+on the approved `:latest` channel and use the actual-container verifier above
+to record the resolved digest and OCI revision. Production instead sets
+`PDFSEARCH_IMAGE` to the certified `repo@sha256:<digest>`. Do not add Dokploy
+project IDs, generated labels, or Compose-project variables to the checked-in
+Compose file.
 
 If startup emits
 `startup_schema_contract_older_than_control_database`, the mounted control
