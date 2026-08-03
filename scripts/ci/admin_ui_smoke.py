@@ -329,6 +329,19 @@ def main():
                 ),
             ]
         )
+        scale_storage = PDFFile._meta.get_field("file").storage
+        for scale_document in scale_documents:
+            storage_name = scale_document.file.name
+            if scale_storage.exists(storage_name):
+                scale_storage.delete(storage_name)
+            saved_name = scale_storage.save(
+                storage_name,
+                ContentFile(b"%PDF-1.7\n% bounded browser fixture\n"),
+            )
+            require(
+                saved_name == storage_name,
+                "scale fixture storage changed the requested media name",
+            )
         PDFFile.objects.bulk_create(scale_documents)
         Folder.objects.bulk_create(
             [
