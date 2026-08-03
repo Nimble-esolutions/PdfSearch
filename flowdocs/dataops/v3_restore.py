@@ -201,10 +201,55 @@ def _sqlite_evidence(database: Path) -> dict[str, Any]:
     return {"integrity": "ok", "foreign_keys": "ok"}
 
 
+def _database_counts(database: Path) -> dict[str, int]:
+    try:
+        uri = f"file:{database.as_posix()}?mode=ro"
+        with sqlite3.connect(uri, uri=True) as connection:
+            tables = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+
+            def count(table: str) -> int:
+                if table not in tables:
+                    return 0
+                return int(
+                    connection.execute(
+                        f'SELECT COUNT(*) FROM "{table}"'
+                    ).fetchone()[0]
+                )
+
+            user_table = (
+                "core_customuser"
+                if "core_customuser" in tables
+                else "auth_user"
+            )
+            indexed = 0
+            if "core_pdffile" in tables:
+                indexed = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM core_pdffile "
+                        "WHERE indexed = 1 AND processing_status = 'ready'"
+                    ).fetchone()[0]
+                )
+            return {
+                "documents": count("core_pdffile"),
+                "folders": count("core_folder"),
+                "users": count(user_table),
+                "migrations": count("django_migrations"),
+                "indexed_documents": indexed,
+            }
+    except sqlite3.Error as exc:
+        raise V3RestoreError("restored_database_counts_invalid") from exc
+
+
 def _local_evidence(root: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
     database = root / "db.sqlite3"
     sqlite_evidence = _sqlite_evidence(database)
-    documents = (
+    database_counts = _database_counts(database)
+    media_documents = (
         sum(
             1
             for path in (root / "media").rglob("*")
@@ -213,25 +258,35 @@ def _local_evidence(root: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
         if (root / "media").is_dir()
         else 0
     )
-    expected_documents = int(manifest.get("counts", {}).get("documents", 0))
-    if documents != expected_documents:
+    signed_counts = manifest.get("counts")
+    if not isinstance(signed_counts, Mapping):
+        raise V3RestoreError("restored_signed_counts_invalid")
+    count_codes = {
+        "documents": "restored_document_count_mismatch",
+        "folders": "restored_folder_count_mismatch",
+        "users": "restored_user_count_mismatch",
+        "migrations": "restored_migration_count_mismatch",
+    }
+    for name, code in count_codes.items():
+        if name in signed_counts and database_counts[name] != int(
+            signed_counts[name]
+        ):
+            raise V3RestoreError(code)
+    if (
+        "documents" in signed_counts
+        and media_documents != int(signed_counts["documents"])
+    ):
         raise V3RestoreError("restored_media_count_mismatch")
-    indexed = 0
-    try:
-        uri = f"file:{database.as_posix()}?mode=ro"
-        with sqlite3.connect(uri, uri=True) as connection:
-            indexed = int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM core_pdffile "
-                    "WHERE indexed = 1 AND processing_status = 'ready'"
-                ).fetchone()[0]
-            )
-    except sqlite3.Error:
-        indexed = 0
+    documents = database_counts["documents"]
+    indexed = database_counts["indexed_documents"]
     ratio = 1.0 if documents == 0 else min(1.0, indexed / documents)
     return {
         "sqlite": sqlite_evidence,
         "documents": documents,
+        "media_documents": media_documents,
+        "folders": database_counts["folders"],
+        "users": database_counts["users"],
+        "migrations": database_counts["migrations"],
         "indexed_documents": indexed,
         "indexing_ratio": round(ratio, 4),
     }

@@ -7,6 +7,7 @@ import json
 import sqlite3
 import tempfile
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -31,15 +32,22 @@ from dataops.models import (
 from dataops.package_v3 import canonical_json_bytes
 from dataops.tests.test_v3_backup import FakeS3
 from dataops.v3_backup import blob_key, publish_snapshot
+from dataops.v3_candidate import V3CandidateError, prepare_recovery_candidate
 from dataops.v3_config import connection_from_model
 from dataops.v3_import import V3ImportError, import_rebind_recovery_point
 from dataops.v3_restore import (
     V3RestoreError,
+    _local_evidence,
     load_verified_recovery_point,
     materialize_quarantine,
     rehearse_quarantine,
 )
-from dataops.v3_restore_executor import execute_restore_operation
+from dataops.v3_executor import V3ExecutionError
+from dataops.v3_restore_executor import (
+    _component_rebuild_requirements,
+    _component_reconciliation,
+    execute_restore_operation,
+)
 
 
 class V3RestoreTests(TestCase):
@@ -160,6 +168,7 @@ class V3RestoreTests(TestCase):
             state=RecoveryPoint.State.VERIFIED,
             evidence={"signature_valid": True},
         )
+        self.preparation_calls = []
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -171,12 +180,36 @@ class V3RestoreTests(TestCase):
             client_factory=lambda _connection: self.client,
         )
 
+    def prepare_candidate(self, restored):
+        workspace = Path(restored["workspace"])
+        for relative in ("pdf_cache", "faiss_indexes", "chroma_db"):
+            (workspace / relative).mkdir(exist_ok=True)
+        self.preparation_calls.append(workspace)
+        rebuilt = sorted(restored["component_rebuild_requirements"])
+        return {
+            "schema_version": 3,
+            "success": True,
+            "manifest_sha256": restored["manifest_sha256"],
+            "rebuilt_components": rebuilt,
+            "indexing_ratio": 1.0,
+            "validation": {
+                "faiss": {},
+                "validated_folder_ids": [],
+                "chroma": {
+                    "ready": True,
+                    "file_count": 0,
+                    "sha256": "c" * 64,
+                },
+            },
+        }
+
     def operation_for(
         self,
         point,
         *,
         intent=LifecycleIntent.RESTORE,
         activate=False,
+        environment="staging",
     ):
         plan = compile_lifecycle_plan(
             LifecycleRequest(
@@ -185,8 +218,8 @@ class V3RestoreTests(TestCase):
                 confirmation_present=activate,
             ),
             InstanceIdentity(
-                environment="staging",
-                deployment_id="stage-2026",
+                environment=environment,
+                deployment_id=f"{environment}-2026",
                 dataset_id=self.connection.dataset_id,
             ),
             LifecycleCapabilities(
@@ -238,9 +271,99 @@ class V3RestoreTests(TestCase):
         workspace = Path(first["workspace"])
         self.assertEqual(first["evidence"]["sqlite"]["integrity"], "ok")
         self.assertEqual(first["evidence"]["documents"], 2)
+        self.assertEqual(first["evidence"]["media_documents"], 2)
+        self.assertEqual(first["evidence"]["folders"], 1)
+        self.assertEqual(first["evidence"]["users"], 1)
+        self.assertEqual(first["evidence"]["migrations"], 1)
         self.assertEqual(first["evidence"]["indexing_ratio"], 1.0)
         self.assertTrue((workspace / "media" / "pdfs" / "two.PDF").is_file())
         self.assertTrue(second["reused"])
+
+    def test_reconciles_all_signed_database_counts(self):
+        counts = {
+            "documents": 2,
+            "folders": 1,
+            "users": 1,
+            "migrations": 1,
+        }
+        evidence = _local_evidence(
+            self.root / "snapshot",
+            {"counts": counts},
+        )
+        self.assertEqual(
+            {name: evidence[name] for name in counts},
+            counts,
+        )
+
+        failures = {
+            "documents": "restored_document_count_mismatch",
+            "folders": "restored_folder_count_mismatch",
+            "users": "restored_user_count_mismatch",
+            "migrations": "restored_migration_count_mismatch",
+        }
+        for name, code in failures.items():
+            with self.subTest(name=name):
+                mismatched = dict(counts)
+                mismatched[name] += 1
+                with self.assertRaisesMessage(V3RestoreError, code):
+                    _local_evidence(
+                        self.root / "snapshot",
+                        {"counts": mismatched},
+                    )
+
+    def test_authoritative_component_cannot_be_blessed_by_preparation(self):
+        workspace = self.root / "authoritative-component"
+        for relative in ("media", "pdf_cache", "faiss_indexes", "chroma_db"):
+            (workspace / relative).mkdir(parents=True)
+        (workspace / "db.sqlite3").write_bytes(b"sqlite")
+        manifest = deepcopy(self.manifest)
+        manifest["components"]["database"]["coherent"] = False
+        requirements = _component_rebuild_requirements(
+            manifest,
+            workspace=workspace,
+        )
+        self.assertIn("signed_component_incoherent", requirements["database"])
+        with self.assertRaisesMessage(
+            V3ExecutionError,
+            "candidate_database_unresolved",
+        ):
+            _component_reconciliation(
+                manifest,
+                workspace=workspace,
+                requirements=requirements,
+                preparation={
+                    "success": True,
+                    "rebuilt_components": list(requirements),
+                    "validation": {
+                        "faiss": {},
+                        "validated_folder_ids": [],
+                        "chroma": {
+                            "ready": True,
+                            "file_count": 0,
+                            "sha256": "c" * 64,
+                        },
+                    },
+                },
+            )
+
+    def test_default_preparer_fails_closed_when_chroma_rebuild_is_required(self):
+        with self.assertRaisesMessage(
+            V3CandidateError,
+            "candidate_chroma_rebuild_unimplemented",
+        ):
+            prepare_recovery_candidate(
+                {
+                    "verified": True,
+                    "manifest_sha256": self.point.manifest_digest,
+                    "workspace": str(self.root / "snapshot"),
+                    "component_rebuild_requirements": {
+                        "chroma": ["signed_rebuild_required"]
+                    },
+                },
+                runner=lambda *_args, **_kwargs: self.fail(
+                    "unimplemented Chroma rebuild must not start a subprocess"
+                ),
+            )
 
     def test_reuses_a_successfully_rehearsed_workspace(self):
         first = materialize_quarantine(
@@ -461,6 +584,7 @@ class V3RestoreTests(TestCase):
                 operation,
                 client_factory=lambda _connection: self.client,
                 migration_runner=migration_runner,
+                candidate_preparer=self.prepare_candidate,
             )
         candidate = RestoreCandidate.objects.using("control").get(
             operation=operation
@@ -468,7 +592,75 @@ class V3RestoreTests(TestCase):
         self.assertEqual(result["status"], "ready_for_activation")
         self.assertEqual(result["indexing_ratio"], 1.0)
         self.assertEqual(candidate.state, RestoreCandidate.State.READY)
+        self.assertEqual(len(self.preparation_calls), 1)
+        self.assertTrue(
+            candidate.evidence["component_reconciliation"]["pdf_cache"]["ready"]
+        )
+        self.assertTrue(
+            candidate.evidence["component_reconciliation"]["faiss"]["ready"]
+        )
+        self.assertTrue(
+            candidate.evidence["component_reconciliation"]["chroma"]["ready"]
+        )
         self.assertFalse(result["activation_performed"])
+
+    def test_missing_required_derived_component_fails_closed(self):
+        operation = self.operation_for(self.point, activate=True)
+        control_root = self.root / "failed-control"
+        active = control_root / "runtime" / "active.json"
+        active.parent.mkdir(parents=True)
+        active.write_text("previous-active\n", encoding="utf-8")
+
+        def incomplete_preparation(restored):
+            workspace = Path(restored["workspace"])
+            (workspace / "pdf_cache").mkdir(exist_ok=True)
+            (workspace / "faiss_indexes").mkdir(exist_ok=True)
+            (workspace / "chroma_db").mkdir(exist_ok=True)
+            return {
+                "success": True,
+                "rebuilt_components": ["faiss", "chroma"],
+                "indexing_ratio": 1.0,
+                "validation": {
+                    "faiss": {},
+                    "validated_folder_ids": [],
+                    "chroma": {
+                        "ready": True,
+                        "file_count": 0,
+                        "sha256": "c" * 64,
+                    },
+                },
+            }
+
+        with override_settings(
+            ACTIVATION_INTENT_SIGNING_KEY=self.signing_key.decode(),
+            DATA_CONTROL_ROOT=control_root,
+            DATAOPS_RESTORE_STAGING_ROOT=self.root / "failed-quarantine",
+        ):
+            with self.assertRaisesMessage(
+                V3ExecutionError,
+                "candidate_pdf_cache_unresolved",
+            ):
+                execute_restore_operation(
+                    operation,
+                    client_factory=lambda _connection: self.client,
+                    migration_runner=lambda *_args, **_kwargs: {"success": True},
+                    candidate_preparer=incomplete_preparation,
+                    activation_scheduler=lambda *_args, **_kwargs: self.fail(
+                        "activation must not be scheduled"
+                    ),
+                )
+        self.assertEqual(active.read_text(encoding="utf-8"), "previous-active\n")
+        self.assertFalse(
+            RestoreCandidate.objects.using("control").filter(
+                operation=operation
+            ).exists()
+        )
+        self.assertTrue(
+            any(
+                path.name.startswith("restore-stage-rp-001-")
+                for path in (self.root / "failed-quarantine").iterdir()
+            )
+        )
 
     def test_approved_activation_is_scheduled_only_after_candidate_is_ready(self):
         operation = self.operation_for(self.point, activate=True)
@@ -490,6 +682,7 @@ class V3RestoreTests(TestCase):
                 operation,
                 client_factory=lambda _connection: self.client,
                 migration_runner=lambda *_args, **_kwargs: {"success": True},
+                candidate_preparer=self.prepare_candidate,
                 activation_scheduler=scheduler,
             )
         self.assertEqual(
@@ -498,6 +691,45 @@ class V3RestoreTests(TestCase):
         )
         self.assertEqual(result["activation"]["state"], "scheduled")
         self.assertFalse(result["activation_performed"])
+
+    def test_production_activation_fails_before_restore_or_pointer_mutation(self):
+        operation = self.operation_for(
+            self.point,
+            activate=True,
+            environment="production",
+        )
+        control_root = self.root / "production-control"
+        active = control_root / "runtime" / "active.json"
+        active.parent.mkdir(parents=True)
+        active.write_text("previous-production\n", encoding="utf-8")
+        with override_settings(
+            ACTIVATION_INTENT_SIGNING_KEY=self.signing_key.decode(),
+            DATA_CONTROL_ROOT=control_root,
+            DATAOPS_RESTORE_STAGING_ROOT=self.root / "production-quarantine",
+        ):
+            with self.assertRaisesMessage(
+                V3ExecutionError,
+                "production_restore_gates_unimplemented",
+            ):
+                execute_restore_operation(
+                    operation,
+                    client_factory=lambda _connection: self.fail(
+                        "production preflight must not read recovery storage"
+                    ),
+                    activation_scheduler=lambda *_args, **_kwargs: self.fail(
+                        "production activation must not be scheduled"
+                    ),
+                )
+        self.assertEqual(
+            active.read_text(encoding="utf-8"),
+            "previous-production\n",
+        )
+        self.assertFalse((self.root / "production-quarantine").exists())
+        self.assertFalse(
+            RestoreCandidate.objects.using("control").filter(
+                operation=operation
+            ).exists()
+        )
 
     def test_queued_isolated_recovery_never_imports_or_activates(self):
         operation = self.operation_for(
@@ -573,6 +805,7 @@ class V3RestoreTests(TestCase):
                 operation,
                 client_factory=clients,
                 migration_runner=lambda *_args, **_kwargs: {"success": True},
+                candidate_preparer=self.prepare_candidate,
             )
         effective = RecoveryPoint.objects.using("control").get(
             public_id=result["effective_recovery_point_id"]

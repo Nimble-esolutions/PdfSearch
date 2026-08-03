@@ -50,16 +50,27 @@ def _sha256(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def _quarantine_legacy_indexes(workspace: Path) -> None:
+def _quarantine_legacy_indexes(workspace: Path, components: set[str]) -> None:
     quarantine = workspace / "derived-quarantine"
+    if quarantine.is_symlink():
+        raise CommandError("candidate_derived_quarantine_unsafe")
     quarantine.mkdir(exist_ok=True, mode=0o700)
-    for name in ("faiss_indexes", "chroma_db"):
+    if not quarantine.is_dir():
+        raise CommandError("candidate_derived_quarantine_unsafe")
+    runtime_names = {
+        "pdf_cache": "pdf_cache",
+        "faiss": "faiss_indexes",
+    }
+    for component in sorted(components):
+        name = runtime_names[component]
         source = workspace / name
         retained = quarantine / f"legacy-{name}"
+        if source.is_symlink():
+            raise CommandError("candidate_derived_path_unsafe")
         if source.exists() and not retained.exists():
             os.replace(source, retained)
-        elif source.is_symlink():
-            raise CommandError("candidate_derived_path_unsafe")
+        elif source.exists():
+            raise CommandError("candidate_derived_quarantine_conflict")
         source.mkdir(exist_ok=True, mode=0o700)
 
 
@@ -101,6 +112,12 @@ class Command(BaseCommand):
             type=int,
             default=500,
         )
+        parser.add_argument(
+            "--rebuild-component",
+            action="append",
+            choices=("pdf_cache", "faiss"),
+            default=[],
+        )
 
     def handle(self, *args, **options):
         if os.environ.get("MAINTENANCE_CANDIDATE_EXECUTION") != "1":
@@ -110,6 +127,7 @@ class Command(BaseCommand):
             raise CommandError("candidate_workspace_invalid")
         workspace = workspace.resolve()
         manifest_digest = str(options["manifest_digest"] or "")
+        rebuild_components = set(options.get("rebuild_component") or [])
         if not re.fullmatch(r"[0-9a-f]{64}", manifest_digest):
             raise CommandError("candidate_manifest_digest_invalid")
         restore = _json_object(
@@ -130,10 +148,14 @@ class Command(BaseCommand):
         receipt_path = workspace / ".dataops-candidate.json"
         if receipt_path.is_file() and not receipt_path.is_symlink():
             existing = _json_object(receipt_path, "candidate_receipt_invalid")
+            existing_rebuilt = existing.get("rebuilt_components", [])
             if (
                 existing.get("success") is True
                 and existing.get("manifest_sha256") == manifest_digest
                 and existing.get("indexing_ratio") == 1.0
+                and isinstance(existing_rebuilt, list)
+                and all(isinstance(name, str) for name in existing_rebuilt)
+                and rebuild_components.issubset(set(existing_rebuilt))
             ):
                 validation = validate_candidate(workspace)
                 if existing.get("evidence_version") != EVIDENCE_VERSION:
@@ -202,7 +224,7 @@ class Command(BaseCommand):
             except EmbeddingContractError as exc:
                 raise CommandError(f"candidate_{exc}") from exc
 
-        _quarantine_legacy_indexes(workspace)
+        _quarantine_legacy_indexes(workspace, rebuild_components)
         reindex_job = None
         if reindex:
             reindex_job = queue_job(
@@ -249,6 +271,7 @@ class Command(BaseCommand):
             "reindexed_documents": _reindexed_document_count(manifest_digest),
             "reindex_attempted_this_run": len(reindex),
             "repaired_folders": len(folders),
+            "rebuilt_components": sorted(rebuild_components),
             "indexing_ratio": ratio,
             "text_coverage": _text_coverage(),
             "validation": validation,

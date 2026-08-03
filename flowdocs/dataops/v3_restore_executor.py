@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 from django.conf import settings
@@ -21,6 +22,124 @@ from .v3_restore import (
 )
 from .v3_storage import client_for_connection
 from .v3_signing import V3SigningError, manifest_signing_material
+
+
+_RUNTIME_COMPONENT_PATHS = {
+    "database": ("db.sqlite3", "file"),
+    "media": ("media", "directory"),
+    "pdf_cache": ("pdf_cache", "directory"),
+    "faiss": ("faiss_indexes", "directory"),
+    "chroma": ("chroma_db", "directory"),
+}
+_DERIVED_COMPONENTS = frozenset({"pdf_cache", "faiss", "chroma"})
+
+
+def _path_ready(workspace: Path, relative: str, expected_kind: str) -> bool:
+    path = workspace / relative
+    if path.is_symlink():
+        return False
+    if expected_kind == "file":
+        return path.is_file()
+    return path.is_dir()
+
+
+def _component_rebuild_requirements(
+    manifest: Mapping,
+    *,
+    workspace: Path,
+) -> dict[str, list[str]]:
+    """Bind signed component state to the materialized runtime paths."""
+
+    components = manifest.get("components")
+    if not isinstance(components, Mapping):
+        raise V3ExecutionError("manifest_components_invalid", stage="preflight")
+    requirements: dict[str, list[str]] = {}
+    for name, (relative, expected_kind) in _RUNTIME_COMPONENT_PATHS.items():
+        component = components.get(name)
+        reasons: list[str] = []
+        if not isinstance(component, Mapping):
+            if name in _DERIVED_COMPONENTS:
+                reasons.append("component_not_declared")
+            else:
+                raise V3ExecutionError(
+                    f"candidate_{name}_component_missing",
+                    stage="candidate_preparation",
+                )
+        else:
+            if component.get("complete") is not True:
+                reasons.append("signed_component_incomplete")
+            if component.get("coherent") is False:
+                reasons.append("signed_component_incoherent")
+            if component.get("rebuild_required") is True:
+                reasons.append("signed_rebuild_required")
+        if not _path_ready(workspace, relative, expected_kind):
+            reasons.append("runtime_path_missing_or_unsafe")
+        if reasons:
+            requirements[name] = sorted(set(reasons))
+    return requirements
+
+
+def _component_reconciliation(
+    manifest: Mapping,
+    *,
+    workspace: Path,
+    requirements: Mapping[str, list[str]],
+    preparation: Mapping,
+) -> dict[str, dict]:
+    """Prove every runtime component is ready after any required rebuild."""
+
+    components = manifest.get("components")
+    validation = preparation.get("validation")
+    preparation_succeeded = preparation.get("success") is True
+    rebuilt_components = preparation.get("rebuilt_components")
+    if not isinstance(rebuilt_components, list):
+        rebuilt_components = []
+    reconciliation: dict[str, dict] = {}
+    for name, (relative, expected_kind) in _RUNTIME_COMPONENT_PATHS.items():
+        required_rebuild = name in requirements
+        ready = _path_ready(workspace, relative, expected_kind)
+        if required_rebuild:
+            ready = bool(
+                ready
+                and name in _DERIVED_COMPONENTS
+                and preparation_succeeded
+                and name in rebuilt_components
+            )
+        if required_rebuild and name == "faiss":
+            ready = bool(
+                ready
+                and isinstance(validation, Mapping)
+                and isinstance(validation.get("faiss"), Mapping)
+                and isinstance(validation.get("validated_folder_ids"), list)
+            )
+        if required_rebuild and name == "chroma":
+            chroma = validation.get("chroma") if isinstance(validation, Mapping) else None
+            ready = bool(
+                ready
+                and isinstance(chroma, Mapping)
+                and chroma.get("ready") is True
+                and isinstance(chroma.get("file_count"), int)
+                and not isinstance(chroma.get("file_count"), bool)
+                and chroma.get("file_count") >= 0
+                and len(str(chroma.get("sha256") or "")) == 64
+            )
+        reconciliation[name] = {
+            "ready": ready,
+            "path": relative,
+            "source": (
+                "candidate_preparation"
+                if required_rebuild
+                else "signed_manifest_and_restore"
+            ),
+            "rebuild_reasons": list(requirements.get(name, [])),
+            "signed": dict(components.get(name) or {}),
+        }
+        if not ready:
+            raise V3ExecutionError(
+                f"candidate_{name}_unresolved",
+                stage="candidate_preparation",
+            )
+    return reconciliation
 
 
 def _source_point(operation: DataOperation) -> RecoveryPoint:
@@ -123,6 +242,14 @@ def execute_restore_operation(
             "status": "already_active",
             "plan_digest": operation.lifecycle_plan_digest,
         }
+    environment = str(
+        operation.lifecycle_plan.get("environment") or ""
+    ).strip().lower()
+    if activation_mode == "signed_atomic" and environment == "production":
+        raise V3ExecutionError(
+            "production_restore_gates_unimplemented",
+            stage="preflight",
+        )
     try:
         signing_key, signing_key_id = manifest_signing_material()
     except V3SigningError as exc:
@@ -155,6 +282,7 @@ def execute_restore_operation(
             retryable=bool(getattr(exc, "retryable", False)),
         ) from exc
     effective_point = point
+    effective_manifest = source.manifest
     import_receipt = None
     if route == "import_rebind_restore":
         if lease:
@@ -195,6 +323,7 @@ def execute_restore_operation(
                 imported,
                 quarantine_root=quarantine_root,
             )
+            effective_manifest = imported.manifest
         except Exception as exc:
             if isinstance(exc, V3ExecutionError):
                 raise
@@ -223,17 +352,53 @@ def execute_restore_operation(
     indexing_ratio = float(
         restored.get("evidence", {}).get("indexing_ratio", 0.0)
     )
+    workspace = Path(str(restored["workspace"])).resolve()
+    component_requirements = _component_rebuild_requirements(
+        effective_manifest,
+        workspace=workspace,
+    )
+    if indexing_ratio < 1.0:
+        component_requirements.setdefault("faiss", []).append(
+            "indexing_incomplete"
+        )
+        component_requirements["faiss"] = sorted(
+            set(component_requirements["faiss"])
+        )
     candidate_preparation = {}
-    if route != "isolated_rehearsal" and indexing_ratio < 1.0:
+    preparation_required = route != "isolated_rehearsal" and (
+        indexing_ratio < 1.0 or component_requirements
+    )
+    if preparation_required:
         try:
-            candidate_preparation = candidate_preparer(restored)
+            candidate_preparation = candidate_preparer(
+                {
+                    **restored,
+                    "component_rebuild_requirements": component_requirements,
+                }
+            )
         except Exception as exc:
             raise V3ExecutionError(
                 getattr(exc, "code", "candidate_preparation_failed"),
                 stage="candidate_preparation",
                 retryable=bool(getattr(exc, "retryable", False)),
             ) from exc
+        if (
+            not isinstance(candidate_preparation, Mapping)
+            or candidate_preparation.get("success") is not True
+        ):
+            raise V3ExecutionError(
+                "candidate_preparation_unverified",
+                stage="candidate_preparation",
+            )
         indexing_ratio = float(candidate_preparation.get("indexing_ratio", 0.0))
+    component_reconciliation = {}
+    if route != "isolated_rehearsal":
+        component_reconciliation = _component_reconciliation(
+            effective_manifest,
+            workspace=workspace,
+            requirements=component_requirements,
+            preparation=candidate_preparation,
+        )
     candidate_ready = route != "isolated_rehearsal" and indexing_ratio == 1.0
     candidate, created = RestoreCandidate.objects.using("control").get_or_create(
         operation=operation,
@@ -256,6 +421,8 @@ def execute_restore_operation(
                 "rehearsal": rehearsal,
                 "indexing_ratio": indexing_ratio,
                 "requires_reindex": indexing_ratio < 1.0,
+                "component_rebuild_requirements": component_requirements,
+                "component_reconciliation": component_reconciliation,
                 "candidate_preparation": {
                     key: value
                     for key, value in candidate_preparation.items()
@@ -268,9 +435,19 @@ def execute_restore_operation(
         },
     )
     if not created and (
-        candidate.manifest_digest != effective_point.manifest_digest
+        candidate.recovery_point_id != effective_point.pk
+        or candidate.manifest_digest != effective_point.manifest_digest
         or Path(candidate.workspace).resolve()
         != Path(restored["workspace"]).resolve()
+        or candidate.state
+        != (
+            RestoreCandidate.State.READY
+            if candidate_ready
+            else RestoreCandidate.State.VERIFIED
+        )
+        or candidate.evidence.get("indexing_ratio") != indexing_ratio
+        or candidate.evidence.get("component_reconciliation")
+        != component_reconciliation
     ):
         raise V3ExecutionError(
             "restore_candidate_conflict",
@@ -310,6 +487,7 @@ def execute_restore_operation(
         "workspace": str(restored["workspace"]),
         "indexing_ratio": indexing_ratio,
         "requires_reindex": indexing_ratio < 1.0,
+        "component_reconciliation": component_reconciliation,
         "activation_performed": False,
         "activation": activation,
         "plan_digest": operation.lifecycle_plan_digest,

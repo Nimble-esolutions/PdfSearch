@@ -10,9 +10,11 @@ VaultOps operator configuration is consulted.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shutil
+from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
 
@@ -30,7 +32,6 @@ from vaultops.models import (
 from vaultops.runtime_control import (
     RuntimeControlError,
     atomic_write_json,
-    runtime_control_paths,
     validate_runtime_workspace,
 )
 from vaultops.services.activation import (
@@ -49,6 +50,129 @@ class V3ActivationError(RuntimeError):
         self.code = code or self.code
         self.retryable = retryable
         super().__init__(self.code)
+
+
+_RUNTIME_COMPONENTS = (
+    "database",
+    "media",
+    "pdf_cache",
+    "faiss",
+    "chroma",
+)
+
+
+def _candidate_index_evidence(candidate: RestoreCandidate) -> dict:
+    evidence = candidate.evidence
+    if not isinstance(evidence, Mapping) or evidence.get("indexing_ratio") != 1.0:
+        raise V3ActivationError("candidate_index_evidence_missing")
+    reconciliation = evidence.get("component_reconciliation")
+    if not isinstance(reconciliation, Mapping):
+        raise V3ActivationError("candidate_component_evidence_missing")
+    components = {}
+    for name in _RUNTIME_COMPONENTS:
+        component = reconciliation.get(name)
+        if not isinstance(component, Mapping) or component.get("ready") is not True:
+            raise V3ActivationError(f"candidate_{name}_unresolved")
+        reasons = component.get("rebuild_reasons")
+        if not isinstance(reasons, list) or any(
+            not isinstance(reason, str) for reason in reasons
+        ):
+            raise V3ActivationError("candidate_component_evidence_invalid")
+        source = str(component.get("source") or "")
+        if source not in {"candidate_preparation", "signed_manifest_and_restore"}:
+            raise V3ActivationError("candidate_component_evidence_invalid")
+        if (source == "candidate_preparation") != bool(reasons):
+            raise V3ActivationError("candidate_component_evidence_invalid")
+        signed = component.get("signed")
+        if source == "signed_manifest_and_restore" and (
+            not isinstance(signed, Mapping)
+            or signed.get("complete") is not True
+            or signed.get("coherent") is False
+            or signed.get("rebuild_required") is True
+        ):
+            raise V3ActivationError(f"candidate_{name}_unresolved")
+        components[name] = {
+            "ready": True,
+            "source": source,
+            "rebuild_reasons": list(reasons),
+        }
+
+    preparation = evidence.get("candidate_preparation")
+    validation = (
+        preparation.get("validation")
+        if isinstance(preparation, Mapping)
+        else None
+    )
+    faiss = validation.get("faiss") if isinstance(validation, Mapping) else {}
+    chroma = validation.get("chroma") if isinstance(validation, Mapping) else {}
+    folder_ids = (
+        validation.get("validated_folder_ids")
+        if isinstance(validation, Mapping)
+        else []
+    )
+    if (
+        not isinstance(faiss, Mapping)
+        or not isinstance(chroma, Mapping)
+        or not isinstance(folder_ids, list)
+    ):
+        raise V3ActivationError("candidate_index_evidence_invalid")
+    if any(
+        not isinstance(folder_id, int)
+        or isinstance(folder_id, bool)
+        or folder_id < 0
+        for folder_id in folder_ids
+    ):
+        raise V3ActivationError("candidate_index_evidence_invalid")
+    rebuilt_components = (
+        preparation.get("rebuilt_components")
+        if isinstance(preparation, Mapping)
+        else None
+    )
+    prepared_components = {
+        name
+        for name, component in components.items()
+        if component["source"] == "candidate_preparation"
+    }
+    if prepared_components and (
+        not isinstance(preparation, Mapping)
+        or preparation.get("success") is not True
+        or not isinstance(rebuilt_components, list)
+        or any(not isinstance(name, str) for name in rebuilt_components)
+        or not prepared_components.issubset(set(rebuilt_components))
+    ):
+        raise V3ActivationError("candidate_rebuild_evidence_missing")
+    if (
+        components["faiss"]["source"] == "candidate_preparation"
+        and not isinstance(validation, Mapping)
+    ):
+        raise V3ActivationError("candidate_faiss_evidence_missing")
+    if components["chroma"]["source"] == "candidate_preparation" and (
+        chroma.get("ready") is not True
+        or not isinstance(chroma.get("file_count"), int)
+        or isinstance(chroma.get("file_count"), bool)
+        or chroma.get("file_count") < 0
+        or len(str(chroma.get("sha256") or "")) != 64
+    ):
+        raise V3ActivationError("candidate_chroma_evidence_missing")
+    serialized_faiss = json.dumps(
+        dict(faiss),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    serialized_chroma = json.dumps(
+        dict(chroma),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "indexing_ratio": 1.0,
+        "components": components,
+        "validated_folder_ids": list(folder_ids),
+        "faiss_index_count": len(faiss),
+        "faiss_evidence_sha256": hashlib.sha256(serialized_faiss).hexdigest(),
+        "chroma_file_count": int(chroma.get("file_count", 0)),
+        "chroma_evidence_sha256": hashlib.sha256(serialized_chroma).hexdigest(),
+    }
 
 
 def _sha256(path: Path) -> str:
@@ -161,7 +285,11 @@ def project_candidate_runtime(candidate: RestoreCandidate):
         raise V3ActivationError("candidate_not_activation_ready")
     if len(candidate.manifest_digest) != 64:
         raise V3ActivationError("candidate_manifest_digest_invalid")
-    source = Path(candidate.workspace).resolve()
+    index_evidence = _candidate_index_evidence(candidate)
+    configured_source = Path(candidate.workspace)
+    if configured_source.is_symlink():
+        raise V3ActivationError("candidate_workspace_unsafe")
+    source = configured_source.resolve()
     records, total_bytes = _safe_records(source)
     required = {"db.sqlite3", "media", "pdf_cache", "faiss_indexes", "chroma_db"}
     present = {item.name for item in source.iterdir()}
@@ -189,6 +317,7 @@ def project_candidate_runtime(candidate: RestoreCandidate):
                     "candidate_id": candidate.pk,
                     "file_count": len(records),
                     "total_bytes": total_bytes,
+                    "index_evidence": index_evidence,
                 },
             )
             _freeze(incomplete)
@@ -200,7 +329,7 @@ def project_candidate_runtime(candidate: RestoreCandidate):
     if published_records != records or published_bytes != total_bytes:
         raise V3ActivationError("runtime_generation_collision")
     try:
-        validate_runtime_workspace(
+        _runtime, _database, _directories, runtime_evidence = validate_runtime_workspace(
             target,
             runtime_root=runtime_root,
             generation_id=generation_id,
@@ -208,6 +337,8 @@ def project_candidate_runtime(candidate: RestoreCandidate):
         )
     except RuntimeControlError as exc:
         raise V3ActivationError(exc.reason_code) from exc
+    if runtime_evidence.get("index_evidence") != index_evidence:
+        raise V3ActivationError("runtime_index_evidence_mismatch")
 
     profile = _compatibility_profile(candidate)
     point = candidate.recovery_point
@@ -253,6 +384,7 @@ def project_candidate_runtime(candidate: RestoreCandidate):
                     "schema_version": 3,
                     "dataops_candidate_id": candidate.pk,
                     "indexing_ratio": candidate.evidence.get("indexing_ratio"),
+                    "index_evidence": index_evidence,
                 },
                 "rehearsal_evidence": {
                     "success": True,
@@ -268,6 +400,8 @@ def project_candidate_runtime(candidate: RestoreCandidate):
             workspace.generation_id != generation.pk
             or workspace.manifest_digest != candidate.manifest_digest
             or Path(workspace.runtime_path).resolve() != target.resolve()
+            or workspace.validation_evidence.get("index_evidence")
+            != index_evidence
         ):
             raise V3ActivationError("runtime_workspace_collision")
         if created:
@@ -281,6 +415,7 @@ def project_candidate_runtime(candidate: RestoreCandidate):
                     "candidate_id": candidate.pk,
                     "recovery_point_id": str(point.public_id),
                     "indexing_ratio": candidate.evidence.get("indexing_ratio"),
+                    "index_evidence": index_evidence,
                 },
             )
     return workspace

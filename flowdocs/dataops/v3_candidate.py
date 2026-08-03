@@ -48,6 +48,14 @@ def prepare_recovery_candidate(
     workspace = workspace.resolve()
     if maximum_external_documents < 0:
         raise V3CandidateError("candidate_budget_invalid")
+    requirements = restore_receipt.get("component_rebuild_requirements", {})
+    if not isinstance(requirements, Mapping):
+        raise V3CandidateError("candidate_rebuild_requirements_invalid")
+    if "chroma" in requirements:
+        raise V3CandidateError("candidate_chroma_rebuild_unimplemented")
+    rebuild_components = sorted(set(requirements) & {"pdf_cache", "faiss"})
+    if set(requirements) - {"pdf_cache", "faiss"}:
+        raise V3CandidateError("candidate_authoritative_rebuild_refused")
     environment = os.environ.copy()
     environment.update(
         {
@@ -61,16 +69,19 @@ def prepare_recovery_candidate(
         }
     )
     try:
+        command = [
+            sys.executable,
+            str(Path(settings.BASE_DIR) / "manage.py"),
+            "prepare_dataops_candidate",
+            "--manifest-digest",
+            manifest_digest,
+            "--maximum-external-documents",
+            str(maximum_external_documents),
+        ]
+        for component in rebuild_components:
+            command.extend(("--rebuild-component", component))
         result = runner(
-            [
-                sys.executable,
-                str(Path(settings.BASE_DIR) / "manage.py"),
-                "prepare_dataops_candidate",
-                "--manifest-digest",
-                manifest_digest,
-                "--maximum-external-documents",
-                str(maximum_external_documents),
-            ],
+            command,
             cwd=settings.BASE_DIR,
             env=environment,
             stdout=subprocess.DEVNULL,
@@ -86,11 +97,15 @@ def prepare_recovery_candidate(
         workspace / ".dataops-candidate.json",
         "candidate_receipt_invalid",
     )
+    rebuilt_receipt = receipt.get("rebuilt_components", [])
     if (
         receipt.get("schema_version") != 3
         or receipt.get("success") is not True
         or receipt.get("manifest_sha256") != manifest_digest
         or receipt.get("indexing_ratio") != 1.0
+        or not isinstance(rebuilt_receipt, list)
+        or any(not isinstance(name, str) for name in rebuilt_receipt)
+        or not set(rebuild_components).issubset(set(rebuilt_receipt))
     ):
         raise V3CandidateError("candidate_receipt_mismatch")
     return {**receipt, "workspace": str(workspace)}
