@@ -29,7 +29,9 @@ class RecoverySnapshotTests(TestCase):
                 "(indexed INTEGER, processing_status TEXT)"
             )
             connection.execute("CREATE TABLE core_folder (id INTEGER PRIMARY KEY)")
-            connection.execute("CREATE TABLE auth_user (id INTEGER PRIMARY KEY)")
+            connection.execute(
+                "CREATE TABLE core_customuser (id INTEGER PRIMARY KEY)"
+            )
             connection.execute(
                 "CREATE TABLE django_migrations "
                 "(app TEXT, name TEXT, applied TEXT)"
@@ -41,6 +43,10 @@ class RecoverySnapshotTests(TestCase):
             connection.executemany(
                 "INSERT INTO core_pdffile VALUES (?, ?)",
                 [(1, "ready"), (0, "queued")],
+            )
+            connection.executemany(
+                "INSERT INTO core_customuser VALUES (?)",
+                [(1,), (2,), (3,)],
             )
         (self.media / "one.pdf").write_bytes(b"pdf-one")
         self.snapshots = self.root / "snapshots"
@@ -68,8 +74,26 @@ class RecoverySnapshotTests(TestCase):
         self.assertTrue(evidence["source_stable"])
         self.assertEqual(evidence["consistency"]["sqlite_integrity"], "ok")
         self.assertEqual(evidence["inventory"]["counts"]["pdf_rows"], 2)
+        self.assertEqual(evidence["inventory"]["counts"]["users"], 3)
         self.assertEqual(evidence["inventory"]["database"]["migrations"]["latest"], "core.0029")
         self.assertTrue((workspace / "media" / "one.pdf").is_file())
+
+    def test_falls_back_to_django_default_user_table(self):
+        with sqlite3.connect(self.database) as connection:
+            connection.execute("DROP TABLE core_customuser")
+            connection.execute("CREATE TABLE auth_user (id INTEGER PRIMARY KEY)")
+            connection.executemany(
+                "INSERT INTO auth_user VALUES (?)",
+                [(1,), (2,)],
+            )
+
+        snapshot = self.capture()
+        evidence = json.loads(
+            (
+                Path(snapshot.workspace_path) / "snapshot-evidence.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(evidence["inventory"]["counts"]["users"], 2)
 
     def test_one_mutation_retries_and_converges(self):
         snapshot_id = str(uuid.uuid4())

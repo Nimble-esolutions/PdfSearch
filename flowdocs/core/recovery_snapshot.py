@@ -196,6 +196,19 @@ def _table_count(connection: sqlite3.Connection, table: str) -> int:
     return int(connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
 
 
+def _user_count(connection: sqlite3.Connection) -> int:
+    """Count the authoritative user table without assuming Django's default."""
+
+    for table in ("core_customuser", "auth_user"):
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        ).fetchone()
+        if exists:
+            return _table_count(connection, table)
+    return 0
+
+
 def _database_inventory(database: Path) -> dict[str, Any]:
     with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as db:
         latest = ""
@@ -210,7 +223,7 @@ def _database_inventory(database: Path) -> dict[str, Any]:
             "counts": {
                 "pdf_rows": _table_count(db, "core_pdffile"),
                 "folders": _table_count(db, "core_folder"),
-                "users": _table_count(db, "auth_user"),
+                "users": _user_count(db),
             },
         }
 
