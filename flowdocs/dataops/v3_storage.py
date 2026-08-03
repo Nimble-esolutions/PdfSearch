@@ -129,6 +129,7 @@ def verify_remote_object(
     sha256: str,
     size: int,
 ) -> None:
+    body = None
     try:
         response = client.get_object(Bucket=bucket, Key=key)
         body = response["Body"]
@@ -140,8 +141,16 @@ def verify_remote_object(
                 break
             hasher.update(chunk)
             observed_size += len(chunk)
+            if observed_size > size:
+                raise V3StorageError("remote_object_digest_mismatch")
+    except V3StorageError:
+        raise
     except Exception as exc:
         raise V3StorageError("storage_read_failed") from exc
+    finally:
+        close = getattr(body, "close", None)
+        if callable(close):
+            close()
     if observed_size != size or hasher.hexdigest() != sha256:
         raise V3StorageError("remote_object_digest_mismatch")
 
@@ -151,14 +160,47 @@ def verify_head(
     *,
     sha256: str,
     size: int,
-) -> None:
+) -> bool:
+    """Verify size and, when available, the provider's digest metadata.
+
+    Some S3-compatible providers accept user metadata but omit it from HEAD
+    responses.  Returning ``False`` lets callers perform a full content hash
+    readback without weakening immutable-object verification.
+    """
     if head is None:
         raise V3StorageError("immutable_object_missing")
     metadata = head.get("Metadata") or {}
     observed_digest = str(metadata.get("sha256") or "").lower()
     observed_size = head.get("ContentLength")
-    if observed_digest != sha256 or observed_size != size:
+    if observed_size != size or (observed_digest and observed_digest != sha256):
         raise V3StorageError("immutable_object_conflict")
+    return bool(observed_digest)
+
+
+def verify_immutable_object(
+    client,
+    *,
+    bucket: str,
+    key: str,
+    sha256: str,
+    size: int,
+    head: Mapping[str, Any] | None = None,
+) -> None:
+    """Verify an immutable object, hashing content when metadata is absent."""
+
+    current = head if head is not None else head_or_none(
+        client,
+        bucket=bucket,
+        key=key,
+    )
+    if not verify_head(current, sha256=sha256, size=size):
+        verify_remote_object(
+            client,
+            bucket=bucket,
+            key=key,
+            sha256=sha256,
+            size=size,
+        )
 
 
 def put_bytes_immutable(
@@ -174,7 +216,14 @@ def put_bytes_immutable(
         raise V3StorageError("immutable_object_digest_mismatch")
     existing = head_or_none(client, bucket=bucket, key=key)
     if existing is not None:
-        verify_head(existing, sha256=sha256, size=len(body))
+        verify_immutable_object(
+            client,
+            bucket=bucket,
+            key=key,
+            sha256=sha256,
+            size=len(body),
+            head=existing,
+        )
         return "reused"
     try:
         client.put_object(
@@ -189,12 +238,21 @@ def put_bytes_immutable(
     except Exception as exc:
         try:
             existing = head_or_none(client, bucket=bucket, key=key)
-            verify_head(existing, sha256=sha256, size=len(body))
+            verify_immutable_object(
+                client,
+                bucket=bucket,
+                key=key,
+                sha256=sha256,
+                size=len(body),
+                head=existing,
+            )
         except V3StorageError:
             raise V3StorageError("immutable_object_write_failed") from exc
         return "reused_after_race"
-    verify_head(
-        head_or_none(client, bucket=bucket, key=key),
+    verify_immutable_object(
+        client,
+        bucket=bucket,
+        key=key,
         sha256=sha256,
         size=len(body),
     )
@@ -224,7 +282,14 @@ def put_file_immutable(
         raise V3StorageError("immutable_object_digest_mismatch")
     existing = head_or_none(client, bucket=bucket, key=key)
     if existing is not None:
-        verify_head(existing, sha256=sha256, size=size)
+        verify_immutable_object(
+            client,
+            bucket=bucket,
+            key=key,
+            sha256=sha256,
+            size=size,
+            head=existing,
+        )
         return "reused"
     try:
         with path.open("rb") as stream:
@@ -240,12 +305,21 @@ def put_file_immutable(
     except Exception as exc:
         try:
             existing = head_or_none(client, bucket=bucket, key=key)
-            verify_head(existing, sha256=sha256, size=size)
+            verify_immutable_object(
+                client,
+                bucket=bucket,
+                key=key,
+                sha256=sha256,
+                size=size,
+                head=existing,
+            )
         except V3StorageError:
             raise V3StorageError("immutable_object_write_failed") from exc
         return "reused_after_race"
-    verify_head(
-        head_or_none(client, bucket=bucket, key=key),
+    verify_immutable_object(
+        client,
+        bucket=bucket,
+        key=key,
         sha256=sha256,
         size=size,
     )

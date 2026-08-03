@@ -21,9 +21,10 @@ class MissingObject(Exception):
 
 
 class FakeS3:
-    def __init__(self):
+    def __init__(self, *, preserve_metadata=True):
         self.objects = {}
         self.puts = []
+        self.preserve_metadata = preserve_metadata
 
     def head_object(self, *, Bucket, Key):
         try:
@@ -32,7 +33,9 @@ class FakeS3:
             raise MissingObject() from exc
         return {
             "ContentLength": len(item["body"]),
-            "Metadata": dict(item["metadata"]),
+            "Metadata": (
+                dict(item["metadata"]) if self.preserve_metadata else {}
+            ),
         }
 
     def put_object(self, *, Bucket, Key, Body, Metadata, **kwargs):
@@ -112,6 +115,48 @@ class V3StorageTests(unittest.TestCase):
                 key="blob",
                 body=b"new",
                 sha256=hashlib.sha256(b"new").hexdigest(),
+                content_type="application/octet-stream",
+            )
+
+    def test_missing_provider_metadata_uses_content_hash_readback(self):
+        client = FakeS3(preserve_metadata=False)
+        body = b"metadata-optional"
+        digest = hashlib.sha256(body).hexdigest()
+        first = put_bytes_immutable(
+            client,
+            bucket="bucket",
+            key="blob",
+            body=body,
+            sha256=digest,
+            content_type="application/octet-stream",
+        )
+        second = put_bytes_immutable(
+            client,
+            bucket="bucket",
+            key="blob",
+            body=body,
+            sha256=digest,
+            content_type="application/octet-stream",
+        )
+        self.assertEqual((first, second), ("uploaded", "reused"))
+
+    def test_missing_provider_metadata_does_not_hide_content_conflict(self):
+        client = FakeS3(preserve_metadata=False)
+        client.objects[("bucket", "blob")] = {
+            "body": b"tampered",
+            "metadata": {},
+        }
+        expected = b"expected"
+        with self.assertRaisesRegex(
+            V3StorageError,
+            "remote_object_digest_mismatch",
+        ):
+            put_bytes_immutable(
+                client,
+                bucket="bucket",
+                key="blob",
+                body=expected,
+                sha256=hashlib.sha256(expected).hexdigest(),
                 content_type="application/octet-stream",
             )
 

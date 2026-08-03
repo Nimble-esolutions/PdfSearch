@@ -19,9 +19,10 @@ from dataops.v3_connection import (
 
 
 class FakeS3:
-    def __init__(self, *, conditional=True, accessible=True):
+    def __init__(self, *, conditional=True, accessible=True, metadata=True):
         self.conditional = conditional
         self.accessible = accessible
+        self.metadata = metadata
         self.objects = {}
 
     @staticmethod
@@ -56,7 +57,10 @@ class FakeS3:
 
     def head_object(self, *, Bucket, Key):
         item = self.objects[(Bucket, Key)]
-        return {"ETag": item["etag"], "Metadata": dict(item["metadata"])}
+        return {
+            "ETag": item["etag"],
+            "Metadata": dict(item["metadata"]) if self.metadata else {},
+        }
 
     def get_bucket_versioning(self, *, Bucket):
         return {"Status": "Enabled"}
@@ -112,6 +116,16 @@ class V3ConnectionTests(TestCase):
         self.connection.refresh_from_db(using="control")
         self.assertFalse(self.connection.capabilities["conditional_write"])
         self.assertEqual(self.connection.observation["status"], "blocked")
+
+    def test_missing_object_metadata_uses_digest_readback_without_blocking(self):
+        probe_owned_connection(
+            self.connection,
+            client_factory=lambda _connection: FakeS3(metadata=False),
+        )
+        self.connection.refresh_from_db(using="control")
+        self.assertTrue(connection_is_ready(self.connection))
+        self.assertTrue(self.connection.capabilities["write"])
+        self.assertFalse(self.connection.capabilities["metadata"])
 
     def test_provider_exception_details_are_not_persisted(self):
         with self.assertRaises(V3ConnectionError):

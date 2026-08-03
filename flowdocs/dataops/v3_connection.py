@@ -56,9 +56,10 @@ def probe_owned_connection(
             deployment_id=deployment_id,
         )
         readable = bool(result.bucket_accessible and result.read_after_write_consistent)
-        writable = bool(
-            readable and result.etag_available and result.metadata_supported
-        )
+        # User metadata is an optimization for remote digest verification, not
+        # a write primitive. Providers that omit it are supported through a
+        # bounded content-hash readback in v3_storage.
+        writable = bool(readable and result.etag_available)
         conditional = bool(result.authoritative_publication_allowed)
         failure_codes.extend(result.errors)
         if not readable:
