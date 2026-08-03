@@ -256,6 +256,27 @@ def _existing_workspace(
         or receipt.get("manifest_sha256") != manifest.get("manifest_sha256")
     ):
         return None
+    rehearsal = None
+    try:
+        rehearsal = _json_object(
+            (final / ".dataops-rehearsal.json").read_bytes(),
+            "rehearsal_receipt_invalid",
+        )
+    except (OSError, V3RestoreError):
+        pass
+    rehearsed_database = None
+    if (
+        rehearsal
+        and rehearsal.get("success") is True
+        and rehearsal.get("manifest_sha256") == receipt.get("manifest_sha256")
+        and isinstance(rehearsal.get("database_size"), int)
+        and rehearsal.get("database_size", 0) > 0
+        and re.fullmatch(r"[0-9a-f]{64}", str(rehearsal.get("database_sha256") or ""))
+    ):
+        rehearsed_database = (
+            rehearsal["database_size"],
+            rehearsal["database_sha256"],
+        )
     for item in manifest["files"]:
         path = final / item["path"]
         if not path.is_file() or path.is_symlink() or path.stat().st_nlink != 1:
@@ -266,7 +287,15 @@ def _existing_workspace(
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 hasher.update(chunk)
                 observed += len(chunk)
-        if observed != item["size"] or hasher.hexdigest() != item["sha256"]:
+        expected = (item["size"], item["sha256"])
+        if item["path"] == "db.sqlite3" and rehearsed_database is not None:
+            expected = rehearsed_database
+        if (observed, hasher.hexdigest()) != expected:
+            return None
+    if rehearsed_database is not None:
+        try:
+            _sqlite_evidence(final / "db.sqlite3")
+        except V3RestoreError:
             return None
     return receipt
 
@@ -374,12 +403,20 @@ def rehearse_quarantine(
     except Exception as exc:
         raise V3RestoreError("migration_rehearsal_failed") from exc
     sqlite_evidence = _sqlite_evidence(database)
+    database_hasher = hashlib.sha256()
+    database_size = 0
+    with database.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            database_hasher.update(chunk)
+            database_size += len(chunk)
     receipt = {
         "schema_version": 3,
         "success": True,
         "manifest_sha256": restore_receipt.get("manifest_sha256"),
         "migration": dict(migration),
         "sqlite": sqlite_evidence,
+        "database_size": database_size,
+        "database_sha256": database_hasher.hexdigest(),
     }
     temporary = evidence_path.with_name(f".{evidence_path.name}.partial")
     temporary.write_bytes(canonical_json_bytes(receipt) + b"\n")

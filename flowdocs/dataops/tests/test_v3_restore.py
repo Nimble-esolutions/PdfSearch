@@ -227,6 +227,49 @@ class V3RestoreTests(TestCase):
         self.assertTrue((workspace / "media" / "pdfs" / "two.PDF").is_file())
         self.assertTrue(second["reused"])
 
+    def test_reuses_a_successfully_rehearsed_workspace(self):
+        first = materialize_quarantine(
+            self.verified(),
+            quarantine_root=self.root / "rehearsed-quarantine",
+        )
+
+        def migration_runner(_database, *, promote_to, **_kwargs):
+            with sqlite3.connect(promote_to) as database:
+                database.execute("CREATE TABLE migrated_marker (value TEXT)")
+            return {"success": True, "migration_leaf_after": "0029"}
+
+        rehearsal = rehearse_quarantine(
+            first,
+            migration_runner=migration_runner,
+        )
+        second = materialize_quarantine(
+            self.verified(),
+            quarantine_root=self.root / "rehearsed-quarantine",
+        )
+
+        self.assertTrue(rehearsal["success"])
+        self.assertEqual(len(rehearsal["database_sha256"]), 64)
+        self.assertGreater(rehearsal["database_size"], 0)
+        self.assertTrue(second["reused"])
+
+    def test_rehearsal_receipt_does_not_allow_other_file_mutation(self):
+        first = materialize_quarantine(
+            self.verified(),
+            quarantine_root=self.root / "tampered-quarantine",
+        )
+        rehearse_quarantine(
+            first,
+            migration_runner=lambda *_args, **_kwargs: {"success": True},
+        )
+        workspace = Path(first["workspace"])
+        (workspace / "media" / "pdfs" / "one.pdf").write_bytes(b"tampered")
+
+        with self.assertRaisesMessage(V3RestoreError, "restore_workspace_conflict"):
+            materialize_quarantine(
+                self.verified(),
+                quarantine_root=self.root / "tampered-quarantine",
+            )
+
     def test_invalid_signature_is_rejected_before_materialization(self):
         key = self.receipt.manifest_key
         payload = json.loads(self.client.objects[(self.connection.bucket, key)]["body"])

@@ -28,7 +28,10 @@ class CandidatePreparationTests(SimpleTestCase):
             prepare_recovery_candidate({**self.restore, "verified": False})
 
     def test_returns_exact_successful_receipt(self):
-        def runner(*_args, **_kwargs):
+        observed_environment = {}
+
+        def runner(*_args, **kwargs):
+            observed_environment.update(kwargs["env"])
             (self.workspace / ".dataops-candidate.json").write_text(
                 json.dumps(
                     {
@@ -44,6 +47,14 @@ class CandidatePreparationTests(SimpleTestCase):
         receipt = prepare_recovery_candidate(self.restore, runner=runner)
         self.assertEqual(receipt["manifest_sha256"], self.digest)
         self.assertEqual(receipt["workspace"], str(self.workspace.resolve()))
+        self.assertEqual(
+            observed_environment["STAGING_RUNTIME_ACTIVATION_ENABLED"],
+            "0",
+        )
+        self.assertEqual(
+            observed_environment["STAGING_INITIAL_ACTIVATION_ENABLED"],
+            "0",
+        )
 
     def test_subprocess_failure_is_safe_and_retryable(self):
         def runner(*_args, **_kwargs):

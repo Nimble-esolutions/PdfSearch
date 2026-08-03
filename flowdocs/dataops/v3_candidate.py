@@ -57,6 +57,7 @@ def prepare_recovery_candidate(
             "MAINTENANCE_CANDIDATE_PREPARATION_ENABLED": "0",
             "VAULT_SYNC_ENABLED": "0",
             "STAGING_RUNTIME_ACTIVATION_ENABLED": "0",
+            "STAGING_INITIAL_ACTIVATION_ENABLED": "0",
         }
     )
     try:
