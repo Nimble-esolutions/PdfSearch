@@ -701,44 +701,38 @@ class MaintenancePlanningTests(TestCase):
         self.assertIn(queued.status_code, {302, 403})
         self.assertFalse(MaintenanceJob.objects.exists())
 
-    def test_workbench_renders_full_capability_contract_and_disabled_reasons(self):
+    def test_dataops_workbench_renders_capabilities_and_disabled_reasons(self):
         self.client.force_login(self.superadmin)
-        response = self.client.get(
-            f"{reverse('operations_panel')}?section=maintenance"
-        )
+        response = self.client.get(reverse("dataops:advanced"))
         self.assertEqual(response.status_code, 200)
         for text in (
-            "Documents & Search",
-            "Preview Validate Files",
-            "Preview Repair Stored Indexes",
-            "Preview Reindex Needed",
-            "Preview Reindex Selected",
+            "Search maintenance",
+            "Preview validation",
+            "Preview index repair",
+            "Preview needed reindex",
+            "Preview selected reindex",
             "Indexed state",
             "Category",
             "Subject",
             "Keywords",
             "Uploaded after",
             "Uploaded before",
-            "Local maintenance jobs",
+            "Maintenance jobs",
         ):
             self.assertContains(response, text)
 
         with override_settings(LOCAL_INDEX_MAINTENANCE_ENABLED=False):
-            disabled = self.client.get(
-                f"{reverse('operations_panel')}?section=maintenance"
-            )
+            disabled = self.client.get(reverse("dataops:advanced"))
             self.assertContains(disabled, "bulk_reindex_disabled")
-            self.assertContains(disabled, "disabled")
+            self.assertContains(disabled, "Unavailable until the shared requirement is resolved.")
 
-    def test_workbench_explains_unverified_source_before_mutation_preview(self):
+    def test_dataops_workbench_explains_unverified_source_before_preview(self):
         self.client.force_login(self.superadmin)
         with patch(
             "core.maintenance_plans.maintenance_source_capability_reason",
             return_value="maintenance_source_pointer_unverified",
         ):
-            response = self.client.get(
-                f"{reverse('operations_panel')}?section=maintenance"
-            )
+            response = self.client.get(reverse("dataops:advanced"))
 
         self.assertContains(response, "Active search source is not verified")
         self.assertContains(
@@ -760,45 +754,42 @@ class MaintenancePlanningTests(TestCase):
             "reindex_needed",
             "reindex_selected",
         ):
-            self.assertContains(
+            self.assertNotContains(
                 response,
-                f'name="operation" value="{operation}" disabled',
+                f'name="operation" value="{operation}"',
                 html=False,
             )
 
-    def test_workbench_renders_guided_authority_scope_and_preview_contract(self):
+    def test_dataops_workbench_renders_authority_scope_and_preview_contract(self):
         self.client.force_login(self.superadmin)
         plan = self._plan("validate")
         response = self.client.get(
-            reverse("operations_panel"),
-            {"section": "maintenance", "plan": plan.public_id},
+            reverse("dataops:advanced"),
+            {"plan": plan.public_id},
         )
-        self.assertContains(response, "Choose the outcome you need")
-        self.assertContains(response, "Local maintenance")
-        self.assertContains(response, "Unchanged during processing")
-        self.assertContains(response, "Unchanged until explicit publication")
-        self.assertContains(response, "Document filters")
+        self.assertContains(response, "Choose one outcome")
+        self.assertContains(response, "Local documents and derived search artifacts")
+        self.assertContains(response, "Unchanged while work runs")
+        self.assertContains(response, "Managed from Data protection")
+        self.assertContains(response, "Optional document filters")
         self.assertContains(response, "Selected preview")
         self.assertContains(response, str(plan.public_id))
         self.assertEqual(
             response.context["state"]["maintenance"]["selected_plan"]["public_id"],
             plan.public_id,
         )
-        self.assertTrue(response.context["state"]["maintenance_state_version"])
-        self.assertTrue(response.context["state"]["combined_state_version"])
+        self.assertTrue(response.context["state"]["maintenance"]["state_version"])
 
-    def test_vault_workbench_owns_local_job_cancel_and_retry_actions(self):
+    def test_dataops_workbench_owns_local_job_cancel_and_retry_actions(self):
         self.client.force_login(self.superadmin)
         running = MaintenanceJob.objects.create(
             kind="validate",
             status="running",
             requested_by=self.superadmin,
         )
-        response = self.client.get(
-            reverse("operations_panel"), {"section": "maintenance"}
-        )
+        response = self.client.get(reverse("dataops:advanced"))
         job_state = next(
-            job for job in response.context["state"]["maintenance"]["jobs"]
+            job for job in response.context["state"]["maintenance"]["active_jobs"]
             if job["public_id"] == str(running.public_id)
         )
         cancelled = self.client.post(
@@ -811,7 +802,7 @@ class MaintenancePlanningTests(TestCase):
         self.assertEqual(cancelled.status_code, 303)
         self.assertEqual(
             cancelled["Location"],
-            f"{reverse('operations_panel')}?section=maintenance",
+            reverse("dataops:advanced"),
         )
         running.refresh_from_db()
         self.assertEqual(running.status, "cancel_requested")
@@ -823,11 +814,9 @@ class MaintenancePlanningTests(TestCase):
             error_summary="typed_failure",
             requested_by=self.superadmin,
         )
-        response = self.client.get(
-            reverse("operations_panel"), {"section": "maintenance"}
-        )
+        response = self.client.get(reverse("dataops:advanced"))
         job_state = next(
-            job for job in response.context["state"]["maintenance"]["jobs"]
+            job for job in response.context["state"]["maintenance"]["attention_jobs"]
             if job["public_id"] == str(failed.public_id)
         )
         retried = self.client.post(
