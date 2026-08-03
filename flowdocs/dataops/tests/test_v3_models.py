@@ -95,4 +95,3 @@ class DataOpsV3ModelTests(TestCase):
         )
         self.assertEqual(point.profile_key, "")
         self.assertTrue(point.data_complete)
-
