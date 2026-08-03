@@ -28,7 +28,7 @@ services:
       - internal
 
   web:
-    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be an immutable repo@sha256 digest}
+    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be set}
     pull_policy: always
     volumes:
       - flowdocs_data:/app/data
@@ -304,7 +304,7 @@ services:
       - dokploy-network
 
   maintenance:
-    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be an immutable repo@sha256 digest}
+    image: ${PDFSEARCH_IMAGE:?PDFSEARCH_IMAGE must be set}
     pull_policy: always
     env_file:
       - path: .env

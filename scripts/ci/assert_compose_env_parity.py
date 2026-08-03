@@ -251,8 +251,12 @@ def find_local_build_errors(services):
     return sorted(errors)
 
 
-def find_release_image_errors(services):
-    errors = find_immutable_image_contract_errors(services)
+def find_release_image_errors(services, *, require_immutable=True):
+    errors = (
+        find_immutable_image_contract_errors(services)
+        if require_immutable
+        else []
+    )
     references = {}
     for name in APPLICATION_SERVICES:
         service = services.get(name, {})
@@ -264,6 +268,13 @@ def find_release_image_errors(services):
             references[name] = service["image"]
         if service.get("environment", {}).get("APP_IMAGE_DIGEST") != service.get("image"):
             errors.append(f"{name}_image_digest_mismatch")
+    if (
+        not require_immutable
+        and "web" in references
+        and "maintenance" in references
+        and references["web"] != references["maintenance"]
+    ):
+        errors.append("service_images_divergent")
     return sorted(set(errors))
 
 
@@ -293,8 +304,10 @@ def find_contract_errors(services, deployment_mode="production"):
     if deployment_mode == "development":
         errors.extend(find_local_build_errors(services))
         errors.extend(find_rustfs_errors(services))
+    elif deployment_mode == "staging":
+        errors.extend(find_release_image_errors(services, require_immutable=False))
     else:
-        errors.extend(find_release_image_errors(services))
+        errors.extend(find_release_image_errors(services, require_immutable=True))
     return sorted(set(errors))
 
 

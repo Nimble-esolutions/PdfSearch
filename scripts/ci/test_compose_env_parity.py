@@ -208,6 +208,37 @@ class ComposeEnvironmentParityTests(unittest.TestCase):
         self.assertEqual(find_contract_errors(services, "staging"), [])
         self.assertEqual(find_contract_errors(services, "production"), [])
 
+    def test_staging_allows_shared_latest_channel_but_production_rejects_it(self):
+        services = _services()
+        latest = "ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest"
+        for name in ("web", "maintenance"):
+            services[name]["image"] = latest
+            services[name]["environment"]["APP_IMAGE_DIGEST"] = latest
+
+        self.assertEqual(find_contract_errors(services, "staging"), [])
+        self.assertEqual(
+            find_contract_errors(services, "production"),
+            [
+                "maintenance_image_not_immutable",
+                "web_image_not_immutable",
+            ],
+        )
+
+    def test_staging_still_requires_one_shared_image_reference(self):
+        services = _services()
+        services["web"]["image"] = "example.invalid/pdfsearch:latest"
+        services["maintenance"]["image"] = "example.invalid/pdfsearch:next"
+        for name in ("web", "maintenance"):
+            services[name]["environment"]["APP_IMAGE_DIGEST"] = services[name]["image"]
+
+        self.assertEqual(
+            find_contract_errors(services, "staging"),
+            [
+                "environment_key_divergent:APP_IMAGE_DIGEST",
+                "service_images_divergent",
+            ],
+        )
+
 
 class DevelopmentCredentialWiringTests(unittest.TestCase):
     compose_file = Path(__file__).resolve().parents[2] / "docker-compose.dev.yml"
