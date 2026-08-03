@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -19,16 +20,24 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--profile", required=True, help="Configured Data Operations profile key")
         parser.add_argument("--release-id", required=True, help="Exact generation/release identifier")
-        parser.add_argument("--destination", default=None, help="Quarantine root; defaults to DATAOPS_RESTORE_STAGING_ROOT")
+        parser.add_argument(
+            "--destination",
+            default=None,
+            help="Quarantine root; defaults to the shared DATA_ROOT recovery workspace",
+        )
 
     def handle(self, *args, **options):
         profile_key = options["profile"].strip().lower()
         profile = next((item for item in resolve_profiles() if item.key == profile_key), None)
         if profile is None or profile.role not in {"restore", "both"}:
             raise CommandError("restore_profile_not_configured")
-        destination = options["destination"] or os.environ.get(
-            "DATAOPS_RESTORE_STAGING_ROOT",
-            str(getattr(settings, "DATA_ROOT", "/tmp")) + "/dataops-restore",
+        destination = options["destination"] or str(
+            getattr(
+                settings,
+                "DATAOPS_RESTORE_STAGING_ROOT",
+                Path(getattr(settings, "DATA_ROOT", "/tmp"))
+                / "restore-quarantine",
+            )
         )
         try:
             client = client_for_profile(profile, os.environ)

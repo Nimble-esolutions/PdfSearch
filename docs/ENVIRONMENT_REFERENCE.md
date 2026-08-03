@@ -309,12 +309,16 @@ automatic activation.
 | DATAOPS_OPERATION_LEASE_SECONDS | Operation lease | 3600 | Prevents competing mutations |
 | DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING | Automatic activation after restore | 0 | This must remain 0 until explicitly redesigned and approved |
 | DATAOPS_RESTORE_REQUIRE_PRODUCTION_CONFIRMATION | Confirmation for production-derived restore | 1 | Keeps custody boundary explicit |
-| DATAOPS_RESTORE_STAGING_ROOT | Restore quarantine root | /var/lib/flowdocs/dataops-restore or /app/data/restore-quarantine | Must not be the active volume |
 | DATAOPS_CLONE_REBIND_ENABLED | Explicit cross-dataset clone/rebind | 0 by default | Requires source generation, destination profile, confirmation, collision and digest checks |
 | DATAOPS_UI_CONFIG_ENABLED | Show Data Operations configuration UI | 1 in operator control plane | UI is not a secret store |
 | DATAOPS_UI_SECRET_ENTRY_ENABLED | Permit UI secret entry | 0 | Use the secret provider |
 | DATAOPS_MIRROR_QUARANTINE_RETENTION_DAYS | Retain guarded mirror deletions | 30 | Cleanup is bounded and recoverable; it is not RustFS retention |
 | DATAOPS_MIRROR_QUARANTINE_CLEANUP_MAX_OBJECTS | Per-pass mirror cleanup bound | 100 | Prevents a single maintenance pass from deleting a large set |
+
+The restore quarantine is intentionally derived as
+`DATA_ROOT/restore-quarantine`; it is not configurable through an environment
+variable. This keeps verified candidates on the shared data volume visible to
+both the maintenance worker and activation supervisor.
 
 ### Canonical profile identities
 
