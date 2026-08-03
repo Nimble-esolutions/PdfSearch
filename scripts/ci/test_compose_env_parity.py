@@ -40,7 +40,7 @@ def _services():
         "maintenance": {
             **base,
             "environment": dict(environment),
-            "depends_on": {"redis": {"condition": "service_healthy"}},
+            "depends_on": {"web": {"condition": "service_healthy"}},
         },
         "redis": {"healthcheck": {"test": ["CMD", "true"]}},
     }

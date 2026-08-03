@@ -501,7 +501,7 @@ services:
       APP_RELEASE_VERSION: ${APP_RELEASE_VERSION:-}
       NONPROD_DATA_POLICY: ${NONPROD_DATA_POLICY:-}
     depends_on:
-      redis:
+      web:
         condition: service_healthy
     restart: always
     healthcheck:
