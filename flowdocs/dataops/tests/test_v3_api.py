@@ -219,7 +219,6 @@ class DataOpsV3APITests(TestCase):
                 "action": "restore",
                 "recovery_point_id": str(point.public_id),
                 "activate": True,
-                "confirmation": "present",
             }
         )
         self.assertEqual(preview.status_code, 200)

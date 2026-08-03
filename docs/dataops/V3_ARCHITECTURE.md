@@ -55,6 +55,11 @@ flowchart LR
 5. Activation is a separately signed, compare-and-swap operation tied to the
    exact plan, image, generation, and manifest digest.
 
+An activating preview is read-only and returns its exact plan-bound
+confirmation token directly. Operators and clients never send a placeholder
+confirmation merely to discover the token; the start endpoint still rejects a
+missing, stale, or mismatched token before it queues an operation.
+
 ## Full and incremental backup
 
 “Full” describes the recovery point. “Incremental” describes transfer and

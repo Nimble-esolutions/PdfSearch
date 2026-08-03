@@ -195,6 +195,7 @@ def v3_operation_preview(request):
         point = _v3_recovery_point(payload.get("recovery_point_id"))
         source_model = source_view = legacy_generation = None
         requested_source_kind = str(payload.get("source_kind") or "").strip().lower()
+        activate = _v3_bool(payload.get("activate"), field="activate")
         if action == "import" and requested_source_kind != "legacy_mount":
             source_model, source_view, legacy_generation = _v3_legacy_source(
                 payload,
@@ -202,10 +203,11 @@ def v3_operation_preview(request):
             )
         config, plan = compile_requested_plan(
             action=action,
-            activate=_v3_bool(payload.get("activate"), field="activate"),
+            activate=activate,
             confirmation_present=bool(
                 str(payload.get("confirmation") or "").strip()
-            ),
+            )
+            or activate,
             point=point,
             source_kind=(
                 "legacy_object_store"
