@@ -12,6 +12,11 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from core.candidate_maintenance import validate_candidate
+from core.embedding_contract import (
+    EmbeddingContractError,
+    observed_embedding_dimensions,
+    require_incremental_embedding_compatibility,
+)
 from core.maintenance import queue_job, run_job
 from core.models import (
     Folder,
@@ -154,10 +159,14 @@ class Command(BaseCommand):
 
         reindex = []
         blocked = []
+        embedding_dimensions: set[int] = set()
         searchable = PDFFile.objects.filter(
             lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
         ).order_by("pk")
         for pdf in searchable.iterator(chunk_size=100):
+            embedding_dimensions.update(
+                observed_embedding_dimensions([pdf.chunk_embeddings])
+            )
             try:
                 media_exists = bool(
                     pdf.file
@@ -184,6 +193,14 @@ class Command(BaseCommand):
             raise CommandError("candidate_external_budget_exceeded")
         if reindex and not getattr(settings, "EXTERNAL_EMBEDDINGS_ENABLED", False):
             raise CommandError("candidate_external_embeddings_disabled")
+        if reindex or embedding_dimensions:
+            try:
+                require_incremental_embedding_compatibility(
+                    model=settings.OPENAI_EMBED_MODEL,
+                    observed_dimensions=embedding_dimensions,
+                )
+            except EmbeddingContractError as exc:
+                raise CommandError(f"candidate_{exc}") from exc
 
         _quarantine_legacy_indexes(workspace)
         reindex_job = None

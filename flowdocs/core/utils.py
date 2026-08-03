@@ -29,6 +29,7 @@ from indic_transliteration import sanscript as sc
 from indic_transliteration.sanscript import transliterate
 from langdetect import detect, DetectorFactory, LangDetectException
 
+from .embedding_contract import embedding_dimension_for_model
 from .models import Folder, PDFFile, SEARCHABLE_PDF_LIFECYCLES
 
 # Optional FAISS
@@ -76,7 +77,9 @@ def _test_embeddings_enabled() -> bool:
 
 def _deterministic_embeddings(texts: list[str]) -> list[list[float]]:
     """Use only for credential-free disposable runtime smoke tests."""
-    return [[1.0, 0.0] for _ in texts]
+    dimension = embedding_dimension_for_model(OPENAI_EMBED_MODEL)
+    vector = [1.0] + [0.0] * (dimension - 1)
+    return [vector.copy() for _ in texts]
 
 # Embedding and chunk sizes
 CHUNK_SIZE = getattr(settings, "PDF_CHUNK_SIZE", 1200)
