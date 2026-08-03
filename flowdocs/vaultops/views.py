@@ -356,7 +356,12 @@ def _mutation_error(request, exc, *, section="overview"):
         request,
         f"{presentation['title']} {presentation['detail']}",
     )
-    return _form_redirect(section)
+    response = _form_redirect(section)
+    # Keep browser-driven operations diagnosable without exposing exception
+    # text or submitted values. The same stable code is already returned by
+    # the JSON contract and rendered in the operator-facing flash message.
+    response["X-DataOps-Reason-Code"] = reason_code
+    return response
 
 
 @superadmin_required
