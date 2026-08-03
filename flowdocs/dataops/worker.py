@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from datetime import timedelta
 
 from django.db import transaction
@@ -153,23 +154,72 @@ def _finish_pipeline_operation(operation, *, lease_token=""):
         operation.lease_expires_at = None
         operation.save(update_fields=["state", "pipeline_stage", "error_code", "error_detail", "finished_at", "lease_token", "lease_expires_at", "updated_at"])
         return operation
-    if operation.lease_token:
+    owned_lease_token = operation.lease_token
+    if owned_lease_token:
         try:
-            _renew_operation_lease(operation.pk, operation.lease_token)
+            _renew_operation_lease(operation.pk, owned_lease_token)
         except DataOpsPipelineError:
             return operation
-    operation.state = DataOperation.State.SUCCEEDED
-    operation.pipeline_stage = "publish_receipt"
-    operation.result = result
-    operation.release_id = str(result.get("release_id", operation.release_id) or operation.release_id)
-    operation.source_profile_key = str(result.get("source_profile", operation.source_profile_key) or operation.source_profile_key)
-    operation.destination_profile_key = str(result.get("destination_profile", operation.destination_profile_key) or operation.destination_profile_key)
-    operation.error_code = ""
-    operation.error_detail = ""
-    operation.finished_at = timezone.now()
-    operation.lease_token = ""
-    operation.lease_expires_at = None
-    operation.save(update_fields=["state", "pipeline_stage", "result", "release_id", "source_profile_key", "destination_profile_key", "error_code", "error_detail", "finished_at", "lease_token", "lease_expires_at", "updated_at"])
+    activation = result.get("activation")
+    if not isinstance(activation, Mapping):
+        activation = {}
+    with transaction.atomic(using="control"):
+        current = DataOperation.objects.using("control").select_for_update().get(pk=operation.pk)
+        if owned_lease_token and (
+            current.state != DataOperation.State.RUNNING
+            or current.lease_token != owned_lease_token
+        ):
+            return operation
+        current.state = DataOperation.State.SUCCEEDED
+        current.pipeline_stage = "publish_receipt"
+        current.result = result
+        current.release_id = str(result.get("release_id", current.release_id) or current.release_id)
+        current.source_profile_key = str(
+            result.get("source_profile", current.source_profile_key) or current.source_profile_key
+        )
+        current.destination_profile_key = str(
+            result.get("destination_profile", current.destination_profile_key)
+            or current.destination_profile_key
+        )
+        current.error_code = ""
+        current.error_detail = ""
+        current.finished_at = timezone.now()
+        current.lease_token = ""
+        current.lease_expires_at = None
+        current.save(
+            using="control",
+            update_fields=[
+                "state",
+                "pipeline_stage",
+                "result",
+                "release_id",
+                "source_profile_key",
+                "destination_profile_key",
+                "error_code",
+                "error_detail",
+                "finished_at",
+                "lease_token",
+                "lease_expires_at",
+                "updated_at",
+            ],
+        )
+        DataOpsAuditEvent.objects.using("control").create(
+            operation_id=current.public_id,
+            profile_key=(
+                current.destination_profile_key
+                or current.source_profile_key
+                or current.profile_key
+            ),
+            action="pipeline_receipt_published",
+            outcome=current.state,
+            evidence={
+                "manifest_digest": result.get("manifest_digest", ""),
+                "active_generation": activation.get("active_generation", ""),
+                "source_profile": result.get("source_profile", ""),
+                "destination_profile": result.get("destination_profile", ""),
+            },
+        )
+        operation = current
     if operation.kind == DataOperation.Kind.BACKUP:
         try:
             from core.backup_policy import clear_dirty_flag
@@ -177,18 +227,6 @@ def _finish_pipeline_operation(operation, *, lease_token=""):
             clear_dirty_flag()
         except Exception:
             pass
-    DataOpsAuditEvent.objects.using("control").create(
-        operation_id=operation.public_id,
-        profile_key=operation.destination_profile_key or operation.source_profile_key or operation.profile_key,
-        action="pipeline_receipt_published",
-        outcome=operation.state,
-        evidence={
-            "manifest_digest": result.get("manifest_digest", ""),
-            "active_generation": result.get("activation", {}).get("active_generation", ""),
-            "source_profile": result.get("source_profile", ""),
-            "destination_profile": result.get("destination_profile", ""),
-        },
-    )
     return operation
 
 
