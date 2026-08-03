@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -38,6 +39,12 @@ LOCAL_OPERATIONS = {
     "reindex_needed",
     "reindex_selected",
 }
+ACTIVE_MAINTENANCE_STATUSES = {
+    "queued",
+    "running",
+    "paused",
+    "cancel_requested",
+}
 FORCE_CONFIRMATION = "REINDEX SELECTED"
 MAX_SELECTION_IDS = 5000
 # A plan is persisted in the control database and later used to construct the
@@ -45,6 +52,27 @@ MAX_SELECTION_IDS = 5000
 # stored indexes is folder-scoped and does not need document ids, so it may
 # report a larger document count without serialising every id.
 MAX_PREVIEW_PDFS = 5000
+
+
+def _grouped_capability_blockers(reasons: dict[str, str]) -> list[dict]:
+    """Group repeated capability reasons for concise operator guidance."""
+    blocked_reason_counts = Counter(reason for reason in reasons.values() if reason)
+    return [
+        {
+            "dom_id": f"maintenance-capability-blocker-{index}",
+            "reason_code": common_reason,
+            "affected_operations": [
+                operation
+                for operation, reason in reasons.items()
+                if reason == common_reason
+            ],
+        }
+        for index, (common_reason, count) in enumerate(
+            blocked_reason_counts.most_common(),
+            start=1,
+        )
+        if count > 1
+    ]
 
 
 class MaintenancePlanError(RuntimeError):
@@ -662,6 +690,11 @@ def workbench_maintenance_state(
     *, selected_plan_id="", selected_job_id=""
 ) -> dict:
     reasons = capability_reasons()
+    capability_blockers = _grouped_capability_blockers(reasons)
+    shared_blocker_ids = {
+        blocker["reason_code"]: blocker["dom_id"]
+        for blocker in capability_blockers
+    }
     worker = maintenance_worker_capability()
     recovery_sets = list_sets()
     cleanup = plan_prune()
@@ -694,10 +727,18 @@ def workbench_maintenance_state(
             "free_inodes": 0,
             "inode_reserve": 0,
         }
-    job_records = list(
-        MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS).order_by(
+    maintenance_jobs = MaintenanceJob.objects.filter(kind__in=LOCAL_OPERATIONS)
+    job_records = list(maintenance_jobs.order_by("-created_at", "-pk")[:20])
+    active_job_records = list(
+        maintenance_jobs.filter(status__in=ACTIVE_MAINTENANCE_STATUSES).order_by(
             "-created_at", "-pk"
-        )[:20]
+        )
+    )
+    attention_candidate_records = list(
+        maintenance_jobs.filter(
+            Q(status="failed")
+            | Q(status="completed", options__candidate_state="activation_ready")
+        ).order_by("-created_at", "-pk")
     )
     selected_job_id = str(selected_job_id).strip()
     selected_job_record = next(
@@ -712,12 +753,17 @@ def workbench_maintenance_state(
             public_id=selected_job_id,
             kind__in=LOCAL_OPERATIONS,
         ).first()
-    workspace_job_records = list(job_records)
-    if (
-        selected_job_record is not None
-        and selected_job_record not in workspace_job_records
+    workspace_job_records = []
+    workspace_job_ids = set()
+    for job in (
+        job_records
+        + active_job_records
+        + attention_candidate_records
+        + ([selected_job_record] if selected_job_record is not None else [])
     ):
-        workspace_job_records.append(selected_job_record)
+        if job.pk not in workspace_job_ids:
+            workspace_job_records.append(job)
+            workspace_job_ids.add(job.pk)
     prepared_workspace_by_job = _prepared_workspace_ids(workspace_job_records)
     jobs = [
         _serialize_local_job_payload(
@@ -725,6 +771,42 @@ def workbench_maintenance_state(
             prepared_workspace_by_job=prepared_workspace_by_job,
         )
         for job in job_records
+    ]
+    active_jobs = [
+        _serialize_local_job_payload(
+            job,
+            prepared_workspace_by_job=prepared_workspace_by_job,
+        )
+        for job in active_job_records
+    ]
+    attention_jobs = [
+        job
+        for job in (
+            _serialize_local_job_payload(
+                record,
+                prepared_workspace_by_job=prepared_workspace_by_job,
+            )
+            for record in attention_candidate_records
+        )
+        if any(
+            job["allowed_actions"].get(action)
+            for action in ("retry", "prepare_activation", "review_activation")
+        )
+    ]
+    projected_job_ids = {
+        job["public_id"] for job in active_jobs + attention_jobs
+    }
+    job_history_records = list(
+        maintenance_jobs.exclude(public_id__in=projected_job_ids).order_by(
+            "-created_at", "-pk"
+        )[:20]
+    )
+    job_history = [
+        _serialize_local_job_payload(
+            job,
+            prepared_workspace_by_job=prepared_workspace_by_job,
+        )
+        for job in job_history_records
     ]
     plans = list(
         MaintenancePlan.objects.select_related("job").values(
@@ -795,18 +877,27 @@ def workbench_maintenance_state(
     return {
         "state_version": state_version,
         "capabilities": {
-            operation: {"enabled": not reason, "reason_code": reason}
+            operation: {
+                "enabled": not reason,
+                "reason_code": reason,
+                "shared_blocker": reason in shared_blocker_ids,
+                "shared_blocker_id": shared_blocker_ids.get(reason, ""),
+            }
             for operation, reason in reasons.items()
         },
+        "capability_blockers": capability_blockers,
         "worker": worker,
         "folders": list(
             Folder.objects.annotate(pdf_count=Count("files")).values(
                 "id", "name", "pdf_count"
-            )
+            ).order_by("name", "id")
         ),
         "plans": plans,
         "selected_plan": selected_plan,
         "jobs": jobs,
+        "active_jobs": active_jobs,
+        "attention_jobs": attention_jobs,
+        "job_history": job_history,
         "selected_job": selected_job,
         "confirmation_phrase": FORCE_CONFIRMATION,
         "health": {

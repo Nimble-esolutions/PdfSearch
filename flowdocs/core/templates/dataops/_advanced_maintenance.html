@@ -1,56 +1,74 @@
 {% load i18n %}
 <div class="dataops-advanced" aria-labelledby="dataops-search-maintenance-heading">
-  <h2 class="visually-hidden" id="dataops-search-maintenance-heading">{% trans "Search maintenance" %}</h2>
-
   <section class="dataops-advanced__section" aria-labelledby="dataops-maintenance-actions-heading">
     <header>
       <p class="dataops-eyebrow">{% trans "Choose one outcome" %}</p>
       <h3 id="dataops-maintenance-actions-heading">{% trans "Validate or rebuild search data" %}</h3>
     </header>
     <p>{% trans "Every action first creates a 15-minute preview. The preview must contain at least one document or category before it can be queued." %}</p>
-    <div class="dataops-advanced__authority" role="status">
+    <div class="dataops-advanced__authority">
       <span>{% trans "Scope" %}: {% trans "Local documents and derived search artifacts" %}</span>
       <span>{% trans "Active runtime" %}: {% trans "Unchanged while work runs" %}</span>
       <span>{% trans "Recovery data" %}: {% trans "Managed from Data protection" %}</span>
     </div>
+
+    {% for blocker in state.maintenance.capability_blockers %}
+      <aside class="maintenance-shared-blocker" id="{{ blocker.dom_id }}" aria-labelledby="maintenance-shared-blocker-heading-{{ forloop.counter }}">
+        <p class="dataops-eyebrow" id="maintenance-shared-blocker-heading-{{ forloop.counter }}">{% trans "Shared requirement" %}</p>
+        {% include "components/operator_evidence.html" with presentation=blocker.presentation technical_code=blocker.reason_code show_action=False only %}
+        <p>{% blocktrans count affected=blocker.affected_operations|length %}This requirement blocks one maintenance action.{% plural %}This requirement blocks {{ affected }} maintenance actions.{% endblocktrans %}</p>
+      </aside>
+    {% endfor %}
 
     <form class="dataops-form" method="post" action="{% url 'vaultops:maintenance_plan_create' %}">
       {% csrf_token %}
       <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:maintenance">
       <div class="dataops-advanced__grid">
         {% with capability=state.maintenance.capabilities.validate %}
-        <article{% if not capability.enabled %} aria-disabled="true"{% endif %}>
+        <article{% if not capability.enabled %} aria-disabled="true"{% endif %}{% if capability.shared_blocker %} aria-describedby="{{ capability.shared_blocker_id }}"{% endif %}>
           <h4>{% trans "Validate files" %}</h4>
           <p>{% trans "Read-only checks for database rows, media references, and stored search artifacts." %}</p>
-          {% if capability.enabled %}<button type="submit" name="operation" value="validate">{% trans "Preview validation" %}</button>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
+          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="validate">{% trans "Preview validation" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
         </article>
         {% endwith %}
         {% with capability=state.maintenance.capabilities.repair_indexes %}
-        <article{% if not capability.enabled %} aria-disabled="true"{% endif %}>
+        <article{% if not capability.enabled %} aria-disabled="true"{% endif %}{% if capability.shared_blocker %} aria-describedby="{{ capability.shared_blocker_id }}"{% endif %}>
           <h4>{% trans "Repair stored indexes" %}</h4>
           <p>{% trans "Rebuild category indexes from existing chunks and embeddings; no new external embedding request." %}</p>
-          {% if capability.enabled %}<button type="submit" name="operation" value="repair_indexes">{% trans "Preview index repair" %}</button>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
+          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="repair_indexes">{% trans "Preview index repair" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
         </article>
         {% endwith %}
         {% with capability=state.maintenance.capabilities.reindex_needed %}
-        <article{% if not capability.enabled %} aria-disabled="true"{% endif %}>
+        <article{% if not capability.enabled %} aria-disabled="true"{% endif %}{% if capability.shared_blocker %} aria-describedby="{{ capability.shared_blocker_id }}"{% endif %}>
           <h4>{% trans "Reindex only what is needed" %}</h4>
           <p>{% trans "Reprocess documents whose searchable artifacts are missing or invalid." %}</p>
-          {% if capability.enabled %}<button type="submit" name="operation" value="reindex_needed">{% trans "Preview needed reindex" %}</button>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
+          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="reindex_needed">{% trans "Preview needed reindex" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
         </article>
         {% endwith %}
         {% with capability=state.maintenance.capabilities.reindex_selected %}
-        <article{% if not capability.enabled %} aria-disabled="true"{% endif %}>
+        <article{% if not capability.enabled %} aria-disabled="true"{% endif %}{% if capability.shared_blocker %} aria-describedby="{{ capability.shared_blocker_id }}"{% endif %}>
           <h4>{% trans "Reindex a selected scope" %}</h4>
           <p>{% trans "Deliberately regenerate searchable artifacts for the reviewed selection." %}</p>
-          {% if capability.enabled %}<button type="submit" name="operation" value="reindex_selected">{% trans "Preview selected reindex" %}</button>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
+          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="reindex_selected">{% trans "Preview selected reindex" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
         </article>
         {% endwith %}
       </div>
 
-      <fieldset class="maintenance-scope">
+      <fieldset class="maintenance-scope" data-maintenance-scope data-selected-label="{% trans 'selected' %}" data-visible-label="{% trans 'visible' %}" data-total-label="{% trans 'total' %}">
         <legend>{% trans "Categories" %}</legend>
-        {% for folder in state.maintenance.folders %}<label><input type="checkbox" name="folder_ids" value="{{ folder.id }}"> {{ folder.name }} ({{ folder.pdf_count }})</label>{% empty %}<p>{% trans "No categories are available. A preview with no matching items will be refused." %}</p>{% endfor %}
+        {% if state.maintenance.folders %}
+          <div class="maintenance-scope__toolbar">
+            <label for="maintenance-category-filter">{% trans "Find categories" %}<input id="maintenance-category-filter" type="search" data-maintenance-scope-filter autocomplete="off"></label>
+            <div class="maintenance-scope__actions">
+              <button type="button" data-maintenance-select-visible>{% trans "Select visible" %}</button>
+              <button type="button" data-maintenance-clear>{% trans "Clear selection" %}</button>
+            </div>
+            <p class="maintenance-scope__status" data-maintenance-scope-status aria-live="polite"></p>
+          </div>
+          <div class="maintenance-scope__grid" data-maintenance-scope-list>
+            {% for folder in state.maintenance.folders %}<label data-maintenance-scope-item><input type="checkbox" name="folder_ids" value="{{ folder.id }}"> <span>{{ folder.name }}</span> <small>{{ folder.pdf_count }} {% trans "documents" %}</small></label>{% endfor %}
+          </div>
+        {% else %}<p>{% trans "No categories are available. A preview with no matching items will be refused." %}</p>{% endif %}
       </fieldset>
       <details>
         <summary>{% trans "Optional document filters" %}</summary>
@@ -87,13 +105,14 @@
           <h4>{{ plan.operation_label }}</h4>
           <p>{{ plan.state_label }} · {{ plan.preview.pdf_count }} {% trans "documents" %} · {{ plan.preview.folder_count }} {% trans "categories" %}</p>
           <p>{% trans "Estimated work" %}: {{ plan.preview.estimated_work_units }} · {% trans "Expires" %}: {{ plan.expires_at|date:"Y-m-d H:i:s T" }}</p>
-          {% if plan.state == "previewed" %}
+          {% if plan.state == "previewed" and can_act %}
             <form class="dataops-form" method="post" action="{% url 'vaultops:maintenance_plan_queue' plan.public_id %}">
               {% csrf_token %}
               <input type="hidden" name="state_version" value="{{ plan.state_version }}">
               {% if plan.operation == "reindex_selected" %}<label>{% blocktrans with phrase=state.maintenance.confirmation_phrase %}Type {{ phrase }} to confirm external reprocessing{% endblocktrans %}<input name="typed_confirmation" autocomplete="off" required></label>{% endif %}
               <button type="submit">{% trans "Confirm and queue" %}</button>
             </form>
+          {% elif plan.state == "previewed" %}<p>{% trans "Superadmin approval required." %}</p>
           {% elif plan.job__public_id %}<p><code>{{ plan.job__public_id }}</code> · {{ plan.job__status }}</p>{% endif %}
         </article>
       {% empty %}<p role="listitem">{% trans "No maintenance previews are recorded." %}</p>{% endfor %}
@@ -102,36 +121,20 @@
 
   <section class="dataops-advanced__section" aria-labelledby="dataops-maintenance-jobs-heading">
     <header><p class="dataops-eyebrow">{% trans "Progress and audit" %}</p><h3 id="dataops-maintenance-jobs-heading">{% trans "Maintenance jobs" %}</h3></header>
-    {% for job in state.maintenance.jobs %}
-      <article class="dataops-advanced__job" id="maintenance-job-{{ job.public_id }}">
-        <h4>{{ job.kind_label }} · <code>{{ job.public_id }}</code></h4>
-        <p>{{ job.status_label }} · {{ job.completed_items }}/{{ job.total_items }} {% trans "completed" %} · {{ job.failed_items }} {% trans "failed" %}</p>
-        {% widthratio job.completed_items job.total_items 100 as maintenance_progress %}
-        <div class="maintenance-progress" role="progressbar" aria-label="{% trans 'Maintenance job progress' %}" aria-valuemin="0" aria-valuemax="{{ job.total_items }}" aria-valuenow="{{ job.completed_items }}"><span style="width: {{ maintenance_progress|default:0 }}%"></span></div>
-        {% if job.safe_error_code %}<div role="status">{% include "components/operator_evidence.html" with presentation=job.error_presentation technical_code=job.safe_error_code evidence_id=job.public_id show_action=False only %}<p>{{ job.error_presentation.action_label }}</p></div>{% endif %}
-        {% if job.allowed_actions.cancel %}<form method="post" action="{% url 'vaultops:maintenance_job_cancel' job.public_id %}">{% csrf_token %}<input type="hidden" name="state_version" value="{{ job.state_version }}"><button type="submit">{% trans "Cancel job" %}</button></form>{% endif %}
-        {% if job.allowed_actions.retry %}<form method="post" action="{% url 'vaultops:maintenance_job_retry' job.public_id %}">{% csrf_token %}<input type="hidden" name="state_version" value="{{ job.state_version }}"><button type="submit">{% trans "Retry from checkpoints" %}</button></form>{% endif %}
-        {% if job.options.candidate_state == "activation_ready" %}
-          {% if job.allowed_actions.prepare_activation %}
-            <form method="post" action="{% url 'vaultops:maintenance_candidate_prepare' job.public_id %}">
-              {% csrf_token %}
-              <input type="hidden" name="state_version" value="{{ job.state_version }}">
-              <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:prepare:{{ job.public_id }}">
-              <button type="submit">{% trans "Prepare search update" %}</button>
-            </form>
-            <p>{% trans "This verifies the completed search artifacts and prepares an immutable runtime candidate. Active search remains unchanged." %}</p>
-          {% elif job.allowed_actions.review_activation %}
-            <form method="post" action="{% url 'vaultops:confirmation_issue' %}">
-              {% csrf_token %}
-              <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}:activate:{{ job.public_id }}">
-              <input type="hidden" name="action" value="activate_workspace">
-              <input type="hidden" name="target" value="{{ job.prepared_workspace_id }}">
-              <button type="submit">{% trans "Review search update activation" %}</button>
-            </form>
-            <p>{% trans "The verified search update is ready. Activation still requires the exact signed confirmation shown on the next screen." %}</p>
-          {% endif %}
-        {% endif %}
-      </article>
-    {% empty %}<p>{% trans "No maintenance jobs are recorded." %}</p>{% endfor %}
+    {% for job in state.maintenance.active_jobs %}
+      {% include "dataops/_maintenance_job.html" with job=job idempotency_key=idempotency_key %}
+    {% empty %}<p class="dataops-empty">{% trans "No maintenance work is currently active." %}</p>{% endfor %}
+    {% if state.maintenance.attention_jobs %}
+      <h4>{% trans "Needs attention" %}</h4>
+      {% for job in state.maintenance.attention_jobs %}{% include "dataops/_maintenance_job.html" with job=job idempotency_key=idempotency_key %}{% endfor %}
+    {% endif %}
+    {% if state.maintenance.job_history %}
+      <details class="dataops-history maintenance-job-history">
+        <summary>{% blocktrans count count=state.maintenance.job_history|length %}Show one past job{% plural %}Show {{ count }} past jobs{% endblocktrans %}</summary>
+        <div class="maintenance-job-history__list">
+          {% for job in state.maintenance.job_history %}{% include "dataops/_maintenance_job.html" with job=job idempotency_key=idempotency_key %}{% endfor %}
+        </div>
+      </details>
+    {% endif %}
   </section>
 </div>

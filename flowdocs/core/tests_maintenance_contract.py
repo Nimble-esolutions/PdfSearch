@@ -28,11 +28,13 @@ from core.maintenance_plans import (
     FORCE_CONFIRMATION,
     MaintenancePlanError,
     MAX_SELECTION_IDS,
+    _grouped_capability_blockers,
     capability_reasons,
     calculate_preview,
     create_plan,
     normalize_selection,
     queue_plan,
+    workbench_maintenance_state,
 )
 from core.models import CustomUser, Folder, MaintenanceJob, MaintenancePlan, PDFFile
 
@@ -101,6 +103,116 @@ class ActiveRuntimeMaintenanceConfigurationTests(TestCase):
 @LOCAL_GATES
 class MaintenancePlanningTests(TestCase):
     databases = {"default", "control"}
+
+    def test_repeated_capability_reason_becomes_one_shared_blocker(self):
+        blockers = _grouped_capability_blockers(
+            {
+                "validate": "",
+                "repair_indexes": "mutation_tracking_disabled",
+                "reindex_needed": "mutation_tracking_disabled",
+                "reindex_selected": "mutation_tracking_disabled",
+            }
+        )
+        blocker = blockers[0]
+
+        self.assertEqual(len(blockers), 1)
+        self.assertEqual(blocker["reason_code"], "mutation_tracking_disabled")
+        self.assertEqual(
+            blocker["affected_operations"],
+            ["repair_indexes", "reindex_needed", "reindex_selected"],
+        )
+
+    def test_each_repeated_capability_reason_gets_its_own_shared_blocker(self):
+        blockers = _grouped_capability_blockers(
+            {
+                "validate": "worker_unavailable",
+                "repair_indexes": "worker_unavailable",
+                "reindex_needed": "mutation_tracking_disabled",
+                "reindex_selected": "mutation_tracking_disabled",
+            }
+        )
+
+        self.assertEqual(
+            [blocker["reason_code"] for blocker in blockers],
+            ["worker_unavailable", "mutation_tracking_disabled"],
+        )
+
+    def test_active_and_actionable_jobs_are_not_hidden_by_bounded_history(self):
+        active = MaintenanceJob.objects.create(kind="validate", status="running")
+        failed = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="failed",
+            error_summary="bounded-safe-error",
+        )
+        for _ in range(25):
+            MaintenanceJob.objects.create(kind="validate", status="completed")
+
+        with (
+            patch(
+                "core.maintenance_plans.capability_reasons",
+                return_value={
+                    "validate": "",
+                    "repair_indexes": "",
+                    "reindex_needed": "",
+                    "reindex_selected": "",
+                },
+            ),
+            patch(
+                "core.maintenance_plans.maintenance_worker_capability",
+                return_value={"available": True},
+            ),
+            patch("core.maintenance_plans.list_sets", return_value=[]),
+            patch(
+                "core.maintenance_plans.plan_prune",
+                return_value={"blocked": False, "candidate_bytes": 0},
+            ),
+            patch(
+                "core.maintenance_plans.cleanup_plan",
+                return_value={
+                    "plan_id": "cleanup",
+                    "candidate_bytes": 0,
+                    "protected_bytes": 0,
+                    "apply_allowed": True,
+                },
+            ),
+            patch(
+                "core.maintenance_plans.inventory_local_artifacts",
+                return_value=[],
+            ),
+            patch(
+                "core.maintenance_plans._vault_health",
+                return_value=(
+                    {"state": "healthy", "verified_count": 1},
+                    {"state": "passed"},
+                ),
+            ),
+            patch(
+                "core.maintenance_plans.capacity_report",
+                return_value={
+                    "byte_capacity_ok": True,
+                    "inode_capacity_ok": True,
+                    "free_bytes": 1,
+                    "required_bytes": 0,
+                    "free_inodes": 1,
+                    "inode_reserve": 0,
+                },
+            ),
+            patch(
+                "core.maintenance_plans._prepared_workspace_ids",
+                return_value={},
+            ),
+        ):
+            state = workbench_maintenance_state()
+
+        active_ids = {job["public_id"] for job in state["active_jobs"]}
+        attention_ids = {job["public_id"] for job in state["attention_jobs"]}
+        history_ids = {job["public_id"] for job in state["job_history"]}
+        self.assertIn(str(active.public_id), active_ids)
+        self.assertIn(str(failed.public_id), attention_ids)
+        self.assertEqual(len(state["job_history"]), 20)
+        self.assertFalse(active_ids & attention_ids)
+        self.assertFalse(active_ids & history_ids)
+        self.assertFalse(attention_ids & history_ids)
 
     def setUp(self):
         source_capability = patch(

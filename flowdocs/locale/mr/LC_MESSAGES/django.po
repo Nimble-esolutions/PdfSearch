@@ -4832,3 +4832,83 @@ msgstr "शोध अद्यतन सक्रियकरणाचा आढ
 
 msgid "The verified search update is ready. Activation still requires the exact signed confirmation shown on the next screen."
 msgstr "पडताळलेले शोध अद्यतन तयार आहे. सक्रियकरणासाठी पुढील स्क्रीनवर दाखवलेली अचूक स्वाक्षरीकृत पुष्टी अजूनही आवश्यक आहे."
+
+#: core/templates/dashboard.html
+msgid "Storage connection"
+msgstr "संचयन जोडणी"
+
+#: core/templates/dashboard.html
+msgid "Connected"
+msgstr "जोडलेले"
+
+#: core/templates/dashboard.html
+msgid "Active runtime"
+msgstr "सक्रिय रनटाइम"
+
+#: core/templates/dashboard.html
+msgid "Indexing ratio"
+msgstr "अनुक्रमण प्रमाण"
+
+#: core/templates/dashboard.html
+msgid "Active generation"
+msgstr "सक्रिय आवृत्ती"
+
+#: core/templates/dashboard.html
+msgid "Manifest digest"
+msgstr "मॅनिफेस्ट डायजेस्ट"
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Shared requirement"
+msgstr "सामायिक आवश्यकता"
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "This requirement blocks one maintenance action."
+msgid_plural "This requirement blocks %(affected)s maintenance actions."
+msgstr[0] "ही आवश्यकता एक देखभाल कृती रोखते."
+msgstr[1] "ही आवश्यकता %(affected)s देखभाल कृती रोखते."
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Unavailable until the shared requirement is resolved."
+msgstr "सामायिक आवश्यकता पूर्ण होईपर्यंत उपलब्ध नाही."
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Superadmin approval required."
+msgstr "सुपरअॅडमिनची मंजुरी आवश्यक आहे."
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Find categories"
+msgstr "श्रेणी शोधा"
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Select visible"
+msgstr "दिसणाऱ्या निवडा"
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Clear selection"
+msgstr "निवड साफ करा"
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "selected"
+msgstr "निवडले"
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "visible"
+msgstr "दिसत आहेत"
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "total"
+msgstr "एकूण"
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "No maintenance work is currently active."
+msgstr "सध्या कोणतेही देखभाल कार्य सक्रिय नाही."
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Show one past job"
+msgid_plural "Show %(count)s past jobs"
+msgstr[0] "एक मागील कार्य दाखवा"
+msgstr[1] "%(count)s मागील कार्ये दाखवा"
+
+#: core/templates/dataops/_maintenance_job.html
+msgid "Work size is not available yet."
+msgstr "कार्याचा आकार अद्याप उपलब्ध नाही."

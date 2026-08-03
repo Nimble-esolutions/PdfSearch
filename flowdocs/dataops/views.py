@@ -1037,6 +1037,10 @@ def advanced(request):
             "folders": [],
             "plans": [],
             "jobs": [],
+            "active_jobs": [],
+            "attention_jobs": [],
+            "job_history": [],
+            "capability_blockers": [],
             "selected_plan": None,
             "selected_job": None,
         }
@@ -1047,6 +1051,7 @@ def advanced(request):
         {
             "state": {"maintenance": maintenance},
             "idempotency_key": secrets.token_urlsafe(18),
+            "can_act": _can_act(request),
             "dataops_nav": _navigation("advanced"),
         },
     )
