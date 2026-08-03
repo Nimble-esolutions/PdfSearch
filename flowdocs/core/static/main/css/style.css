@@ -948,6 +948,45 @@ body {
   text-align: center;
 }
 
+.cockpit-technical-details {
+  margin: 0 0 1rem;
+  border-block: 1px solid var(--admin-border);
+  padding: 0.65rem 0;
+  color: var(--admin-muted);
+  font-size: 0.82rem;
+}
+
+.cockpit-technical-details summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--admin-ink);
+  font-weight: 700;
+}
+
+.cockpit-technical-details__list {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.5rem 0 0;
+}
+
+.cockpit-technical-details__list div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.cockpit-technical-details__list dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.cockpit-technical-details__list code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: inherit;
+}
+
 .admin-empty-state--compact {
   padding: 1rem;
 }

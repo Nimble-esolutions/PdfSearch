@@ -317,37 +317,42 @@
     {% if role == 'superadmin' %}
       <section class="admin-panel">
         <div class="admin-page-heading">
-          <h2>{% trans "Data recovery posture" %}</h2>
+          <h2>{% trans "Data protection" %}</h2>
           <p>
-            <strong>{{ cockpit.vault_posture.status_label|default:_("Unavailable") }}</strong>
+            {% if cockpit.dataops_posture.status == "ok" %}
+              <strong>{% trans "Ready" %}</strong>
+            {% else %}
+              <strong>{% trans "Needs attention" %}</strong>
+            {% endif %}
           </p>
         </div>
         <div class="ops-lane-list">
           <div class="ops-lane-item">
             <span>
-              <strong>{% trans "Remote authority" %}</strong>
-              <small>{{ cockpit.vault_posture.remote.state_label|default:_("Unavailable") }}</small>
-            </span>
-            <span>
-              {% if cockpit.vault_posture.remote.authoritative_generation_id %}
-                <b>{{ cockpit.vault_posture.remote.authoritative_generation_id }}</b>
-              {% endif %}
-              <small>{% trans "Observed" %}: {{ cockpit.vault_posture.remote.observed_at|default:"—" }}</small>
+              <strong>{% trans "Storage connection" %}</strong>
+              <small>{% if cockpit.dataops_posture.connection_configured %}{% trans "Connected" %}{% else %}{% trans "Unavailable" %}{% endif %}</small>
             </span>
           </div>
           <div class="ops-lane-item">
             <span>
-              <strong>{% trans "Runtime" %}</strong>
-              <small>{{ cockpit.vault_posture.runtime.state_label|default:_("Unavailable") }}</small>
+              <strong>{% trans "Active runtime" %}</strong>
+              <small>{% if cockpit.dataops_posture.runtime_verified %}{% trans "Verified" %}{% else %}{% trans "Unavailable" %}{% endif %}</small>
             </span>
-            <span>
-              {% if cockpit.vault_posture.runtime.active_generation_id %}
-                <b>{{ cockpit.vault_posture.runtime.active_generation_id }}</b>
-              {% endif %}
-              <small>{% trans "Observed" %}: {{ cockpit.vault_posture.runtime.observed_at|default:"—" }}</small>
+            <span class="text-end">
+              <b>{{ cockpit.dataops_posture.indexing_ratio|floatformat:2 }}</b>
+              <small>{% trans "Indexing ratio" %}</small>
             </span>
           </div>
         </div>
+        {% if cockpit.dataops_posture.active_generation %}
+          <details class="cockpit-technical-details">
+            <summary>{% trans "Technical details" %}</summary>
+            <dl class="cockpit-technical-details__list">
+              <div><dt>{% trans "Active generation" %}</dt><dd><code>{{ cockpit.dataops_posture.active_generation }}</code></dd></div>
+              <div><dt>{% trans "Manifest digest" %}</dt><dd><code>{{ cockpit.dataops_posture.manifest_digest }}</code></dd></div>
+            </dl>
+          </details>
+        {% endif %}
         <div class="d-grid gap-2">
           <a href="{% url 'operations_panel' %}?section=maintenance" class="btn btn-outline-primary btn-sm">{% trans "Maintain Documents & Search" %}</a>
           <a href="{% url 'operations_panel' %}" class="btn btn-outline-primary btn-sm">{% trans "Open Data Operations" %}</a>

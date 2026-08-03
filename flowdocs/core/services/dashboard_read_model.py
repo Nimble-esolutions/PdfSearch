@@ -6,6 +6,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
 
+from dataops.readiness import readiness_payload
+
 from core.models import (
     CustomUser,
     Folder,
@@ -33,6 +35,47 @@ class DashboardFilters:
     occupancy: str = ""
     ordering: str = "name"
     page: int = 1
+
+
+def _dataops_dashboard_projection():
+    """Return the same bounded runtime authority used by ``/readyz``.
+
+    Dashboard used to reconstruct readiness from the legacy Vault projection,
+    which can legitimately lag behind the active DataOps v3 runtime. Keep one
+    source of operational truth and expose only fields that are safe and useful
+    to an authenticated operator.
+    """
+    try:
+        payload = readiness_payload()
+    except Exception:
+        return {
+            "status": "unavailable",
+            "search_available": False,
+            "connection_configured": False,
+            "runtime_verified": False,
+            "active_generation": "",
+            "manifest_digest": "",
+            "indexing_ratio": 0.0,
+            "reason_code": "dataops_readiness_unavailable",
+        }
+
+    runtime = payload.get("runtime_evidence") or {}
+    return {
+        "status": payload.get("status") or "unavailable",
+        "search_available": bool(payload.get("signed_active_generation")),
+        "connection_configured": bool(
+            (payload.get("connection") or {}).get("configured")
+        ),
+        "runtime_verified": bool(runtime.get("verified")),
+        "active_generation": str(payload.get("active_generation") or ""),
+        "manifest_digest": str(payload.get("manifest_digest") or ""),
+        "indexing_ratio": float(payload.get("indexing_ratio") or 0.0),
+        "reason_code": str(
+            payload.get("configuration_error")
+            or runtime.get("reason_code")
+            or ""
+        ),
+    }
 
 
 def _visible_folders(user):
@@ -254,12 +297,10 @@ def build_dashboard_state(*, user, data):
     folders_with_documents = folder_summary["with_documents"] or 0
     empty_folders = max(folder_count - folders_with_documents, 0)
 
+    authority_summary = _dataops_dashboard_projection()
+    search_available = authority_summary["search_available"]
     is_superadmin = getattr(user, "role", None) == "superadmin"
     if is_superadmin:
-        from vaultops.services.read_model import build_dashboard_authority_summary
-
-        authority_summary = build_dashboard_authority_summary()
-        search_available = authority_summary["search_available"]
         jobs = list(
             MaintenanceJob.objects.select_related("requested_by")
             .filter(
@@ -272,12 +313,9 @@ def build_dashboard_state(*, user, data):
             kind__in=LOCAL_DASHBOARD_JOB_KINDS,
             status="failed",
         ).count()
-        vault_posture = authority_summary
     else:
-        search_available = False
         jobs = []
         failed_job_count = 0
-        vault_posture = None
     local_index_debt = max(searchable_pdfs - indexed_pdfs, 0)
     needs_index = local_index_debt if search_available else 0
     attention = _attention_items(
@@ -333,7 +371,7 @@ def build_dashboard_state(*, user, data):
         "unknown_uploaders": unknown_uploaders,
         "recent_pdfs": list(pdfs.order_by("-uploaded_at", "-pk")[:RECENT_INTAKE_LIMIT]),
         "maintenance_jobs": jobs,
-        "vault_posture": vault_posture,
+        "dataops_posture": authority_summary if is_superadmin else None,
         "attention_items": attention,
         "category_page": page,
         "category_result_count": paginator.count,

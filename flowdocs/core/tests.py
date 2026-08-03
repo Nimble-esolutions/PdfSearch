@@ -1195,6 +1195,59 @@ class DashboardTests(TestCase):
         self.assertEqual(category.pdf_count, 2)
         self.assertEqual(category.index_debt, 0)
 
+    @patch("core.services.dashboard_read_model.readiness_payload")
+    def test_dashboard_uses_dataops_v3_runtime_authority_for_every_admin(self, readiness):
+        readiness.return_value = {
+            "status": "ok",
+            "signed_active_generation": True,
+            "connection": {"configured": True},
+            "runtime_evidence": {"verified": True, "reason_code": ""},
+            "active_generation": "dataops-stage-generation",
+            "manifest_digest": "a" * 64,
+            "indexing_ratio": 1.0,
+            "configuration_error": "",
+        }
+        folder = Folder.objects.create(name="Verified runtime", created_by=self.user)
+        PDFFile.objects.create(
+            title="Searchable",
+            file="pdfs/searchable.pdf",
+            folder=folder,
+            uploaded_by=self.user,
+            lifecycle="ready",
+            indexed=True,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertTrue(response.context["cockpit"]["search_available"])
+        self.assertContains(response, "1/1")
+        self.assertNotContains(response, "Search readiness is unavailable")
+
+    @patch("core.services.dashboard_read_model.readiness_payload")
+    def test_superadmin_sees_bounded_v3_data_protection_evidence(self, readiness):
+        self.user.role = "superadmin"
+        self.user.save(update_fields=["role"])
+        readiness.return_value = {
+            "status": "ok",
+            "signed_active_generation": True,
+            "connection": {"configured": True},
+            "runtime_evidence": {"verified": True, "reason_code": ""},
+            "active_generation": "dataops-stage-generation",
+            "manifest_digest": "b" * 64,
+            "indexing_ratio": 1.0,
+            "configuration_error": "",
+        }
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertContains(response, "Data protection")
+        self.assertContains(response, "Storage connection")
+        self.assertContains(response, "Active runtime")
+        self.assertContains(response, "dataops-stage-generation")
+        self.assertNotContains(response, "Remote authority")
+
     def test_dashboard_renders_marathi_cockpit_labels(self):
         self.client.force_login(self.user)
         Folder.objects.create(name="Marathi lane", created_by=self.user)
