@@ -86,7 +86,26 @@ class V3BackupExecutorTests(TestCase):
     def snapshot_factory(self, _operation, *, lease=None):
         workspace = self.root / "snapshot"
         (workspace / "media" / "pdfs").mkdir(parents=True, exist_ok=True)
-        (workspace / "db.sqlite3").write_bytes(b"sqlite")
+        with sqlite3.connect(workspace / "db.sqlite3") as database:
+            database.execute(
+                "CREATE TABLE core_pdffile "
+                "(indexed INTEGER, processing_status TEXT)"
+            )
+            database.execute("INSERT INTO core_pdffile VALUES (1, 'ready')")
+            database.execute("CREATE TABLE core_folder (id INTEGER PRIMARY KEY)")
+            database.execute("INSERT INTO core_folder VALUES (1)")
+            database.execute(
+                "CREATE TABLE core_customuser (id INTEGER PRIMARY KEY)"
+            )
+            database.execute("INSERT INTO core_customuser VALUES (1)")
+            database.execute(
+                "CREATE TABLE django_migrations "
+                "(app TEXT, name TEXT, applied TEXT)"
+            )
+            database.execute(
+                "INSERT INTO django_migrations VALUES "
+                "('core', '0027', '2026-08-03T00:00:00Z')"
+            )
         (workspace / "media" / "pdfs" / "one.pdf").write_bytes(b"pdf")
         snapshot_id = uuid.uuid4()
         files = []
@@ -105,6 +124,7 @@ class V3BackupExecutorTests(TestCase):
             )
         evidence = {
             "snapshot_id": str(snapshot_id),
+            "included_epoch": 3,
             "source_stable": True,
             "consistency": {
                 "sqlite_integrity": "ok",
@@ -112,8 +132,10 @@ class V3BackupExecutorTests(TestCase):
             },
             "files": files,
             "inventory": {
-                "database": {"migrations": {"latest": "0027"}},
-                "counts": {"pdf_rows": 242, "folders": 46, "users": 7},
+                "database": {
+                    "migrations": {"latest": "core.0027", "count": 1}
+                },
+                "counts": {"pdf_rows": 1, "folders": 1, "users": 1},
             },
             "faiss": {"unavailable_documents": {"count": 0}},
             "configuration_fingerprint": {"sha256": "f" * 64},
@@ -150,7 +172,8 @@ class V3BackupExecutorTests(TestCase):
             point.evidence["plan_digest"],
             self.operation.lifecycle_plan_digest,
         )
-        self.assertEqual(point.counts["documents"], 242)
+        self.assertEqual(point.counts["documents"], 1)
+        self.assertEqual(point.counts["migrations"], 1)
         self.assertGreaterEqual(len(leases), 3)
 
     def test_tampered_plan_is_refused_before_snapshot_or_storage(self):

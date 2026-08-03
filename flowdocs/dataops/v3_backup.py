@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
+import sqlite3
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from .package_v3 import build_manifest, canonical_json_bytes, sign_manifest
+from .package_v3 import (
+    ManifestV3Error,
+    build_manifest,
+    canonical_json_bytes,
+    sign_manifest,
+    validate_manifest,
+    verify_manifest_signature,
+)
 from .v3_config import ConnectionView
 from .v3_storage import (
-    V3StorageError,
     head_or_none,
     put_bytes_immutable,
     put_file_immutable,
@@ -79,6 +86,22 @@ class ManifestPublication:
     activation_ready: bool
 
 
+@dataclass(frozen=True)
+class LatestPointerObservation:
+    """The exact latest pointer against which publication must be fenced."""
+
+    key: str
+    etag: str
+    body: bytes
+    recovery_point_id: str
+    manifest_sha256: str
+    recovery_point_key: str
+
+    @property
+    def exists(self) -> bool:
+        return bool(self.etag)
+
+
 def _safe_segment(value: str, code: str) -> str:
     value = str(value or "").strip()
     if not SAFE_SEGMENT.fullmatch(value):
@@ -132,10 +155,20 @@ def load_snapshot_bundle(snapshot) -> SnapshotBundle:
         or consistency.get("foreign_keys") != "ok"
     ):
         raise V3BackupError("snapshot_database_evidence_invalid")
+    included_epoch = getattr(snapshot, "included_epoch", None)
+    if (
+        not isinstance(included_epoch, int)
+        or isinstance(included_epoch, bool)
+        or included_epoch < 0
+    ):
+        raise V3BackupError("snapshot_epoch_invalid")
+    evidence_epoch = evidence.get("included_epoch")
+    if evidence_epoch is not None and evidence_epoch != included_epoch:
+        raise V3BackupError("snapshot_epoch_mismatch")
     return SnapshotBundle(
         snapshot_id=snapshot_id,
         workspace=root,
-        included_epoch=int(snapshot.included_epoch),
+        included_epoch=included_epoch,
         evidence=evidence,
         evidence_sha256=observed_evidence_sha256,
     )
@@ -215,16 +248,25 @@ def _verified_snapshot_files(bundle: SnapshotBundle) -> list[dict[str, Any]]:
     return result
 
 
-def _latest_lineage(client, connection: ConnectionView) -> tuple[str, str]:
+def _observe_latest_pointer(
+    client,
+    connection: ConnectionView,
+) -> LatestPointerObservation:
     key = f"{dataset_root(connection)}/refs/latest.json"
-    if head_or_none(client, bucket=connection.bucket, key=key) is None:
-        return "", ""
+    head = head_or_none(client, bucket=connection.bucket, key=key)
+    if head is None:
+        return LatestPointerObservation(key, "", b"", "", "", "")
+    etag = str(head.get("ETag") or "").strip()
+    if not etag:
+        raise V3BackupError("latest_pointer_etag_missing")
     try:
-        payload = json.loads(
-            read_object(client, bucket=connection.bucket, key=key)
-        )
+        body = read_object(client, bucket=connection.bucket, key=key)
+        payload = json.loads(body)
     except (ValueError, TypeError) as exc:
         raise V3BackupError("latest_pointer_invalid") from exc
+    confirmed = head_or_none(client, bucket=connection.bucket, key=key)
+    if confirmed is None or str(confirmed.get("ETag") or "").strip() != etag:
+        raise V3BackupError("latest_pointer_changed_during_read")
     if payload.get("dataset_id") != connection.dataset_id:
         raise V3BackupError("latest_pointer_dataset_mismatch")
     digest = str(payload.get("manifest_sha256") or "").lower()
@@ -234,7 +276,139 @@ def _latest_lineage(client, connection: ConnectionView) -> tuple[str, str]:
         payload.get("recovery_point_id"),
         "latest_pointer_invalid",
     )
-    return recovery_point_id, digest
+    recovery_point_key = str(payload.get("recovery_point_key") or "")
+    expected_recovery_point_key = (
+        f"{dataset_root(connection)}/recovery-points/{recovery_point_id}.json"
+    )
+    if recovery_point_key != expected_recovery_point_key:
+        raise V3BackupError("latest_pointer_invalid")
+    return LatestPointerObservation(
+        key,
+        etag,
+        body,
+        recovery_point_id,
+        digest,
+        recovery_point_key,
+    )
+
+
+def _table_exists(database: sqlite3.Connection, table: str) -> bool:
+    return database.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone() is not None
+
+
+def _table_count(database: sqlite3.Connection, table: str) -> int:
+    if not _table_exists(database, table):
+        return 0
+    return int(database.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
+
+
+def _user_count(database: sqlite3.Connection) -> int:
+    for table in ("core_customuser", "auth_user"):
+        if _table_exists(database, table):
+            return _table_count(database, table)
+    return 0
+
+
+def _database_facts(path: Path) -> dict[str, Any]:
+    try:
+        with sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True) as database:
+            integrity = database.execute("PRAGMA integrity_check").fetchone()[0]
+            foreign_keys = database.execute("PRAGMA foreign_key_check").fetchall()
+            migration_count = _table_count(database, "django_migrations")
+            latest_migration = ""
+            if migration_count:
+                row = database.execute(
+                    "SELECT app, name FROM django_migrations "
+                    "ORDER BY applied DESC, app DESC, name DESC LIMIT 1"
+                ).fetchone()
+                latest_migration = f"{row[0]}.{row[1]}" if row else ""
+            facts = {
+                "documents": _table_count(database, "core_pdffile"),
+                "folders": _table_count(database, "core_folder"),
+                "users": _user_count(database),
+                "migrations": migration_count,
+                "latest_migration": latest_migration,
+            }
+    except (sqlite3.Error, OSError, TypeError) as exc:
+        raise V3BackupError("snapshot_database_invalid") from exc
+    if integrity != "ok":
+        raise V3BackupError("snapshot_database_integrity_failed")
+    if foreign_keys:
+        raise V3BackupError("snapshot_database_foreign_keys_failed")
+    return facts
+
+
+def _declared_count(counts: Mapping[str, Any], field: str) -> int:
+    value = counts.get(field)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise V3BackupError("snapshot_inventory_malformed")
+    return value
+
+
+def _reconciled_counts(
+    evidence: Mapping[str, Any],
+    files: list[dict[str, Any]],
+) -> dict[str, int]:
+    databases = [item for item in files if item["kind"] == "database"]
+    if len(databases) != 1:
+        raise V3BackupError("snapshot_database_count_invalid")
+    facts = _database_facts(databases[0]["local_path"])
+    inventory = evidence.get("inventory")
+    inventory_counts = (
+        inventory.get("counts") if isinstance(inventory, Mapping) else None
+    )
+    if not isinstance(inventory_counts, Mapping):
+        raise V3BackupError("snapshot_inventory_malformed")
+    declarations = {
+        "documents": _declared_count(inventory_counts, "pdf_rows"),
+        "folders": _declared_count(inventory_counts, "folders"),
+        "users": _declared_count(inventory_counts, "users"),
+    }
+    for field, code in (
+        ("documents", "snapshot_document_count_mismatch"),
+        ("folders", "snapshot_folder_count_mismatch"),
+        ("users", "snapshot_user_count_mismatch"),
+    ):
+        if declarations[field] != facts[field]:
+            raise V3BackupError(code)
+    pdf_objects = sum(
+        1
+        for item in files
+        if item["kind"] == "media" and Path(item["path"]).suffix.lower() == ".pdf"
+    )
+    if pdf_objects != facts["documents"]:
+        raise V3BackupError("snapshot_pdf_object_count_mismatch")
+    inventory_database = inventory.get("database")
+    migrations = (
+        inventory_database.get("migrations")
+        if isinstance(inventory_database, Mapping)
+        else None
+    )
+    declared_latest = (
+        str(migrations.get("latest") or "") if isinstance(migrations, Mapping) else ""
+    )
+    if declared_latest != facts["latest_migration"]:
+        raise V3BackupError("snapshot_migration_mismatch")
+    declared_migration_count = (
+        migrations.get("count") if isinstance(migrations, Mapping) else None
+    )
+    if declared_migration_count is not None and (
+        not isinstance(declared_migration_count, int)
+        or isinstance(declared_migration_count, bool)
+        or declared_migration_count != facts["migrations"]
+    ):
+        raise V3BackupError("snapshot_migration_count_mismatch")
+    return {
+        "documents": facts["documents"],
+        "folders": facts["folders"],
+        "users": facts["users"],
+        "migrations": facts["migrations"],
+        "objects": len(files),
+        "bytes": sum(item["size"] for item in files),
+    }
 
 
 def _components(files: list[dict[str, Any]], evidence: Mapping[str, Any]):
@@ -263,20 +437,6 @@ def _components(files: list[dict[str, Any]], evidence: Mapping[str, Any]):
     }
 
 
-def _counts(evidence: Mapping[str, Any], files: list[dict[str, Any]]):
-    inventory = evidence.get("inventory")
-    inventory_counts = (
-        inventory.get("counts", {}) if isinstance(inventory, Mapping) else {}
-    )
-    return {
-        "documents": int(inventory_counts.get("pdf_rows", 0) or 0),
-        "folders": int(inventory_counts.get("folders", 0) or 0),
-        "users": int(inventory_counts.get("users", 0) or 0),
-        "objects": len(files),
-        "bytes": sum(item["size"] for item in files),
-    }
-
-
 def _database_schema(evidence: Mapping[str, Any]) -> str:
     inventory = evidence.get("inventory")
     if isinstance(inventory, Mapping):
@@ -288,15 +448,59 @@ def _database_schema(evidence: Mapping[str, Any]) -> str:
     return "unknown-verified-snapshot"
 
 
+def _created_at_from_epoch(included_epoch: int) -> str:
+    try:
+        seconds, nanoseconds = divmod(included_epoch, 1_000_000_000)
+        captured = datetime.fromtimestamp(seconds, tz=timezone.utc) + timedelta(
+            microseconds=nanoseconds // 1_000,
+        )
+    except (OverflowError, OSError, ValueError) as exc:
+        raise V3BackupError("snapshot_epoch_invalid") from exc
+    return captured.isoformat().replace("+00:00", "Z")
+
+
+def _load_retry_manifest(
+    client,
+    connection: ConnectionView,
+    observation: LatestPointerObservation,
+    *,
+    signing_key: bytes,
+    signing_key_id: str,
+) -> dict[str, Any]:
+    key = (
+        f"{dataset_root(connection)}/manifests/"
+        f"{observation.manifest_sha256}.json"
+    )
+    try:
+        manifest = json.loads(read_object(client, bucket=connection.bucket, key=key))
+        validate_manifest(manifest)
+    except (ManifestV3Error, ValueError, TypeError) as exc:
+        raise V3BackupError("recovery_point_retry_manifest_invalid") from exc
+    if (
+        manifest.get("dataset_id") != connection.dataset_id
+        or manifest.get("recovery_point_id") != observation.recovery_point_id
+        or manifest.get("manifest_sha256") != observation.manifest_sha256
+        or manifest.get("signature", {}).get("key_id") != signing_key_id
+        or manifest.get("backup_mode") != "smart"
+        or manifest.get("lineage", {}).get("transition") != "backup"
+        or not verify_manifest_signature(manifest, key=signing_key)
+    ):
+        raise V3BackupError("recovery_point_retry_manifest_mismatch")
+    return manifest
+
+
 def _publish_latest_pointer(
     client,
     connection: ConnectionView,
     *,
+    observed: LatestPointerObservation,
     recovery_point_id: str,
     manifest_sha256: str,
     recovery_point_key: str,
 ) -> None:
     key = f"{dataset_root(connection)}/refs/latest.json"
+    if observed.key != key:
+        raise V3BackupError("latest_pointer_observation_invalid")
     payload = {
         "schema_version": 3,
         "dataset_id": connection.dataset_id,
@@ -306,13 +510,18 @@ def _publish_latest_pointer(
     }
     body = canonical_json_bytes(payload)
     digest = hashlib.sha256(body).hexdigest()
-    existing = head_or_none(client, bucket=connection.bucket, key=key)
+    if observed.body == body:
+        current = head_or_none(client, bucket=connection.bucket, key=key)
+        if (
+            current is None
+            or str(current.get("ETag") or "").strip() != observed.etag
+            or read_object(client, bucket=connection.bucket, key=key) != body
+        ):
+            raise V3BackupError("latest_pointer_conflict")
+        return
     conditions = {"IfNoneMatch": "*"}
-    if existing is not None:
-        etag = str(existing.get("ETag") or "").strip()
-        if not etag:
-            raise V3BackupError("latest_pointer_etag_missing")
-        conditions = {"IfMatch": etag}
+    if observed.exists:
+        conditions = {"IfMatch": observed.etag}
     try:
         client.put_object(
             Bucket=connection.bucket,
@@ -336,6 +545,7 @@ def publish_manifest_contract(
     manifest: Mapping[str, Any],
     signing_key: bytes,
     signing_key_id: str,
+    latest_pointer: LatestPointerObservation | None = None,
 ) -> tuple[dict[str, Any], ManifestPublication]:
     """Publish one signed manifest, immutable descriptor, and fenced latest ref."""
 
@@ -349,6 +559,8 @@ def publish_manifest_contract(
     )
     if manifest.get("dataset_id") != connection.dataset_id:
         raise V3BackupError("manifest_dataset_mismatch")
+    if latest_pointer is None:
+        latest_pointer = _observe_latest_pointer(client, connection)
     descriptor = {
         "schema_version": 3,
         "dataset_id": connection.dataset_id,
@@ -426,6 +638,7 @@ def publish_manifest_contract(
     _publish_latest_pointer(
         client,
         connection,
+        observed=latest_pointer,
         recovery_point_id=recovery_point_id,
         manifest_sha256=signed_manifest["manifest_sha256"],
         recovery_point_key=recovery_point_key,
@@ -467,32 +680,29 @@ def publish_snapshot(
     )
     bundle = load_snapshot_bundle(snapshot)
     files = _verified_snapshot_files(bundle)
-    parent_recovery_point_id, base_digest = _latest_lineage(client, connection)
-    uploaded_objects = uploaded_bytes = reused_objects = reused_bytes = 0
-
-    for item in files:
-        key = blob_key(connection, item["sha256"])
-        outcome = put_file_immutable(
+    counts = _reconciled_counts(bundle.evidence, files)
+    latest_pointer = _observe_latest_pointer(client, connection)
+    retry_manifest = None
+    if latest_pointer.recovery_point_id == recovery_point_id:
+        retry_manifest = _load_retry_manifest(
             client,
-            bucket=connection.bucket,
-            key=key,
-            path=item["local_path"],
-            sha256=item["sha256"],
-            size=item["size"],
+            connection,
+            latest_pointer,
+            signing_key=signing_key,
+            signing_key_id=signing_key_id,
         )
-        verify_remote_object(
-            client,
-            bucket=connection.bucket,
-            key=key,
-            sha256=item["sha256"],
-            size=item["size"],
+        retry_lineage = retry_manifest.get("lineage", {})
+        parent_recovery_point_id = str(
+            retry_lineage.get("parent_generation_id") or ""
         )
-        if outcome == "uploaded":
-            uploaded_objects += 1
-            uploaded_bytes += item["size"]
-        else:
-            reused_objects += 1
-            reused_bytes += item["size"]
+        base_digest = str(retry_manifest.get("base_manifest_sha256") or "")
+        if str(retry_lineage.get("parent_manifest_sha256") or "") != base_digest:
+            raise V3BackupError("recovery_point_retry_manifest_mismatch")
+        created_at = str(retry_manifest.get("created_at") or "")
+    else:
+        parent_recovery_point_id = latest_pointer.recovery_point_id
+        base_digest = latest_pointer.manifest_sha256
+        created_at = _created_at_from_epoch(bundle.included_epoch)
 
     config_fingerprint = bundle.evidence.get("configuration_fingerprint")
     index_digest = (
@@ -521,27 +731,61 @@ def publish_snapshot(
             "sqlite_integrity": bundle.evidence["consistency"]["sqlite_integrity"],
             "foreign_keys": bundle.evidence["consistency"]["foreign_keys"],
             "source_stable": bundle.evidence["source_stable"],
+            "snapshot_evidence_sha256": bundle.evidence_sha256,
         },
         components=_components(files, bundle.evidence),
         files=[
             {key: value for key, value in item.items() if key != "local_path"}
             for item in files
         ],
-        counts=_counts(bundle.evidence, files),
+        counts=counts,
         lineage={
             "transition": "backup",
             "parent_dataset_id": connection.dataset_id if base_digest else "",
             "parent_generation_id": parent_recovery_point_id,
             "parent_manifest_sha256": base_digest,
         },
+        created_at=created_at,
         base_manifest_sha256=base_digest,
     )
+    if (
+        retry_manifest is not None
+        and manifest["manifest_sha256"] != latest_pointer.manifest_sha256
+    ):
+        raise V3BackupError("recovery_point_retry_conflict")
+
+    uploaded_objects = uploaded_bytes = reused_objects = reused_bytes = 0
+    for item in files:
+        key = blob_key(connection, item["sha256"])
+        outcome = put_file_immutable(
+            client,
+            bucket=connection.bucket,
+            key=key,
+            path=item["local_path"],
+            sha256=item["sha256"],
+            size=item["size"],
+        )
+        verify_remote_object(
+            client,
+            bucket=connection.bucket,
+            key=key,
+            sha256=item["sha256"],
+            size=item["size"],
+        )
+        if outcome == "uploaded":
+            uploaded_objects += 1
+            uploaded_bytes += item["size"]
+        else:
+            reused_objects += 1
+            reused_bytes += item["size"]
+
     signed_manifest, publication = publish_manifest_contract(
         connection=connection,
         client=client,
         manifest=manifest,
         signing_key=signing_key,
         signing_key_id=signing_key_id,
+        latest_pointer=latest_pointer,
     )
     receipt = BackupReceipt(
         recovery_point_id=recovery_point_id,
@@ -553,8 +797,8 @@ def publish_snapshot(
         uploaded_bytes=uploaded_bytes,
         reused_objects=reused_objects,
         reused_bytes=reused_bytes,
-        total_objects=len(files),
-        total_bytes=sum(item["size"] for item in files),
+        total_objects=counts["objects"],
+        total_bytes=counts["bytes"],
         base_manifest_sha256=base_digest,
     )
     return signed_manifest, receipt

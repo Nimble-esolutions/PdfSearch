@@ -72,6 +72,18 @@ class V3RestoreTests(TestCase):
                 "INSERT INTO core_pdffile VALUES (?, ?)",
                 [(1, "ready"), (1, "ready")],
             )
+            db.execute("CREATE TABLE core_folder (id INTEGER PRIMARY KEY)")
+            db.execute("INSERT INTO core_folder VALUES (1)")
+            db.execute("CREATE TABLE core_customuser (id INTEGER PRIMARY KEY)")
+            db.execute("INSERT INTO core_customuser VALUES (1)")
+            db.execute(
+                "CREATE TABLE django_migrations "
+                "(app TEXT, name TEXT, applied TEXT)"
+            )
+            db.execute(
+                "INSERT INTO django_migrations VALUES "
+                "('core', '0027', '2026-08-03T00:00:00Z')"
+            )
         (workspace / "media" / "pdfs" / "one.pdf").write_bytes(b"pdf-one")
         (workspace / "media" / "pdfs" / "two.PDF").write_bytes(b"pdf-two")
         records = []
@@ -92,6 +104,7 @@ class V3RestoreTests(TestCase):
         snapshot_id = uuid.uuid4()
         evidence = {
             "snapshot_id": str(snapshot_id),
+            "included_epoch": 1,
             "source_stable": True,
             "consistency": {
                 "sqlite_integrity": "ok",
@@ -99,7 +112,9 @@ class V3RestoreTests(TestCase):
             },
             "files": records,
             "inventory": {
-                "database": {"migrations": {"latest": "0027"}},
+                "database": {
+                    "migrations": {"latest": "core.0027", "count": 1}
+                },
                 "counts": {"pdf_rows": 2, "folders": 1, "users": 1},
             },
             "faiss": {"unavailable_documents": {"count": 0}},
