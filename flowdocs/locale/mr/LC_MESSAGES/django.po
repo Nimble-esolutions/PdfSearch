@@ -4785,3 +4785,30 @@ msgstr "इतिहास आणि तांत्रिक पुरावा
 
 msgid "Storage and automation"
 msgstr "साठवण आणि स्वयंचलन"
+
+msgid "Data protection"
+msgstr "डेटा संरक्षण"
+
+msgid "Check health"
+msgstr "डेटा स्थिती तपासा"
+
+msgid "Back up data"
+msgstr "डेटाचा बॅकअप घ्या"
+
+msgid "Recovery points"
+msgstr "पुनर्प्राप्ती बिंदू"
+
+msgid "Search maintenance"
+msgstr "शोध देखभाल"
+
+msgid "Activity and technical evidence"
+msgstr "क्रियाकलाप आणि तांत्रिक पुरावा"
+
+msgid "Discover latest recovery point"
+msgstr "नवीनतम पुनर्प्राप्ती बिंदू शोधा"
+
+msgid "Local derived data"
+msgstr "स्थानिक व्युत्पन्न डेटा"
+
+msgid "Maintenance jobs"
+msgstr "देखभाल कार्ये"

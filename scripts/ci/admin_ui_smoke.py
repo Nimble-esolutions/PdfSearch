@@ -99,54 +99,85 @@ def main():
 
         operations = client.get("/dashboard/operations/")
         require(operations.status_code == 200, "backup and restore GET failed")
-        require("Data operations" in operations.text, "data operations heading missing")
-        require("Refresh data" in operations.text, "refresh controls missing")
-        require("Back up data" in operations.text, "backup controls missing")
-        require("Restore data" in operations.text, "restore controls missing")
+        for expected in (
+            "Data protection",
+            "Check health",
+            "Back up data",
+            "Recovery points",
+            "Search maintenance",
+            "Activity and technical evidence",
+        ):
+            require(
+                expected in operations.text,
+                f"guided data protection workbench missing: {expected}",
+            )
+        for obsolete in (
+            "Refresh data",
+            "Storage profiles",
+            "Backup &amp; sync jobs",
+            "Advanced manual controls",
+            'name="source_profile"',
+            'name="destination_profile"',
+        ):
+            require(
+                obsolete not in operations.text,
+                f"obsolete workbench control found: {obsolete}",
+            )
         require(
             "vendor/bootstrap/5.3.0" in operations.text,
             "vendored Bootstrap asset missing",
         )
         require("cdn.jsdelivr.net" not in operations.text, "external Bootstrap dependency found")
-        configuration = client.get("/dashboard/data-operations/configuration/")
-        require(configuration.status_code == 200 and "Storage profiles" in configuration.text, "configuration page missing")
-        maintenance = client.get("/dashboard/operations/?section=maintenance")
+
+        token = csrf_token(operations.text)
+        health_check = client.post(
+            "/dashboard/data-operations/actions/",
+            data={
+                "csrfmiddlewaretoken": token,
+                "action": "health_check",
+            },
+        )
+        require(health_check.status_code == 200, "read-only health check failed")
+        require(
+            "Health check" in health_check.text
+            and "This check was read-only" in health_check.text,
+            "read-only health-check evidence missing",
+        )
+
+        maintenance = client.get("/dashboard/data-operations/advanced/")
         require(maintenance.status_code == 200, "maintenance workbench GET failed")
         for expected in (
-            "Documents",
-            "Refresh and repair",
-            "History and technical evidence",
-            "Storage and automation",
+            "Search maintenance",
+            "Local derived data",
+            "Maintenance jobs",
         ):
             require(
                 expected in maintenance.text,
-                f"guided maintenance workbench missing: {expected}",
+                f"search maintenance workbench missing: {expected}",
             )
-        state = client.get("/dashboard/operations/api/v1/state/")
+        require(
+            'name="action" value="restore"' not in maintenance.text
+            and 'name="action" value="backup"' not in maintenance.text,
+            "recovery controls leaked into search maintenance",
+        )
+
+        state = client.get("/dashboard/data-operations/state/")
         require(state.status_code == 200, "workbench state API failed")
         state_payload = state.json()
         require(
-            "state_version" in state_payload
-            and "correlation_id" in state_payload
-            and "owner_token" not in state.text,
+            "posture" in state_payload
+            and "v3" in state_payload
+            and "permissions" in state_payload
+            and "history" in state_payload,
+            "v3 workbench state contract missing",
+        )
+        require(
+            "owner_token" not in state.text
+            and "secret_key" not in state.text
+            and "access_key" not in state.text,
             "workbench state contract or redaction failed",
         )
-        retention = client.get("/dashboard/operations/?section=retention")
-        require(
-            retention.status_code == 200
-            and "History and technical evidence" in retention.text
-            and "Credentials are never shown here" in retention.text
-            and "Permanently delete" not in retention.text,
-            "truthful data operations controls missing",
-        )
-        diagnostics = client.get("/dashboard/operations/api/v1/diagnostics/")
-        require(
-            diagnostics.status_code == 200
-            and "credential_alias" not in diagnostics.text
-            and "owner_token" not in diagnostics.text
-            and "object_key" not in diagnostics.text,
-            "diagnostic export contract or redaction failed",
-        )
+
         token = csrf_token(operations.text)
         marathi = client.post(
             "/i18n/setlang/",
@@ -160,8 +191,11 @@ def main():
         operations_mr = client.get("/dashboard/operations/")
         require(
             operations_mr.status_code == 200
-            and "डेटा संचालन" in operations_mr.text
-            and "इतिहास आणि तांत्रिक पुरावा" in operations_mr.text,
+            and "डेटा संरक्षण" in operations_mr.text
+            and "डेटाचा बॅकअप घ्या" in operations_mr.text
+            and "पुनर्प्राप्ती बिंदू" in operations_mr.text
+            and "शोध देखभाल" in operations_mr.text
+            and "क्रियाकलाप आणि तांत्रिक पुरावा" in operations_mr.text,
             "reviewed Marathi workbench language missing",
         )
         token = csrf_token(operations_mr.text)
@@ -300,7 +334,7 @@ def main():
         require(new_user.is_active is False, "toggle user did not persist")
 
     print(
-        "admin http smoke passed: login dashboard vault workbench "
+        "admin http smoke passed: login dashboard data protection workbench "
         "English/Marathi no-JS category keywords rename folder pdf view "
         "users register toggle"
     )
