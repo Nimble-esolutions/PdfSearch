@@ -3,11 +3,12 @@
 {% block title %}{% trans "Search maintenance — Data Operations" %}{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'main/css/data-operations.css' %}">{% endblock %}
 {% block content %}
-<main class="dataops-workbench">
+<div class="dataops-workbench">
   {% include "dataops/_navigation.html" %}
   <header class="dataops-heading">
-    <div><p class="dataops-kicker">{% trans "Local derived data" %}</p><h2>{% trans "Search maintenance" %}</h2><p>{% trans "Preview and supervise validation, index repair, and selective reprocessing. Backup, restore, and activation stay in the guided Data protection workflow." %}</p></div>
+    <div><p class="dataops-kicker">{% trans "Local derived data" %}</p><h2 id="dataops-search-maintenance-heading">{% trans "Search maintenance" %}</h2><p>{% trans "Preview and supervise validation, index repair, and selective reprocessing. Backup, restore, and activation stay in the guided Data protection workflow." %}</p></div>
   </header>
   {% include "dataops/_advanced_maintenance.html" %}
-</main>
+</div>
 {% endblock %}
+{% block extra_js %}<script src="{% static 'main/js/maintenance-scope.js' %}" defer></script>{% endblock %}

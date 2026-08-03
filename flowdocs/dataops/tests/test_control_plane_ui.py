@@ -432,6 +432,117 @@ class DataOpsV3RenderedActionTests(TestCase):
         ):
             self.assertNotContains(response, obsolete)
 
+    def test_search_maintenance_collapses_shared_blocker_and_scales_scope(self):
+        blocker = "mutation_tracking_disabled"
+        maintenance = {
+            "state_version": "state-v1",
+            "capabilities": {
+                "validate": {"enabled": True, "reason_code": ""},
+                **{
+                    operation: {
+                        "enabled": False,
+                        "reason_code": blocker,
+                        "shared_blocker": True,
+                        "shared_blocker_id": "maintenance-capability-blocker-1",
+                    }
+                    for operation in (
+                        "repair_indexes",
+                        "reindex_needed",
+                        "reindex_selected",
+                    )
+                },
+            },
+            "capability_blockers": [
+                {
+                    "dom_id": "maintenance-capability-blocker-1",
+                    "reason_code": blocker,
+                    "affected_operations": [
+                        "repair_indexes",
+                        "reindex_needed",
+                        "reindex_selected",
+                    ],
+                }
+            ],
+            "folders": [
+                {"id": number, "name": f"Category {number:02d}", "pdf_count": number}
+                for number in range(1, 47)
+            ],
+            "plans": [],
+            "jobs": [],
+            "active_jobs": [],
+            "job_history": [],
+            "selected_plan": None,
+            "selected_job": None,
+            "confirmation_phrase": "REINDEX SELECTED",
+        }
+        with patch(
+            "dataops.views.workbench_maintenance_state",
+            return_value=maintenance,
+        ):
+            response = self.client.get(reverse("dataops:advanced"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, blocker, count=1)
+        self.assertContains(response, "Shared requirement")
+        self.assertContains(response, "data-maintenance-scope")
+        self.assertContains(response, 'name="folder_ids"', count=46)
+        self.assertContains(response, "maintenance-scope.js")
+        self.assertContains(
+            response,
+            "Unavailable until the shared requirement is resolved.",
+            count=3,
+        )
+
+    def test_search_maintenance_is_read_only_for_non_superadmins(self):
+        admin = get_user_model().objects.create_user(
+            "read-only-admin",
+            "read-only-admin@example.invalid",
+            "test-password",
+            role="admin",
+        )
+        self.client.force_login(admin)
+        maintenance = {
+            "state_version": "state-v1",
+            "capabilities": {
+                operation: {
+                    "enabled": True,
+                    "reason_code": "",
+                    "shared_blocker": False,
+                    "shared_blocker_id": "",
+                }
+                for operation in (
+                    "validate",
+                    "repair_indexes",
+                    "reindex_needed",
+                    "reindex_selected",
+                )
+            },
+            "capability_blockers": [],
+            "folders": [],
+            "plans": [],
+            "jobs": [],
+            "active_jobs": [],
+            "attention_jobs": [],
+            "job_history": [],
+            "selected_plan": None,
+            "selected_job": None,
+            "confirmation_phrase": "REINDEX SELECTED",
+        }
+        with patch(
+            "dataops.views.workbench_maintenance_state",
+            return_value=maintenance,
+        ):
+            response = self.client.get(reverse("dataops:advanced"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Superadmin approval required.", count=4)
+        self.assertNotContains(response, 'type="submit" name="operation"')
+        self.assertContains(
+            response,
+            '<h2 id="dataops-search-maintenance-heading">Search maintenance</h2>',
+            html=True,
+        )
+
     @override_settings(
         LOCAL_INDEX_MAINTENANCE_ENABLED=True,
         FORCE_REINDEX_ENABLED=True,

@@ -1774,3 +1774,95 @@ msgstr ""
 #: core/templates/dataops/_advanced_maintenance.html
 msgid "The verified search update is ready. Activation still requires the exact signed confirmation shown on the next screen."
 msgstr ""
+
+#: core/templates/dashboard.html
+msgid "Storage connection"
+msgstr ""
+
+#: core/templates/dashboard.html
+msgid "Connected"
+msgstr ""
+
+#: core/templates/dashboard.html
+msgid "Active runtime"
+msgstr ""
+
+#: core/templates/dashboard.html
+msgid "Verified"
+msgstr ""
+
+#: core/templates/dashboard.html
+msgid "Indexing ratio"
+msgstr ""
+
+#: core/templates/dashboard.html
+msgid "Technical details"
+msgstr ""
+
+#: core/templates/dashboard.html
+msgid "Active generation"
+msgstr ""
+
+#: core/templates/dashboard.html
+msgid "Manifest digest"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Shared requirement"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "This requirement blocks one maintenance action."
+msgid_plural "This requirement blocks %(affected)s maintenance actions."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Unavailable until the shared requirement is resolved."
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Superadmin approval required."
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Find categories"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Select visible"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Clear selection"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "selected"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "visible"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "total"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "No maintenance work is currently active."
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Needs attention"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Show one past job"
+msgid_plural "Show %(count)s past jobs"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/dataops/_maintenance_job.html
+msgid "Work size is not available yet."
+msgstr ""
