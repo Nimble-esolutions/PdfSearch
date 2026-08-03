@@ -9,6 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import DataConnection, DataOperation, RecoveryPoint, RestoreCandidate
+from .v3_activation import schedule_candidate_activation
 from .v3_candidate import prepare_recovery_candidate
 from .v3_config import connection_from_model
 from .v3_executor import V3ExecutionError, validate_operation_plan
@@ -95,17 +96,16 @@ def execute_legacy_import_operation(
     client_factory=client_for_connection,
     migration_runner=None,
     candidate_preparer=prepare_recovery_candidate,
+    activation_scheduler=schedule_candidate_activation,
 ) -> dict:
     validate_operation_plan(operation)
     if operation.kind != DataOperation.Kind.IMPORT:
         raise V3ExecutionError("operation_kind_invalid", stage="preflight")
     if operation.lifecycle_route != "legacy_import":
         raise V3ExecutionError("lifecycle_route_invalid", stage="preflight")
-    if operation.lifecycle_plan.get("activation") != "none":
-        raise V3ExecutionError(
-            "signed_activation_executor_not_available",
-            stage="preflight",
-        )
+    activation_mode = str(operation.lifecycle_plan.get("activation") or "none")
+    if activation_mode not in {"none", "signed_atomic"}:
+        raise V3ExecutionError("activation_mode_invalid", stage="preflight")
     if operation.connection_id is None:
         raise V3ExecutionError("owned_connection_missing", stage="preflight")
     source_model = _source_connection(operation)
@@ -267,6 +267,25 @@ def execute_legacy_import_operation(
             "restore_candidate_conflict",
             stage="publish_receipt",
         )
+    activation = None
+    if activation_mode == "signed_atomic":
+        if not candidate_ready:
+            raise V3ExecutionError(
+                "candidate_not_activation_ready",
+                stage="activation",
+            )
+        try:
+            activation = activation_scheduler(
+                candidate,
+                operation=operation,
+                confirmed=True,
+            )
+        except Exception as exc:
+            raise V3ExecutionError(
+                getattr(exc, "code", "activation_scheduling_failed"),
+                stage="activation",
+                retryable=bool(getattr(exc, "retryable", False)),
+            ) from exc
     return {
         "contract_version": 3,
         "status": "ready_for_activation" if candidate_ready else "verified_rehearsal",
@@ -278,6 +297,7 @@ def execute_legacy_import_operation(
         "indexing_ratio": effective_ratio,
         "requires_reindex": not candidate_ready,
         "activation_performed": False,
+        "activation": activation,
         "legacy_import_receipt": import_receipt.as_dict(),
         "plan_digest": operation.lifecycle_plan_digest,
     }

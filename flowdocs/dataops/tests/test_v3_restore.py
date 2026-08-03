@@ -156,9 +156,19 @@ class V3RestoreTests(TestCase):
             client_factory=lambda _connection: self.client,
         )
 
-    def operation_for(self, point, *, intent=LifecycleIntent.RESTORE):
+    def operation_for(
+        self,
+        point,
+        *,
+        intent=LifecycleIntent.RESTORE,
+        activate=False,
+    ):
         plan = compile_lifecycle_plan(
-            LifecycleRequest(intent),
+            LifecycleRequest(
+                intent,
+                activate=activate,
+                confirmation_present=activate,
+            ),
             InstanceIdentity(
                 environment="staging",
                 deployment_id="stage-2026",
@@ -169,6 +179,8 @@ class V3RestoreTests(TestCase):
                 owned_store_writable=True,
                 source_readable=True,
                 quarantine_writable=True,
+                signing_available=activate,
+                activation_available=activate,
                 isolated_restore_available=True,
             ),
             ArtifactPassport(
@@ -377,7 +389,7 @@ class V3RestoreTests(TestCase):
                 signing_key_id="stage-manifest-1",
             )
 
-    def test_queued_same_dataset_restore_builds_verified_candidate(self):
+    def test_queued_same_dataset_restore_builds_ready_candidate(self):
         operation = self.operation_for(self.point)
 
         def migration_runner(*_args, **_kwargs):
@@ -395,9 +407,38 @@ class V3RestoreTests(TestCase):
         candidate = RestoreCandidate.objects.using("control").get(
             operation=operation
         )
-        self.assertEqual(result["status"], "verified_rehearsal")
+        self.assertEqual(result["status"], "ready_for_activation")
         self.assertEqual(result["indexing_ratio"], 1.0)
-        self.assertEqual(candidate.state, RestoreCandidate.State.VERIFIED)
+        self.assertEqual(candidate.state, RestoreCandidate.State.READY)
+        self.assertFalse(result["activation_performed"])
+
+    def test_approved_activation_is_scheduled_only_after_candidate_is_ready(self):
+        operation = self.operation_for(self.point, activate=True)
+        scheduled = []
+
+        def scheduler(candidate, *, operation, confirmed):
+            scheduled.append((candidate.state, operation.public_id, confirmed))
+            return {
+                "state": "scheduled",
+                "intent_id": "activation-intent-1",
+                "manifest_digest": candidate.manifest_digest,
+            }
+
+        with override_settings(
+            ACTIVATION_INTENT_SIGNING_KEY=self.signing_key.decode(),
+            DATAOPS_RESTORE_STAGING_ROOT=self.root / "activation-quarantine",
+        ):
+            result = execute_restore_operation(
+                operation,
+                client_factory=lambda _connection: self.client,
+                migration_runner=lambda *_args, **_kwargs: {"success": True},
+                activation_scheduler=scheduler,
+            )
+        self.assertEqual(
+            scheduled,
+            [(RestoreCandidate.State.READY, operation.public_id, True)],
+        )
+        self.assertEqual(result["activation"]["state"], "scheduled")
         self.assertFalse(result["activation_performed"])
 
     def test_queued_isolated_recovery_never_imports_or_activates(self):

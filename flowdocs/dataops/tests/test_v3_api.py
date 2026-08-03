@@ -194,25 +194,50 @@ class DataOpsV3APITests(TestCase):
         self.assertEqual(response.json()["error"]["code"], "bucket_access_failed")
         self.assertFalse(DataOperation.objects.using("control").exists())
 
-    def test_activation_is_not_queued_until_signed_executor_is_available(self):
+    def test_activation_requires_exact_preview_confirmation_and_is_queued(self):
         point = self.recovery_point(
             dataset_id="ai-sahakar-stage-2026",
             release_id="stage-backup-activation",
             digest="e" * 64,
         )
-        response = self.post_operation(
+        refused = self.post_operation(
             {
                 "action": "restore",
                 "recovery_point_id": str(point.public_id),
                 "activate": True,
             }
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(
-            response.json()["error"]["code"],
-            "signed_activation_executor_not_available",
+        self.assertEqual(refused.status_code, 409)
+        self.assertIn(
+            "operator_confirmation_required",
+            refused.json()["plan"]["refusal_codes"],
         )
         self.assertFalse(DataOperation.objects.using("control").exists())
+
+        preview = self.post_preview(
+            {
+                "action": "restore",
+                "recovery_point_id": str(point.public_id),
+                "activate": True,
+                "confirmation": "present",
+            }
+        )
+        self.assertEqual(preview.status_code, 200)
+        confirmation = preview.json()["confirmation"]["token"]
+        response = self.post_operation(
+            {
+                "action": "restore",
+                "recovery_point_id": str(point.public_id),
+                "activate": True,
+                "confirmation": confirmation,
+                "idempotency_key": "activate-once",
+            }
+        )
+        self.assertEqual(response.status_code, 202)
+        operation = DataOperation.objects.using("control").get(
+            public_id=response.json()["operation_id"]
+        )
+        self.assertEqual(operation.lifecycle_plan["activation"], "signed_atomic")
 
     def test_restore_start_queues_exact_source_without_profile_selectors(self):
         point = self.recovery_point(

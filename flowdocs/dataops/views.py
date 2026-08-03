@@ -223,7 +223,9 @@ def v3_operation_preview(request):
         "plan": plan.as_dict(),
         "active_data_unchanged_until_activation": True,
     }
-    if action == "import" and plan.allowed:
+    if plan.allowed and (
+        action == "import" or plan.activation == "signed_atomic"
+    ):
         response["confirmation"] = {
             "required": True,
             "token": _v3_confirmation_token(config.digest, plan.plan_digest),
@@ -249,8 +251,6 @@ def v3_operation_start(request):
         if action not in {"backup", "restore", "test_recovery", "import"}:
             raise ValueError("executor_not_available")
         activate = _v3_bool(payload.get("activate"), field="activate")
-        if activate:
-            raise ValueError("signed_activation_executor_not_available")
         point = _v3_recovery_point(payload.get("recovery_point_id"))
         initial_config = runtime_config()
         connection = materialize_primary_connection(initial_config)
@@ -292,7 +292,9 @@ def v3_operation_start(request):
                 {"configuration_digest": config.digest, "plan": plan.as_dict()},
                 status=409,
             )
-        if action == "import" and str(payload.get("confirmation") or "") != (
+        if (
+            action == "import" or plan.activation == "signed_atomic"
+        ) and str(payload.get("confirmation") or "") != (
             _v3_confirmation_token(config.digest, plan.plan_digest)
         ):
             raise ValueError("confirmation_mismatch")

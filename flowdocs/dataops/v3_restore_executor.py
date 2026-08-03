@@ -9,6 +9,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import DataOperation, RecoveryPoint, RestoreCandidate
+from .v3_activation import schedule_candidate_activation
+from .v3_candidate import prepare_recovery_candidate
 from .v3_config import connection_from_model
 from .v3_executor import V3ExecutionError, validate_operation_plan
 from .v3_import import import_rebind_recovery_point
@@ -95,6 +97,8 @@ def execute_restore_operation(
     lease=None,
     client_factory=client_for_connection,
     migration_runner=None,
+    candidate_preparer=prepare_recovery_candidate,
+    activation_scheduler=schedule_candidate_activation,
 ) -> dict:
     validate_operation_plan(operation)
     if operation.kind not in {
@@ -102,11 +106,9 @@ def execute_restore_operation(
         DataOperation.Kind.TEST_RECOVERY,
     }:
         raise V3ExecutionError("operation_kind_invalid", stage="preflight")
-    if operation.lifecycle_plan.get("activation") != "none":
-        raise V3ExecutionError(
-            "signed_activation_executor_not_available",
-            stage="preflight",
-        )
+    activation_mode = str(operation.lifecycle_plan.get("activation") or "none")
+    if activation_mode not in {"none", "signed_atomic"}:
+        raise V3ExecutionError("activation_mode_invalid", stage="preflight")
     route = str(operation.lifecycle_route or "")
     if route not in {
         "same_dataset_restore",
@@ -221,13 +223,29 @@ def execute_restore_operation(
     indexing_ratio = float(
         restored.get("evidence", {}).get("indexing_ratio", 0.0)
     )
+    candidate_preparation = {}
+    if route != "isolated_rehearsal" and indexing_ratio < 1.0:
+        try:
+            candidate_preparation = candidate_preparer(restored)
+        except Exception as exc:
+            raise V3ExecutionError(
+                getattr(exc, "code", "candidate_preparation_failed"),
+                stage="candidate_preparation",
+                retryable=bool(getattr(exc, "retryable", False)),
+            ) from exc
+        indexing_ratio = float(candidate_preparation.get("indexing_ratio", 0.0))
+    candidate_ready = route != "isolated_rehearsal" and indexing_ratio == 1.0
     candidate, created = RestoreCandidate.objects.using("control").get_or_create(
         operation=operation,
         defaults={
             "recovery_point": effective_point,
             "environment": str(operation.lifecycle_plan.get("environment") or ""),
             "workspace": str(restored["workspace"]),
-            "state": RestoreCandidate.State.VERIFIED,
+            "state": (
+                RestoreCandidate.State.READY
+                if candidate_ready
+                else RestoreCandidate.State.VERIFIED
+            ),
             "manifest_digest": effective_point.manifest_digest,
             "evidence": {
                 "restore": {
@@ -238,6 +256,11 @@ def execute_restore_operation(
                 "rehearsal": rehearsal,
                 "indexing_ratio": indexing_ratio,
                 "requires_reindex": indexing_ratio < 1.0,
+                "candidate_preparation": {
+                    key: value
+                    for key, value in candidate_preparation.items()
+                    if key != "workspace"
+                },
                 "import_receipt": (
                     import_receipt.as_dict() if import_receipt else None
                 ),
@@ -253,9 +276,32 @@ def execute_restore_operation(
             "restore_candidate_conflict",
             stage="publish_receipt",
         )
+    activation = None
+    if activation_mode == "signed_atomic":
+        if not candidate_ready:
+            raise V3ExecutionError(
+                "candidate_not_activation_ready",
+                stage="activation",
+            )
+        try:
+            activation = activation_scheduler(
+                candidate,
+                operation=operation,
+                confirmed=True,
+            )
+        except Exception as exc:
+            raise V3ExecutionError(
+                getattr(exc, "code", "activation_scheduling_failed"),
+                stage="activation",
+                retryable=bool(getattr(exc, "retryable", False)),
+            ) from exc
     return {
         "contract_version": 3,
-        "status": "verified_rehearsal",
+        "status": (
+            "ready_for_activation"
+            if candidate_ready
+            else "verified_rehearsal"
+        ),
         "route": route,
         "source_recovery_point_id": str(point.public_id),
         "effective_recovery_point_id": str(effective_point.public_id),
@@ -265,5 +311,6 @@ def execute_restore_operation(
         "indexing_ratio": indexing_ratio,
         "requires_reindex": indexing_ratio < 1.0,
         "activation_performed": False,
+        "activation": activation,
         "plan_digest": operation.lifecycle_plan_digest,
     }
