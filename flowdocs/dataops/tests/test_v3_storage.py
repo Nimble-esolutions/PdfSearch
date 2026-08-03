@@ -21,21 +21,23 @@ class MissingObject(Exception):
 
 
 class FakeS3:
-    def __init__(self, *, preserve_metadata=True):
+    def __init__(self, *, preserve_metadata=True, titlecase_metadata=False):
         self.objects = {}
         self.puts = []
         self.preserve_metadata = preserve_metadata
+        self.titlecase_metadata = titlecase_metadata
 
     def head_object(self, *, Bucket, Key):
         try:
             item = self.objects[(Bucket, Key)]
         except KeyError as exc:
             raise MissingObject() from exc
+        metadata = dict(item["metadata"]) if self.preserve_metadata else {}
+        if self.titlecase_metadata:
+            metadata = {name.title(): value for name, value in metadata.items()}
         return {
             "ContentLength": len(item["body"]),
-            "Metadata": (
-                dict(item["metadata"]) if self.preserve_metadata else {}
-            ),
+            "Metadata": metadata,
         }
 
     def put_object(self, *, Bucket, Key, Body, Metadata, **kwargs):
@@ -121,6 +123,28 @@ class V3StorageTests(unittest.TestCase):
     def test_missing_provider_metadata_uses_content_hash_readback(self):
         client = FakeS3(preserve_metadata=False)
         body = b"metadata-optional"
+        digest = hashlib.sha256(body).hexdigest()
+        first = put_bytes_immutable(
+            client,
+            bucket="bucket",
+            key="blob",
+            body=body,
+            sha256=digest,
+            content_type="application/octet-stream",
+        )
+        second = put_bytes_immutable(
+            client,
+            bucket="bucket",
+            key="blob",
+            body=body,
+            sha256=digest,
+            content_type="application/octet-stream",
+        )
+        self.assertEqual((first, second), ("uploaded", "reused"))
+
+    def test_provider_metadata_keys_are_case_insensitive(self):
+        client = FakeS3(titlecase_metadata=True)
+        body = b"case-normalized-metadata"
         digest = hashlib.sha256(body).hexdigest()
         first = put_bytes_immutable(
             client,

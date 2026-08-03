@@ -169,7 +169,10 @@ def verify_head(
     """
     if head is None:
         raise V3StorageError("immutable_object_missing")
-    metadata = head.get("Metadata") or {}
+    metadata = {
+        str(name).lower(): value
+        for name, value in (head.get("Metadata") or {}).items()
+    }
     observed_digest = str(metadata.get("sha256") or "").lower()
     observed_size = head.get("ContentLength")
     if observed_size != size or (observed_digest and observed_digest != sha256):

@@ -25,11 +25,13 @@ class FakeS3:
         conditional=True,
         accessible=True,
         metadata=True,
+        titlecase_metadata=False,
         bulk_delete=True,
     ):
         self.conditional = conditional
         self.accessible = accessible
         self.metadata = metadata
+        self.titlecase_metadata = titlecase_metadata
         self.bulk_delete = bulk_delete
         self.objects = {}
 
@@ -65,9 +67,12 @@ class FakeS3:
 
     def head_object(self, *, Bucket, Key):
         item = self.objects[(Bucket, Key)]
+        metadata = dict(item["metadata"]) if self.metadata else {}
+        if self.titlecase_metadata:
+            metadata = {name.title(): value for name, value in metadata.items()}
         return {
             "ETag": item["etag"],
-            "Metadata": dict(item["metadata"]) if self.metadata else {},
+            "Metadata": metadata,
         }
 
     def get_bucket_versioning(self, *, Bucket):
@@ -140,6 +145,17 @@ class V3ConnectionTests(TestCase):
         self.assertTrue(connection_is_ready(self.connection))
         self.assertTrue(self.connection.capabilities["write"])
         self.assertFalse(self.connection.capabilities["metadata"])
+
+    def test_metadata_probe_accepts_provider_header_casing(self):
+        probe_owned_connection(
+            self.connection,
+            client_factory=lambda _connection: FakeS3(
+                titlecase_metadata=True,
+            ),
+        )
+        self.connection.refresh_from_db(using="control")
+        self.assertTrue(connection_is_ready(self.connection))
+        self.assertTrue(self.connection.capabilities["metadata"])
 
     def test_probe_cleanup_falls_back_when_bulk_delete_is_unsupported(self):
         client = FakeS3(bulk_delete=False)

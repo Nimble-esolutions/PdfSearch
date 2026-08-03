@@ -270,7 +270,10 @@ def _probe_metadata(client: Any, bucket: str, prefix: str) -> bool:
         Metadata={"test-key": "test-value"},
     )
     resp = client.head_object(Bucket=bucket, Key=key)
-    meta = resp.get("Metadata", {})
+    meta = {
+        str(name).lower(): value
+        for name, value in (resp.get("Metadata", {}) or {}).items()
+    }
     return meta.get("test-key") == "test-value"
 
 
