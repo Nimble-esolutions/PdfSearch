@@ -69,6 +69,17 @@
   </section>
   {% endif %}
 
+  {% if ui_discovery %}
+  <section class="dataops-alert" role="status">
+    <h3>{% trans "Recovery point discovered" %}</h3>
+    <p>{% trans "The latest signed recovery point is now available locally for review. No data was restored or activated." %}</p>
+    <dl class="dataops-facts">
+      <div><dt>{% trans "Recovery point" %}</dt><dd><code lang="en" dir="ltr">{{ ui_discovery.release_id }}</code></dd></div>
+      <div><dt>{% trans "Manifest digest" %}</dt><dd><code lang="en" dir="ltr">{{ ui_discovery.manifest_digest }}</code></dd></div>
+    </dl>
+  </section>
+  {% endif %}
+
   {% if ui_preview %}
   <section class="dataops-panel" aria-labelledby="dataops-preview-heading">
     <header><p class="dataops-eyebrow">{% trans "Review before starting" %}</p><h3 id="dataops-preview-heading">{% trans "Operation preview" %}</h3></header>
@@ -155,7 +166,16 @@
           </form>
         </div>
       </article>
-      {% empty %}<p class="dataops-empty">{% trans "No verified recovery point is available. Create a backup or complete an approved legacy import first." %}</p>{% endfor %}
+      {% empty %}
+      <div class="dataops-empty">
+        <p>{% trans "No verified recovery point is recorded on this instance. If the configured recovery store already contains one, discover and verify it without restoring data." %}</p>
+        <form class="dataops-form" method="post" action="{% url 'dataops:workbench_action' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="discover_latest">
+          <button class="dataops-button dataops-button--secondary" type="submit">{% trans "Discover latest recovery point" %}</button>
+        </form>
+      </div>
+      {% endfor %}
     </div>
   </section>
 

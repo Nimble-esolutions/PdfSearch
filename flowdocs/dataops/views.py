@@ -43,9 +43,11 @@ from .v3_connection import (
     ensure_connection_readable,
     ensure_owned_connection_ready,
 )
+from .v3_discovery import V3DiscoveryError, discover_latest_recovery_point
 from .v3_planning import action_status, compile_requested_plan, materialize_primary_connection, runtime_config
 from .v3_config import connection_from_model
 from .v3_legacy import V3LegacyImportError, load_legacy_generation
+from .v3_signing import V3SigningError, manifest_signing_material
 from .v3_storage import client_for_connection
 
 
@@ -583,6 +585,34 @@ def workbench_action(request):
             request,
             ui_health_check=payload,
             ui_health_check_ok=status == 200,
+        )
+    if action == "discover_latest":
+        try:
+            config = runtime_config()
+            connection = materialize_primary_connection(config)
+            ensure_connection_readable(connection)
+            signing_key, _key_id = manifest_signing_material()
+            point = discover_latest_recovery_point(
+                connection,
+                signing_key=signing_key,
+            )
+        except (
+            ValueError,
+            V3ConfigurationError,
+            V3ConnectionError,
+            V3DiscoveryError,
+            V3SigningError,
+        ) as exc:
+            return _render_workbench(
+                request,
+                ui_error_code=getattr(exc, "code", str(exc)),
+            )
+        return _render_workbench(
+            request,
+            ui_discovery={
+                "release_id": point.release_id,
+                "manifest_digest": point.manifest_digest,
+            },
         )
 
     phase = str(request.POST.get("phase") or "preview").strip().lower()

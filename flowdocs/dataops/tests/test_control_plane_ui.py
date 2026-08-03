@@ -236,6 +236,63 @@ class DataOpsV3RenderedActionTests(TestCase):
         self.assertFalse(DataOperation.objects.using("control").exists())
         self.assertFalse(DataOpsAuditEvent.objects.using("control").exists())
 
+    @patch("dataops.views.discover_latest_recovery_point")
+    @patch("dataops.views.manifest_signing_material")
+    @patch("dataops.views.ensure_connection_readable")
+    def test_fresh_control_store_can_discover_latest_signed_point(
+        self,
+        ensure_readable,
+        signing_material,
+        discover_latest,
+    ):
+        point = SimpleNamespace(
+            release_id="stage-recovery-1",
+            manifest_digest="b" * 64,
+        )
+        signing_material.return_value = (b"manifest-signing-key", "key-id")
+        discover_latest.return_value = point
+
+        self.assertFalse(RecoveryPoint.objects.using("control").exists())
+
+        response = self.client.post(
+            reverse("dataops:workbench_action"),
+            {"action": "discover_latest"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Recovery point discovered")
+        self.assertContains(response, point.release_id)
+        self.assertContains(response, point.manifest_digest)
+        self.assertContains(response, "No data was restored or activated")
+        ensure_readable.assert_called_once_with(self.connection)
+        discover_latest.assert_called_once_with(
+            self.connection,
+            signing_key=b"manifest-signing-key",
+        )
+        self.assertFalse(DataOperation.objects.using("control").exists())
+        self.assertFalse(DataOpsAuditEvent.objects.using("control").exists())
+
+    @patch("dataops.views.ensure_connection_readable")
+    def test_discovery_failure_renders_reason_without_a_500_or_operation(
+        self,
+        ensure_readable,
+    ):
+        from dataops.v3_connection import V3ConnectionError
+
+        ensure_readable.side_effect = V3ConnectionError(
+            "owned_connection_not_readable"
+        )
+
+        response = self.client.post(
+            reverse("dataops:workbench_action"),
+            {"action": "discover_latest"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "owned_connection_not_readable")
+        self.assertFalse(DataOperation.objects.using("control").exists())
+        self.assertFalse(DataOpsAuditEvent.objects.using("control").exists())
+
     def test_backup_preview_and_start_use_the_v3_plan_contract(self):
         preview = self.client.post(
             reverse("dataops:workbench_action"),
