@@ -720,6 +720,30 @@ class MaintenancePlanningTests(TestCase):
         self.assertEqual(response["X-DataOps-Reason-Code"], "empty_scope")
         self.assertNotIn("exception", response.headers)
 
+    def test_advanced_form_generated_key_is_always_accepted(self):
+        self.client.force_login(self.superadmin)
+        for unsafe_token in ("_leading-underscore", "-leading-dash"):
+            with self.subTest(unsafe_token=unsafe_token):
+                with patch(
+                    "dataops.views.secrets.token_urlsafe",
+                    return_value=unsafe_token,
+                ):
+                    page = self.client.get(reverse("dataops:advanced"))
+                rendered_key = page.context["idempotency_key"]
+                self.assertTrue(rendered_key[0].isalnum())
+
+                preview = self.client.post(
+                    reverse("vaultops:maintenance_plan_create"),
+                    {
+                        "operation": "validate",
+                        "folder_ids": [self.folder.pk],
+                        "idempotency_key": f"{rendered_key}:maintenance",
+                    },
+                )
+
+                self.assertEqual(preview.status_code, 302)
+                self.assertIn("?section=maintenance&plan=", preview["Location"])
+
     def test_dataops_workbench_renders_capabilities_and_disabled_reasons(self):
         self.client.force_login(self.superadmin)
         response = self.client.get(reverse("dataops:advanced"))

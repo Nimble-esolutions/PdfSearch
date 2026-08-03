@@ -56,6 +56,11 @@ _FORBIDDEN_V3_REQUEST_FIELDS = frozenset(
 )
 
 
+def _ui_idempotency_key():
+    """Return a random key accepted by every HTML mutation boundary."""
+    return f"ui-{secrets.token_urlsafe(18)}"
+
+
 def _contains_forbidden_v3_field(value):
     if isinstance(value, dict):
         for key, item in value.items():
@@ -316,7 +321,7 @@ def v3_operation_start(request):
             raise ValueError("confirmation_mismatch")
         idempotency_key = str(payload.get("idempotency_key") or "").strip()
         if not idempotency_key:
-            idempotency_key = secrets.token_urlsafe(18)
+            idempotency_key = _ui_idempotency_key()
         operation_kind = {
             "backup": DataOperation.Kind.BACKUP,
             "restore": DataOperation.Kind.RESTORE,
@@ -545,7 +550,7 @@ def _render_workbench(request, **extra_context):
     context = {
         "state": _state(request),
         "state_url": reverse("dataops:state"),
-        "idempotency_key": secrets.token_urlsafe(18),
+        "idempotency_key": _ui_idempotency_key(),
         "dataops_nav": _navigation("overview"),
     }
     context.update(extra_context)
@@ -630,7 +635,7 @@ def workbench_action(request):
         # normalization total so malformed input renders its API error rather
         # than causing a second, HTML-only exception.
         "activate": "1" if activate in {"1", "true", "yes", "on"} else "0",
-        "idempotency_key": str(request.POST.get("idempotency_key") or secrets.token_urlsafe(18)),
+        "idempotency_key": str(request.POST.get("idempotency_key") or _ui_idempotency_key()),
     }
     if api_response.status_code >= 400:
         error_code = (payload.get("error") or {}).get("code")
@@ -672,7 +677,7 @@ def backup(request):
         return HttpResponse("Superadmin approval required", status=403)
     destination = request.POST.get("destination_profile", "").strip().lower()
     source = request.POST.get("source_profile", "").strip().lower()
-    idempotency_key = request.POST.get("idempotency_key", "").strip() or secrets.token_urlsafe(18)
+    idempotency_key = request.POST.get("idempotency_key", "").strip() or _ui_idempotency_key()
     operation, _ = DataOperation.objects.using("control").get_or_create(
         kind=DataOperation.Kind.BACKUP,
         idempotency_key=idempotency_key,
@@ -699,7 +704,7 @@ def restore(request):
     release_id = request.POST.get("release_id", "").strip() or request.POST.get("recovery_point_id", "").strip()
     operation, _ = DataOperation.objects.using("control").get_or_create(
         kind=DataOperation.Kind.RESTORE,
-        idempotency_key=request.POST.get("idempotency_key", "") or secrets.token_urlsafe(18),
+        idempotency_key=request.POST.get("idempotency_key", "") or _ui_idempotency_key(),
         defaults={
             "state": DataOperation.State.QUEUED,
             "profile_key": source,
@@ -757,7 +762,7 @@ def clone_rebind(request):
         return HttpResponse(f"Clone/rebind blocked: {getattr(exc, 'code', str(exc))}", status=409)
     if not preview.ok:
         return HttpResponse("Clone/rebind confirmation or profile validation failed", status=409)
-    idempotency_key = request.POST.get("idempotency_key", "").strip() or secrets.token_urlsafe(18)
+    idempotency_key = request.POST.get("idempotency_key", "").strip() or _ui_idempotency_key()
     operation, created = DataOperation.objects.using("control").get_or_create(
         kind=DataOperation.Kind.CLONE_REBIND,
         idempotency_key=idempotency_key,
@@ -1050,7 +1055,7 @@ def advanced(request):
         "dataops/advanced.html",
         {
             "state": {"maintenance": maintenance},
-            "idempotency_key": secrets.token_urlsafe(18),
+            "idempotency_key": _ui_idempotency_key(),
             "can_act": _can_act(request),
             "dataops_nav": _navigation("advanced"),
         },
