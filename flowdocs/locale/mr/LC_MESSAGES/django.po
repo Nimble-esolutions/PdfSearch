@@ -1784,6 +1784,14 @@ msgid ""
 "Sorry, the requested information was not found in the available documents."
 msgstr "क्षमस्व, उपलब्ध दस्तऐवजांमध्ये संबंधित माहिती सापडली नाही."
 
+#: core/views.py
+msgid ""
+"No supporting source was found in the searchable documents. Try adding the "
+"Act, Rule, section number, society type, or topic."
+msgstr ""
+"शोधता येणाऱ्या कागदपत्रांमध्ये या प्रश्नाला आधार देणारा स्रोत सापडला नाही. "
+"कायदा, नियम, कलम क्रमांक, संस्थेचा प्रकार किंवा विषय नमूद करून पुन्हा प्रयत्न करा."
+
 #: core/templates/vaultops/workbench.html:69
 #| msgid "%(counter)s empty"
 #| msgid_plural "%(counter)s empty"

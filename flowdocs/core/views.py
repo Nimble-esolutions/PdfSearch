@@ -85,15 +85,11 @@ from datetime import datetime
 from .utils import (
     detect_language,
     build_or_load_faiss_index_for_folder,
-    search_pdfs_fast,
+    search_pdf_folders,
     is_general_query,
     detect_folder_by_keywords,
     semantic_folder_search,
-    truncate_context,
     detect_folder_by_keywords_multi,
-    TOP_K_CHUNKS,
-    MAX_CONTEXT_WORDS,
-    generate_gpt_answer,
     SearchDataIntegrityError,
 )
 
@@ -1624,6 +1620,10 @@ def search_query(request):
     if request.method in {"GET", "HEAD"}:
         if request.path.rstrip("/") == "/search":
             return redirect("home", permanent=True)
+        searchable_scope = visible_pdfs(
+            request.user,
+            public=not request.user.is_authenticated,
+        )
         return render(
             request,
             "search.html",
@@ -1719,13 +1719,8 @@ def search_query(request):
                 },
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
-                "indexed_count": PDFFile.objects.filter(
-                    indexed=True,
-                    lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
-                ).count(),
-                "total_count": PDFFile.objects.filter(
-                    lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
-                ).count(),
+                "indexed_count": searchable_scope.filter(indexed=True).count(),
+                "total_count": searchable_scope.count(),
             },
         )
 
@@ -1784,174 +1779,71 @@ def search_query(request):
             # --------------------------------------------------
             # 2️⃣ KEYWORD-BASED FOLDER DETECTION
             # --------------------------------------------------
+            visible_folders = list(
+                searchable_folders(request.user, public=public_search).order_by("pk")
+            )
             detected = detect_folder_by_keywords_multi(
                 query,
                 min_score_threshold=0.40,
-                folders=searchable_folders(request.user, public=public_search),
+                folders=visible_folders,
             )
 
-            visible_folder_ids = set(
-                searchable_folders(request.user, public=public_search).values_list("pk", flat=True)
+            folder_scores = {folder.pk: score for folder, score in detected}
+            folders_by_id = {folder.pk: folder for folder in visible_folders}
+            ordered_folders = [
+                folders_by_id[folder.pk]
+                for folder, _score in detected
+                if folder.pk in folders_by_id
+            ]
+            ordered_folders.extend(
+                folder for folder in visible_folders if folder.pk not in folder_scores
             )
 
-            # --------------------------------------------------
-            # 🔒 DOMINANCE-AWARE FOLDER LOCKING (FIX)
-            # --------------------------------------------------
-            locked_folders = []
+            folder_scopes = []
+            for folder in ordered_folders:
+                scoped_pdfs = None
+                if not public_search and not is_admin_user(request.user):
+                    scoped_pdfs = visible_pdfs(
+                        request.user,
+                        PDFFile.objects.filter(folder=folder),
+                        public=False,
+                    ).filter(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
+                folder_scopes.append((folder, scoped_pdfs))
 
-            if detected:
-                top_folder, top_score = detected[0]
-                second_score = detected[1][1] if len(detected) > 1 else 0.0
-
-                # HARD LOCK if dominant
-                if top_score >= 0.65 and (top_score - second_score) >= 0.15:
-                    locked_folders = [top_folder]
-                else:
-                    locked_folders = [folder for folder, _ in detected]
-                locked_folders = [
-                    folder for folder in locked_folders if folder.pk in visible_folder_ids
-                ]
-
-            # --------------------------------------------------
-            # 3️⃣ SEARCH ONLY INSIDE LOCKED FOLDERS
-            # --------------------------------------------------
-            if locked_folders:
-                aggregated_scores = {}
-
-                for folder in locked_folders:
-                    try:
-                        scoped_pdfs = (
-                            None
-                            if is_admin_user(request.user)
-                            else visible_pdfs(
-                                request.user,
-                                PDFFile.objects.filter(
-                                    folder=folder,
-                                    lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
-                                ),
-                                public=public_search,
-                            )
-                        )
-                        _, refs = search_pdfs_fast(
-                            folder,
-                            query,
-                            top_n_pdfs=3,
-                            pdfs=scoped_pdfs,
-                            language=language,
-                        )
-
-                        for r in refs:
-                            key = r.get("pdf_id") or r.get("title")
-                            score = float(r.get("score", 0))
-
-                            if key in aggregated_scores:
-                                aggregated_scores[key]["score"] += score
-                            else:
-                                aggregated_scores[key] = {
-                                    "score": score,
-                                    "meta": {
-                                        "title": r.get("title"),
-                                        "pdf_id": r.get("pdf_id"),
-                                        "folder": folder.name,
-                                        "uploaded_at": r.get("uploaded_at"),
-                                    }
-                                }
-                    except SearchDataIntegrityError:
-                        raise
-                    except Exception:
-                        continue
-
-                if aggregated_scores:
-                    ranked = sorted(
-                        aggregated_scores.values(),
-                        key=lambda x: x["score"],
-                        reverse=True
-                    )[:3]
-
-                    final_refs = []
-                    combined_snippets = []
-
-                    for item in ranked:
-                        meta = item["meta"]
-                        final_refs.append({
-                            "title": meta["title"],
-                            "pdf_id": meta["pdf_id"],
-                            "folder": meta["folder"],
-                            "uploaded_at": meta["uploaded_at"],
-                            "score": item["score"],
-                        })
-
-                        pdf = visible_pdfs(
-                            request.user,
-                            PDFFile.objects.filter(pk=meta["pdf_id"]),
-                            public=public_search,
-                        ).first()
-                        if pdf:
-                            combined_snippets.append(f"--- {pdf.title} ---")
-                            combined_snippets.extend(
-                                (pdf.page_chunks or [])[:TOP_K_CHUNKS]
-                            )
-
-                    combined_context = truncate_context(
-                        "\n\n".join(combined_snippets),
-                        MAX_CONTEXT_WORDS
-                    )
-
-                    answer = generate_gpt_answer(
-                        user_question=query,
-                        context=combined_context,
-                        references=final_refs,
-                        max_words=400,
-                        language=language,
-                    )
-
-                    return JsonResponse({
-                        "answer": answer,
-                        "references": _protected_references(final_refs, public=public_search)
-                    })
-
-                # Folder matched but no PDFs → DO NOT go to Act
+            started_at = time.monotonic()
+            answer, refs, diagnostics = search_pdf_folders(
+                folder_scopes,
+                query,
+                folder_scores=folder_scores,
+                top_n_pdfs=3,
+                language=language,
+            )
+            logger.info(
+                "search_completed route=%s outcome=%s public=%s language=%s "
+                "visible_folders=%s folders_scanned=%s references=%s "
+                "integrity_failures=%s embedding_calls=%s chat_calls=%s duration_ms=%s",
+                "keyword_ranked" if detected else "global",
+                "answered" if refs else "no_evidence",
+                public_search,
+                language,
+                len(visible_folders),
+                diagnostics["folders_scanned"],
+                len(refs),
+                diagnostics["integrity_failures"],
+                1 if folder_scopes else 0,
+                1 if refs else 0,
+                round((time.monotonic() - started_at) * 1000),
+            )
+            if refs:
                 return JsonResponse({
-                    "answer": gettext(
-                        "Sorry, information related to this topic is not available "
-                        "in this section."
-                    ),
-                    "references": []
+                    "answer": answer,
+                    "references": _protected_references(refs, public=public_search),
                 })
 
-            # --------------------------------------------------
-            # 4️⃣ NO FOLDER MATCH → ACT FOLDER ONLY HERE
-            # --------------------------------------------------
-            acts_folder = Folder.objects.filter(name__icontains="act").first()
-
-            if acts_folder and searchable_folders(request.user, public=public_search).filter(pk=acts_folder.pk).exists():
-                answer, refs = search_pdfs_fast(
-                    acts_folder,
-                    query,
-                    top_n_pdfs=3,
-                    pdfs=(
-                        None
-                        if is_admin_user(request.user)
-                        else visible_pdfs(
-                            request.user,
-                            PDFFile.objects.filter(folder=acts_folder),
-                            public=public_search,
-                        )
-                    ),
-                    language=language,
-                )
-                if answer.strip():
-                    return JsonResponse({
-                        "answer": answer,
-                        "references": _protected_references(refs, public=public_search)
-                    })
-
-            # --------------------------------------------------
-            # 5️⃣ FINAL FALLBACK
-            # --------------------------------------------------
             return JsonResponse({
                 "answer": gettext(
-                    "Sorry, the requested information was not found in the available documents."
+                    "No supporting source was found in the searchable documents. "
+                    "Try adding the Act, Rule, section number, society type, or topic."
                 ),
                 "references": []
             })

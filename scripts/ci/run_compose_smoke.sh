@@ -68,13 +68,14 @@ test_log="$(mktemp)"
 # The retired Vault workbench contract is no longer the active UI surface. Its
 # lifecycle tests remain available for the migration stack, while this release
 # gate exercises the active core/Data Operations contracts instead.
-if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.test_startup_restore core.test_artifact_vault core.tests_recovery core.tests_candidate_cleanup core.test_custody_audit dataops --noinput --verbosity=2 >"$test_log" 2>&1; then
+if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.test_public_search_routing core.test_startup_restore core.test_artifact_vault core.tests_recovery core.tests_candidate_cleanup core.test_custody_audit dataops --noinput --verbosity=2 >"$test_log" 2>&1; then
     cat "$test_log"
     rm -f "$test_log"
     exit 1
 fi
 cat "$test_log"
 grep -q "core.test_artifact_vault" "$test_log"
+grep -q "core.test_public_search_routing" "$test_log"
 grep -q "dataops" "$test_log"
 rm -f "$test_log"
 
