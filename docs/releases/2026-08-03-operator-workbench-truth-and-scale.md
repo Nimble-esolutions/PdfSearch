@@ -78,11 +78,19 @@ docker compose -f docker-compose.dev.yml exec -T --user appuser web \
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:8000 npx playwright test \
   browser_tests/operations-cockpit.spec.ts \
   --project=desktop --project=mobile --workers=1
+
+PDFSEARCH_IMAGE=pdfsearch-ci:operator-workbench \
+REDIS_IMAGE=redis:7-alpine SECRET_KEY=ci-only-secret \
+COMPOSE_PROJECT_NAME=pdfsearch-operator-workbench-smoke WEB_PORT=18003 \
+  bash scripts/ci/run_compose_smoke.sh
 ```
 
-Focused core/DataOps tests, image build, HTTP smoke, desktop Playwright, and
-mobile Playwright passed locally. The complete hosted workflow remains the
-merge gate.
+The disposable Linux stack passed 593 active Django tests (one documented
+runtime-image documentation skip), seven applicable desktop/mobile browser
+tests (one intentional project skip), package integrity, the data-release gate
+with 108 rows and 112 files, index compatibility, and seed recovery. The scale
+fixture writes valid PDF media, so browser setup cannot leave false custody
+debt. The hosted workflow remains the merge gate.
 
 ## Stage deployment and rollback
 
