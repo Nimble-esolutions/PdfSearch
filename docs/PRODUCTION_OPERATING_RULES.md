@@ -22,6 +22,10 @@ These rules apply to every PdfSearch production change.
 - Every deployment must identify Git SHA, image digest, Compose hash, and data release.
 - Dokploy must pull exact web and Redis image digests with `pull_policy: always`.
 - Do not deploy a tag, cached `latest`, or alias as the release identifier.
+- Treat Dokploy/Compose rendering as desired state only. Post-deploy evidence
+  must inspect the running container's `.Config.Image` and image ID, inspect
+  that image ID's OCI revision, and compare its live release sentinels with the
+  exact source checkout using `scripts/ops/verify_running_release.py`.
 - Keep application code in the image and mutable data in `/app/data`.
 - A normal Dokploy deploy/autodeploy may recreate containers while retaining
   the named `/app/data` volume; this is conditional on the Compose project and
@@ -37,6 +41,10 @@ These rules apply to every PdfSearch production change.
 - Startup validation is fail-closed: an invalid identity exits before migrations.
 - Never delete or rotate `/app/data/.instance_id` on a live instance.
 - OCI labels, `/app/flowdocs/.release`, and `PDFSEARCH_IMAGE` must agree.
+- Dokploy's saved application environment is authoritative for interpolation;
+  a host or repository env file is inert unless explicitly supplied to the
+  deployment. Never compensate by adding generated Dokploy variables or labels
+  to the portable Compose contract.
 
 ## Secrets
 
