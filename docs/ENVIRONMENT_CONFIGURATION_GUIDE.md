@@ -77,13 +77,13 @@ must not become an authoritative writer.
 | --- | ---: | --- | --- |
 | `MAX_FILE_SIZE_MB` | `10` | Maximum accepted PDF size; also sets Django request/upload memory limits | Low-to-medium; affects upload acceptance and memory pressure |
 | `ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES` | `67108864` | Maximum canonical existing-media size accepted by read-only custody verification | Medium; raising it increases verification I/O, but never upload acceptance |
-| `OPENAI_EMBED_MODEL` | `text-embedding-3-small` | Model used to embed indexed chunks and queries | High; vector dimensions/model compatibility and cost |
+| `OPENAI_EMBED_MODEL` | `text-embedding-3-small` | Model used to embed indexed chunks and queries | High; candidate preflight rejects unknown or dimension-incompatible model changes before mutation; changing vector space requires a reviewed full reindex |
 | `OPENAI_CHAT_MODEL` | `gpt-4o-mini` | Model used to prepare the grounded answer | Medium-high; answer quality, latency, and cost |
 | `PDF_CHUNK_SIZE` | `1200` | Approximate text chunk size for indexing | High; changes retrieval boundaries and requires reindex review |
 | `PDF_CHUNK_OVERLAP` | `200` | Repeated boundary context between chunks | Medium; increases index size and context overlap |
 | `PDF_OCR_FALLBACK_ENABLED` | `1` | OCR blank PDF pages when native text extraction returns no text | Medium-high; adds CPU and derived-text work for scanned PDFs |
 | `PDF_OCR_BINARY` | `tesseract` | OCR executable resolved inside the immutable image | High; missing or mismatched binaries fail scanned-document indexing closed |
-| `PDF_OCR_LANGUAGES` | `eng+mar` | Tesseract language packs used for OCR | High; changing languages requires OCR/reindex review |
+| `PDF_OCR_LANGUAGES` | `eng+mar+hin` | Tesseract language packs used for OCR | High; changing languages requires OCR/reindex review |
 | `PDF_OCR_DPI` | `200` | Rasterization resolution for OCR pages | Medium-high; raises CPU and memory use as it increases |
 | `PDF_OCR_MAX_PAGES` | `50` | Maximum blank pages OCR will process per PDF | High; exceeding the cap leaves the PDF unindexed rather than partial |
 | `PDF_OCR_PAGE_TIMEOUT_SECONDS` | `180` | Per-page OCR subprocess timeout | Medium; bounds worker occupancy |

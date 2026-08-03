@@ -34,6 +34,13 @@ were not changed. Signed activation, one real stage backup, and isolated stage
 round-trip restore remain release gates; compatibility surfaces must stay
 read-only until those gates pass.
 
+The rehearsal also proved two failure boundaries that are now enforced in
+code. Candidate preflight rejects a configured embedding model whose default
+dimension differs from stored vectors before OCR, reindex, or index quarantine
+begins. Worker success state and the corresponding audit receipt share one
+control-database transaction; `activation=null` is valid for a non-activating
+rehearsal, while an audit write failure rolls the operation back to running.
+
 ## Keep, adapt, replace, remove
 
 | Existing area | Decision | Reason and required proof |
@@ -60,6 +67,7 @@ read-only until those gates pass.
 | `dataops/package.py` | Add v3 manifest/provenance | Old manifest incompatibility | v2 import fixtures, canonical digest, secret exclusion |
 | DataOps models/migrations | Connection/policy and v3 operation metadata | Control DB migration/rollback | Forward migration, empty-stage migration, fixture import |
 | DataOps worker/executor | One resumable state machine | Duplicate/stale publication | Lease loss, restart, idempotent retry, process death |
+| Embedding/index contract | Preflight stored and configured dimensions | Mixed vector spaces or runtime query mismatch | Known model dimensions, model change, mixed vectors, deterministic provider |
 | DataOps views/templates/API | Three primary actions and plan preview | Authorization or unsafe hidden defaults | Superadmin, CSRF, rejected secret fields, browser workflow |
 | VaultOps services | Temporary internal adapters only | Coupling old flags into v3 | Adapter contract tests with explicit capability inputs |
 | Settings/Compose/env examples | Remove lifecycle key explosion | Web/maintenance drift | Effective Compose parity and redacted config digest |
@@ -188,6 +196,8 @@ candidates, and audit evidence remain until review is complete.
 - Foreign-dataset restore automatically becomes import/rebind.
 - Legacy source remains read-only and requires a stable two-scan result.
 - Migration/reindex/search failure leaves the active pointer unchanged.
+- Unknown, changed, or mixed embedding dimensions fail before candidate mutation; model changes require a reviewed full reindex.
+- A success receipt and its audit event commit atomically; a missing activation result is not an error.
 - Production restore planning includes a pre-restore backup and mutation
   barrier even though production execution is outside this rollout.
 - Web and maintenance share the same secret-free compiled configuration digest.

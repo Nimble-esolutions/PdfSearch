@@ -268,26 +268,39 @@ target.
 | --- | --- |
 | Source dataset | `ai-sahakar-prod-v2` |
 | Source manifest SHA-256 | `b59593fbc3f772b331110bdc6b1a590c1bd944c6f40900b2caf8e01a03cf8843` |
-| Source unique objects / bytes | 280 / 1,052,817,195 |
-| Source before/after inventory | Identical |
-| Imported logical objects / bytes | 416 / 1,093,501,777 |
-| Destination v3 manifest SHA-256 | `4b8b2ef7b3089c44416fb8217bd2edc9f0ac03bc828b4cf060312f2ce34d7cf8` |
-| Idempotent publication retry | 416 objects and all bytes reused; zero uploaded |
-| Legacy database | 242 documents, 46 folders, 7 users, 29 migrations |
-| SQLite | Integrity `ok`; foreign keys `ok`; current migrations rehearsed |
+| Source before/after manifest | Exact digest unchanged |
+| Imported logical entries / bytes | 416 / 1,093,501,777 |
+| Destination unique objects / bytes | 280 / 1,052,703,487 |
+| Destination v3 manifest SHA-256 | `d1ec9beacaa0b5dc5212619a989a5603174d5f83becac30d0a516c4870b7aff6` |
+| Legacy database | 242 documents, 46 folders, 7 users, 29 source migrations |
+| SQLite | Integrity `ok`; zero foreign-key violations; 64 current migration rows after rehearsal |
 | Candidate repair | 9 image-only PDFs OCRed/embedded; 45 searchable folder indexes rebuilt |
 | Candidate index | 7,615 vectors, dimension 1,536, indexing ratio `1.0` |
 | Text coverage | 242 with text; 239 Latin-script; 206 Devanagari; 9 with OCR evidence |
-| Candidate database SHA-256 | `faf5779846138abc06de780791cba54b118788a9b4e92d43df9bec10c8c207c9` |
+| Candidate database SHA-256 | `d79e8354d180a017bc305dc4303562e4956f906ed92b58fce7a11d1aa13b33ab` |
 | Activation | Not performed; active pointer and active volumes unchanged |
 
-The exercise found and fixed four real defects before stage: the legacy user
+The exercise found and fixed six real defects before stage: the legacy user
 table was incorrectly assumed to be `auth_user`; cached import evidence did not
 refresh after adapter upgrades; candidate retries lost cumulative repair
-evidence; and the all-folder repair query used the wrong Django relation name.
-It also proved that local OCR was healthy while the first embedding attempt was
-correctly blocked by the external-side-effect policy. The approved retry
-enabled embeddings only for the isolated candidate.
+evidence; the all-folder repair query used the wrong Django relation name; the
+credential-free provider produced vectors with a different dimension from the
+configured embedding model; and a successful non-activating import crashed
+while recording its audit receipt because `activation` was `null`.
+
+Embedding dimensions are now a code-owned contract for supported models. The
+candidate command compares stored vectors with the configured model before it
+quarantines indexes or queues OCR/reindex work. A changed or unknown model fails
+closed and requires an explicit full reindex design; it is never repaired by
+mixing new vectors into an old vector space. Test embeddings use the same
+dimension as the configured model. Successful operation state and its audit
+receipt are committed together, so an audit failure cannot leave an unaudited
+success row.
+
+The retained `a5` failure was replayed read-only and rejected at preflight with
+`candidate_embedding_model_dimension_mismatch`. The corrected code then
+revalidated the retained 242-document `a6` candidate as reusable. The approved
+rehearsal enabled embeddings only inside the isolated candidate process.
 
 The certified image contains Tesseract English, Marathi, and Hindi language
 packs, `cryptography` 48.0.1, and no runtime `setuptools` or `wheel` package.
