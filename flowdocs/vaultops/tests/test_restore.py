@@ -861,6 +861,7 @@ class InventoryAndRestoreTests(TestCase):
 
 
 class RehearsalTests(SimpleTestCase):
+    @override_settings(MAINTENANCE_JOB_TIMEOUT_SECONDS=4321)
     def test_rehearsal_runs_migrations_in_subprocess_without_raw_output(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "source.sqlite3"
@@ -925,6 +926,7 @@ class RehearsalTests(SimpleTestCase):
             "0",
         )
         self.assertEqual(run.call_args.kwargs["stderr"], -3)
+        self.assertEqual(run.call_args.kwargs["timeout"], 4321)
 
     def test_rehearsal_maps_timeout_to_typed_error(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -64,7 +64,7 @@ def rehearse_migrations(
     source_db_path: str | Path,
     *,
     workspace_path: str | Path = "",
-    timeout_seconds: int = 120,
+    timeout_seconds: int | None = None,
     promote_to: str | Path | None = None,
 ) -> dict[str, Any]:
     """Migrate a private database copy in another Python process.
@@ -89,6 +89,11 @@ def rehearse_migrations(
     shutil.copy2(source, rehearsal_db)
     before = _migration_leaf(rehearsal_db)
     started = time.monotonic()
+    effective_timeout = (
+        int(timeout_seconds)
+        if timeout_seconds is not None
+        else int(getattr(settings, "MAINTENANCE_JOB_TIMEOUT_SECONDS", 7200))
+    )
     manage_py = Path(settings.BASE_DIR) / "manage.py"
     environment = os.environ.copy()
     environment.update(
@@ -119,7 +124,7 @@ def rehearse_migrations(
             env=environment,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=timeout_seconds,
+            timeout=effective_timeout,
             check=False,
         )
     except subprocess.TimeoutExpired as exc:

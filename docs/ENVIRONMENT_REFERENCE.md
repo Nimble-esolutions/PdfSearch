@@ -183,7 +183,7 @@ automatic activation.
 | MAINTENANCE_WORKER_HEARTBEAT_PATH | Worker liveness file | /app/data-control/runtime/maintenance-worker.heartbeat | Paired with readiness evidence |
 | MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS | Worker heartbeat freshness | 30 | Stale evidence degrades readiness |
 | MAINTENANCE_WORKER_READINESS_REQUIRED | Require worker readiness | 1 | Keep enabled in stage/production |
-| MAINTENANCE_JOB_TIMEOUT_SECONDS | Maintenance job bound | 7200 | Prevents unbounded reindex/OCR work |
+| MAINTENANCE_JOB_TIMEOUT_SECONDS | Maintenance job bound | 7200 | Shared bound for migration rehearsal, candidate preparation, reindex, and OCR; large legacy databases must not use a separate short timeout |
 | MAINTENANCE_SCHEDULER_ENABLED | Automatic scheduler | 0 in reviewed examples | Enable only with writer fencing and budgets |
 | MAINTENANCE_WORKSPACE_ROOT | Isolated workspaces | /app/data-control/maintenance-workspaces | Never use the active generation as a scratch area |
 | GUNICORN_WORKERS | Web worker count | 1 local, 2 stage, 4 production example | Match memory and concurrency budget |
