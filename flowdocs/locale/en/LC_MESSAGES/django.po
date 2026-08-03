@@ -1733,6 +1733,12 @@ msgid ""
 "Sorry, the requested information was not found in the available documents."
 msgstr ""
 
+#: core/views.py
+msgid ""
+"No supporting source was found in the searchable documents. Try adding the "
+"Act, Rule, section number, society type, or topic."
+msgstr ""
+
 #: core/templates/vaultops/workbench.html
 msgid "Signed runtime control"
 msgstr ""

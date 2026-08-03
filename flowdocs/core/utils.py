@@ -93,6 +93,8 @@ CHUNK_SIZE = getattr(settings, "PDF_CHUNK_SIZE", 1200)
 CHUNK_OVERLAP = getattr(settings, "PDF_CHUNK_OVERLAP", 200)
 MAX_CONTEXT_WORDS = getattr(settings, "MAX_CONTEXT_WORDS", 2500)  # much smaller than 22500
 TOP_K_CHUNKS = getattr(settings, "TOP_K_CHUNKS", 5)
+MAX_SEARCH_FOLDERS = 64
+MAX_SEARCH_CANDIDATES = 128
 
 # Cache TTLs (seconds)
 EMBEDDING_TTL = getattr(settings, "EMBEDDING_TTL", 60 * 60 * 24 * 7)  # 7 days
@@ -142,6 +144,30 @@ def truncate_context(text: str, max_words: int = MAX_CONTEXT_WORDS) -> str:
 class PDFExtractionResult:
     text: str
     metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class SearchHit:
+    """One exact stored chunk selected by semantic retrieval."""
+
+    pdf_id: int
+    title: str
+    folder_id: int
+    folder: str
+    uploaded_at: str | None
+    snippet: str
+    score: float
+
+
+@dataclass(frozen=True)
+class _StoredSearchChunk:
+    pdf_id: int
+    title: str
+    folder_id: int
+    folder: str
+    uploaded_at: str | None
+    text: str
+    embedding: np.ndarray
 
 
 def _ocr_languages() -> str:
@@ -333,13 +359,48 @@ def _json_list(value: Any, field_name: str, pdf: PDFFile) -> list[Any]:
     return value
 
 
-def _folder_embedding_matrix(
+def _validated_pdf_search_chunks(pdf: PDFFile) -> list[_StoredSearchChunk]:
+    p_chunks = _json_list(getattr(pdf, "page_chunks", []), "page_chunks", pdf)
+    p_embs = _json_list(getattr(pdf, "chunk_embeddings", []), "chunk_embeddings", pdf)
+    if not p_chunks or not p_embs:
+        raise SearchDataIntegrityError("missing searchable chunks or embeddings")
+    if len(p_chunks) != len(p_embs):
+        raise SearchDataIntegrityError("chunk and embedding counts differ")
+
+    uploaded_at = getattr(pdf, "uploaded_at", None)
+    uploaded_at_str = uploaded_at.strftime("%Y-%m-%d") if uploaded_at else None
+    folder = getattr(pdf, "folder", None)
+    rows: list[_StoredSearchChunk] = []
+    for chunk, embedding in zip(p_chunks, p_embs):
+        if not isinstance(chunk, str) or not chunk.strip():
+            raise SearchDataIntegrityError("contains an invalid chunk")
+        if not isinstance(embedding, (list, tuple)) or not embedding:
+            raise SearchDataIntegrityError("contains an invalid embedding")
+        vector = np.asarray(embedding, dtype=np.float32)
+        if vector.ndim != 1 or not np.isfinite(vector).all():
+            raise SearchDataIntegrityError("contains an invalid embedding vector")
+        if not np.linalg.norm(vector):
+            raise SearchDataIntegrityError("contains a zero embedding vector")
+        rows.append(
+            _StoredSearchChunk(
+                pdf_id=pdf.pk,
+                title=getattr(pdf, "title", ""),
+                folder_id=getattr(pdf, "folder_id", 0) or 0,
+                folder=getattr(folder, "name", "") if folder else "",
+                uploaded_at=uploaded_at_str,
+                text=chunk,
+                embedding=vector,
+            )
+        )
+    return rows
+
+
+def _folder_search_chunks(
     folder: Folder,
     pdfs=None,
-) -> tuple[list[str], np.ndarray]:
-    """Return deterministic chunk order and validated, normalized embeddings."""
-    chunk_texts: list[str] = []
-    chunk_embeddings: list[np.ndarray] = []
+) -> tuple[list[_StoredSearchChunk], np.ndarray]:
+    """Return deterministic chunk ownership and normalized embeddings."""
+    stored_chunks: list[_StoredSearchChunk] = []
     expected_dimensions = None
 
     pdf_queryset = (
@@ -349,30 +410,10 @@ def _folder_embedding_matrix(
     ).filter(
         lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
     )
-    for pdf in pdf_queryset.order_by("pk"):
+    for pdf in pdf_queryset.select_related("folder").order_by("pk"):
         try:
-            p_chunks = _json_list(getattr(pdf, "page_chunks", []), "page_chunks", pdf)
-            p_embs = _json_list(getattr(pdf, "chunk_embeddings", []), "chunk_embeddings", pdf)
-            if not p_chunks or not p_embs:
-                raise SearchDataIntegrityError("missing searchable chunks or embeddings")
-            if len(p_chunks) != len(p_embs):
-                raise SearchDataIntegrityError("chunk and embedding counts differ")
-
-            pdf_chunks = []
-            pdf_embeddings = []
-            for chunk, embedding in zip(p_chunks, p_embs):
-                if not isinstance(chunk, str) or not chunk.strip():
-                    raise SearchDataIntegrityError("contains an invalid chunk")
-                if not isinstance(embedding, (list, tuple)) or not embedding:
-                    raise SearchDataIntegrityError("contains an invalid embedding")
-                vector = np.asarray(embedding, dtype=np.float32)
-                if vector.ndim != 1 or not np.isfinite(vector).all():
-                    raise SearchDataIntegrityError("contains an invalid embedding vector")
-                if not np.linalg.norm(vector):
-                    raise SearchDataIntegrityError("contains a zero embedding vector")
-                pdf_chunks.append(chunk)
-                pdf_embeddings.append(vector)
-            pdf_dimensions = {vector.shape[0] for vector in pdf_embeddings}
+            pdf_chunks = _validated_pdf_search_chunks(pdf)
+            pdf_dimensions = {row.embedding.shape[0] for row in pdf_chunks}
             if len(pdf_dimensions) != 1:
                 raise SearchDataIntegrityError("contains inconsistent embedding dimensions")
             pdf_dimension = next(iter(pdf_dimensions))
@@ -383,18 +424,26 @@ def _folder_embedding_matrix(
             logger.warning("Skipping PDF id=%s from folder id=%s: %s", pdf.pk, folder.pk, exc)
             continue
 
-        chunk_texts.extend(pdf_chunks)
-        chunk_embeddings.extend(pdf_embeddings)
+        stored_chunks.extend(pdf_chunks)
 
-    if not chunk_embeddings:
+    if not stored_chunks:
         return [], np.empty((0, 0), dtype=np.float32)
 
-    dimensions = {vector.shape[0] for vector in chunk_embeddings}
+    dimensions = {row.embedding.shape[0] for row in stored_chunks}
     if len(dimensions) != 1:
         raise SearchDataIntegrityError("Folder embeddings have inconsistent dimensions")
-    matrix = np.vstack(chunk_embeddings).astype(np.float32)
+    matrix = np.vstack([row.embedding for row in stored_chunks]).astype(np.float32)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    return chunk_texts, matrix / norms
+    return stored_chunks, matrix / norms
+
+
+def _folder_embedding_matrix(
+    folder: Folder,
+    pdfs=None,
+) -> tuple[list[str], np.ndarray]:
+    """Return deterministic chunk order and validated, normalized embeddings."""
+    stored_chunks, matrix = _folder_search_chunks(folder, pdfs=pdfs)
+    return [row.text for row in stored_chunks], matrix
 
 
 def _validate_index(index: Any, chunk_count: int, dimensions: int) -> None:
@@ -516,17 +565,14 @@ def build_or_load_faiss_index_for_folder(
     )
 
 
-def search_chunks_with_faiss_or_numpy(
+def _search_chunk_indices_with_faiss_or_numpy(
     query_embedding: np.ndarray,
     index: Optional[faiss.Index],
     chunk_texts: List[str],
     top_k: int = TOP_K_CHUNKS,
     embeddings_matrix: Optional[np.ndarray] = None,
-) -> List[Tuple[str, float]]:
-    """
-    Returns list of (chunk_text, score) sorted desc by score.
-    If FAISS index provided, use it. Otherwise run numpy dot product.
-    """
+) -> List[Tuple[int, float]]:
+    """Return exact chunk positions and scores in descending relevance order."""
     if query_embedding is None or len(chunk_texts) == 0:
         return []
     if embeddings_matrix is None:
@@ -550,7 +596,7 @@ def search_chunks_with_faiss_or_numpy(
         except Exception as exc:
             raise SearchDataIntegrityError("FAISS search failed") from exc
         return [
-            (chunk_texts[idx], float(distance))
+            (int(idx), float(distance))
             for distance, idx in zip(distances[0], indices[0])
             if idx >= 0
         ]
@@ -560,7 +606,30 @@ def search_chunks_with_faiss_or_numpy(
 
     scores = embeddings_matrix @ q_norm
     order = np.argsort(scores)[::-1][:top_k]
-    return [(chunk_texts[int(idx)], float(scores[idx])) for idx in order]
+    return [(int(idx), float(scores[idx])) for idx in order]
+
+
+def search_chunks_with_faiss_or_numpy(
+    query_embedding: np.ndarray,
+    index: Optional[faiss.Index],
+    chunk_texts: List[str],
+    top_k: int = TOP_K_CHUNKS,
+    embeddings_matrix: Optional[np.ndarray] = None,
+) -> List[Tuple[str, float]]:
+    """
+    Returns list of (chunk_text, score) sorted desc by score.
+    If FAISS index provided, use it. Otherwise run numpy dot product.
+    """
+    return [
+        (chunk_texts[idx], score)
+        for idx, score in _search_chunk_indices_with_faiss_or_numpy(
+            query_embedding,
+            index,
+            chunk_texts,
+            top_k=top_k,
+            embeddings_matrix=embeddings_matrix,
+        )
+    ]
 
 
 # ----------------- Public: Precompute embeddings on upload -----------------
@@ -650,6 +719,221 @@ def precompute_pdf_embeddings(
 
 
 # ------------------ Search PDFs (fast path) ------------------
+def create_query_embedding(user_query: str) -> np.ndarray:
+    """Create one validated query embedding for an entire search request."""
+    try:
+        if _test_embeddings_enabled():
+            vector = _deterministic_embeddings([user_query])[0]
+        else:
+            response = _get_client().embeddings.create(
+                model=OPENAI_EMBED_MODEL,
+                input=[user_query],
+            )
+            vector = response.data[0].embedding
+        embedding = np.asarray(vector, dtype=np.float32)
+    except Exception as exc:
+        raise SearchDataIntegrityError("Unable to create the query embedding") from exc
+    if embedding.ndim != 1 or not np.isfinite(embedding).all() or not np.linalg.norm(embedding):
+        raise SearchDataIntegrityError("Query embedding is invalid")
+    return embedding
+
+
+def retrieve_folder_hits(
+    folder: Folder,
+    user_query: str,
+    *,
+    pdfs=None,
+    query_embedding: np.ndarray | None = None,
+    top_k: int = TOP_K_CHUNKS * 2,
+) -> list[SearchHit]:
+    """Retrieve exact chunks from one authorized folder without generating an answer."""
+    restricted_scope = pdfs is not None
+    scoped_pdfs = (
+        pdfs if restricted_scope else PDFFile.objects.filter(folder=folder)
+    ).filter(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
+    if not scoped_pdfs.exists():
+        return []
+
+    query_embedding = (
+        query_embedding if query_embedding is not None else create_query_embedding(user_query)
+    )
+    index, chunk_texts, embeddings_matrix = build_or_load_faiss_index_for_folder(
+        folder,
+        pdfs=scoped_pdfs if restricted_scope else None,
+    )
+    stored_chunks, stored_matrix = _folder_search_chunks(
+        folder,
+        pdfs=scoped_pdfs if restricted_scope else None,
+    )
+    if (
+        len(stored_chunks) != len(chunk_texts)
+        or stored_matrix.shape != embeddings_matrix.shape
+        or not np.array_equal(stored_matrix, embeddings_matrix)
+        or any(row.text != text for row, text in zip(stored_chunks, chunk_texts))
+    ):
+        raise SearchDataIntegrityError("Folder search metadata changed during retrieval")
+
+    matches = _search_chunk_indices_with_faiss_or_numpy(
+        query_embedding,
+        index,
+        chunk_texts,
+        top_k=top_k,
+        embeddings_matrix=embeddings_matrix,
+    )
+    hits = [
+        SearchHit(
+            pdf_id=stored_chunks[idx].pdf_id,
+            title=stored_chunks[idx].title,
+            folder_id=stored_chunks[idx].folder_id,
+            folder=stored_chunks[idx].folder,
+            uploaded_at=stored_chunks[idx].uploaded_at,
+            snippet=stored_chunks[idx].text,
+            score=score,
+        )
+        for idx, score in matches
+    ]
+    if hits:
+        return hits
+
+    # Preserve the narrow rule-number fallback for legacy rows without vectors.
+    rule_match = re.search(r"नियम\s*([०१२३४५६७८९0-9]+)", user_query)
+    fallback_hits: list[SearchHit] = []
+    for pdf in scoped_pdfs.select_related("folder").order_by("pk"):
+        try:
+            chunks = _json_list(getattr(pdf, "page_chunks", []), "page_chunks", pdf)
+        except SearchDataIntegrityError:
+            continue
+        uploaded_at = getattr(pdf, "uploaded_at", None)
+        for chunk in chunks:
+            if not isinstance(chunk, str):
+                continue
+            score = 0.0
+            if rule_match and f"नियम {rule_match.group(1)}" in chunk:
+                score += 5.0
+            if user_query in chunk:
+                score += 1.0
+            if score:
+                fallback_hits.append(
+                    SearchHit(
+                        pdf_id=pdf.pk,
+                        title=pdf.title,
+                        folder_id=pdf.folder_id or 0,
+                        folder=pdf.folder.name if pdf.folder else "",
+                        uploaded_at=uploaded_at.strftime("%Y-%m-%d") if uploaded_at else None,
+                        snippet=chunk,
+                        score=score,
+                    )
+                )
+    return sorted(fallback_hits, key=lambda hit: hit.score, reverse=True)[:top_k]
+
+
+def _rank_search_hits(
+    hits: list[SearchHit],
+    *,
+    folder_scores: dict[int, float],
+    top_n_pdfs: int,
+) -> tuple[list[dict[str, Any]], str]:
+    by_pdf: dict[int, dict[str, Any]] = {}
+    for hit in sorted(hits, key=lambda item: item.score, reverse=True):
+        entry = by_pdf.setdefault(
+            hit.pdf_id,
+            {
+                "title": hit.title,
+                "pdf_id": hit.pdf_id,
+                "folder_id": hit.folder_id,
+                "folder": hit.folder,
+                "uploaded_at": hit.uploaded_at,
+                "hits": [],
+            },
+        )
+        if all(existing.snippet != hit.snippet for existing in entry["hits"]):
+            entry["hits"].append(hit)
+
+    ranked: list[tuple[float, dict[str, Any]]] = []
+    for entry in by_pdf.values():
+        selected_hits = entry["hits"][:TOP_K_CHUNKS]
+        semantic_score = sum(hit.score for hit in selected_hits)
+        keyword_bonus = min(0.05, max(0.0, folder_scores.get(entry["folder_id"], 0.0)) * 0.02)
+        ranked.append((semantic_score + keyword_bonus, entry))
+    ranked.sort(key=lambda item: (-item[0], item[1]["pdf_id"]))
+
+    references: list[dict[str, Any]] = []
+    context_parts: list[str] = []
+    for score, entry in ranked[:top_n_pdfs]:
+        references.append(
+            {
+                "title": entry["title"],
+                "pdf_id": entry["pdf_id"],
+                "folder": entry["folder"],
+                "uploaded_at": entry["uploaded_at"],
+                "score": score,
+            }
+        )
+        context_parts.append(f"--- {entry['title']} ---")
+        context_parts.extend(hit.snippet for hit in entry["hits"][:TOP_K_CHUNKS])
+    context = truncate_context("\n\n".join(context_parts), max_words=MAX_CONTEXT_WORDS)
+    return references, context
+
+
+def search_pdf_folders(
+    folder_scopes: list[tuple[Folder, Any]],
+    user_query: str,
+    *,
+    folder_scores: dict[int, float] | None = None,
+    top_n_pdfs: int = 3,
+    language: str = "en",
+) -> tuple[str, list[dict[str, Any]], dict[str, int]]:
+    """Search authorized folders with one embedding and at most one chat completion."""
+    if len(folder_scopes) > MAX_SEARCH_FOLDERS:
+        raise SearchDataIntegrityError("Search folder limit exceeded")
+    if not folder_scopes:
+        return "", [], {"folders_scanned": 0, "integrity_failures": 0, "candidates": 0}
+
+    query_embedding = create_query_embedding(user_query)
+    hits: list[SearchHit] = []
+    integrity_failures = 0
+    successful_scopes = 0
+    for folder, pdfs in folder_scopes:
+        try:
+            hits.extend(
+                retrieve_folder_hits(
+                    folder,
+                    user_query,
+                    pdfs=pdfs,
+                    query_embedding=query_embedding,
+                )
+            )
+            successful_scopes += 1
+        except SearchDataIntegrityError:
+            integrity_failures += 1
+            logger.warning("Search skipped invalid folder id=%s", folder.pk)
+
+    if not successful_scopes and integrity_failures:
+        raise SearchDataIntegrityError("All authorized search folders failed integrity checks")
+    hits = sorted(hits, key=lambda hit: hit.score, reverse=True)[:MAX_SEARCH_CANDIDATES]
+    references, context = _rank_search_hits(
+        hits,
+        folder_scores=folder_scores or {},
+        top_n_pdfs=top_n_pdfs,
+    )
+    diagnostics = {
+        "folders_scanned": len(folder_scopes),
+        "integrity_failures": integrity_failures,
+        "candidates": len(hits),
+    }
+    if not references:
+        return "", [], diagnostics
+
+    answer = generate_gpt_answer(
+        user_question=user_query,
+        context=context,
+        references=references,
+        max_words=400,
+        language=language,
+    )
+    return answer, references, diagnostics
+
+
 def search_pdfs_fast(
     folder: Folder,
     user_query: str,
@@ -657,137 +941,14 @@ def search_pdfs_fast(
     pdfs=None,
     language: str = "en",
 ) -> Tuple[str, List[Dict[str, Any]]]:
-    """
-    Fast search that:
-     - uses precomputed chunk embeddings saved on PDFs
-     - loads or builds FAISS folder index (persistent)
-     - finds top chunks and returns combined context and references
-    Returns (answer_text, references_list)
-     Each reference has: title, pdf_id, folder, uploaded_at, score.
-     The protected view URL is added by the HTTP view before serialization.
-    """
-    # 1. quick guard
-    restricted_scope = pdfs is not None
-    pdfs = (
-        pdfs
-        if restricted_scope
-        else PDFFile.objects.filter(folder=folder)
-    ).filter(
-        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
-    )
-    if not pdfs.exists():
-        return "", []
-
-    # 2. create query embedding
-    try:
-        if _test_embeddings_enabled():
-            query_emb = np.array(_deterministic_embeddings([user_query])[0], dtype=np.float32)
-        else:
-            emb_resp = _get_client().embeddings.create(model=OPENAI_EMBED_MODEL, input=[user_query])
-            query_emb = np.array(emb_resp.data[0].embedding, dtype=np.float32)
-    except Exception as exc:
-        raise SearchDataIntegrityError("Unable to create the query embedding") from exc
-
-    index, chunk_texts, embeddings_matrix = build_or_load_faiss_index_for_folder(
-        folder,
-        pdfs=pdfs if restricted_scope else None,
-    )
-
-    # 3. get top matched chunks (text + scores)
-    matches = search_chunks_with_faiss_or_numpy(
-        query_emb,
-        index,
-        chunk_texts,
-        top_k=TOP_K_CHUNKS * 10,
-        embeddings_matrix=embeddings_matrix,
-    )
-
-    if not matches:
-        # fallback to rule-based search
-        import re
-        rule_match = re.search(r"नियम\s*([०१२३४५६७८९0-9]+)", user_query)
-        matches = []
-        for pdf in pdfs:
-            chunks = getattr(pdf, "page_chunks", []) or []
-            for c in chunks:
-                score = 0
-                if rule_match and f"नियम {rule_match.group(1)}" in c:
-                    score += 5
-                if user_query in c:
-                    score += 1
-                if score > 0:
-                    matches.append((c, score))
-        matches = sorted(matches, key=lambda x: x[1], reverse=True)[:TOP_K_CHUNKS * 10]
-
-    # 4. collate matches by PDF
-    chunk_to_pdf = {}
-    for pdf in pdfs:
-        p_chunks = getattr(pdf, "page_chunks", []) or []
-        uploaded_at = getattr(pdf, "uploaded_at", None)
-        uploaded_at_str = uploaded_at.strftime("%Y-%m-%d") if uploaded_at else None
-        for c in p_chunks:
-            if c not in chunk_to_pdf:
-                chunk_to_pdf[c] = {
-                    "title": getattr(pdf, "title", None),
-                    "pdf_id": pdf.pk,
-                    "folder": getattr(getattr(pdf, "folder", None), "name", None),
-                    "uploaded_at": uploaded_at_str,
-                }
-
-    # Aggregate by PDF: sum scores and collect top snippets
-    pdf_scores = {}
-    pdf_snippets = {}
-    for chunk_text, score in matches:
-        meta = chunk_to_pdf.get(chunk_text)
-        if not meta:
-            continue
-        title = meta["title"]
-        pdf_scores.setdefault(title, 0)
-        pdf_scores[title] += score
-        pdf_snippets.setdefault(title, []).append(chunk_text)
-
-    if not pdf_scores:
-        return "", []
-
-    # Create references list
-    refs = []
-    for title, s in pdf_scores.items():
-        pdf_obj = pdfs.filter(title=title).first()
-        if pdf_obj:
-            uploaded_at = getattr(pdf_obj, "uploaded_at", None)
-            refs.append({
-                "title": title,
-                "pdf_id": pdf_obj.pk,
-                "folder": getattr(getattr(pdf_obj, "folder", None), "name", None),
-                "uploaded_at": uploaded_at.strftime("%Y-%m-%d") if uploaded_at else None,
-                "score": s,
-            })
-        else:
-            refs.append({"title": title, "pdf_id": None, "folder": None, "uploaded_at": None, "score": s})
-
-    # pick top N PDFs by score
-    refs = sorted(refs, key=lambda x: x["score"], reverse=True)[:top_n_pdfs]
-
-    # build context: include only top K snippets across top refs
-    combined_snippets = []
-    for r in refs:
-        title = r["title"]
-        snippets = pdf_snippets.get(title, [])[:TOP_K_CHUNKS]
-        label = f"--- {title} ---"
-        combined_snippets.append(label)
-        combined_snippets.extend(snippets)
-    combined_context = "\n\n".join(combined_snippets)
-    combined_context = truncate_context(combined_context, max_words=MAX_CONTEXT_WORDS)
-
-    # 5. generate answer
-    answer = generate_gpt_answer(
-        user_question=user_query,
-        context=combined_context,
-        references=refs,
-        max_words=400,
+    """Backward-compatible single-folder search used by activation smoke tests."""
+    answer, references, _diagnostics = search_pdf_folders(
+        [(folder, pdfs)],
+        user_query,
+        top_n_pdfs=top_n_pdfs,
         language=language,
     )
-    return answer, refs
+    return answer, references
 
 # ------------------ GPT answer ------------------
 def generate_gpt_answer(
@@ -996,9 +1157,6 @@ def detect_folder_by_keywords_multi(query, min_score_threshold=0.50, folders=Non
     - Keeps your fuzzy + substring logic fully intact
     """
 
-    print("\n========== 🔍 KEYWORD DEBUG INFO (MULTI-FOLDER) ==========")
-    print(f"📝 User Query: {query}\n")
-
     folders = folders if folders is not None else Folder.objects.all()
     query_lower = query.lower().strip()
 
@@ -1014,11 +1172,7 @@ def detect_folder_by_keywords_multi(query, min_score_threshold=0.50, folders=Non
         else:
             folder_keywords = [k.strip().lower() for k in folder.keywords.split(",") if k.strip()]
 
-        print(f"📁 Folder: {folder.name}")
-        print(f"🔑 Keywords: {folder_keywords}")
-
         folder_score = 0.0
-        matched_phrases = []
 
         for phrase in folder_keywords:
             sim = fuzzy_ratio(query_lower, phrase)
@@ -1026,22 +1180,16 @@ def detect_folder_by_keywords_multi(query, min_score_threshold=0.50, folders=Non
             # direct match
             if phrase in query_lower:
                 folder_score += 1.0
-                matched_phrases.append(f"{phrase} (substring)")
                 continue
 
             # reversed
             if query_lower in phrase:
                 folder_score += 0.8
-                matched_phrases.append(f"{phrase} (reverse-substring)")
                 continue
 
             # fuzzy
             if sim > 0.60:
                 folder_score += sim
-                matched_phrases.append(f"{phrase} (fuzzy={sim:.2f})")
-
-        print(f"🔍 Matches: {matched_phrases}")
-        print(f"⭐ Folder Score: {folder_score}\n")
 
         if folder_score >= min_score_threshold:
             scored.append((folder, folder_score))
@@ -1050,13 +1198,7 @@ def detect_folder_by_keywords_multi(query, min_score_threshold=0.50, folders=Non
     scored = sorted(scored, key=lambda x: x[1], reverse=True)
 
     if not scored:
-        print("🎯 Final Detected Folders: None ≥ threshold\n")
         return []
-
-    print("🎯 Final Detected Folders (ALL ≥ threshold):")
-    for f, s in scored:
-        print(f"   - {f.name} (score={s})")
-    print("============================================\n")
 
     return scored
 

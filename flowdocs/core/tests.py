@@ -764,16 +764,14 @@ class SearchAndAuthenticationTests(TestCase):
             role="admin",
         )
 
-    @patch("core.views.generate_gpt_answer", return_value="<b>unsafe</b>\nमराठी")
-    @patch("core.views.search_pdfs_fast")
+    @patch("core.views.search_pdf_folders")
     @patch("core.views.detect_folder_by_keywords_multi")
     @patch("core.views.is_general_query", return_value=False)
     def test_search_references_use_protected_pdf_view_url(
         self,
         _is_general_query,
         detect_folder,
-        search_pdfs,
-        _generate_answer,
+        search_folders,
     ):
         folder = Folder.objects.create(name="Rules", created_by=self.user)
         pdf = PDFFile.objects.create(
@@ -784,8 +782,8 @@ class SearchAndAuthenticationTests(TestCase):
         )
         self.client.force_login(self.user)
         detect_folder.return_value = [(folder, 0.9)]
-        search_pdfs.return_value = (
-            "",
+        search_folders.return_value = (
+            "<b>unsafe</b>\nमराठी",
             [{
                 "title": pdf.title,
                 "pdf_id": pdf.pk,
@@ -794,6 +792,7 @@ class SearchAndAuthenticationTests(TestCase):
                 "uploaded_at": "2026-07-22",
                 "score": 1,
             }],
+            {"folders_scanned": 1, "integrity_failures": 0, "candidates": 1},
         )
 
         response = self.client.post(reverse("search_query"), {"query": "rule book"})
@@ -839,9 +838,9 @@ class SearchAndAuthenticationTests(TestCase):
             "core.views.detect_folder_by_keywords_multi",
             return_value=[(folder, 0.9)],
         ), patch(
-            "core.views.search_pdfs_fast",
+            "core.views.search_pdf_folders",
             return_value=(
-                "",
+                "Public answer",
                 [{
                     "title": pdf.title,
                     "pdf_id": pdf.pk,
@@ -849,10 +848,8 @@ class SearchAndAuthenticationTests(TestCase):
                     "uploaded_at": "2026-07-22",
                     "score": 1,
                 }],
+                {"folders_scanned": 1, "integrity_failures": 0, "candidates": 1},
             ),
-        ), patch(
-            "core.views.generate_gpt_answer",
-            return_value="Public answer",
         ):
             response = self.client.post(
                 reverse("search_query"),
@@ -903,9 +900,13 @@ class SearchAndAuthenticationTests(TestCase):
                 return_value=[(folder, 0.9)],
             ),
             patch(
-                "core.views.search_pdfs_fast",
-                return_value=("", []),
-            ) as search_pdfs,
+                "core.views.search_pdf_folders",
+                return_value=(
+                    "",
+                    [],
+                    {"folders_scanned": 1, "integrity_failures": 0, "candidates": 0},
+                ),
+            ) as search_folders,
         ):
             response = self.client.post(
                 reverse("search_query"),
@@ -913,7 +914,8 @@ class SearchAndAuthenticationTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        scoped = search_pdfs.call_args.kwargs["pdfs"]
+        folder_scopes = search_folders.call_args.args[0]
+        scoped = folder_scopes[0][1]
         self.assertEqual(list(scoped.values_list("pk", flat=True)), [available.pk])
         self.assertFalse(scoped.filter(pk=unavailable.pk).exists())
 
@@ -959,15 +961,15 @@ class SearchAndAuthenticationTests(TestCase):
             "core.views.detect_folder_by_keywords_multi",
             return_value=[(folder, 0.9)],
         ), patch(
-            "core.views.search_pdfs_fast",
+            "core.views.search_pdf_folders",
             side_effect=SearchDataIntegrityError("stale index"),
-        ) as search_pdfs:
+        ) as search_folders:
             response = self.client.post(
                 reverse("search_query"),
                 {"query": "act search"},
             )
 
-        search_pdfs.assert_called_once()
+        search_folders.assert_called_once()
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"], "search_unavailable")
         self.assertNotIn("stale index", response.content.decode())
@@ -983,7 +985,14 @@ class SearchAndAuthenticationTests(TestCase):
         with patch(
             "core.views.detect_folder_by_keywords_multi",
             return_value=[],
-        ) as detect_folder:
+        ) as detect_folder, patch(
+            "core.views.search_pdf_folders",
+            return_value=(
+                "",
+                [],
+                {"folders_scanned": 0, "integrity_failures": 0, "candidates": 0},
+            ),
+        ):
             self.client.force_login(ordinary)
             response = self.client.post(
                 reverse("search_query"),
@@ -992,7 +1001,7 @@ class SearchAndAuthenticationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         folders = detect_folder.call_args.kwargs["folders"]
-        self.assertFalse(folders.filter(pk=folder.pk).exists())
+        self.assertNotIn(folder.pk, {visible.pk for visible in folders})
 
     def test_login_preserves_safe_next_destination(self):
         next_url = reverse("dashboard_folder", args=[42])
