@@ -47,6 +47,14 @@ class V3RecoveryPointDiscoveryTests(TestCase):
                 "(indexed INTEGER, processing_status TEXT)"
             )
             db.execute("INSERT INTO core_pdffile VALUES (1, 'ready')")
+            db.execute(
+                "CREATE TABLE django_migrations "
+                "(app TEXT, name TEXT, applied TEXT)"
+            )
+            db.execute(
+                "INSERT INTO django_migrations VALUES "
+                "('core', '0027', '2026-08-03T00:00:00Z')"
+            )
         (workspace / "media" / "pdfs" / "one.pdf").write_bytes(b"pdf")
         records = []
         for relative, category in (
@@ -69,7 +77,9 @@ class V3RecoveryPointDiscoveryTests(TestCase):
             "consistency": {"sqlite_integrity": "ok", "foreign_keys": "ok"},
             "files": records,
             "inventory": {
-                "database": {"migrations": {"latest": "0027"}},
+                "database": {
+                    "migrations": {"latest": "core.0027", "count": 1}
+                },
                 "counts": {"pdf_rows": 1, "folders": 0, "users": 0},
             },
             "faiss": {"unavailable_documents": {"count": 0}},
