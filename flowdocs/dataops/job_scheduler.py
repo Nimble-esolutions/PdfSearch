@@ -1,17 +1,26 @@
-"""Small dependency-free cron scheduler for S3 backup jobs."""
+"""Cron parsing and fail-closed handling for legacy profile backup jobs."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from django.db import transaction
+from django.conf import settings
 
-from .models import BackupJob, DataOperation, DataOpsAuditEvent
+from .models import BackupJob
 
 
 class ScheduleConfigurationError(ValueError):
     pass
+
+
+def automatic_backup_scheduling_enabled() -> bool:
+    """Resolve the single scheduler posture used by every DataOps queue path."""
+    explicit = getattr(settings, "MAINTENANCE_SCHEDULER_ENABLED", None)
+    if explicit is not None:
+        return bool(explicit)
+    identity = getattr(settings, "ENV_IDENTITY", None)
+    return bool(identity and identity.maintenance_scheduler_enabled)
 
 
 def _field(value: str, minimum: int, maximum: int) -> tuple[set[int], bool]:
@@ -79,8 +88,15 @@ def schedule_matches(expression: str, moment: datetime, timezone_name: str = "UT
 
 
 def queue_due_backup_jobs(*, moment: datetime | None = None) -> int:
+    """Refuse legacy profile schedules instead of silently executing v2 syncs.
+
+    Routine automatic backup is owned by the v3 lifecycle policy in
+    ``dataops.worker.queue_backup_if_due``. Existing per-profile cron rows are
+    retained for operator review, but can no longer enqueue v2 ``SYNC`` work.
+    """
+    if not automatic_backup_scheduling_enabled():
+        return 0
     moment = moment or datetime.now(timezone.utc)
-    queued = 0
     for job in BackupJob.objects.using("control").filter(enabled=True).exclude(schedule=""):
         try:
             due = schedule_matches(job.schedule, moment, job.timezone)
@@ -89,28 +105,7 @@ def queue_due_backup_jobs(*, moment: datetime | None = None) -> int:
             continue
         if not due:
             continue
-        key = f"scheduled-job:{job.slug}:{moment.astimezone(timezone.utc).strftime('%Y%m%d%H%M')}"
-        with transaction.atomic(using="control"):
-            operation, created = DataOperation.objects.using("control").get_or_create(
-                kind=DataOperation.Kind.SYNC,
-                idempotency_key=key,
-                defaults={
-                    "state": DataOperation.State.QUEUED,
-                    "profile_key": job.target_profile_key,
-                    "source_profile_key": job.source_profile_key,
-                    "destination_profile_key": job.target_profile_key,
-                    "checkpoint": {"job_slug": job.slug, "trigger": "schedule"},
-                },
-            )
-            if not created:
-                continue
-            BackupJob.objects.using("control").filter(pk=job.pk).update(last_run_status="queued")
-            DataOpsAuditEvent.objects.using("control").create(
-                action="backup_job_queued",
-                operation_id=operation.public_id,
-                profile_key=job.target_profile_key,
-                outcome="queued",
-                evidence={"job_slug": job.slug, "trigger": "schedule"},
-            )
-            queued += 1
-    return queued
+        BackupJob.objects.using("control").filter(pk=job.pk).update(
+            last_run_status="manual_required:v3_only"
+        )
+    return 0

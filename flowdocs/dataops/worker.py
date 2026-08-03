@@ -12,9 +12,8 @@ from django.utils import timezone
 
 from core.models import MaintenanceJob
 
-from .models import DataOperation, DataOpsAuditEvent
+from .models import DataConnection, DataOperation, DataOpsAuditEvent
 from .pipeline import DataOpsPipelineError, execute_operation_record
-from .config import resolve_selectors
 
 
 def _lease_deadline():
@@ -243,13 +242,32 @@ def json_safe_detail(value):
 
 
 def queue_backup_if_due(*, trigger: str = "scheduled", force: bool = False, requested_by_id=None, requested_by_name: str = ""):
-    """Coalesce scheduled/change-triggered backup requests into one operation."""
+    """Compile and coalesce one policy-approved v3 backup operation."""
     from django.conf import settings
+    from .job_scheduler import automatic_backup_scheduling_enabled
+    from .v3_planning import action_status, compile_requested_plan, runtime_config
 
     if not getattr(settings, "DATAOPS_ENABLED", False):
         return None
-    mode = str(getattr(settings, "DATAOPS_BACKUP_MODE", "manual")).strip().lower()
+    if not force and not automatic_backup_scheduling_enabled():
+        return None
+    try:
+        config = runtime_config()
+    except Exception:
+        return None
+    backup_policy = config.policy.get("backup", {})
+    if not isinstance(backup_policy, Mapping):
+        return None
+    mode = str(backup_policy.get("mode", "manual") or "manual").strip().lower()
     if mode == "manual" and not force:
+        return None
+    if mode not in {"manual", "scheduled", "changes"}:
+        return None
+    if not config.connection or config.connection.source != "control_database":
+        return None
+    if action_status(config).get("backup") != "ready":
+        return None
+    if not force and trigger == "change" and mode != "changes":
         return None
     if mode == "changes" and not force:
         from django.core.cache import cache
@@ -259,48 +277,82 @@ def queue_backup_if_due(*, trigger: str = "scheduled", force: bool = False, requ
         if dirty_at is None:
             return None
         try:
-            quiet_period = int(getattr(settings, "DATAOPS_BACKUP_QUIET_PERIOD_SECONDS", 120))
+            quiet_period = int(backup_policy.get("quiet_period_seconds", 120))
             if (timezone.now().timestamp() - float(dirty_at)) < quiet_period:
                 return None
         except (TypeError, ValueError):
             return None
-    selectors = resolve_selectors()
-    destination_key = selectors.get("backup_destination") or selectors.get("backup")
-    source_key = selectors.get("backup_source") or ""
-    if not destination_key:
-        return None
     now = timezone.now()
-    interval = int(getattr(settings, "DATAOPS_BACKUP_INTERVAL_SECONDS", 900))
+    try:
+        interval = int(
+            backup_policy.get("interval_seconds")
+            or backup_policy.get("maximum_delay_seconds")
+            or 900
+        )
+    except (TypeError, ValueError):
+        return None
+    interval = max(1, interval)
     latest = DataOperation.objects.using("control").filter(
         kind=DataOperation.Kind.BACKUP,
         state=DataOperation.State.SUCCEEDED,
+        lifecycle_plan__contract_version=3,
     ).first()
     if not force and latest and latest.finished_at and (now - latest.finished_at).total_seconds() < interval:
         return None
-    bucket = int(now.timestamp() // max(1, interval))
-    idempotency = f"dataops-backup:{destination_key}:{mode}:{bucket}"
-    operation, created = DataOperation.objects.using("control").get_or_create(
-        kind=DataOperation.Kind.BACKUP,
-        idempotency_key=idempotency,
-        defaults={
-            "state": DataOperation.State.QUEUED,
-            "profile_key": destination_key,
-            "source_profile_key": source_key,
-            "destination_profile_key": destination_key,
-            "request_id": str(requested_by_id or ""),
-            "checkpoint": {"trigger": trigger},
-        },
-    )
-    if created:
-        DataOpsAuditEvent.objects.using("control").create(
-            actor_id=requested_by_id,
-            actor_name=requested_by_name,
-            action="backup_queued_automatically",
-            operation_id=operation.public_id,
-            profile_key=destination_key,
-            outcome="queued",
-            evidence={"trigger": trigger, "mode": mode},
+    try:
+        compiled_config, plan = compile_requested_plan(
+            action="backup",
+            activate=False,
+            confirmation_present=False,
         )
+    except Exception:
+        return None
+    if (
+        not plan.allowed
+        or plan.contract_version != 3
+        or compiled_config.digest != config.digest
+    ):
+        return None
+    try:
+        connection = DataConnection.objects.using("control").get(
+            public_id=config.connection.public_id
+        )
+    except Exception:
+        return None
+    bucket = int(now.timestamp() // max(1, interval))
+    idempotency = f"dataops-v3-backup:{config.digest[:16]}:{mode}:{bucket}"
+    with transaction.atomic(using="control"):
+        operation, created = DataOperation.objects.using("control").get_or_create(
+            kind=DataOperation.Kind.BACKUP,
+            idempotency_key=idempotency,
+            defaults={
+                "state": DataOperation.State.QUEUED,
+                "connection": connection,
+                "request_id": str(requested_by_id or ""),
+                "pipeline_stage": "planned",
+                "lifecycle_route": plan.route,
+                "lifecycle_plan": plan.as_dict(),
+                "lifecycle_plan_digest": plan.plan_digest,
+                "checkpoint": {
+                    "configuration_digest": config.digest,
+                    "trigger": trigger,
+                },
+            },
+        )
+        if created:
+            DataOpsAuditEvent.objects.using("control").create(
+                actor_id=requested_by_id,
+                actor_name=requested_by_name,
+                action="backup_queued_automatically",
+                operation_id=operation.public_id,
+                outcome="queued",
+                evidence={
+                    "trigger": trigger,
+                    "mode": mode,
+                    "plan_digest": plan.plan_digest,
+                    "configuration_digest": config.digest,
+                },
+            )
     return operation if created else None
 
 
