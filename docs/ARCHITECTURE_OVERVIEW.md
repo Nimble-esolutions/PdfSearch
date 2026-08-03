@@ -97,6 +97,26 @@ The repository separates source code, test harnesses, operator tooling, and
 documentation. Runtime data is not committed as application source; it lives
 in named volumes or immutable RustFS generations.
 
+## 2.2 Operator read models
+
+```mermaid
+flowchart LR
+  R["dataops.readiness_payload"] --> Z["/readyz"]
+  R --> D["Dashboard data-protection strip"]
+  M["workbench_maintenance_state"] --> C["Capability actions"]
+  M --> J["Active / attention / history jobs"]
+  F["folder_cockpit_context"] --> P["25-document page"]
+  P --> V["View"]
+  P --> A["Manage lifecycle actions"]
+```
+
+Dashboard does not independently reconstruct runtime authority. It projects
+the same bounded DataOps v3 payload used by `/readyz`. Maintenance keeps the
+existing preview, confirmation, idempotency, source-digest, and superadmin
+mutation gates, while grouping repeated capability reasons and ensuring active
+or actionable work cannot disappear behind bounded history. Category metrics
+cover the full authorized queryset; only the rendered document list is paged.
+
 All modules live under `flowdocs/core/`. Grouped by concern:
 
 ### Environment & Safety
@@ -474,7 +494,8 @@ CREATE_SUPERUSER=0
 | Static files 404 | `collectstatic` not run or wrong `STATIC_ROOT` | Verify `/app/data/staticfiles/` contains collected assets |
 | Search returns no results | FAISS indexes missing or incompatible | Check `/app/data/faiss_indexes/`, verify embedding model matches |
 | Maintenance worker stuck | SQLite lock contention | Ensure single maintenance worker; check for zombie processes |
-| Image digest mismatch | `pull_policy: always` not pulling expected digest | Verify `PDFSEARCH_IMAGE` is an immutable digest, not a tag |
+| Stage image did not advance | mutable channel remained cached or publication lagged | Confirm `pull_policy: always`, then compare the resolved container digest and OCI revision |
+| Production image digest mismatch | configured and running release identities differ | Verify `PDFSEARCH_IMAGE` is the approved immutable digest, not a tag |
 
 ---
 
@@ -482,35 +503,34 @@ CREATE_SUPERUSER=0
 
 | Metric | Value |
 |--------|-------|
-| dev HEAD | `2e1ca38` |
-| Django migrations | 17 (core:0001 through core:0017) |
-| Unit tests | 157+ (all passing) |
-| Integration tests | 16 S3 primitive + 3 application publication (passing) |
-| PDF rows | 253 |
-| PDF files | 242 |
-| Folders | 53 |
-| Users | 8 |
-| FAISS indexes | 51 |
-| FAISS vectors | 8,753 |
-| i18n languages | English (Indian) + Marathi |
-| Production readiness | Pending: RustFS certification + staging rehearsal |
+| Repository revision | Use the current reviewed PR/release SHA; do not copy this living document as release identity |
+| Project migration files | 46 across core, dataops, and vaultops |
+| Stage PDF rows/files | 242 / 242 |
+| Stage folders | 46 |
+| Stage users | 7 |
+| Stage indexing ratio | 1.0 |
+| OCR input languages | English + Marathi + Hindi |
+| Admin UI languages | English (Indian) + Marathi |
+| Stage recovery | Signed activation, real backup, and isolated restore passed |
+| Production cutover | Out of scope; legacy production remains authoritative |
 
 ### What's Verified
 
-- All 157 unit tests pass in the current image
-- 16 MinIO S3/CAS integration tests pass
-- Django system check: 0 issues
-- `/livez`, `/readyz`, `/health/data/`, `/health/lease/`, `/health/metrics/` all respond correctly
-- Operations dashboard renders (superadmin-only)
-- CI pipeline: runtime smoke, migration guard, data release gate, admin UI smoke
+- Signed stage runtime serves 242/242 indexed documents.
+- DataOps v3 stage backup and isolated restore rehearsal completed.
+- `/readyz` reports signed generation, manifest evidence, and ratio 1.0.
+- English and Marathi searches return real-provider answers and references.
+- Dashboard readiness parity, 46-category maintenance scope, 105-document
+  pagination, 320px overflow, keyboard controls, and Axe checks pass locally.
+- Django system check and focused core/DataOps contract suites pass.
 
 ### What's Planned / In Progress
 
-- RustFS certification (S3 conditional operation verification against production RustFS)
-- Staging rehearsal (full restore → sanitize → rehearse → activate cycle)
-- OpenAI call routing through `ai_guard.py` (currently some code paths bypass the guard)
-- Automatic cross-environment sync
-- Generated artifact manifests with automatic reconciliation
-- FAISS recovery orchestration
+- Merge and deploy the operator-workbench correction to the stage `:latest`
+  channel, then record the resolved running digest.
+- Keep automatic stage backup disabled unless the operator explicitly enables
+  it after a bounded scheduling review.
+- Certify an immutable image digest separately before any future production
+  promotion.
 - Department-scoped admin roles (phase 2 authorization)
 - Docker secrets migration for credential management

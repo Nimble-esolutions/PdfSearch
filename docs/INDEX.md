@@ -11,7 +11,7 @@ Supersedes: None
 
 - [STATUS-2026-08-03.md](STATUS-2026-08-03.md) — canonical current record for
   signed 242-document stage activation, search-policy repair, local and real
-  stage backup/recovery evidence, and final immutable-release gates.
+  stage backup/recovery evidence, and current stage-release gates.
 - [STATUS-2026-08-02.md](STATUS-2026-08-02.md) — historical source snapshot,
   RustFS v2 publication/clone, quarantine, OCR, and migration evidence.
 - [OPERATIONS_CHANGELOG-2026-08-02.md](OPERATIONS_CHANGELOG-2026-08-02.md) —
@@ -75,6 +75,7 @@ maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
 ## Release Promotion
 
 - [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) — current workflow guarantees and future targets
+- [`releases/2026-08-03-operator-workbench-truth-and-scale.md`](releases/2026-08-03-operator-workbench-truth-and-scale.md) — single readiness authority, maintenance/PDF scale UX, browser evidence, and stage `:latest` policy
 - [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md) — Admin Operations Cockpit merge, image digest, and dev-release evidence
 - Data release pipeline merge evidence is maintained in [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) and the current data-custody/release records.
 - [`SECURITY_SCAN.md`](SECURITY_SCAN.md) — Trivy behavior, root cause, remediation, and verification

@@ -63,8 +63,8 @@ release note and compatibility review.
 | `BACKUP_ROLE` | Controls writer/reader/disabled custody behavior | `writer` only with vault and approvals | `disabled` or `reader` | `disabled` |
 | `BACKUP_SYNC_MODE` | Selects manual/scheduled/hybrid backup behavior | `manual` unless explicitly approved | `manual` | `manual` |
 | `EXTERNAL_SIDE_EFFECTS_MODE` | Gates email/OpenAI/payment/webhook behavior | `enabled` | `sandbox` or `disabled` | `sandbox` |
-| `PDFSEARCH_IMAGE` | Exact deployed image reference | Immutable GHCR digest | Immutable GHCR digest | Image/build reference |
-| `APP_IMAGE_DIGEST` | Runtime release identity shown in admin/health evidence | Same exact image digest | Same exact image digest | Optional but useful |
+| `PDFSEARCH_IMAGE` | Compose image reference | Immutable GHCR digest | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest` | Image/build reference |
+| `APP_IMAGE_DIGEST` | Runtime image marker shown in admin/health evidence | Same immutable image digest | Same intentional `:latest` stage channel | Optional locally; record the stage container's resolved digest separately |
 | `APP_RELEASE_VERSION` | Git SHA/release identifier | Approved SHA | Approved SHA | Local SHA or blank |
 
 Production with `BACKUP_ROLE=writer` additionally requires the artifact vault,

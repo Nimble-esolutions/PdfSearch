@@ -96,9 +96,9 @@ automatic activation.
 | DATA_PINNED_GENERATION | Exact generation to use | blank | explicit during rehearsal | blank | Pinning prevents moving-target restores; record the digest |
 | EXTERNAL_SIDE_EFFECTS_MODE | Email, webhook, payment, and similar effects | sandbox | sandbox | enabled | Never let production-derived stage data trigger real external effects |
 | EXTERNAL_AI_MODE | AI-only provider policy | sandbox or disabled | enabled by reviewed policy | enabled by reviewed policy | Sandbox is refused in review/stage/prod; this does not authorize unrelated side effects |
-| APP_RELEASE_VERSION | Human-readable release identity | local-dev | approved Git SHA | approved Git SHA | Must agree with release evidence |
-| APP_IMAGE_DIGEST | Immutable running image identity | blank locally | immutable GHCR digest | immutable GHCR digest | Mutable tags are aliases; verify the digest from the running container |
-| PDFSEARCH_IMAGE | Compose image reference | local image may be used | immutable digest | immutable digest | A tag pull is not proof that the intended image is running |
+| APP_RELEASE_VERSION | Human-readable release identity | local-dev | stage channel/revision marker | approved Git SHA | Record the resolved stage digest separately |
+| APP_IMAGE_DIGEST | Runtime image marker | blank locally | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest` | immutable GHCR digest | Stage intentionally tracks latest; production never does |
+| PDFSEARCH_IMAGE | Compose image reference | local image may be used | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest` | immutable digest | Stage always pulls and records the resolved digest |
 | PDFSEARCH_DEV_IMAGE | Local development image | pdfsearch-dev:local | unused | unused | Never use a local tag for deployment |
 | LOCAL_BUILD_REVISION | Local build marker | local-dev | unused | unused | Useful for local diagnostics only |
 | ALLOWED_HOSTS | Host header allowlist | localhost values | 2026.ai-sahakar.net and approved aliases | production domains | A missing host causes request rejection; a broad value weakens routing protection |

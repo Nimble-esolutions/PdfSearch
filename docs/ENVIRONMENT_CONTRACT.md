@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-02
+Last verified: 2026-08-03
 Canonical source: docs/ENVIRONMENT_CONTRACT.md
 Supersedes: env.minimal, env.template
 
@@ -10,13 +10,15 @@ reference and reviewed dev/stage/production examples.
 
 # Environment Contract
 
-## 2026 stage applied posture (2026-08-02)
+## 2026 stage applied posture (2026-08-03)
 
-The current stage deployment is intentionally fail-closed before activation:
+The current stage deployment has a signed active runtime. Production remains
+untouched. The operator-approved stage image channel intentionally follows
+`:latest`:
 
     APP_ENV=staging
-    DATA_MODE=empty
-    DATA_BOOTSTRAP_MODE=empty
+    DATA_MODE=local
+    DATA_BOOTSTRAP_MODE=strict
     DATASET_ID=ai-sahakar-stage-2026
     AUTHORITATIVE_DATASET_ID=ai-sahakar-stage-2026
     DATAOPS_ENV_PROFILES=production_v2_source,stage_2026
@@ -24,8 +26,10 @@ The current stage deployment is intentionally fail-closed before activation:
     DATAOPS_BACKUP_PROFILE=stage_2026
     BACKUP_ROLE=reader
     BACKUP_SYNC_MODE=manual
-    STAGING_INITIAL_ACTIVATION_ENABLED=0
-    STAGING_RUNTIME_ACTIVATION_ENABLED=0
+    STAGING_INITIAL_ACTIVATION_ENABLED=1
+    STAGING_RUNTIME_ACTIVATION_ENABLED=1
+    PDFSEARCH_IMAGE=ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest
+    APP_IMAGE_DIGEST=ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest
 
 The production source profile points to the v2 bucket/dataset and the stage
 profile points to the stage-owned bucket/dataset. Credential and signing-key
@@ -59,8 +63,10 @@ ALLOW_INSECURE_DEFAULTS=0
 CREATE_SUPERUSER=0
 ```
 
-`PDFSEARCH_IMAGE` must be an immutable GHCR digest tied to the approved Git SHA.
-This requirement applies to staging and production. Development uses
+Production `PDFSEARCH_IMAGE` must be an immutable GHCR digest tied to the
+approved Git SHA. The disposable 2026 stage is an explicit exception: it uses
+the `:latest` channel, always pulls, and records the resolved running digest as
+evidence after deployment. Development uses
 `PDFSEARCH_DEV_IMAGE` (default `pdfsearch-dev:local`) plus an identical local
 build definition for web and maintenance. `APP_RELEASE_VERSION` records the
 local revision and `APP_IMAGE_DIGEST` remains empty for a native local build.
@@ -70,7 +76,7 @@ Redis, `/app/data`, `/app/data-control`, health/dependency semantics, and all
 critical environment keys. Development supplies an in-stack RustFS capability;
 staging and production connect to externally operated RustFS. Configuration
 validation emits reason codes and key names only, never rendered values.
-Tags such as `latest` or `dev` are compatibility aliases, not release identity.
+Tags such as `latest` or `dev` do not prove which digest is running.
 
 ## Environment Identity (New — 2026-07-24)
 
@@ -162,9 +168,12 @@ The OCI image carries build identity through:
 - OCI labels: `org.opencontainers.image.revision` (Git SHA), `created`,
   `version`
 - `/app/flowdocs/.release` file: Git SHA, build timestamp, CI run URL
-- `PDFSEARCH_IMAGE` env var: the deployed digest
+- the resolved container image digest recorded by the deployment operator
 
-All three must agree for a release to be accepted.
+For production, `PDFSEARCH_IMAGE` and `APP_IMAGE_DIGEST` must name that exact
+immutable digest. The 2026 stage deliberately keeps both variables on
+`:latest`; its acceptance record therefore pairs the mutable channel with the
+resolved container digest and OCI revision observed after the pull.
 
 ## Artifact Vault Configuration
 
