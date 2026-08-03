@@ -228,6 +228,7 @@ services:
       - ACTIVATION_SUPERVISOR_POLL_SECONDS=${ACTIVATION_SUPERVISOR_POLL_SECONDS:-2}
       - ACTIVATION_READINESS_TIMEOUT_SECONDS=${ACTIVATION_READINESS_TIMEOUT_SECONDS:-120}
       - EXTERNAL_SIDE_EFFECTS_MODE=${EXTERNAL_SIDE_EFFECTS_MODE:-enabled}
+      - EXTERNAL_AI_MODE=${EXTERNAL_AI_MODE:-}
       - APP_IMAGE_DIGEST=${PDFSEARCH_IMAGE:-}
       - APP_RELEASE_VERSION=${APP_RELEASE_VERSION:-}
       - NONPROD_DATA_POLICY=${NONPROD_DATA_POLICY:-}
@@ -495,6 +496,7 @@ services:
       ACTIVATION_SUPERVISOR_POLL_SECONDS: ${ACTIVATION_SUPERVISOR_POLL_SECONDS:-2}
       ACTIVATION_READINESS_TIMEOUT_SECONDS: ${ACTIVATION_READINESS_TIMEOUT_SECONDS:-120}
       EXTERNAL_SIDE_EFFECTS_MODE: ${EXTERNAL_SIDE_EFFECTS_MODE:-enabled}
+      EXTERNAL_AI_MODE: ${EXTERNAL_AI_MODE:-}
       APP_IMAGE_DIGEST: ${PDFSEARCH_IMAGE:-}
       APP_RELEASE_VERSION: ${APP_RELEASE_VERSION:-}
       NONPROD_DATA_POLICY: ${NONPROD_DATA_POLICY:-}
@@ -525,17 +527,9 @@ services:
       - internal
 
 volumes:
-  # Dokploy provisions these persistent volumes. Keep them external so a
-  # project-name change or a missing volume cannot create a blank replacement.
   redis_data:
-    external: true
-    name: ${COMPOSE_PROJECT_NAME}_redis_data
   flowdocs_data:
-    external: true
-    name: ${COMPOSE_PROJECT_NAME}_flowdocs_data
   flowdocs_control:
-    external: true
-    name: ${COMPOSE_PROJECT_NAME}_flowdocs_control
   prod_flowdocs:
     external: true
 
