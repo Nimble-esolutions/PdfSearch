@@ -4912,3 +4912,23 @@ msgstr[1] "%(count)s मागील कार्ये दाखवा"
 #: core/templates/dataops/_maintenance_job.html
 msgid "Work size is not available yet."
 msgstr "कार्याचा आकार अद्याप उपलब्ध नाही."
+
+#: core/templates/dashboard_pdfs.html
+msgid "Documents in this category"
+msgstr "या श्रेणीतील दस्तऐवज"
+
+#: core/templates/dashboard_pdfs.html
+msgid "Manage document"
+msgstr "दस्तऐवज व्यवस्थापित करा"
+
+#: core/templates/dashboard_pdfs.html
+msgid "Manage"
+msgstr "व्यवस्थापित करा"
+
+#: core/templates/dashboard_pdfs.html
+msgid "Document pages"
+msgstr "दस्तऐवज पृष्ठे"
+
+#: core/templates/dashboard_pdfs.html
+msgid "Page %(current)s of %(total)s"
+msgstr "%(total)s पैकी पृष्ठ %(current)s"

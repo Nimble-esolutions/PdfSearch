@@ -4,11 +4,12 @@ import os
 import sqlite3
 import tempfile
 import time
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import skipUnless
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 from django.conf import settings
@@ -21,13 +22,14 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import (
     Client,
+    RequestFactory,
     SimpleTestCase,
     TestCase,
     TransactionTestCase,
     override_settings,
 )
 from django.urls import reverse
-from django.utils import translation
+from django.utils import timezone, translation
 
 from flowdocs import settings as project_settings
 
@@ -54,6 +56,7 @@ from .views import (
     _backup_readiness_check,
     _data_readiness_check,
     _parse_bulk_filters,
+    rate_limit,
     _signed_active_runtime,
 )
 from .runtime_data_gate import RuntimeDataGateError, seed_pdf_media_report, validate_seed_pdf_media
@@ -75,6 +78,48 @@ class StaticFilesConfigurationTests(TestCase):
             Path(matches[0]).resolve(),
             (settings.BASE_DIR / 'core' / 'static' / asset).resolve(),
         )
+
+
+class LoginRateLimitTests(SimpleTestCase):
+    @patch("core.views.redis_lib.from_url")
+    def test_successful_login_clears_failed_attempt_counter(self, from_url):
+        from django.http import HttpResponseRedirect
+
+        redis_client = MagicMock()
+        redis_client.get.return_value = b"4"
+        from_url.return_value = redis_client
+        request = RequestFactory().post(
+            "/login/",
+            REMOTE_ADDR="127.0.0.1",
+        )
+        wrapped = rate_limit()(lambda _request: HttpResponseRedirect("/dashboard/"))
+
+        response = wrapped(request)
+
+        self.assertEqual(response.status_code, 302)
+        redis_client.delete.assert_called_once_with("ratelimit:login:127.0.0.1")
+        redis_client.pipeline.assert_not_called()
+
+    @patch("core.views.redis_lib.from_url")
+    def test_failed_login_increments_bounded_counter(self, from_url):
+        from django.http import HttpResponse
+
+        redis_client = MagicMock()
+        redis_client.get.return_value = None
+        pipeline = redis_client.pipeline.return_value
+        from_url.return_value = redis_client
+        request = RequestFactory().post(
+            "/login/",
+            REMOTE_ADDR="127.0.0.1",
+        )
+        wrapped = rate_limit()(lambda _request: HttpResponse("invalid"))
+
+        response = wrapped(request)
+
+        self.assertEqual(response.status_code, 200)
+        pipeline.incr.assert_called_once_with("ratelimit:login:127.0.0.1")
+        pipeline.expire.assert_called_once_with("ratelimit:login:127.0.0.1", 60)
+        pipeline.execute.assert_called_once_with()
 
 
 class OperationalEndpointTests(TestCase):
@@ -1139,6 +1184,8 @@ class RestorePDFCommandTests(TestCase):
 
 
 class DashboardTests(TestCase):
+    databases = {"default", "control"}
+
     def setUp(self):
         self.user = get_user_model().objects.create_user(
             username="dashboard-user",
@@ -1489,6 +1536,101 @@ class DashboardTests(TestCase):
         self.assertContains(response, 'aria-label="Close"', count=2)
         self.assertContains(response, "Superadmin access is required")
         self.assertNotContains(response, "Repair Stored Index")
+
+    def test_folder_workbench_paginates_documents_without_changing_metrics(self):
+        self.client.force_login(self.user)
+        folder = Folder.objects.create(name="Scaled documents", created_by=self.user)
+        for number in range(27):
+            PDFFile.objects.create(
+                title=f"Document {number:02d}",
+                file=f"pdfs/document-{number:02d}.pdf",
+                folder=folder,
+                uploaded_by=self.user,
+                lifecycle="ready",
+                indexed=True,
+            )
+        shared_time = timezone.now() - timedelta(days=1)
+        PDFFile.objects.filter(folder=folder).update(uploaded_at=shared_time)
+
+        first = self.client.get(reverse("dashboard_folder", args=[folder.pk]))
+        second = self.client.get(
+            reverse("dashboard_folder", args=[folder.pk]),
+            {"document_page": 2},
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(len(first.context["pdfs"]), 25)
+        self.assertEqual(first.context["folder_stats"]["total_pdfs"], 27)
+        self.assertEqual(first.context["folder_stats"]["indexed_pdfs"], 27)
+        self.assertEqual(first.context["pdfs"].paginator.num_pages, 2)
+        self.assertEqual(len(second.context["pdfs"]), 2)
+        self.assertEqual(
+            [pdf.pk for pdf in first.context["pdfs"]],
+            sorted(
+                [pdf.pk for pdf in first.context["pdfs"]],
+                reverse=True,
+            ),
+        )
+        self.assertContains(first, "Document pages")
+        self.assertContains(first, 'class="document-record"', count=25)
+
+    def test_folder_workbench_handles_invalid_and_excessive_page_numbers(self):
+        self.client.force_login(self.user)
+        folder = Folder.objects.create(name="Paged documents", created_by=self.user)
+        for number in range(26):
+            PDFFile.objects.create(
+                title=f"Document {number:02d}",
+                file=f"pdfs/paged-document-{number:02d}.pdf",
+                folder=folder,
+                uploaded_by=self.user,
+            )
+
+        invalid = self.client.get(
+            reverse("dashboard_folder", args=[folder.pk]),
+            {"document_page": "not-a-page"},
+        )
+        excessive = self.client.get(
+            reverse("dashboard_folder", args=[folder.pk]),
+            {"document_page": 999},
+        )
+
+        self.assertEqual(invalid.status_code, 200)
+        self.assertEqual(invalid.context["pdfs"].number, 1)
+        self.assertEqual(excessive.status_code, 200)
+        self.assertEqual(excessive.context["pdfs"].number, 2)
+
+    def test_pdf_actions_preserve_same_origin_document_page(self):
+        owner = get_user_model().objects.create_user(
+            username="pagination-owner",
+            password="test-password",
+            role="admin",
+        )
+        self.client.force_login(self.user)
+        folder = Folder.objects.create(name="Documents", created_by=self.user)
+        pdf = PDFFile.objects.create(
+            title="Paged document",
+            file="pdfs/paged.pdf",
+            folder=folder,
+            uploaded_by=None,
+        )
+        paged_url = (
+            f"http://testserver{reverse('dashboard_folder', args=[folder.pk])}"
+            "?document_page=2"
+        )
+
+        renamed = self.client.post(
+            reverse("rename_pdf", args=[pdf.pk]),
+            {"title": "Renamed paged document"},
+            HTTP_REFERER=paged_url,
+        )
+        assigned = self.client.post(
+            reverse("assign_pdf_owner", args=[pdf.pk]),
+            {"owner_id": owner.pk},
+            HTTP_REFERER=paged_url,
+        )
+
+        self.assertRedirects(renamed, paged_url, fetch_redirect_response=False)
+        self.assertRedirects(assigned, paged_url, fetch_redirect_response=False)
 
     def test_admin_can_assign_owner_to_unknown_owner_pdf(self):
         owner = get_user_model().objects.create_user(

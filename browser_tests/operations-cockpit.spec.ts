@@ -40,7 +40,7 @@ test.describe('Operations Cockpit', () => {
     await expect(page.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Category Yard' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Active Work' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Data recovery posture' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Data protection' })).toBeVisible();
 
     await expect(page.locator('.cockpit-posture__code')).toHaveCount(0);
     await expect(page.locator('.cockpit-attention-item code')).toHaveCount(0);
@@ -73,6 +73,8 @@ test.describe('Operations Cockpit', () => {
     await page.goto('/dashboard/?readiness=unavailable');
     await page.getByRole('link', { name: /Codex Smoke Category Renamed/ }).first().click();
     await expect(page.getByText('Document file is unavailable')).toBeVisible();
+    const unavailableRecord = page.locator('.document-record').filter({ hasText: 'Codex Unavailable PDF' });
+    await unavailableRecord.locator('summary[aria-label^="Manage document"]').click();
     const editKeywords = page.getByRole('button', { name: 'Edit Keywords' });
     await editKeywords.hover();
     await expectNoSeriousAxeViolations(page);
@@ -86,7 +88,7 @@ test.describe('Operations Cockpit', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByText('document_media_unavailable')).toBeHidden();
 
-    const bindRecovery = page.getByText('Bind recovery evidence').first();
+    const bindRecovery = unavailableRecord.getByText('Bind recovery evidence').first();
     await bindRecovery.click();
     const bindingForm = page.locator('form[action$="/recovery-evidence/"]');
     await bindingForm.evaluate((form: HTMLFormElement) => {
@@ -110,7 +112,9 @@ test.describe('Operations Cockpit', () => {
     await expect(bindingAfterRedirect.locator('input[name="expected_sha256"]')).toBeFocused();
     await expect(page.getByText('Restore is unavailable until approved').first()).toBeVisible();
 
-    const quarantine = page.getByText('Mark unavailable').first();
+    const availableRecord = page.locator('.document-record').filter({ hasText: 'Codex Smoke PDF' });
+    await availableRecord.locator('summary[aria-label^="Manage document"]').click();
+    const quarantine = availableRecord.getByText('Mark unavailable').first();
     await quarantine.hover();
     await expectNoSeriousAxeViolations(page);
     await quarantine.focus();
@@ -135,6 +139,80 @@ test.describe('Operations Cockpit', () => {
     await expect(page.getByText('अपेक्षित संचिका आकार (बाइटमध्ये)').first()).toHaveCount(1);
     await expectNoVisibleMachineTokens(page);
 
+    await expectNoSeriousAxeViolations(page);
+  });
+
+  test('keeps a 105-document category bounded and responsive', async ({ page }, testInfo) => {
+    await login(page);
+    await page.locator('.admin-category-card__link').filter({ hasText: 'Codex Scale Category' }).click();
+
+    await expect(page.locator('.document-record')).toHaveCount(25);
+    await expect(page.getByText('Page 1 of 5')).toBeVisible();
+    await expect(page.getByText('VeryLongUnbrokenDocumentTitle')).toBeVisible();
+    await expect(page.getByText('मराठी सहकारी संस्था दस्तऐवज')).toBeVisible();
+    await expect(page.locator('.document-action-panel:visible')).toHaveCount(0);
+
+    const configuredWidth = page.viewportSize()?.width || 1440;
+    const widths = testInfo.project.name === 'mobile' ? [320, 390] : [configuredWidth];
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 900 });
+      const dimensions = await page.evaluate(() => {
+        const list = document.querySelector('.document-list') as HTMLElement;
+        return {
+          pageScroll: document.documentElement.scrollWidth,
+          pageClient: document.documentElement.clientWidth,
+          listScroll: list.scrollWidth,
+          listClient: list.clientWidth,
+        };
+      });
+      expect(dimensions.pageScroll).toBeLessThanOrEqual(dimensions.pageClient + 1);
+      expect(dimensions.listScroll).toBeLessThanOrEqual(dimensions.listClient + 1);
+    }
+
+    const firstRecord = page.locator('.document-record').first();
+    const view = firstRecord.getByRole('link', { name: 'View' });
+    const manage = firstRecord.locator('summary[aria-label^="Manage document"]');
+    for (const control of [view, manage]) {
+      const box = await control.boundingBox();
+      expect(box?.height || 0).toBeGreaterThanOrEqual(44);
+    }
+    await manage.focus();
+    await page.keyboard.press('Enter');
+    await expect(firstRecord.locator('.document-action-panel')).toBeVisible();
+    await expect(firstRecord.getByRole('button', { name: /Rename PDF/ })).toBeVisible();
+    await expect(firstRecord.getByRole('button', { name: /Delete PDF/ })).toBeVisible();
+    await expectNoSeriousAxeViolations(page);
+  });
+
+  test('keeps maintenance scope usable with stage-scale categories', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', '320px scope check runs once');
+    await login(page);
+    await page.goto('/dashboard/data-operations/advanced/');
+
+    await expect(page.getByRole('heading', { name: 'Search maintenance', level: 2 })).toHaveCount(1);
+    const scope = page.locator('[data-maintenance-scope]');
+    const items = scope.locator('[data-maintenance-scope-item]');
+    expect(await items.count()).toBeGreaterThanOrEqual(46);
+
+    const filter = scope.getByLabel('Find categories');
+    await filter.fill('Codex Scope Category 01');
+    await scope.getByRole('button', { name: 'Select visible' }).click();
+    await expect(scope.locator('input[type="checkbox"]:checked')).toHaveCount(1);
+    await scope.getByRole('button', { name: 'Clear selection' }).click();
+    await expect(scope.locator('input[type="checkbox"]:checked')).toHaveCount(0);
+
+    await page.setViewportSize({ width: 320, height: 844 });
+    const firstVisible = scope.locator('[data-maintenance-scope-item]:visible').first();
+    const checkboxBox = await firstVisible.locator('input[type="checkbox"]').boundingBox();
+    const labelBox = await firstVisible.boundingBox();
+    expect(checkboxBox?.width || 0).toBeGreaterThanOrEqual(16);
+    expect(checkboxBox?.width || 0).toBeLessThanOrEqual(20);
+    expect(labelBox?.height || 0).toBeGreaterThanOrEqual(44);
+    const dimensions = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
     await expectNoSeriousAxeViolations(page);
   });
 

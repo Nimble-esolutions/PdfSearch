@@ -1866,3 +1866,23 @@ msgstr[1] ""
 #: core/templates/dataops/_maintenance_job.html
 msgid "Work size is not available yet."
 msgstr ""
+
+#: core/templates/dashboard_pdfs.html
+msgid "Documents in this category"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html
+msgid "Manage document"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html
+msgid "Manage"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html
+msgid "Document pages"
+msgstr ""
+
+#: core/templates/dashboard_pdfs.html
+msgid "Page %(current)s of %(total)s"
+msgstr ""
