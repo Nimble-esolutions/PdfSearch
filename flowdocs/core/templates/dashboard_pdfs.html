@@ -98,29 +98,15 @@
           <p>{% trans "Each row shows ownership, search readiness, and available actions." %}</p>
         </div>
       </div>
-      <div class="table-responsive admin-table-wrap">
-        <table class="table table-hover table-sm align-middle mb-0 admin-table">
-          <thead>
-            <tr>
-              <th scope="col">{% trans "Document" %}</th>
-              <th scope="col">{% trans "Owner" %}</th>
-              <th scope="col">{% trans "Received" %}</th>
-              <th scope="col">{% trans "Readiness" %}</th>
-              <th scope="col">{% trans "View" %}</th>
-              {% if role == 'admin' or role == 'superadmin' %}
-                <th scope="col" class="text-end">{% trans "Actions" %}</th>
-              {% endif %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for pdf in pdfs %}
-              <tr>
-                <td>
-                  <strong>{{ pdf.title }}</strong>
-                </td>
-                <td>{% if pdf.uploaded_by %}{{ pdf.uploaded_by.username }}{% else %}{% trans "Unknown" %}{% endif %}</td>
-                <td>{{ pdf.uploaded_at|date:"d M Y H:i" }}</td>
-                <td>
+      <div class="document-list" role="list" aria-label="{% trans 'Documents in this category' %}">
+        {% for pdf in pdfs %}
+          <article class="document-record" role="listitem">
+            <div class="document-record__identity">
+              <strong>{{ pdf.title }}</strong>
+              <span>{% trans "Owner" %}: {% if pdf.uploaded_by %}{{ pdf.uploaded_by.username }}{% else %}{% trans "Unknown" %}{% endif %}</span>
+              <span>{% trans "Received" %}: {{ pdf.uploaded_at|date:"d M Y H:i" }}</span>
+            </div>
+            <div class="document-record__status" aria-label="{% trans 'Readiness' %}">
                   {% if pdf.lifecycle == 'unavailable' %}
                     <span class="badge text-bg-danger">{% trans "Unavailable" %}</span>
                   {% elif pdf.indexed %}
@@ -148,19 +134,20 @@
                   {% if not pdf.uploaded_by %}
                     <span class="badge text-bg-light">{% trans "Owner review" %}</span>
                   {% endif %}
-                </td>
-                <td>
+            </div>
+            <div class="document-record__primary">
                   {% if pdf.lifecycle == 'unavailable' %}
                     <span class="text-muted">{% trans "File unavailable" %}</span>
                   {% else %}
-                    <a href="{% url 'view_pdf' pdf.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
+                    <a href="{% url 'view_pdf' pdf.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm document-primary-action">
                       {% trans "View" %}
                     </a>
                   {% endif %}
-                </td>
-                {% if role == 'admin' or role == 'superadmin' %}
-                  <td>
-                    <div class="admin-row-actions justify-content-end">
+            </div>
+            {% if role == 'admin' or role == 'superadmin' %}
+              <details class="document-actions"{% if media_quarantine_form.pdf_id == pdf.id %} open{% endif %}>
+                <summary aria-label="{% trans 'Manage document' %}: {{ pdf.title }}">{% trans "Manage" %}</summary>
+                <div class="document-action-panel admin-row-actions">
                       {% if not pdf.uploaded_by %}
                         <button type="button"
                                 class="btn btn-outline-secondary btn-sm"
@@ -314,20 +301,21 @@
                           {% trans "Delete" %}
                         </button>
                       </form>
-                    </div>
-                  </td>
-                {% endif %}
-              </tr>
-            {% empty %}
-              <tr>
-                <td colspan="{% if role == 'admin' or role == 'superadmin' %}6{% else %}5{% endif %}" class="text-center text-muted py-4">
-                  {% trans "No PDFs available in this category." %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+                </div>
+              </details>
+            {% endif %}
+          </article>
+        {% empty %}
+          <p class="text-center text-muted py-4">{% trans "No PDFs available in this category." %}</p>
+        {% endfor %}
       </div>
+      {% if pdfs.paginator.num_pages > 1 %}
+        <nav class="cockpit-pagination" aria-label="{% trans 'Document pages' %}">
+          {% if pdfs.has_previous %}<a href="?document_page={{ pdfs.previous_page_number }}">{% trans "Previous" %}</a>{% endif %}
+          <span>{% blocktrans with current=pdfs.number total=pdfs.paginator.num_pages %}Page {{ current }} of {{ total }}{% endblocktrans %}</span>
+          {% if pdfs.has_next %}<a href="?document_page={{ pdfs.next_page_number }}">{% trans "Next" %}</a>{% endif %}
+        </nav>
+      {% endif %}
     </div>
   </div>
 

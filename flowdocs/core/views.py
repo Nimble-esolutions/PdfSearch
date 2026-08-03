@@ -20,24 +20,37 @@ def rate_limit(max_attempts: int = 5, window_seconds: int = 60):
         def wrapper(request, *args, **kwargs):
             if request.method != "POST":
                 return view_func(request, *args, **kwargs)
+            redis_client = None
+            key = ""
             try:
-                r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis:6379/1"))
+                redis_client = redis_lib.from_url(
+                    os.environ.get("REDIS_URL", "redis://redis:6379/1")
+                )
                 client_ip = request.META.get("REMOTE_ADDR", "unknown")
                 key = f"ratelimit:login:{client_ip}"
-                attempts = r.get(key)
+                attempts = redis_client.get(key)
                 if attempts and int(attempts) >= max_attempts:
                     from django.http import HttpResponse
                     return HttpResponse(
                         "Too many login attempts. Try again later.",
                         status=429,
                     )
-                pipe = r.pipeline()
-                pipe.incr(key)
-                pipe.expire(key, window_seconds)
-                pipe.execute()
             except Exception:
-                pass
-            return view_func(request, *args, **kwargs)
+                redis_client = None
+
+            response = view_func(request, *args, **kwargs)
+            if redis_client is not None:
+                try:
+                    if 300 <= response.status_code < 400:
+                        redis_client.delete(key)
+                    else:
+                        pipe = redis_client.pipeline()
+                        pipe.incr(key)
+                        pipe.expire(key, window_seconds)
+                        pipe.execute()
+                except Exception:
+                    pass
+            return response
         return wrapper
     return decorator
 from django.shortcuts import render, redirect, get_object_or_404
@@ -45,6 +58,7 @@ from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidd
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.core.cache import cache
+from django.core.paginator import Paginator
 from django.conf import settings
 from django.contrib import messages
 from django.db import IntegrityError, connection, transaction
@@ -57,6 +71,8 @@ from django.views.decorators.http import require_POST, require_GET
 from django.urls import reverse
 from django.utils.translation import gettext
 from django.utils import timezone
+
+DOCUMENT_PAGE_SIZE = 25
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent, SEARCHABLE_PDF_LIFECYCLES, SiteSetting
 from .configuration_registry import build_configuration_groups
@@ -251,29 +267,39 @@ def admin_cockpit_context(user, category_query=""):
     return folders, cockpit
 
 
-def folder_cockpit_context(user, folder):
+def folder_cockpit_context(user, folder, *, page_number=1):
     pdfs = visible_pdfs(
         user,
         PDFFile.objects.filter(folder=folder),
-    ).select_related("uploaded_by", "folder").order_by("-uploaded_at")
-    total_pdfs = pdfs.count()
-    searchable_pdfs = pdfs.filter(
-        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES
-    ).count()
-    indexed_pdfs = pdfs.filter(
-        indexed=True,
-        lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
-    ).count()
-    unknown_uploaders = pdfs.filter(uploaded_by__isnull=True).count()
+    ).select_related("uploaded_by", "folder").order_by("-uploaded_at", "-pk")
+    aggregate = pdfs.aggregate(
+        total_pdfs=Count("id"),
+        searchable_pdfs=Count(
+            "id",
+            filter=Q(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES),
+        ),
+        indexed_pdfs=Count(
+            "id",
+            filter=Q(
+                indexed=True,
+                lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+            ),
+        ),
+        unknown_uploaders=Count("id", filter=Q(uploaded_by__isnull=True)),
+        latest_upload=Max("uploaded_at"),
+    )
+    total_pdfs = aggregate["total_pdfs"]
+    searchable_pdfs = aggregate["searchable_pdfs"]
+    indexed_pdfs = aggregate["indexed_pdfs"]
     stats = {
         "total_pdfs": total_pdfs,
         "searchable_pdfs": searchable_pdfs,
         "indexed_pdfs": indexed_pdfs,
         "needs_index_pdfs": max(searchable_pdfs - indexed_pdfs, 0),
-        "unknown_uploaders": unknown_uploaders,
-        "latest_upload": pdfs.aggregate(latest=Max("uploaded_at"))["latest"],
+        "unknown_uploaders": aggregate["unknown_uploaders"],
+        "latest_upload": aggregate["latest_upload"],
     }
-    return pdfs, stats
+    return Paginator(pdfs, DOCUMENT_PAGE_SIZE).get_page(page_number), stats
 
 
 def _pdf_has_stored_search_artifacts(pdf):
@@ -750,8 +776,11 @@ def rename_folder(request, folder_id):
 @require_POST
 def rename_pdf(request, pdf_id):
     pdf = get_object_or_404(PDFFile, id=pdf_id)
-    redirect_name = "dashboard_folder" if pdf.folder_id else "dashboard"
-    redirect_kwargs = {"folder_id": pdf.folder_id} if pdf.folder_id else {}
+    fallback = (
+        reverse("dashboard_folder", kwargs={"folder_id": pdf.folder_id})
+        if pdf.folder_id
+        else reverse("dashboard")
+    )
     new_title = request.POST.get('title', '').strip()
     if new_title:
         pdf.title = new_title
@@ -759,26 +788,29 @@ def rename_pdf(request, pdf_id):
         messages.success(request, "PDF renamed successfully.")
     else:
         messages.error(request, "Title cannot be empty.")
-    return redirect(redirect_name, **redirect_kwargs)
+    return safe_referer_redirect(request, fallback)
 
 
 @admin_required
 @require_POST
 def assign_pdf_owner(request, pdf_id):
     pdf = get_object_or_404(PDFFile, id=pdf_id)
-    redirect_name = "dashboard_folder" if pdf.folder_id else "dashboard"
-    redirect_kwargs = {"folder_id": pdf.folder_id} if pdf.folder_id else {}
+    fallback = (
+        reverse("dashboard_folder", kwargs={"folder_id": pdf.folder_id})
+        if pdf.folder_id
+        else reverse("dashboard")
+    )
     owner_id = request.POST.get("owner_id", "").strip()
 
     if not owner_id:
         messages.error(request, "Choose an owner before saving.")
-        return redirect(redirect_name, **redirect_kwargs)
+        return safe_referer_redirect(request, fallback)
 
     owner = get_object_or_404(CustomUser, id=owner_id, is_active=True)
     pdf.uploaded_by = owner
     pdf.save(update_fields=["uploaded_by"])
     messages.success(request, f"Owner for '{pdf.title}' assigned to {owner.username}.")
-    return redirect(redirect_name, **redirect_kwargs)
+    return safe_referer_redirect(request, fallback)
 
 
 #====================================Update and add keywords ==========================
@@ -1236,7 +1268,11 @@ def dashboard(request, folder_id=None):
                         "PDF upload could not be queued. "
                         "No document was saved; please try again.",
                     )
-                    pdfs, folder_stats = folder_cockpit_context(request.user, folder)
+                    pdfs, folder_stats = folder_cockpit_context(
+                        request.user,
+                        folder,
+                        page_number=request.GET.get("document_page", 1),
+                    )
                     owner_options = CustomUser.objects.filter(is_active=True).order_by("username")
                     return render(
                         request,
@@ -1267,7 +1303,11 @@ def dashboard(request, folder_id=None):
         else:
             form = UploadForm()
 
-        pdfs, folder_stats = folder_cockpit_context(request.user, folder)
+        pdfs, folder_stats = folder_cockpit_context(
+            request.user,
+            folder,
+            page_number=request.GET.get("document_page", 1),
+        )
         owner_options = CustomUser.objects.filter(is_active=True).order_by("username")
         return render(
             request,

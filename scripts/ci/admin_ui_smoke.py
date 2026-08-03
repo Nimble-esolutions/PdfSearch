@@ -24,6 +24,8 @@ USERNAME = os.environ.get("ADMIN_SMOKE_USERNAME", "codex-admin")
 PASSWORD_PATH = Path(os.environ.get("ADMIN_SMOKE_PASSWORD_FILE", "/tmp/codex-admin-password.txt"))
 FOLDER_NAME = "Codex Smoke Category"
 RENAMED_FOLDER_NAME = "Codex Smoke Category Renamed"
+SCALE_FOLDER_NAME = "Codex Scale Category"
+SCOPE_FOLDER_PREFIX = "Codex Scope Category"
 CREATED_USER = "codex-smoke-user"
 
 
@@ -57,7 +59,10 @@ def main():
     )
 
     user_model.objects.filter(username=CREATED_USER).delete()
-    Folder.objects.filter(name__in=[FOLDER_NAME, RENAMED_FOLDER_NAME]).delete()
+    Folder.objects.filter(
+        name__in=[FOLDER_NAME, RENAMED_FOLDER_NAME, SCALE_FOLDER_NAME]
+    ).delete()
+    Folder.objects.filter(name__startswith=SCOPE_FOLDER_PREFIX).delete()
 
     with httpx.Client(base_url=BASE_URL, follow_redirects=False, timeout=20.0) as client:
         login_page = client.get("/login/")
@@ -91,7 +96,7 @@ def main():
             and 'name="readiness"' in dashboard.text
             and 'name="provenance"' in dashboard.text
             and "Active Work" in dashboard.text
-            and "Data recovery posture" in dashboard.text
+            and "Data protection" in dashboard.text
             and "Add Category" in dashboard.text
             and ("No categories yet" in dashboard.text or "admin-category-card" in dashboard.text),
             "dashboard UI missing",
@@ -288,6 +293,51 @@ def main():
             media_expected_size=None,
             media_quarantine_reason="missing_after_inventory",
             media_case_reference="CI-BROWSER",
+        )
+        scale_folder = Folder.objects.create(
+            name=SCALE_FOLDER_NAME,
+            created_by=operator,
+        )
+        scale_documents = [
+            PDFFile(
+                title=f"Scale document {number:03d}",
+                folder=scale_folder,
+                uploaded_by=operator,
+                lifecycle="ready",
+                indexed=number % 3 != 0,
+                file=f"pdfs/scale-document-{number:03d}.pdf",
+            )
+            for number in range(103)
+        ]
+        scale_documents.extend(
+            [
+                PDFFile(
+                    title="मराठी सहकारी संस्था दस्तऐवज",
+                    folder=scale_folder,
+                    uploaded_by=operator,
+                    lifecycle="ready",
+                    indexed=True,
+                    file="pdfs/scale-marathi.pdf",
+                ),
+                PDFFile(
+                    title="VeryLongUnbrokenDocumentTitle" * 8,
+                    folder=scale_folder,
+                    uploaded_by=None,
+                    lifecycle="ready",
+                    indexed=False,
+                    file="pdfs/scale-long-title.pdf",
+                ),
+            ]
+        )
+        PDFFile.objects.bulk_create(scale_documents)
+        Folder.objects.bulk_create(
+            [
+                Folder(
+                    name=f"{SCOPE_FOLDER_PREFIX} {number:02d}",
+                    created_by=operator,
+                )
+                for number in range(1, 47)
+            ]
         )
 
         users = client.get("/dashboard/users/")
