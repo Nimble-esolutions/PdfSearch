@@ -21,7 +21,21 @@ chown -R appuser:appuser \
 gosu appuser:appuser bash -lc \
   'cd /app/flowdocs && python manage.py startup_restore_preflight'
 
+RUNTIME_START_MODE="disabled"
 if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
+  RUNTIME_START_MODE="$(
+    gosu appuser:appuser python /app/flowdocs/runtime_paths_cli.py \
+      generation --allow-initial-bootstrap
+  )"
+  if [ "$RUNTIME_START_MODE" = "initial-bootstrap" ] \
+      && [ "${STAGING_INITIAL_ACTIVATION_ENABLED:-0}" != "1" ]; then
+    echo "[activation] ERROR: initial bootstrap requires explicit opt-in" >&2
+    exit 1
+  fi
+fi
+
+if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ] \
+    && [ "$RUNTIME_START_MODE" != "initial-bootstrap" ]; then
   gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py shell -c "
 import sys
 from django.db import connection

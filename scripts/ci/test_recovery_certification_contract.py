@@ -98,9 +98,13 @@ class RecoveryCertificationContractTests(unittest.TestCase):
 
     def test_startup_supports_the_explicit_initial_bootstrap_sentinel(self):
         start = (ROOT / "start.sh").read_text(encoding="utf-8")
+        worker = (ROOT / "worker-entrypoint.sh").read_text(encoding="utf-8")
         self.assertIn("--allow-initial-bootstrap", start)
         self.assertIn('RUNTIME_START_MODE" = "initial-bootstrap"', start)
         self.assertIn("STAGING_INITIAL_ACTIVATION_ENABLED", start)
+        self.assertIn("--allow-initial-bootstrap", worker)
+        self.assertIn('RUNTIME_START_MODE" != "initial-bootstrap"', worker)
+        self.assertIn("STAGING_INITIAL_ACTIVATION_ENABLED", worker)
 
 
 if __name__ == "__main__":
