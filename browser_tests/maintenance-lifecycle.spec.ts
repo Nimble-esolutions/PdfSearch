@@ -47,6 +47,7 @@ async function previewAndQueue(
     .getByRole('checkbox')
     .first()
     .check();
+  await page.getByText('Optional document filters', { exact: true }).click();
   await page.locator('select[name="filter_indexed"]').selectOption('true');
   await page.locator('input[name="filter_category"]').fill('audit');
   await page.locator('input[name="filter_subject"]').fill('cooperation');
@@ -61,12 +62,37 @@ async function previewAndQueue(
     selected.locator('div').filter({ hasText: /^Documents2$/ }).first(),
   ).toBeVisible();
   await expect(
-    selected.locator('div').filter({ hasText: /^Folders1$/ }).first(),
+    selected.locator('div').filter({ hasText: /^Categories1$/ }).first(),
   ).toBeVisible();
   if (typedConfirmation) {
     await page.locator('input[name="typed_confirmation"]').first().fill(typedConfirmation);
   }
-  await page.getByRole('button', { name: 'Confirm and queue local maintenance' }).first().click();
+  await page.getByRole('button', { name: 'Confirm and queue' }).first().click();
+}
+
+async function submitHiddenForm(
+  page: Page,
+  action: string,
+  fields: Record<string, string>,
+) {
+  await Promise.all([
+    page.waitForURL(`**${action}`),
+    page.evaluate(({ action, fields }) => {
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = action;
+      const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+      for (const [name, value] of Object.entries({ ...fields, csrfmiddlewaretoken: csrf })) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      }
+      document.body.appendChild(form);
+      form.submit();
+    }, { action, fields }),
+  ]);
 }
 
 async function assertExpectedSearch(page: Page, query: string, language: string) {
@@ -139,7 +165,7 @@ test.describe('disposable maintenance lifecycle', () => {
   test(`executes ${phase} phase`, async ({ page }) => {
     if (phase === 'queue') {
       await login(page);
-      await previewAndQueue(page, 'Preview Repair Stored Indexes');
+      await previewAndQueue(page, 'Preview index repair');
       await waitForJob(page, /completed/);
       return;
     }
@@ -148,7 +174,7 @@ test.describe('disposable maintenance lifecycle', () => {
       await login(page);
       await previewAndQueue(
         page,
-        'Preview Reindex Selected',
+        'Preview selected reindex',
         'REINDEX SELECTED',
       );
       await waitForJob(page, /(partial|failed|retryable)/);
@@ -161,10 +187,11 @@ test.describe('disposable maintenance lifecycle', () => {
       await page.getByRole('button', { name: 'Retry from checkpoints' }).click();
       await waitForJob(page, /completed/);
       await page
-        .getByRole('region', { name: 'Local maintenance jobs' })
+        .getByRole('heading', { name: 'Maintenance jobs', exact: true })
+        .locator('xpath=ancestor::section')
         .locator('article')
         .first()
-        .getByRole('button', { name: 'Prepare for activation' })
+        .getByRole('button', { name: 'Prepare search update' })
         .click();
       await expect(page.getByText('Local maintenance candidate prepared')).toBeVisible();
       return;
@@ -180,19 +207,21 @@ test.describe('disposable maintenance lifecycle', () => {
       ).toMatch(/^[0-9a-f]{64}$/);
 
       await login(page, '/dashboard/data-operations/advanced/');
-      const activationForm = page
-        .getByRole('region', { name: 'Runtime activation and recovery' })
-        .getByRole('listitem', {
-          has: page.getByRole('heading', {
-            name: generationId,
-            exact: true,
-          }),
-        })
-        .locator('form:has(button:has-text("Prepare staging activation"))');
-      await expect(activationForm).toHaveCount(1);
-      await activationForm
-        .getByRole('button', { name: 'Prepare staging activation' })
-        .click();
+      const stateResponse = await page.request.get('/dashboard/operations/api/v1/state/');
+      const stateEnvelope = await stateResponse.json();
+      const workspace = stateEnvelope.data.workspaces.find(
+        (item: { generation_id?: string }) => item.generation_id === generationId,
+      );
+      expect(workspace?.public_id, 'verified restore workspace is required').toBeTruthy();
+      await submitHiddenForm(
+        page,
+        '/dashboard/operations/api/v1/confirmations/issue/',
+        {
+          idempotency_key: `vault-activate-${generationId}`,
+          action: 'activate_workspace',
+          target: workspace.public_id,
+        },
+      );
       await page.locator('input[name="confirmation_phrase"]').fill(
         (await page.getByLabel('Required confirmation phrase').textContent())?.trim() || '',
       );
@@ -235,7 +264,7 @@ test.describe('disposable maintenance lifecycle', () => {
     }
 
     await login(page, '/dashboard/data-operations/advanced/');
-    await page.getByRole('button', { name: 'Review typed activation' }).click();
+    await page.getByRole('button', { name: 'Review search update activation' }).click();
     await page.locator('input[name="confirmation_phrase"]').fill(
       (await page.getByLabel('Required confirmation phrase').textContent())?.trim() || '',
     );
@@ -260,7 +289,11 @@ test.describe('disposable maintenance lifecycle', () => {
     }
 
     await page.goto('/dashboard/data-operations/advanced/');
-    await page.getByRole('button', { name: 'Review signed rollback' }).click();
+    await submitHiddenForm(
+      page,
+      '/dashboard/operations/api/v1/activations/rollback/confirm/',
+      { idempotency_key: 'maintenance-e2e-signed-rollback' },
+    );
     await page.locator('input[name="confirmation_phrase"]').fill(
       (await page.getByLabel('Required confirmation phrase').textContent())?.trim() || '',
     );

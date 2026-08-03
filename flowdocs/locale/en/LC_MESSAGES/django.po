@@ -1752,3 +1752,19 @@ msgstr ""
 #: core/templates/vaultops/workbench.html
 msgid "Verified previous runtime:"
 msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Prepare search update"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "This verifies the completed search artifacts and prepares an immutable runtime candidate. Active search remains unchanged."
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "Review search update activation"
+msgstr ""
+
+#: core/templates/dataops/_advanced_maintenance.html
+msgid "The verified search update is ready. Activation still requires the exact signed confirmation shown on the next screen."
+msgstr ""
