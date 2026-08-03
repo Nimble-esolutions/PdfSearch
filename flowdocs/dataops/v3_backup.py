@@ -243,6 +243,26 @@ def _verified_snapshot_files(bundle: SnapshotBundle) -> list[dict[str, Any]]:
                 "local_path": path,
             }
         )
+    chroma_root = bundle.workspace / "chroma_db"
+    if chroma_root.is_symlink() or (
+        chroma_root.exists() and not chroma_root.is_dir()
+    ):
+        raise V3BackupError("snapshot_path_unsafe")
+    actual_chroma = set()
+    if chroma_root.is_dir():
+        for candidate in chroma_root.rglob("*"):
+            if candidate.is_symlink():
+                raise V3BackupError("snapshot_path_unsafe")
+            if candidate.is_dir():
+                continue
+            if not candidate.is_file() or candidate.stat().st_nlink != 1:
+                raise V3BackupError("snapshot_artifact_unsafe")
+            actual_chroma.add(candidate.relative_to(bundle.workspace).as_posix())
+    declared_chroma = {
+        item["path"] for item in result if item["kind"] == "chroma"
+    }
+    if actual_chroma != declared_chroma:
+        raise V3BackupError("snapshot_chroma_inventory_mismatch")
     if not any(item["kind"] == "database" for item in result):
         raise V3BackupError("snapshot_database_missing")
     return result
@@ -415,6 +435,7 @@ def _components(files: list[dict[str, Any]], evidence: Mapping[str, Any]):
     present = {item["kind"] for item in files}
     faiss = evidence.get("faiss")
     faiss_coherent = isinstance(faiss, Mapping)
+    chroma_present = "chroma" in present
     return {
         "database": {"complete": True, "coherent": True},
         "media": {"complete": True, "coherent": True},
@@ -428,11 +449,13 @@ def _components(files: list[dict[str, Any]], evidence: Mapping[str, Any]):
             "rebuild_required": not faiss_coherent,
         },
         # Existing Chroma snapshots do not carry a coherence proof. Preserve
-        # their blobs but require a rebuild before activation.
+        # their blobs but require a rebuild before activation. An absent
+        # optional Chroma store is a coherent empty component, not a broken
+        # component that needs an unavailable rebuild implementation.
         "chroma": {
-            "complete": False,
-            "coherent": False,
-            "rebuild_required": True,
+            "complete": True,
+            "coherent": not chroma_present,
+            "rebuild_required": chroma_present,
         },
     }
 

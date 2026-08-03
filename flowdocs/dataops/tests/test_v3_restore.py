@@ -277,7 +277,49 @@ class V3RestoreTests(TestCase):
         self.assertEqual(first["evidence"]["migrations"], 1)
         self.assertEqual(first["evidence"]["indexing_ratio"], 1.0)
         self.assertTrue((workspace / "media" / "pdfs" / "two.PDF").is_file())
+        self.assertTrue((workspace / "faiss_indexes").is_dir())
+        self.assertTrue((workspace / "chroma_db").is_dir())
+        requirements = _component_rebuild_requirements(
+            self.manifest,
+            workspace=workspace,
+        )
+        self.assertNotIn("chroma", requirements)
         self.assertTrue(second["reused"])
+
+    def test_reused_workspace_rejects_nonempty_signed_empty_component(self):
+        first = materialize_quarantine(
+            self.verified(),
+            quarantine_root=self.root / "nonempty-empty-component",
+        )
+        workspace = Path(first["workspace"])
+        (workspace / "chroma_db" / "unexpected").write_bytes(b"state")
+
+        with self.assertRaisesMessage(
+            V3RestoreError,
+            "restore_empty_component_not_empty",
+        ):
+            materialize_quarantine(
+                self.verified(),
+                quarantine_root=self.root / "nonempty-empty-component",
+            )
+
+    def test_reused_workspace_rejects_unsafe_empty_component_path(self):
+        first = materialize_quarantine(
+            self.verified(),
+            quarantine_root=self.root / "unsafe-empty-component",
+        )
+        workspace = Path(first["workspace"])
+        (workspace / "chroma_db").rmdir()
+        (workspace / "chroma_db").symlink_to(self.root)
+
+        with self.assertRaisesMessage(
+            V3RestoreError,
+            "restore_component_path_unsafe",
+        ):
+            materialize_quarantine(
+                self.verified(),
+                quarantine_root=self.root / "unsafe-empty-component",
+            )
 
     def test_reconciles_all_signed_database_counts(self):
         counts = {

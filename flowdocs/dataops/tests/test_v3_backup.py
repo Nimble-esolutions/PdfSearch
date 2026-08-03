@@ -124,16 +124,21 @@ class V3BackupPublicationTests(TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def snapshot(self, *, database=None, media=b"pdf", epoch=1):
+    def snapshot(self, *, database=None, media=b"pdf", chroma=None, epoch=1):
         workspace = self.root / f"snapshot-{uuid.uuid4()}"
         (workspace / "media" / "pdfs").mkdir(parents=True)
         (workspace / "db.sqlite3").write_bytes(database or self.database_bytes)
         (workspace / "media" / "pdfs" / "one.pdf").write_bytes(media)
-        records = []
-        for relative, category in (
+        record_specs = [
             ("db.sqlite3", "database"),
             ("media/pdfs/one.pdf", "media"),
-        ):
+        ]
+        if chroma is not None:
+            (workspace / "chroma_db").mkdir()
+            (workspace / "chroma_db" / "chroma.sqlite3").write_bytes(chroma)
+            record_specs.append(("chroma_db/chroma.sqlite3", "chroma_db"))
+        records = []
+        for relative, category in record_specs:
             body = (workspace / relative).read_bytes()
             records.append(
                 {
@@ -224,6 +229,45 @@ class V3BackupPublicationTests(TestCase):
         self.assertEqual(receipt.base_manifest_sha256, "")
         self.assertEqual(receipt.total_objects, manifest["counts"]["objects"])
         self.assertEqual(receipt.total_bytes, manifest["counts"]["bytes"])
+        self.assertEqual(
+            manifest["components"]["chroma"],
+            {
+                "complete": True,
+                "coherent": True,
+                "rebuild_required": False,
+            },
+        )
+
+    def test_existing_chroma_payload_remains_fail_closed_without_coherence_proof(self):
+        for suffix, payload in (("content", b"legacy-chroma"), ("empty", b"")):
+            with self.subTest(payload=suffix):
+                self.client = FakeS3()
+                manifest, receipt = self.publish(
+                    self.snapshot(chroma=payload),
+                    f"rp-with-chroma-{suffix}",
+                )
+                self.assertEqual(receipt.total_objects, 3)
+                self.assertEqual(
+                    manifest["components"]["chroma"],
+                    {
+                        "complete": True,
+                        "coherent": False,
+                        "rebuild_required": True,
+                    },
+                )
+
+    def test_unlisted_chroma_payload_blocks_publication(self):
+        snapshot = self.snapshot()
+        workspace = Path(snapshot.workspace_path)
+        (workspace / "chroma_db").mkdir()
+        (workspace / "chroma_db" / "unlisted.sqlite3").write_bytes(b"state")
+
+        with self.assertRaisesRegex(
+            V3BackupError,
+            "snapshot_chroma_inventory_mismatch",
+        ):
+            self.publish(snapshot, "rp-unlisted-chroma")
+        self.assertEqual(self.client.objects, {})
 
     def test_no_change_backup_uploads_no_payload_and_is_independently_restorable(self):
         first_manifest, _ = self.publish(self.snapshot(epoch=1), "rp-001")
@@ -265,6 +309,8 @@ class V3BackupPublicationTests(TestCase):
             (restored_root / "media" / "pdfs" / "one.pdf").read_bytes(),
             b"pdf",
         )
+        self.assertTrue((restored_root / "faiss_indexes").is_dir())
+        self.assertTrue((restored_root / "chroma_db").is_dir())
 
     def test_changed_incremental_uploads_only_changed_payload_object(self):
         self.publish(self.snapshot(media=b"pdf-v1", epoch=1), "rp-001")

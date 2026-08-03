@@ -29,6 +29,11 @@ from .v3_storage import client_for_connection, read_object
 
 
 SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
+EMPTY_COMPONENT_DIRECTORIES = {
+    "pdf_cache": "pdf_cache",
+    "faiss": "faiss_indexes",
+    "chroma": "chroma_db",
+}
 
 
 class V3RestoreError(RuntimeError):
@@ -355,6 +360,39 @@ def _existing_workspace(
     return receipt
 
 
+def _materialize_signed_empty_components(
+    workspace: Path,
+    *,
+    manifest: Mapping[str, Any],
+) -> None:
+    """Create runtime directories only when the signed component is empty."""
+
+    components = manifest.get("components")
+    if not isinstance(components, Mapping):
+        raise V3RestoreError("manifest_components_invalid")
+    present = {
+        str(item.get("kind") or "")
+        for item in manifest.get("files", [])
+        if isinstance(item, Mapping)
+    }
+    for name, relative in EMPTY_COMPONENT_DIRECTORIES.items():
+        component = components.get(name)
+        if (
+            name in present
+            or not isinstance(component, Mapping)
+            or component.get("complete") is not True
+            or component.get("coherent") is False
+            or component.get("rebuild_required") is True
+        ):
+            continue
+        target = workspace / relative
+        if target.is_symlink() or (target.exists() and not target.is_dir()):
+            raise V3RestoreError("restore_component_path_unsafe")
+        if target.is_dir() and any(target.iterdir()):
+            raise V3RestoreError("restore_empty_component_not_empty")
+        target.mkdir(mode=0o700, exist_ok=True)
+
+
 def materialize_quarantine(
     verified: VerifiedRecoveryPoint,
     *,
@@ -373,6 +411,7 @@ def materialize_quarantine(
     final = root / f"restore-{release_id}-{verified.point.manifest_digest[:12]}"
     existing = _existing_workspace(final, manifest=verified.manifest)
     if existing is not None:
+        _materialize_signed_empty_components(final, manifest=verified.manifest)
         return {**existing, "workspace": str(final), "reused": True}
     if final.exists():
         raise V3RestoreError("restore_workspace_conflict")
@@ -390,6 +429,10 @@ def materialize_quarantine(
                 digest=item["sha256"],
                 size=item["size"],
             )
+        _materialize_signed_empty_components(
+            temporary,
+            manifest=verified.manifest,
+        )
         evidence = _local_evidence(temporary, verified.manifest)
         receipt = {
             "schema_version": 3,

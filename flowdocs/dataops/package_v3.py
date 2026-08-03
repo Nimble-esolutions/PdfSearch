@@ -136,7 +136,7 @@ def _validate_files(files: Any) -> None:
             raise ManifestV3Error("blob_size_conflict")
 
 
-def _validate_components(components: Any) -> None:
+def _validate_components(components: Any, files: Any) -> None:
     if not isinstance(components, Mapping):
         raise ManifestV3Error("components_invalid")
     if set(components) - COMPONENT_NAMES:
@@ -156,6 +156,17 @@ def _validate_components(components: Any) -> None:
             raise ManifestV3Error("component_rebuild_flag_invalid")
         if component.get("coherent") is not None and not isinstance(component.get("coherent"), bool):
             raise ManifestV3Error("component_coherence_invalid")
+    chroma = components.get("chroma")
+    chroma_present = any(
+        isinstance(entry, Mapping) and entry.get("kind") == "chroma"
+        for entry in files
+    )
+    if chroma_present and (
+        not isinstance(chroma, Mapping)
+        or chroma.get("coherent") is not False
+        or chroma.get("rebuild_required") is not True
+    ):
+        raise ManifestV3Error("chroma_component_evidence_invalid")
 
 
 def _validate_lineage(lineage: Any, dataset_id: str) -> None:
@@ -256,8 +267,8 @@ def validate_manifest(
     if consistency.get("source_stable") is not True:
         raise ManifestV3Error("source_not_stable")
 
-    _validate_components(manifest.get("components"))
     _validate_files(manifest.get("files"))
+    _validate_components(manifest.get("components"), manifest.get("files"))
     if not isinstance(manifest.get("counts"), Mapping):
         raise ManifestV3Error("counts_invalid")
     for value in manifest["counts"].values():

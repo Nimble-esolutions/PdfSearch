@@ -176,6 +176,22 @@ class ManifestV3Tests(unittest.TestCase):
         self.assertTrue(self.manifest["components"]["chroma"]["rebuild_required"])
         validate_manifest(self.manifest, require_signature=False)
 
+    def test_chroma_payload_requires_explicit_fail_closed_component_state(self):
+        broken = deepcopy(self.manifest)
+        broken["files"][0]["kind"] = "chroma"
+        broken["files"][0]["path"] = "chroma_db/chroma.sqlite3"
+        broken["components"]["chroma"] = {
+            "complete": True,
+            "coherent": True,
+            "rebuild_required": False,
+        }
+        broken["manifest_sha256"] = manifest_digest(broken)
+        with self.assertRaisesRegex(
+            ManifestV3Error,
+            "chroma_component_evidence_invalid",
+        ):
+            validate_manifest(broken, require_signature=False)
+
     def test_secret_bearing_fields_are_refused_recursively(self):
         for field in ("secret_key", "access_key", "password", "token"):
             broken = deepcopy(self.manifest)
