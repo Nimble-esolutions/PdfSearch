@@ -44,7 +44,12 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish an image from dev
+        description: Publish an immutable SHA candidate
+        required: true
+        default: false
+        type: boolean
+      candidate_only:
+        description: Allow a review-branch candidate without promoting dev/latest
         required: true
         default: false
         type: boolean
@@ -261,10 +266,11 @@ jobs:
         run: bash scripts/ci/run_vault_integration.sh
 
   candidate:
-    name: Build and certify immutable dev candidate
+    name: Build and certify immutable candidate
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.publish == true)
+      (github.event_name == 'workflow_dispatch' && inputs.publish == true &&
+      (github.ref == 'refs/heads/dev' || inputs.candidate_only == true))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
