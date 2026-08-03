@@ -5,6 +5,7 @@ echo "[entrypoint] Running as root — fixing persistent data permissions..."
 
 DATA_ROOT="${DATA_ROOT:-/app/data}"
 DATA_CONTROL_ROOT="${DATA_CONTROL_ROOT:-/app/data-control}"
+CONTROL_DB_PATH="${CONTROL_DB_PATH:-$DATA_CONTROL_ROOT/control.sqlite3}"
 MEDIA_ROOT="${MEDIA_ROOT:-$DATA_ROOT/media}"
 PDF_CACHE_DIR="${PDF_CACHE_DIR:-$DATA_ROOT/pdf_cache}"
 CHROMA_DIR="${CHROMA_DIR:-$DATA_ROOT/chroma_db}"
@@ -13,6 +14,15 @@ BACKUP_DIR="${BACKUP_DIR:-$DATA_ROOT/backups}"
 STATIC_ROOT="${STATIC_ROOT:-$DATA_ROOT/staticfiles}"
 VAULT_RESTORE_ROOT="${VAULT_RESTORE_ROOT:-$DATA_ROOT/restore-quarantine}"
 RUNTIME_GENERATIONS_ROOT="${RUNTIME_GENERATIONS_ROOT:-$DATA_ROOT/runtime-generations}"
+
+# Verify the packaged source and inspect existing migration history before any
+# persistent path is created, chowned, restored, backed up, or migrated.
+python /app/scripts/ops/release_integrity.py verify \
+    --root /app \
+    --manifest /app/release-integrity.json
+python /app/scripts/ops/release_integrity.py startup-compatibility \
+    --control-db "$CONTROL_DB_PATH" \
+    --root /app
 
 mkdir -p \
     "$DATA_ROOT" \

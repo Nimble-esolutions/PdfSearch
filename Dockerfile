@@ -77,7 +77,12 @@ RUN pip install --no-compile --no-index --no-deps /wheels/*.whl && \
 
 COPY . .
 
-RUN chmod +x ./start.sh ./docker-entrypoint.sh ./worker-entrypoint.sh 2>/dev/null || true
+RUN python ./scripts/ops/release_integrity.py manifest \
+        --root /app \
+        --output /app/release-integrity.json && \
+    chmod +x ./start.sh ./docker-entrypoint.sh ./worker-entrypoint.sh \
+        ./scripts/ops/release_integrity.py \
+        ./scripts/ops/verify_running_release.py
 
 RUN bash -lc 'cd /app/flowdocs && \
     SECRET_KEY=build-only-not-for-runtime DEBUG=True ALLOW_INSECURE_DEFAULTS=1 \

@@ -45,6 +45,21 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("provenance: mode=max", self.candidate)
         self.assertIn("sbom: true", self.candidate)
         self.assertIn("Smoke-test published image through actual entrypoint", self.candidate)
+        self.assertIn(
+            "Verify published candidate release-integrity sentinels", self.candidate
+        )
+        self.assertIn(
+            "/app/scripts/ops/release_integrity.py manifest --root /app",
+            self.candidate,
+        )
+        self.assertIn("release-integrity.checkout.json", self.candidate)
+        self.assertIn(
+            "scripts/ops/release_integrity.py compare", self.candidate
+        )
+        self.assertLess(
+            self.candidate.index("Verify published candidate release-integrity sentinels"),
+            self.candidate.index("Install browser gate dependencies"),
+        )
         self.assertIn("aquasecurity/trivy-action@", self.candidate)
         self.assertIn("Enforce image size budget", self.candidate)
         self.assertNotIn("docker buildx imagetools create", self.candidate)
