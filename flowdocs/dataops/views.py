@@ -22,13 +22,10 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
-from core.maintenance import queue_job
 from core.maintenance_plans import workbench_maintenance_state
 from core.models import MaintenanceJob, PDFFile
 from core.operator_presentation import decorate_operator_state
-from vaultops.services.read_model import build_workbench_state
-
-from .config import resolve_profiles, resolve_selectors, resolve_setting, validate_profiles
+from .config import resolve_profiles, resolve_selectors, validate_profiles
 from .models import BackupJob, DataConnection, DataOperation, DataProfile, DataOpsAuditEvent, MirrorDeletionPreview, RecoveryPoint
 from .job_scheduler import ScheduleConfigurationError, parse_schedule
 from .profile_service import ProfileMutationError, probe_profile, save_profile, save_selectors
@@ -156,18 +153,24 @@ def v3_status(request):
     """Return one secret-free DataOps readiness and configuration summary."""
     if not _can_act(request):
         return JsonResponse({"error": {"code": "superadmin_required"}}, status=403)
+    payload, status = _v3_status_payload()
+    return JsonResponse(payload, status=status)
+
+
+def _v3_status_payload():
+    """Build the shared read-only status contract used by API and HTML views."""
     try:
         config = runtime_config()
     except V3ConfigurationError as exc:
-        return JsonResponse(
+        return (
             {
                 "contract_version": 3,
                 "status": "action_required",
                 "issue": {"code": exc.code},
             },
-            status=409,
+            409,
         )
-    return JsonResponse(
+    return (
         {
             "contract_version": 3,
             "status": "ready" if config.enabled else "disabled",
@@ -177,7 +180,8 @@ def v3_status(request):
             "configuration_digest": config.digest,
             "connection": config.connection.redacted() if config.connection else None,
             "actions": action_status(config),
-        }
+        },
+        200,
     )
 
 
@@ -289,6 +293,14 @@ def v3_operation_start(request):
             legacy_generation=legacy_generation,
             source_connection=source_view,
         )
+        expected_plan_digest = str(
+            payload.get("expected_plan_digest") or ""
+        ).strip()
+        if (
+            expected_plan_digest
+            and expected_plan_digest != plan.plan_digest
+        ):
+            raise ValueError("plan_changed")
         if not plan.allowed:
             return JsonResponse(
                 {"configuration_digest": config.digest, "plan": plan.as_dict()},
@@ -368,10 +380,60 @@ def v3_operation_start(request):
         {
             "operation_id": str(operation.public_id),
             "state": operation.state,
+            "state_label": operation.get_state_display(),
             "plan_digest": operation.lifecycle_plan_digest,
+            "status_url": reverse(
+                "dataops:v3_operation_status",
+                args=[operation.public_id],
+            ),
             "created": created,
         },
         status=202 if created else 200,
+    )
+
+
+@login_required
+@require_GET
+def v3_operation_status(request, operation_id):
+    """Return bounded, secret-free progress for one v3 operation."""
+    if not _can_act(request):
+        return JsonResponse({"error": {"code": "superadmin_required"}}, status=403)
+    operation = (
+        DataOperation.objects.using("control")
+        .filter(public_id=operation_id)
+        .first()
+    )
+    if operation is None:
+        return JsonResponse(
+            {"error": {"code": "operation_not_found"}},
+            status=404,
+        )
+    return JsonResponse(
+        {
+            "contract_version": 3,
+            "operation_id": str(operation.public_id),
+            "kind": operation.kind,
+            "state": operation.state,
+            "state_label": operation.get_state_display(),
+            "stage": operation.pipeline_stage,
+            "plan_digest": operation.lifecycle_plan_digest,
+            "error": (
+                {"code": operation.error_code}
+                if operation.error_code
+                else None
+            ),
+            "created_at": operation.created_at.isoformat(),
+            "started_at": (
+                operation.started_at.isoformat()
+                if operation.started_at
+                else None
+            ),
+            "finished_at": (
+                operation.finished_at.isoformat()
+                if operation.finished_at
+                else None
+            ),
+        }
     )
 
 
@@ -404,68 +466,95 @@ def _profile_state():
     return [profile.redacted() for profile in resolved], "; ".join(issue.message for issue in issues) if issues else error
 
 
-def _state(request, *, include_legacy_advanced=False):
-    resolved, selectors, configuration_issues, config_error = _resolved_profile_state()
-    profiles = [profile.redacted() for profile in resolved]
+def _state(request):
     pending = MaintenanceJob.objects.filter(status__in=("queued", "running", "retrying")).count()
     pending += DataOperation.objects.using("control").filter(state__in=(DataOperation.State.QUEUED, DataOperation.State.RUNNING)).count()
     documents = PDFFile.objects.count()
     latest = RecoveryPoint.objects.using("control").filter(state=RecoveryPoint.State.VERIFIED).first()
     recent = list(DataOperation.objects.using("control").all()[:8])
-    issues = []
-    if config_error:
-        issues.append({"label": "Configuration needs review", "code": "dataops_config_invalid"})
-    issues.extend({"label": issue.message, "code": issue.code} for issue in configuration_issues)
     readiness = readiness_payload()
+    v3_status, v3_status_code = _v3_status_payload()
+    v3_issue = (v3_status.get("issue") or {}).get("code", "")
+    issues = (
+        [{"label": "Data protection configuration needs review", "code": v3_issue}]
+        if v3_issue
+        else []
+    )
     successful_backup = DataOperation.objects.using("control").filter(kind=DataOperation.Kind.BACKUP, state=DataOperation.State.SUCCEEDED).first()
     successful_restore = DataOperation.objects.using("control").filter(kind=DataOperation.Kind.RESTORE, state=DataOperation.State.SUCCEEDED).first()
-    latest_points = RecoveryPoint.objects.using("control").filter(state=RecoveryPoint.State.VERIFIED)[:12]
-    profile_cards = []
-    for profile in profiles:
-        key = profile["key"]
-        profile_cards.append({
-            **profile,
-            "selected_for_backup": key == (selectors.get("backup_destination") or selectors.get("backup")),
-            "selected_for_restore": key == (selectors.get("restore_source") or selectors.get("restore")),
-            "health": "configured" if not configuration_issues else "attention",
-            "last_successful_operation": next(({"id": str(item.public_id), "kind": item.kind, "finished_at": item.finished_at} for item in recent if item.state == DataOperation.State.SUCCEEDED and item.profile_key == key), None),
-        })
+    latest_points = list(
+        RecoveryPoint.objects.using("control")
+        .filter(state=RecoveryPoint.State.VERIFIED, data_complete=True)
+        .select_related("connection")[:12]
+    )
+    action_states = dict(v3_status.get("actions") or {})
+    action_states["test_recovery"] = action_states.get("restore", "blocked")
+    protection_ready = v3_status_code == 200 and v3_status.get("status") == "ready"
+    if successful_backup:
+        backup_result = successful_backup.result or {}
+        latest_backup = {
+            "id": backup_result.get("release_id", successful_backup.release_id),
+            "verified_at": successful_backup.finished_at,
+            "objects": (backup_result.get("transfer") or {}).get("objects", "—"),
+        }
+    elif latest:
+        latest_backup = {
+            "id": latest.release_id,
+            "verified_at": latest.updated_at,
+            "objects": (latest.counts or {}).get("objects", "—"),
+        }
+    else:
+        latest_backup = None
     state = {
-        "posture": "ready" if readiness.get("status") in {"ok", "not_configured"} and not issues else "attention",
-        "status_label": "Data is ready" if readiness.get("status") in {"ok", "not_configured"} and not issues else "Configuration needs review",
-        "condition": "The automatic pipeline is available." if not issues else (config_error or "Review the highlighted profile configuration."),
-        "automatic_response": "No automatic action running" if not pending else f"{pending} maintenance item(s) in progress",
+        "posture": "ready" if protection_ready and not issues else "attention",
+        "status_label": "Data protection is ready" if protection_ready else "Data protection needs attention",
+        "condition": "Backups and recovery checks use the owned recovery store automatically." if protection_ready else "Review the recorded configuration issue before starting data protection work.",
+        "automatic_response": "No operation running" if not pending else f"{pending} operation(s) in progress",
         "observed_at": datetime.now(timezone.utc),
         "last_verified_at": datetime.now(timezone.utc),
-        "environment": getattr(getattr(getattr(settings, "ENV_IDENTITY", None), "app_env", ""), "value", ""),
+        "environment": v3_status.get("environment") or getattr(getattr(getattr(settings, "ENV_IDENTITY", None), "app_env", ""), "value", ""),
+        "dataset_id": v3_status.get("dataset_id", ""),
         "issues": issues,
-        "refresh": {"documents": documents, "index_status_label": "Observed", "pending": pending, "note": "Repairs are limited by the configured run and daily budgets."},
-        "backup": {"latest": {"id": (successful_backup.result or {}).get("release_id", successful_backup.release_id) if successful_backup else (latest.release_id if latest else ""), "verified_at": successful_backup.finished_at if successful_backup else (latest.updated_at if latest else None), "objects": ((successful_backup.result or {}).get("transfer", {}) or {}).get("objects", latest.counts.get("objects", "—") if latest else "—")} if (successful_backup or latest) else None, "recovery_points": [{"id": point.release_id, "profile_key": point.profile_key, "label": f"{point.release_id} · {point.profile_key}"} for point in latest_points]},
+        "health": {"documents": documents, "index_status_label": "Observed", "pending": pending},
+        "backup": {"latest": latest_backup},
+        "recovery_points": [
+            {
+                "public_id": str(point.public_id),
+                "release_id": point.release_id,
+                "dataset_id": point.dataset_id,
+                "manifest_digest": point.manifest_digest,
+                "observed_at": point.observed_at or point.updated_at,
+                "documents": (point.counts or {}).get("pdfs", (point.counts or {}).get("documents", "—")),
+                "objects": (point.counts or {}).get("objects", "—"),
+            }
+            for point in latest_points
+        ],
         "restore": {"candidate": None, "last_successful": readiness.get("last_restore") or (str(successful_restore.public_id) if successful_restore else "")},
-        "configuration": {"backup_profile": selectors.get("backup_destination") or selectors.get("backup") or resolve_setting("DATAOPS_BACKUP_PROFILE", default="")[0], "restore_profile": selectors.get("restore_source") or selectors.get("restore") or resolve_setting("DATAOPS_RESTORE_PROFILE", default="")[0], "mode_label": resolve_setting("DATAOPS_BACKUP_MODE", default="manual")[0], "env_locked": any(profile.effective_source == "environment" for profile in resolved), "backup_source": resolve_setting("DATAOPS_BACKUP_PROFILE", default="")[1], "restore_source": resolve_setting("DATAOPS_RESTORE_PROFILE", default="")[1]},
         "readiness": readiness,
+        "v3": {**v3_status, "actions": action_states},
         "active_maintenance_jobs": MaintenanceJob.objects.filter(status__in=("queued", "running", "retrying")).count(),
-        "profile_cards": profile_cards,
         "history": {"count": len(recent), "items": [{"label": item.get_kind_display(), "status_label": item.get_state_display(), "started_at": item.created_at, "stage": item.pipeline_stage, "error_code": item.error_code, "receipt_id": str(item.public_id), "timeline": (item.result or {}).get("stages", [])} for item in recent]},
-        "profiles": profiles,
-        "permissions": {"can_refresh": _can_act(request), "can_backup": _can_act(request), "can_restore": _can_act(request), "can_configure": _can_act(request), "can_export_env": _can_act(request)},
+        "permissions": {"can_check": _can_act(request), "can_backup": _can_act(request), "can_restore": _can_act(request)},
     }
-    if include_legacy_advanced:
-        try:
-            maintenance = workbench_maintenance_state(selected_plan_id=request.GET.get("plan", ""), selected_job_id=request.GET.get("job", ""))
-        except Exception:
-            maintenance = {"state_version": "", "capabilities": {}, "folders": [], "plans": [], "jobs": [], "selected_plan": None, "selected_job": None}
-        decorate_operator_state(maintenance)
-        state["maintenance"] = maintenance
-        state["state_version"] = maintenance.get("state_version", "")
     return state
+
+
+def _render_workbench(request, **extra_context):
+    context = {
+        "state": _state(request),
+        "state_url": reverse("dataops:state"),
+        "idempotency_key": secrets.token_urlsafe(18),
+        "dataops_nav": _navigation("overview"),
+    }
+    context.update(extra_context)
+    return render(request, "dataops/workbench.html", context)
 
 
 @login_required
 def workbench(request):
-    legacy_advanced = bool(request.GET.get("section"))
-    state = _state(request, include_legacy_advanced=legacy_advanced)
-    return render(request, "dataops/workbench.html", {"state": state, "state_url": reverse("dataops:state"), "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("overview"), "legacy_advanced": legacy_advanced})
+    if request.GET.get("section"):
+        return redirect("dataops:advanced")
+    return _render_workbench(request)
 
 
 @login_required
@@ -474,28 +563,76 @@ def state_api(request):
     return JsonResponse(_state(request), safe=True)
 
 
-def _queue(request, kind, maintenance_kind):
+def _decoded_json_response(response):
+    try:
+        return json.loads(response.content.decode("utf-8"))
+    except (TypeError, ValueError, UnicodeDecodeError):
+        return {"error": {"code": "operation_response_invalid"}}
+
+
+@login_required
+@require_POST
+def workbench_action(request):
+    """Progressively enhance the v3 JSON contract with server-rendered forms."""
     if not _can_act(request):
         return HttpResponse("Superadmin approval required", status=403)
-    try:
-        job = queue_job(kind=maintenance_kind, requested_by=request.user)
-    except Exception as exc:
-        # A disabled worker or safety gate is an operator-visible blocked state,
-        # not an unhandled server error.
-        return HttpResponse(f"Operation blocked: {getattr(exc, 'reason_code', 'maintenance_unavailable')}", status=409)
-    operation, _ = DataOperation.objects.using("control").get_or_create(
-        kind=kind,
-        idempotency_key=request.POST.get("idempotency_key", ""),
-        defaults={"state": DataOperation.State.QUEUED, "request_id": str(job.public_id)},
+    action = str(request.POST.get("action") or "").strip().lower()
+    if action == "health_check":
+        payload, status = _v3_status_payload()
+        return _render_workbench(
+            request,
+            ui_health_check=payload,
+            ui_health_check_ok=status == 200,
+        )
+
+    phase = str(request.POST.get("phase") or "preview").strip().lower()
+    api_response = (
+        v3_operation_start(request)
+        if phase == "start"
+        else v3_operation_preview(request)
     )
-    DataOpsAuditEvent.objects.using("control").create(actor_id=request.user.pk, actor_name=request.user.get_username(), action=kind, operation_id=operation.public_id, outcome="queued")
-    return redirect("dataops:workbench")
+    payload = _decoded_json_response(api_response)
+    activate = str(request.POST.get("activate") or "").strip().lower()
+    request_contract = {
+        "action": action,
+        "recovery_point_id": str(request.POST.get("recovery_point_id") or ""),
+        # The API response is authoritative for validation. Keep redisplay
+        # normalization total so malformed input renders its API error rather
+        # than causing a second, HTML-only exception.
+        "activate": "1" if activate in {"1", "true", "yes", "on"} else "0",
+        "idempotency_key": str(request.POST.get("idempotency_key") or secrets.token_urlsafe(18)),
+    }
+    if api_response.status_code >= 400:
+        error_code = (payload.get("error") or {}).get("code")
+        if not error_code:
+            refusals = (payload.get("plan") or {}).get("refusal_codes") or []
+            error_code = refusals[0] if refusals else "operation_not_available"
+        return _render_workbench(
+            request,
+            ui_error_code=error_code,
+            ui_request=request_contract,
+        )
+    if phase == "start":
+        return _render_workbench(request, ui_operation=payload)
+    return _render_workbench(
+        request,
+        ui_preview=payload,
+        ui_request=request_contract,
+    )
 
 
 @login_required
 @require_POST
 def refresh(request):
-    return _queue(request, DataOperation.Kind.REINDEX, "repair_indexes")
+    """Compatibility POST: refresh observations without queuing any work."""
+    if not _can_act(request):
+        return HttpResponse("Superadmin approval required", status=403)
+    payload, status = _v3_status_payload()
+    return _render_workbench(
+        request,
+        ui_health_check=payload,
+        ui_health_check_ok=status == 200,
+    )
 
 
 @login_required
@@ -853,29 +990,36 @@ def advanced(request):
     try:
         maintenance = workbench_maintenance_state(selected_plan_id=request.GET.get("plan", ""), selected_job_id=request.GET.get("job", ""))
     except Exception:
-        maintenance = {"state_version": "", "capabilities": {}, "folders": [], "plans": [], "jobs": [], "selected_plan": None, "selected_job": None}
-    decorate_operator_state(maintenance)
-    state = build_workbench_state()
-    state["maintenance"] = maintenance
-    try:
-        resolved = resolve_profiles()
-    except Exception:
-        resolved = ()
-    clone_profiles = [
-        {
-            **profile.redacted(),
-            "can_clone_source": profile.can_restore,
-            "can_clone_destination": profile.can_backup,
+        maintenance = {
+            "state_version": "",
+            "capabilities": {
+                operation: {
+                    "enabled": False,
+                    "reason_code": "maintenance_state_unavailable",
+                }
+                for operation in (
+                    "validate",
+                    "repair_indexes",
+                    "reindex_needed",
+                    "reindex_selected",
+                )
+            },
+            "folders": [],
+            "plans": [],
+            "jobs": [],
+            "selected_plan": None,
+            "selected_job": None,
         }
-        for profile in resolved
-        if profile.enabled
-    ]
-    clone_controls = {
-        "enabled": bool(getattr(settings, "DATAOPS_CLONE_REBIND_ENABLED", False)),
-        "profiles": clone_profiles,
-        "confirmation_prefix": "CLONE <source-profile>:<source-generation> -> <destination-profile>:<destination-generation> / <reason>",
-    }
-    return render(request, "dataops/advanced.html", {"state": state, "clone_controls": clone_controls, "idempotency_key": secrets.token_urlsafe(18), "dataops_nav": _navigation("advanced")})
+    decorate_operator_state(maintenance)
+    return render(
+        request,
+        "dataops/advanced.html",
+        {
+            "state": {"maintenance": maintenance},
+            "idempotency_key": secrets.token_urlsafe(18),
+            "dataops_nav": _navigation("advanced"),
+        },
+    )
 
 
 @login_required

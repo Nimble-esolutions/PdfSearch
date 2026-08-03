@@ -18,11 +18,11 @@ class DataOperationsTemplateTests(unittest.TestCase):
     def test_workbench_is_server_rendered_and_has_primary_tasks(self):
         for marker in (
             "Current condition",
-            "Refresh data",
+            "Check health",
             "Back up data",
-            "Restore data",
-            "Storage and automation",
-            "History and technical evidence",
+            "Recovery points",
+            "Activity and technical evidence",
+            "Search maintenance",
             "csrf_token",
         ):
             self.assertIn(marker, self.template)
@@ -31,6 +31,9 @@ class DataOperationsTemplateTests(unittest.TestCase):
         # name back into operator-facing copy.
         self.assertNotIn("Vault", self.template)
         self.assertNotIn("vaultops", self.template)
+        self.assertNotIn("source_profile", self.template)
+        self.assertNotIn("destination_profile", self.template)
+        self.assertNotIn("clone_rebind", self.template)
 
     def test_workbench_uses_accessible_forms_and_no_script_dependency(self):
         self.assertIn('<form class="dataops-form" method="post"', self.template)

@@ -145,6 +145,10 @@ class DataOpsV3APITests(TestCase):
             operation.lifecycle_plan_digest,
         )
         self.assertEqual(operation.connection, self.connection)
+        status = self.client.get(first.json()["status_url"])
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json()["operation_id"], str(operation.public_id))
+        self.assertEqual(status.json()["state"], DataOperation.State.QUEUED)
 
     def test_backup_start_automatically_refreshes_unproven_connection(self):
         self.connection.capabilities = {"probed": False}
