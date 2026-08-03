@@ -13,9 +13,18 @@ from django.core.management.base import BaseCommand, CommandError
 
 from core.candidate_maintenance import validate_candidate
 from core.maintenance import queue_job, run_job
-from core.models import Folder, PDFFile, SEARCHABLE_PDF_LIFECYCLES
+from core.models import (
+    Folder,
+    MaintenanceJob,
+    MaintenanceJobItem,
+    PDFFile,
+    SEARCHABLE_PDF_LIFECYCLES,
+)
 from core.search_artifact_health import classify_search_artifacts
 from dataops.package_v3 import canonical_json_bytes
+
+
+EVIDENCE_VERSION = 2
 
 
 def _json_object(path: Path, code: str):
@@ -65,6 +74,18 @@ def _text_coverage() -> dict[str, int]:
     }
 
 
+def _reindexed_document_count(manifest_digest: str) -> int:
+    job_ids = MaintenanceJob.objects.filter(
+        kind="reindex_needed",
+        scope__dataops_manifest_sha256=manifest_digest,
+    ).values_list("pk", flat=True)
+    return MaintenanceJobItem.objects.filter(
+        job_id__in=job_ids,
+        status="completed",
+        pdf_id__isnull=False,
+    ).values("pdf_id").distinct().count()
+
+
 class Command(BaseCommand):
     help = "Internal: prepare one isolated DataOps restore candidate"
 
@@ -109,7 +130,24 @@ class Command(BaseCommand):
                 and existing.get("manifest_sha256") == manifest_digest
                 and existing.get("indexing_ratio") == 1.0
             ):
-                validate_candidate(workspace)
+                validation = validate_candidate(workspace)
+                if existing.get("evidence_version") != EVIDENCE_VERSION:
+                    existing.update(
+                        {
+                            "evidence_version": EVIDENCE_VERSION,
+                            "reindexed_documents": _reindexed_document_count(
+                                manifest_digest
+                            ),
+                            "validation": validation,
+                            "text_coverage": _text_coverage(),
+                        }
+                    )
+                    temporary = receipt_path.with_name(
+                        f".{receipt_path.name}.partial"
+                    )
+                    temporary.write_bytes(canonical_json_bytes(existing) + b"\n")
+                    os.chmod(temporary, 0o600)
+                    os.replace(temporary, receipt_path)
                 self.stdout.write("candidate_reused")
                 return
             raise CommandError("candidate_receipt_conflict")
@@ -186,11 +224,13 @@ class Command(BaseCommand):
             raise CommandError("candidate_indexing_incomplete")
         receipt = {
             "schema_version": 3,
+            "evidence_version": EVIDENCE_VERSION,
             "success": True,
             "manifest_sha256": manifest_digest,
             "database_sha256": _sha256(workspace / "db.sqlite3"),
             "documents": total,
-            "reindexed_documents": len(reindex),
+            "reindexed_documents": _reindexed_document_count(manifest_digest),
+            "reindex_attempted_this_run": len(reindex),
             "repaired_folders": len(folders),
             "indexing_ratio": ratio,
             "text_coverage": _text_coverage(),
