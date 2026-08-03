@@ -29,6 +29,8 @@ services:
       NONPROD_DATA_POLICY: exact
       EXACT_PRODUCTION_DATA_APPROVED: "1"
       EXTERNAL_SIDE_EFFECTS_MODE: sandbox
+      CI: "true"
+      PDFSEARCH_TEST_EMBEDDINGS: "1"
       BACKUP_ROLE: disabled
       CREATE_SUPERUSER: "0"
       BACKUP_SYNC_MODE: manual
@@ -68,6 +70,8 @@ services:
       NONPROD_DATA_POLICY: exact
       EXACT_PRODUCTION_DATA_APPROVED: "1"
       EXTERNAL_SIDE_EFFECTS_MODE: sandbox
+      CI: "true"
+      PDFSEARCH_TEST_EMBEDDINGS: "1"
       BACKUP_ROLE: disabled
       CREATE_SUPERUSER: "0"
       BACKUP_SYNC_MODE: manual

@@ -95,7 +95,7 @@ automatic activation.
 | RESTORE_SOURCE_DATASET_ID | Restore source boundary | blank | stage dataset or explicit source | blank | Must match the selected profile and manifest |
 | DATA_PINNED_GENERATION | Exact generation to use | blank | explicit during rehearsal | blank | Pinning prevents moving-target restores; record the digest |
 | EXTERNAL_SIDE_EFFECTS_MODE | Email, webhook, payment, and similar effects | sandbox | sandbox | enabled | Never let production-derived stage data trigger real external effects |
-| EXTERNAL_AI_MODE | AI-only provider policy | sandbox or disabled | enabled by reviewed policy | enabled by reviewed policy | This does not authorize unrelated side effects |
+| EXTERNAL_AI_MODE | AI-only provider policy | sandbox or disabled | enabled by reviewed policy | enabled by reviewed policy | Sandbox is refused in review/stage/prod; this does not authorize unrelated side effects |
 | APP_RELEASE_VERSION | Human-readable release identity | local-dev | approved Git SHA | approved Git SHA | Must agree with release evidence |
 | APP_IMAGE_DIGEST | Immutable running image identity | blank locally | immutable GHCR digest | immutable GHCR digest | Mutable tags are aliases; verify the digest from the running container |
 | PDFSEARCH_IMAGE | Compose image reference | local image may be used | immutable digest | immutable digest | A tag pull is not proof that the intended image is running |
@@ -381,6 +381,12 @@ application's password-management flow and record the operational decision.
 PDFSEARCH_TEST_EMBEDDINGS is reserved for disposable CI/test runs. It must
 remain 0 in stage and production; it is not a substitute for the approved
 embedding provider or a recovery validation.
+
+`EXTERNAL_AI_MODE=sandbox` follows the same boundary. It is valid only for
+development/test. A stage-like disposable lifecycle certification must carry
+both `CI=true` and `PDFSEARCH_TEST_EMBEDDINGS=1`; an ordinary reachable stage,
+review, or production process fails closed instead of returning plausible fake
+answers or vectors.
 
 ## 13. Safe change recipes
 

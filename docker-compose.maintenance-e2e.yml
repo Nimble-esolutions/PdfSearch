@@ -62,6 +62,7 @@ x-lifecycle-environment: &lifecycle-environment
   VAULT_DEFAULT_PROFILE: maintenance-e2e
   OPENAI_API_KEY: ""
   GOOGLE_API_KEY: ""
+  CI: "true"
   PDFSEARCH_TEST_EMBEDDINGS: "1"
   REDIS_URL: redis://redis:6379/7
   ALLOWED_HOSTS: localhost,127.0.0.1

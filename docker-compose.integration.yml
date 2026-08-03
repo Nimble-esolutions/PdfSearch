@@ -88,6 +88,7 @@ services:
       VAULT_RESTORE_MIN_FREE_INODES: "0"
       REDIS_URL: redis://redis:6379/1
       OPENAI_API_KEY: ""
+      CI: "true"
       PDFSEARCH_TEST_EMBEDDINGS: "1"
     volumes:
       - lifecycle_data:/app/integration-data
