@@ -293,9 +293,18 @@ def _cleanup_probes(client: Any, bucket: str, prefix: str) -> None:
         )
         objects = [{"Key": item["Key"]} for item in resp.get("Contents", [])]
         if objects:
-            client.delete_objects(
-                Bucket=bucket,
-                Delete={"Objects": objects, "Quiet": True},
-            )
+            try:
+                client.delete_objects(
+                    Bucket=bucket,
+                    Delete={"Objects": objects, "Quiet": True},
+                )
+            except Exception:
+                # Older S3-compatible providers can authorize DeleteObject
+                # correctly while rejecting the bulk DeleteObjects API.
+                for item in objects:
+                    try:
+                        client.delete_object(Bucket=bucket, Key=item["Key"])
+                    except Exception:
+                        pass
     except Exception:
         pass

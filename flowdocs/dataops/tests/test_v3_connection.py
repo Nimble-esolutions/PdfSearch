@@ -19,10 +19,18 @@ from dataops.v3_connection import (
 
 
 class FakeS3:
-    def __init__(self, *, conditional=True, accessible=True, metadata=True):
+    def __init__(
+        self,
+        *,
+        conditional=True,
+        accessible=True,
+        metadata=True,
+        bulk_delete=True,
+    ):
         self.conditional = conditional
         self.accessible = accessible
         self.metadata = metadata
+        self.bulk_delete = bulk_delete
         self.objects = {}
 
     @staticmethod
@@ -75,8 +83,14 @@ class FakeS3:
         }
 
     def delete_objects(self, *, Bucket, Delete):
+        if not self.bulk_delete:
+            raise RuntimeError("bulk delete unsupported")
         for item in Delete["Objects"]:
             self.objects.pop((Bucket, item["Key"]), None)
+        return {}
+
+    def delete_object(self, *, Bucket, Key):
+        self.objects.pop((Bucket, Key), None)
         return {}
 
 
@@ -126,6 +140,14 @@ class V3ConnectionTests(TestCase):
         self.assertTrue(connection_is_ready(self.connection))
         self.assertTrue(self.connection.capabilities["write"])
         self.assertFalse(self.connection.capabilities["metadata"])
+
+    def test_probe_cleanup_falls_back_when_bulk_delete_is_unsupported(self):
+        client = FakeS3(bulk_delete=False)
+        probe_owned_connection(
+            self.connection,
+            client_factory=lambda _connection: client,
+        )
+        self.assertEqual(client.objects, {})
 
     def test_provider_exception_details_are_not_persisted(self):
         with self.assertRaises(V3ConnectionError):
