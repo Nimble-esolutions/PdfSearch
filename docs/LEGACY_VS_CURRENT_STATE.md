@@ -2,7 +2,7 @@
 Status: Active, living comparison
 Audience: Maintainer, Operator, Reviewer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-02
+Last verified: 2026-08-03
 Canonical source: docs/LEGACY_VS_CURRENT_STATE.md
 Update trigger: every verified migration, release, activation, backup, or rollback
 ---
@@ -11,7 +11,7 @@ Update trigger: every verified migration, release, activation, backup, or rollba
 
 This document is the short comparison for operators who need to understand
 what changed. It is intentionally maintained alongside
-STATUS-2026-08-02.md. The status page carries exact evidence; this page
+STATUS-2026-08-03.md. The status page carries exact evidence; this page
 explains the transition.
 
 ## At a glance
@@ -27,12 +27,12 @@ explains the transition.
 | Search extraction | native PDF extraction only for many documents | native extraction first; bounded local Tesseract OCR for blank/scanned pages |
 | OCR languages | not consistently available in the old path | English + Marathi + Hindi, eng+mar+hin |
 | Index readiness metric | folder-index count could under-report document readiness | document-scoped searchable-PDF ratio; target 1.0 |
-| Runtime activation | no signed active generation in stage | signed atomic pointer mechanism prepared; stage activation still pending |
-| Backup profile | stage backup selector was missing in the degraded state | stage_2026 selected for both restore and backup |
-| Stage route | earlier route returned 404 | HTTPS route is served; /readyz remains 503 until data authority exists |
-| Image identity | mutable or older deployment references | exact repository@sha256 digest; current stage is b71 pending security release |
-| Security release | cryptography 45.0.7 findings | PR #169 upgrades to 48.0.1; post-merge image/Trivy still pending |
-| Public authentication | production accounts requested for stage | public auth/admin exception blocked pending security-owner approval |
+| Runtime activation | no signed active generation in stage | signed pointer verifies and serves the 242-document v3 runtime |
+| Backup profile | stage backup selector was missing in the degraded state | manual stage backup and isolated rehearsal succeeded; automatic backup remains off |
+| Stage route | earlier route returned 404 | HTTPS and real English/Marathi search work; final `/readyz` projection awaits PR 176 image |
+| Image identity | mutable or older deployment references | immutable digest required; stage still needs the final PR 176 candidate |
+| Security release | cryptography 45.0.7 findings | runtime dependency is 48.0.1; final image still passes Trivy/release certification |
+| Public authentication | production accounts requested for stage | exception explicitly approved for stage; unrelated external effects stay sandboxed |
 
 ## Data and recovery comparison
 
@@ -60,10 +60,10 @@ The migration has separate custody boundaries:
       restore-quarantine/
         -> 242 PDFs ready and indexed
       runtime-generations/
-        -> empty authoritative pointer until signed activation
+        -> signed active generation for manifest 80d8dc81…3c96
 
-The stage quarantine is therefore evidence and prepared data, not active
-runtime authority.
+The signed control pointer—not quarantine presence or container health—is the
+active runtime authority.
 
 ## Search and OCR comparison
 

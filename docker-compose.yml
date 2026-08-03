@@ -158,7 +158,6 @@ services:
       - DATAOPS_UI_CONFIG_ENABLED=${DATAOPS_UI_CONFIG_ENABLED:-0}
       - DATAOPS_UI_SECRET_ENTRY_ENABLED=${DATAOPS_UI_SECRET_ENTRY_ENABLED:-0}
       - DATAOPS_CONFIG_ENCRYPTION_KEY=${DATAOPS_CONFIG_ENCRYPTION_KEY:-}
-      - DATAOPS_RESTORE_STAGING_ROOT=${DATAOPS_RESTORE_STAGING_ROOT:-/app/data/restore-quarantine}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://ai-sahakar.net,https://www.ai-sahakar.net}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://ai-sahakar.net,https://www.ai-sahakar.net,http://localhost:8000,http://127.0.0.1:8000}
       # Environment identity
@@ -229,6 +228,7 @@ services:
       - ACTIVATION_SUPERVISOR_POLL_SECONDS=${ACTIVATION_SUPERVISOR_POLL_SECONDS:-2}
       - ACTIVATION_READINESS_TIMEOUT_SECONDS=${ACTIVATION_READINESS_TIMEOUT_SECONDS:-120}
       - EXTERNAL_SIDE_EFFECTS_MODE=${EXTERNAL_SIDE_EFFECTS_MODE:-enabled}
+      - EXTERNAL_AI_MODE=${EXTERNAL_AI_MODE:-}
       - APP_IMAGE_DIGEST=${PDFSEARCH_IMAGE:-}
       - APP_RELEASE_VERSION=${APP_RELEASE_VERSION:-}
       - NONPROD_DATA_POLICY=${NONPROD_DATA_POLICY:-}
@@ -318,6 +318,7 @@ services:
       DATA_ROOT: /app/data
       DATA_CONTROL_ROOT: /app/data-control
       CONTROL_DB_PATH: /app/data-control/control.sqlite3
+      SECRET_KEY: ${SECRET_KEY}
       VAULT_RESTORE_ROOT: /app/data/restore-quarantine
       RUNTIME_GENERATIONS_ROOT: /app/data/runtime-generations
       SQLITE_DB_PATH: /app/data/db.sqlite3
@@ -440,7 +441,6 @@ services:
       DATAOPS_UI_CONFIG_ENABLED: ${DATAOPS_UI_CONFIG_ENABLED:-0}
       DATAOPS_UI_SECRET_ENTRY_ENABLED: ${DATAOPS_UI_SECRET_ENTRY_ENABLED:-0}
       DATAOPS_CONFIG_ENCRYPTION_KEY: ${DATAOPS_CONFIG_ENCRYPTION_KEY:-}
-      DATAOPS_RESTORE_STAGING_ROOT: ${DATAOPS_RESTORE_STAGING_ROOT:-/app/data/restore-quarantine}
       VAULT_SYNC_ENABLED: ${VAULT_SYNC_ENABLED:-0}
       VAULT_SYNC_MODE: ${VAULT_SYNC_MODE:-manual}
       VAULT_SYNC_PROMOTION_MODE: ${VAULT_SYNC_PROMOTION_MODE:-manual}
@@ -497,11 +497,12 @@ services:
       ACTIVATION_SUPERVISOR_POLL_SECONDS: ${ACTIVATION_SUPERVISOR_POLL_SECONDS:-2}
       ACTIVATION_READINESS_TIMEOUT_SECONDS: ${ACTIVATION_READINESS_TIMEOUT_SECONDS:-120}
       EXTERNAL_SIDE_EFFECTS_MODE: ${EXTERNAL_SIDE_EFFECTS_MODE:-enabled}
+      EXTERNAL_AI_MODE: ${EXTERNAL_AI_MODE:-}
       APP_IMAGE_DIGEST: ${PDFSEARCH_IMAGE:-}
       APP_RELEASE_VERSION: ${APP_RELEASE_VERSION:-}
       NONPROD_DATA_POLICY: ${NONPROD_DATA_POLICY:-}
     depends_on:
-      redis:
+      web:
         condition: service_healthy
     restart: always
     healthcheck:
@@ -527,17 +528,9 @@ services:
       - internal
 
 volumes:
-  # Dokploy provisions these persistent volumes. Keep them external so a
-  # project-name change or a missing volume cannot create a blank replacement.
   redis_data:
-    external: true
-    name: ${COMPOSE_PROJECT_NAME}_redis_data
   flowdocs_data:
-    external: true
-    name: ${COMPOSE_PROJECT_NAME}_flowdocs_data
   flowdocs_control:
-    external: true
-    name: ${COMPOSE_PROJECT_NAME}_flowdocs_control
   prod_flowdocs:
     external: true
 

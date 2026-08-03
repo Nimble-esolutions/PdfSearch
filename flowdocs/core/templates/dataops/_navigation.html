@@ -1,7 +1,5 @@
 {% load i18n %}
 <nav class="dataops-nav" aria-label="{% trans 'Data Operations sections' %}">
-  <a href="{% url 'dataops:workbench' %}"{% if dataops_nav.active == 'overview' %} aria-current="page"{% endif %}>{% trans "Overview" %}</a>
-  <a href="{% url 'dataops:configuration' %}"{% if dataops_nav.active == 'profiles' %} aria-current="page"{% endif %}>{% trans "Storage profiles" %}</a>
-  <a href="{% url 'dataops:jobs' %}"{% if dataops_nav.active == 'jobs' %} aria-current="page"{% endif %}>{% trans "Backup & sync jobs" %}</a>
-  <a href="{% url 'dataops:advanced' %}"{% if dataops_nav.active == 'advanced' %} aria-current="page"{% endif %}>{% trans "Advanced manual controls" %}</a>
+  <a href="{% url 'dataops:workbench' %}"{% if dataops_nav.active == 'overview' %} aria-current="page"{% endif %}>{% trans "Data protection" %}</a>
+  <a href="{% url 'dataops:advanced' %}"{% if dataops_nav.active == 'advanced' %} aria-current="page"{% endif %}>{% trans "Search maintenance" %}</a>
 </nav>

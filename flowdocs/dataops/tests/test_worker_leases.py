@@ -4,8 +4,12 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone
 
-from dataops.models import DataOperation
-from dataops.worker import _claim_pipeline_operation, reconcile_receipts
+from dataops.models import DataOperation, DataOpsAuditEvent
+from dataops.worker import (
+    _claim_pipeline_operation,
+    _finish_pipeline_operation,
+    reconcile_receipts,
+)
 
 
 class DataOperationLeaseTests(TestCase):
@@ -50,3 +54,58 @@ class DataOperationLeaseTests(TestCase):
         self.assertEqual(second.state, DataOperation.State.QUEUED)
         self.assertTrue(first.lease_token)
         self.assertIsNotNone(first.lease_expires_at)
+
+    def test_success_with_null_activation_persists_one_audit_event(self):
+        operation = self._operation()
+        operation.lifecycle_plan = {"contract_version": 3}
+        operation.save(using="control", update_fields=["lifecycle_plan", "updated_at"])
+        result = {
+            "release_id": "release-1",
+            "manifest_digest": "abc123",
+            "source_profile": "source",
+            "destination_profile": "destination",
+            "activation": None,
+        }
+
+        with patch("dataops.v3_executor.execute_backup_operation", return_value=result):
+            finished = _finish_pipeline_operation(operation)
+
+        operation.refresh_from_db(using="control")
+        self.assertEqual(finished.state, DataOperation.State.SUCCEEDED)
+        self.assertEqual(operation.state, DataOperation.State.SUCCEEDED)
+        events = DataOpsAuditEvent.objects.using("control").filter(
+            operation_id=operation.public_id,
+            action="pipeline_receipt_published",
+            outcome=DataOperation.State.SUCCEEDED,
+        )
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.get().evidence["active_generation"], "")
+
+    def test_success_audit_failure_rolls_back_success_state(self):
+        operation = self._operation()
+        operation.lifecycle_plan = {"contract_version": 3}
+        operation.save(using="control", update_fields=["lifecycle_plan", "updated_at"])
+        result = {
+            "release_id": "release-1",
+            "manifest_digest": "abc123",
+            "activation": None,
+        }
+
+        with (
+            patch("dataops.v3_executor.execute_backup_operation", return_value=result),
+            patch(
+                "dataops.models.DataOpsAuditEvent.save",
+                side_effect=RuntimeError("audit unavailable"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "audit unavailable"),
+        ):
+            _finish_pipeline_operation(operation)
+
+        operation.refresh_from_db(using="control")
+        self.assertEqual(operation.state, DataOperation.State.RUNNING)
+        self.assertEqual(operation.pipeline_stage, "preflight")
+        self.assertFalse(
+            DataOpsAuditEvent.objects.using("control")
+            .filter(operation_id=operation.public_id, action="pipeline_receipt_published")
+            .exists()
+        )

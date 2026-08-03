@@ -10,6 +10,16 @@ PDF_CACHE_DIR="${PDF_CACHE_DIR:-$DATA_ROOT/pdf_cache}"
 VAULT_RESTORE_ROOT="${VAULT_RESTORE_ROOT:-$DATA_ROOT/restore-quarantine}"
 RUNTIME_GENERATIONS_ROOT="${RUNTIME_GENERATIONS_ROOT:-$DATA_ROOT/runtime-generations}"
 export DATA_CONTROL_ROOT CONTROL_DB_PATH PDF_CACHE_DIR VAULT_RESTORE_ROOT RUNTIME_GENERATIONS_ROOT
+
+# Keep the worker on the same fail-closed image/schema contract as web.  Both
+# checks are read-only and precede persistent-directory or database mutation.
+python /app/scripts/ops/release_integrity.py verify \
+  --root /app \
+  --manifest /app/release-integrity.json
+python /app/scripts/ops/release_integrity.py startup-compatibility \
+  --control-db "$CONTROL_DB_PATH" \
+  --root /app
+
 mkdir -p "$DATA_ROOT" "$DATA_ROOT/media/pdfs" "$DATA_ROOT/faiss_indexes" \
   "$PDF_CACHE_DIR" "$DATA_ROOT/chroma_db" \
   "$DATA_ROOT/backups/json_backups" "$DATA_CONTROL_ROOT" \
@@ -21,7 +31,21 @@ chown -R appuser:appuser \
 gosu appuser:appuser bash -lc \
   'cd /app/flowdocs && python manage.py startup_restore_preflight'
 
+RUNTIME_START_MODE="disabled"
 if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
+  RUNTIME_START_MODE="$(
+    gosu appuser:appuser python /app/flowdocs/runtime_paths_cli.py \
+      generation --allow-initial-bootstrap
+  )"
+  if [ "$RUNTIME_START_MODE" = "initial-bootstrap" ] \
+      && [ "${STAGING_INITIAL_ACTIVATION_ENABLED:-0}" != "1" ]; then
+    echo "[activation] ERROR: initial bootstrap requires explicit opt-in" >&2
+    exit 1
+  fi
+fi
+
+if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ] \
+    && [ "$RUNTIME_START_MODE" != "initial-bootstrap" ]; then
   gosu appuser:appuser bash -lc 'python /app/flowdocs/manage.py shell -c "
 import sys
 from django.db import connection

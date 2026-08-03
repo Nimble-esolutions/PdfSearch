@@ -45,9 +45,10 @@ jobs:
           test -n "$base_sha"
           git cat-file -e "${base_sha}^{commit}"
           git diff --check "${base_sha}...HEAD"
-          bash -n start.sh docker-entrypoint.sh scripts/ops/run_recovery_certification.sh
+          bash -n start.sh docker-entrypoint.sh worker-entrypoint.sh scripts/ops/run_recovery_certification.sh
           python3 -m compileall -q flowdocs scripts
           python3 -m unittest \
+            scripts.ci.test_release_integrity \
             scripts.ci.test_release_workflow_contract \
             scripts.ci.test_pr_contract_workflow \
             scripts.ci.test_docs_contract \

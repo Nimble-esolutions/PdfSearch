@@ -227,6 +227,8 @@ for service_name in ("web", "maintenance"):
     if networks != {"cert_internal", "cert_vault"}:
         raise SystemExit(f"{service_name}: unexpected networks: {networks}")
     environment = service["environment"]
+    if not environment.get("SECRET_KEY"):
+        raise SystemExit(f"{service_name}: SECRET_KEY must be explicit and non-empty")
     if environment.get("CREATE_SUPERUSER") != "0":
         raise SystemExit(f"{service_name}: startup superuser creation must be disabled")
     expected_activation = os.environ["CERT_ACTIVATION_ENABLED"]

@@ -492,7 +492,12 @@ DATAOPS_OPERATION_LEASE_SECONDS = _env_positive_int('DATAOPS_OPERATION_LEASE_SEC
 DATAOPS_MIRROR_QUARANTINE_RETENTION_DAYS = _env_positive_int('DATAOPS_MIRROR_QUARANTINE_RETENTION_DAYS', 30)
 DATAOPS_MIRROR_QUARANTINE_CLEANUP_MAX_OBJECTS = _env_positive_int('DATAOPS_MIRROR_QUARANTINE_CLEANUP_MAX_OBJECTS', 100)
 DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING = _env_bool('DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING', False)
-DATAOPS_RESTORE_STAGING_ROOT = Path(os.getenv('DATAOPS_RESTORE_STAGING_ROOT', str(DATA_ROOT / 'dataops-restore')))
+# Recovery workspaces must live on the shared data volume so the maintenance
+# worker and web activation supervisor observe the same verified candidate.
+# This is intentionally derived instead of operator-configurable: a
+# container-local override can make a restore appear successful to one
+# process while remaining invisible to the other.
+DATAOPS_RESTORE_STAGING_ROOT = DATA_ROOT / 'restore-quarantine'
 DATAOPS_UI_CONFIG_ENABLED = _env_bool('DATAOPS_UI_CONFIG_ENABLED', False)
 DATAOPS_UI_SECRET_ENTRY_ENABLED = _env_bool('DATAOPS_UI_SECRET_ENTRY_ENABLED', False)
 

@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, "/app/flowdocs")
 
 import django
+from django.conf import settings
 
 
 def main():
@@ -18,6 +19,7 @@ def main():
     django.setup()
 
     from core.data_release_validation import validate_release
+    from core.embedding_contract import embedding_dimension_for_model
     from core.management.commands.inventory_artifacts import build_manifest
 
     root = Path(os.environ.get("DATA_ROOT", "/app/data")).resolve()
@@ -37,7 +39,8 @@ def main():
         for item in faiss_files
         if item.get("faiss", {}).get("loadable")
     )
-    if dimensions != [2] or vectors < 1:
+    expected_dimension = embedding_dimension_for_model(settings.OPENAI_EMBED_MODEL)
+    if dimensions != [expected_dimension] or vectors < 1:
         raise AssertionError(f"index compatibility failed: dimensions={dimensions} vectors={vectors}")
 
     counts = manifest["counts"]
@@ -46,7 +49,7 @@ def main():
         "pdf_storage_files": counts["pdf_storage_files"],
         "faiss_files": counts["faiss_files"],
         "faiss_vectors": vectors,
-        "faiss_dimension": 2,
+        "faiss_dimension": expected_dimension,
         "preserved_target_only_rows": counts["pdf_rows_missing_files"],
     }
     report = validate_release(manifest, root)
@@ -65,7 +68,10 @@ def main():
         f"pdf_rows={counts['pdf_rows']} pdf_files={counts['pdf_storage_files']} "
         f"faiss_files={counts['faiss_files']} faiss_vectors={vectors}"
     )
-    print(f"[index-compatibility] loadable_dimensions={dimensions} expected=2")
+    print(
+        "[index-compatibility] "
+        f"loadable_dimensions={dimensions} expected={expected_dimension}"
+    )
     print(f"[data-release] manifest={manifest_path}")
 
 

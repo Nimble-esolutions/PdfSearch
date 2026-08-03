@@ -154,15 +154,37 @@ Dokploy backup policy must cover the exact external volume names separately.
 ## Required post-deploy evidence
 
 Do not accept a green Dokploy deployment or a root-page `200` as sufficient.
-Verify all of the following:
+`docker compose config`, Dokploy's rendered Compose view, and the deployment log
+describe desired state. They do not prove which bytes the running container is
+using. From a checkout of the exact intended revision, verify the actual
+container before functional checks:
 
 ```bash
-docker inspect <web-container> \
-  --format 'image={{.Config.Image}} id={{.Image}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
+python3 scripts/ops/verify_running_release.py \
+  --container <web-container> \
+  --expected-image ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<digest> \
+  --expected-revision <40-character-git-sha> \
+  --checkout-root /path/to/exact-revision
+
+# Preview the Docker reads without executing them.
+python3 scripts/ops/verify_running_release.py \
+  --container <web-container> \
+  --expected-image ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<digest> \
+  --expected-revision <40-character-git-sha> \
+  --dry-run
+
 curl -fsS https://<configured-domain>/livez
 curl -fsS https://<configured-domain>/readyz
 curl -fsS https://<configured-domain>/health/data/
 ```
+
+The verifier reads the container's real `.Config.Image` and `.Image`, inspects
+that image ID for its OCI revision and repository digest, verifies the manifest
+baked into the image, and compares live container sentinel hashes with the
+checkout. The sentinels include the DataOps ORM, every packaged DataOps
+migration (including the leaf), and all startup entrypoints. A mutable tag is
+rejected as release evidence even when it currently resolves to the expected
+image ID.
 
 Then verify one authenticated login, one PDF listing, one representative
 search, one source-document link, and one static asset. Recheck the `/app/data`
@@ -173,6 +195,31 @@ If the image revision changed but the public page did not, inspect Traefik host
 ownership and browser/static caching. If the container revision did not change,
 inspect the release publication, Dokploy image setting, and pull policy before
 restarting again.
+
+## Dokploy environment and mutable-tag drift
+
+Dokploy's saved application environment is authoritative when it interpolates
+the Compose deployment. A repository `.env`, `/root/stage-2026.env`, or shell
+export has no effect unless the operator explicitly imports or supplies it to
+that Dokploy deployment. Compare key names and non-secret posture in Dokploy;
+never print secret values for troubleshooting.
+
+Autodeploy does not make a mutable tag immutable. With `:latest`, the same
+displayed desired image can refer to different bytes over time, or a recreated
+container can continue using an older local image. A tag can also move between
+CI certification and deployment. `pull_policy: always` reduces stale-cache
+risk but cannot prove which certified commit was selected. Set the existing
+`PDFSEARCH_IMAGE` value to the certified `repo@sha256:<digest>` in Dokploy and
+use the actual-container verifier above. Do not add Dokploy project IDs,
+generated labels, or Compose-project variables to the checked-in Compose file.
+
+If startup emits
+`startup_schema_contract_older_than_control_database`, the mounted control
+database records a DataOps migration newer than the packaged image knows. The
+gate reads SQLite in read-only mode and exits before either entrypoint creates,
+chowns, restores, backs up, or migrates persistent paths. Do not delete or
+downgrade the control database; deploy the certified image that contains the
+applied migration and re-run verification.
 
 ## Recovery rules
 

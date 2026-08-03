@@ -22,6 +22,8 @@ from pathlib import Path
 from django.conf import settings
 from django.db.migrations.loader import MigrationLoader
 
+from core.database_ownership import database_alias_for_app
+
 from core.recovery_auth import (
     RecoveryAuthenticationError,
     verify_recovery_superadmin_database,
@@ -127,7 +129,7 @@ def migration_leaves() -> dict[str, list[str]]:
         loader = MigrationLoader(None, ignore_no_migrations=True)
         leaves[alias] = [
             f"{app}.{name}" for app, name in loader.graph.leaf_nodes()
-            if (alias == "control") == (app == "vaultops")
+            if database_alias_for_app(app) == alias
         ]
     return leaves
 

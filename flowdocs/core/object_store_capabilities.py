@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from .artifact_vault import ArtifactVault, ArtifactVaultError
+from .artifact_vault import ArtifactVault
 
 
 PROBE_PREFIX = "system-capability-probes"
@@ -27,6 +27,7 @@ class StoreCapabilities:
     endpoint: str = ""
     bucket: str = ""
     probed_at: str = ""
+    bucket_accessible: bool = False
 
     conditional_create_supported: bool = False
     conditional_replace_supported: bool = False
@@ -45,6 +46,7 @@ class StoreCapabilities:
         return {
             "endpoint": self.endpoint,
             "bucket": self.bucket,
+            "bucket_accessible": self.bucket_accessible,
             "conditional_create": self.conditional_create_supported,
             "conditional_replace": self.conditional_replace_supported,
             "etag_available": self.etag_available,
@@ -61,75 +63,109 @@ def probe_capabilities(
     vault: ArtifactVault,
     deployment_id: str = "",
 ) -> StoreCapabilities:
-    """Detect S3 capabilities with safe probe objects."""
-    cap = StoreCapabilities(
+    """Backward-compatible adapter for callers using ``ArtifactVault``."""
+    if not vault.enabled:
+        cap = StoreCapabilities(
+            endpoint=vault.config.endpoint,
+            bucket=vault.config.bucket,
+            probed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        )
+        cap.errors.append("store_disabled")
+        return cap
+    return probe_s3_capabilities(
+        client=vault.client,
         endpoint=vault.config.endpoint,
         bucket=vault.config.bucket,
-        probed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        deployment_id=deployment_id,
     )
 
-    if not vault.enabled:
-        cap.errors.append("Vault is disabled")
+
+def probe_s3_capabilities(
+    *,
+    client: Any,
+    endpoint: str,
+    bucket: str,
+    deployment_id: str = "",
+) -> StoreCapabilities:
+    """Detect required S3 semantics without binding to an application product."""
+    cap = StoreCapabilities(
+        endpoint=endpoint,
+        bucket=bucket,
+        probed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    )
+    try:
+        client.head_bucket(Bucket=bucket)
+        cap.bucket_accessible = True
+    except Exception:
+        cap.errors.append("bucket_access_failed")
         return cap
 
     deploy_id = deployment_id or secrets.token_hex(4)
     probe_prefix = f"{PROBE_PREFIX}/{deploy_id}"
 
     try:
-        cap.conditional_create_supported = _probe_conditional_create(vault, probe_prefix)
-    except Exception as exc:
-        cap.errors.append(f"conditional-create probe failed: {exc}")
+        cap.conditional_create_supported = _probe_conditional_create(
+            client, bucket, probe_prefix
+        )
+    except Exception:
+        cap.errors.append("conditional_create_probe_failed")
 
     try:
-        cap.conditional_replace_supported = _probe_conditional_replace(vault, probe_prefix)
-    except Exception as exc:
-        cap.errors.append(f"conditional-replace probe failed: {exc}")
+        cap.conditional_replace_supported = _probe_conditional_replace(
+            client, bucket, probe_prefix
+        )
+    except Exception:
+        cap.errors.append("conditional_replace_probe_failed")
 
     try:
-        cap.etag_available, cap.version_id_available = _probe_etag_and_version(vault, probe_prefix)
-    except Exception as exc:
-        cap.errors.append(f"etag/version probe failed: {exc}")
+        cap.etag_available, cap.version_id_available = _probe_etag_and_version(
+            client, bucket, probe_prefix
+        )
+    except Exception:
+        cap.errors.append("etag_version_probe_failed")
 
     try:
-        cap.read_after_write_consistent = _probe_read_after_write(vault, probe_prefix)
-    except Exception as exc:
-        cap.errors.append(f"read-after-write probe failed: {exc}")
+        cap.read_after_write_consistent = _probe_read_after_write(
+            client, bucket, probe_prefix
+        )
+    except Exception:
+        cap.errors.append("read_after_write_probe_failed")
 
     try:
-        cap.metadata_supported = _probe_metadata(vault, probe_prefix)
-    except Exception as exc:
-        cap.errors.append(f"metadata probe failed: {exc}")
+        cap.metadata_supported = _probe_metadata(client, bucket, probe_prefix)
+    except Exception:
+        cap.errors.append("metadata_probe_failed")
 
     try:
-        cap.bucket_versioning_enabled = _probe_bucket_versioning(vault)
-    except Exception as exc:
-        cap.errors.append(f"bucket-versioning probe failed: {exc}")
+        cap.bucket_versioning_enabled = _probe_bucket_versioning(client, bucket)
+    except Exception:
+        cap.errors.append("bucket_versioning_probe_failed")
 
     cap.authoritative_publication_allowed = (
         cap.conditional_create_supported
         and cap.conditional_replace_supported
     )
 
-    _cleanup_probes(vault, probe_prefix)
+    _cleanup_probes(client, bucket, probe_prefix)
     return cap
 
 
-def _probe_conditional_create(vault: ArtifactVault, prefix: str) -> bool:
+def _probe_conditional_create(client: Any, bucket: str, prefix: str) -> bool:
     """Test If-None-Match: * for conditional object creation."""
     key = f"{prefix}/cond-create-{secrets.token_hex(4)}.json"
     data = json.dumps({"probe": "conditional-create", "ts": time.time()}).encode()
 
     try:
-        vault.client.put_object(
-            Bucket=vault.config.bucket,
+        client.put_object(
+            Bucket=bucket,
             Key=key,
             Body=data,
             ContentType="application/json",
             IfNoneMatch="*",
         )
         try:
-            vault.client.put_object(
-                Bucket=vault.config.bucket,
+            client.put_object(
+                Bucket=bucket,
                 Key=key,
                 Body=data,
                 ContentType="application/json",
@@ -139,8 +175,8 @@ def _probe_conditional_create(vault: ArtifactVault, prefix: str) -> bool:
         except Exception:
             return True
     except Exception:
-        plain_put = vault.client.put_object(
-            Bucket=vault.config.bucket,
+        plain_put = client.put_object(
+            Bucket=bucket,
             Key=key,
             Body=data,
             ContentType="application/json",
@@ -150,14 +186,14 @@ def _probe_conditional_create(vault: ArtifactVault, prefix: str) -> bool:
         raise
 
 
-def _probe_conditional_replace(vault: ArtifactVault, prefix: str) -> bool:
+def _probe_conditional_replace(client: Any, bucket: str, prefix: str) -> bool:
     """Test If-Match with ETag for conditional replacement."""
     key = f"{prefix}/cond-replace-{secrets.token_hex(4)}.json"
     data1 = json.dumps({"v": 1}).encode()
     data2 = json.dumps({"v": 2}).encode()
 
-    resp = vault.client.put_object(
-        Bucket=vault.config.bucket,
+    resp = client.put_object(
+        Bucket=bucket,
         Key=key,
         Body=data1,
         ContentType="application/json",
@@ -167,8 +203,8 @@ def _probe_conditional_replace(vault: ArtifactVault, prefix: str) -> bool:
         return False
 
     try:
-        vault.client.put_object(
-            Bucket=vault.config.bucket,
+        client.put_object(
+            Bucket=bucket,
             Key=key,
             Body=data2,
             ContentType="application/json",
@@ -179,8 +215,8 @@ def _probe_conditional_replace(vault: ArtifactVault, prefix: str) -> bool:
         pass
 
     try:
-        vault.client.put_object(
-            Bucket=vault.config.bucket,
+        client.put_object(
+            Bucket=bucket,
             Key=key,
             Body=data2,
             ContentType="application/json",
@@ -191,11 +227,13 @@ def _probe_conditional_replace(vault: ArtifactVault, prefix: str) -> bool:
         return False
 
 
-def _probe_etag_and_version(vault: ArtifactVault, prefix: str) -> tuple[bool, bool]:
+def _probe_etag_and_version(
+    client: Any, bucket: str, prefix: str
+) -> tuple[bool, bool]:
     """Check whether ETag and VersionId are returned."""
     key = f"{prefix}/etag-probe-{secrets.token_hex(4)}.json"
-    resp = vault.client.put_object(
-        Bucket=vault.config.bucket,
+    resp = client.put_object(
+        Bucket=bucket,
         Key=key,
         Body=b"etag-probe",
         ContentType="text/plain",
@@ -205,59 +243,71 @@ def _probe_etag_and_version(vault: ArtifactVault, prefix: str) -> tuple[bool, bo
     return bool(etag), bool(version)
 
 
-def _probe_read_after_write(vault: ArtifactVault, prefix: str) -> bool:
+def _probe_read_after_write(client: Any, bucket: str, prefix: str) -> bool:
     """Test whether a newly written object is immediately readable."""
     key = f"{prefix}/raw-probe-{secrets.token_hex(4)}.json"
     value = f"raw-{secrets.token_hex(8)}"
 
-    vault.client.put_object(
-        Bucket=vault.config.bucket,
+    client.put_object(
+        Bucket=bucket,
         Key=key,
         Body=value.encode(),
         ContentType="text/plain",
     )
-    resp = vault.client.get_object(Bucket=vault.config.bucket, Key=key)
+    resp = client.get_object(Bucket=bucket, Key=key)
     body = resp["Body"].read().decode()
     return body == value
 
 
-def _probe_metadata(vault: ArtifactVault, prefix: str) -> bool:
+def _probe_metadata(client: Any, bucket: str, prefix: str) -> bool:
     """Test object metadata round-trip."""
     key = f"{prefix}/meta-probe-{secrets.token_hex(4)}.json"
-    vault.client.put_object(
-        Bucket=vault.config.bucket,
+    client.put_object(
+        Bucket=bucket,
         Key=key,
         Body=b"metadata-probe",
         ContentType="text/plain",
         Metadata={"test-key": "test-value"},
     )
-    resp = vault.client.head_object(Bucket=vault.config.bucket, Key=key)
-    meta = resp.get("Metadata", {})
+    resp = client.head_object(Bucket=bucket, Key=key)
+    meta = {
+        str(name).lower(): value
+        for name, value in (resp.get("Metadata", {}) or {}).items()
+    }
     return meta.get("test-key") == "test-value"
 
 
-def _probe_bucket_versioning(vault: ArtifactVault) -> bool:
+def _probe_bucket_versioning(client: Any, bucket: str) -> bool:
     """Check if bucket versioning is enabled."""
     try:
-        resp = vault.client.get_bucket_versioning(Bucket=vault.config.bucket)
+        resp = client.get_bucket_versioning(Bucket=bucket)
         status = resp.get("Status", "")
         return status == "Enabled"
     except Exception:
         return False
 
 
-def _cleanup_probes(vault: ArtifactVault, prefix: str) -> None:
+def _cleanup_probes(client: Any, bucket: str, prefix: str) -> None:
     """Remove probe objects."""
     try:
-        resp = vault.client.list_objects_v2(
-            Bucket=vault.config.bucket,
+        resp = client.list_objects_v2(
+            Bucket=bucket,
             Prefix=prefix,
         )
         objects = [{"Key": item["Key"]} for item in resp.get("Contents", [])]
         if objects:
-            vault.client.delete_objects(
-                Bucket=vault.config.bucket,
-                Delete={"Objects": objects, "Quiet": True},
-            )
+            try:
+                client.delete_objects(
+                    Bucket=bucket,
+                    Delete={"Objects": objects, "Quiet": True},
+                )
+            except Exception:
+                # Older S3-compatible providers can authorize DeleteObject
+                # correctly while rejecting the bulk DeleteObjects API.
+                for item in objects:
+                    try:
+                        client.delete_object(Bucket=bucket, Key=item["Key"])
+                    except Exception:
+                        pass
     except Exception:
         pass

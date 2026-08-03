@@ -921,7 +921,14 @@ def run_operation_pipeline(
                 if runtime_root is None:
                     raise DataOpsPipelineError("runtime_root_missing", stage="health_check", retryable=False)
                 result["activation"] = atomic_activate_generation(staged["workspace"], runtime_root, preflight.release_id)
-            result["receipt"] = {"published_at": datetime.now(timezone.utc).isoformat(), "manifest_digest": result["manifest_digest"], "active_generation": result.get("activation", {}).get("active_generation", "")}
+            activation = result.get("activation")
+            if not isinstance(activation, Mapping):
+                activation = {}
+            result["receipt"] = {
+                "published_at": datetime.now(timezone.utc).isoformat(),
+                "manifest_digest": result["manifest_digest"],
+                "active_generation": activation.get("active_generation", ""),
+            }
             result["stages"].append({"stage": "publish_receipt", "status": "succeeded"})
             return result
         except DataOpsPipelineError as exc:

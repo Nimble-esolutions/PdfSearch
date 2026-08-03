@@ -101,6 +101,66 @@ class DataOpsSetting(TimeStampedModel):
     value = models.CharField(max_length=500, blank=True, default="")
 
 
+class DataConnection(TimeStampedModel):
+    """One non-secret object-storage connection discovered by DataOps v3.
+
+    Connections have capabilities, not backup/restore roles.  A foreign
+    readable connection can be used for import; the one primary connection for
+    the local dataset owns routine recovery-point publication.
+    """
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=160)
+    provider = models.CharField(
+        max_length=32,
+        choices=DataProfile.Provider.choices,
+        default=DataProfile.Provider.GENERIC,
+    )
+    endpoint = models.CharField(max_length=500)
+    bucket = models.CharField(max_length=255)
+    region = models.CharField(max_length=80, blank=True, default="")
+    prefix = models.CharField(max_length=200, blank=True, default="v3")
+    dataset_id = models.CharField(max_length=120)
+    credential_ref = models.CharField(max_length=200)
+    enabled = models.BooleanField(default=True)
+    is_primary = models.BooleanField(default=False)
+    capabilities = models.JSONField(default=dict, blank=True)
+    observation = models.JSONField(default=dict, blank=True)
+    fingerprint = models.CharField(max_length=64, blank=True, default="")
+    last_probed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["dataset_id"],
+                condition=models.Q(is_primary=True),
+                name="dataops_one_primary_connection",
+            )
+        ]
+        indexes = [models.Index(fields=["dataset_id", "enabled"])]
+
+
+class DataPolicy(TimeStampedModel):
+    """Versioned non-secret policy compiled from an environment preset."""
+
+    class Preset(models.TextChoices):
+        DEVELOPMENT = "development", "Development"
+        STAGING = "staging", "Staging"
+        PRODUCTION = "production", "Production"
+        TEST = "test", "Test"
+
+    deployment_id = models.CharField(max_length=120, unique=True)
+    schema_version = models.PositiveSmallIntegerField(default=3)
+    preset = models.CharField(
+        max_length=16,
+        choices=Preset.choices,
+        default=Preset.DEVELOPMENT,
+    )
+    values = models.JSONField(default=dict, blank=True)
+    fingerprint = models.CharField(max_length=64, blank=True, default="")
+
+
 class BackupJob(TimeStampedModel):
     class Mode(models.TextChoices):
         INCREMENTAL = "incremental", "Incremental"
@@ -158,6 +218,9 @@ class DataOperation(TimeStampedModel):
         BACKUP = "backup", "Backup"
         RESTORE = "restore", "Restore"
         CLONE_REBIND = "clone_rebind", "Clone / rebind"
+        IMPORT = "import", "Import"
+        TEST_RECOVERY = "test_recovery", "Test recovery"
+        ROLLBACK = "rollback", "Rollback"
         REINDEX = "reindex", "Reindex"
         AUTO_HEAL = "auto_heal", "Automatic recovery"
         SYNC = "sync", "S3 backup and sync job"
@@ -176,11 +239,21 @@ class DataOperation(TimeStampedModel):
     profile_key = models.SlugField(max_length=80, blank=True, default="")
     source_profile_key = models.SlugField(max_length=80, blank=True, default="")
     destination_profile_key = models.SlugField(max_length=80, blank=True, default="")
+    connection = models.ForeignKey(
+        DataConnection,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="operations",
+    )
     release_id = models.CharField(max_length=160, blank=True, default="")
     pipeline_stage = models.CharField(max_length=32, blank=True, default="preflight")
     request_id = models.CharField(max_length=160, blank=True, default="")
     idempotency_key = models.CharField(max_length=160, blank=True, default="")
     checkpoint = models.JSONField(default=dict, blank=True)
+    lifecycle_route = models.CharField(max_length=40, blank=True, default="")
+    lifecycle_plan = models.JSONField(default=dict, blank=True)
+    lifecycle_plan_digest = models.CharField(max_length=64, blank=True, default="")
     result = models.JSONField(default=dict, blank=True)
     error_code = models.CharField(max_length=80, blank=True, default="")
     error_detail = models.TextField(blank=True, default="")
@@ -212,12 +285,23 @@ class RecoveryPoint(TimeStampedModel):
         QUARANTINED = "quarantined", "Quarantined"
         INVALID = "invalid", "Invalid"
 
-    profile_key = models.SlugField(max_length=80)
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    profile_key = models.SlugField(max_length=80, blank=True, default="")
+    connection = models.ForeignKey(
+        DataConnection,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="recovery_points",
+    )
     dataset_id = models.CharField(max_length=120)
     release_id = models.CharField(max_length=160)
     format_version = models.PositiveSmallIntegerField(default=1)
     prefix = models.CharField(max_length=500)
     manifest_digest = models.CharField(max_length=64)
+    signature_key_id = models.CharField(max_length=120, blank=True, default="")
+    data_complete = models.BooleanField(default=False)
+    activation_ready = models.BooleanField(default=False)
     state = models.CharField(max_length=16, choices=State.choices, default=State.DISCOVERED)
     counts = models.JSONField(default=dict, blank=True)
     identity = models.JSONField(default=dict, blank=True)

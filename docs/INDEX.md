@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-02
+Last verified: 2026-08-03
 Canonical source: docs/INDEX.md
 Supersedes: None
 
@@ -9,10 +9,11 @@ Supersedes: None
 
 ## Current operational status
 
-- [STATUS-2026-08-02.md](STATUS-2026-08-02.md) — canonical as-of record for
-  the legacy snapshot, RustFS v2 publication and clone, stage quarantine/OCR
-  evidence, current environment posture, security remediation, and remaining
-  activation/backup/round-trip gates.
+- [STATUS-2026-08-03.md](STATUS-2026-08-03.md) — canonical current record for
+  signed 242-document stage activation, search-policy repair, local and real
+  stage backup/recovery evidence, and final immutable-release gates.
+- [STATUS-2026-08-02.md](STATUS-2026-08-02.md) — historical source snapshot,
+  RustFS v2 publication/clone, quarantine, OCR, and migration evidence.
 - [OPERATIONS_CHANGELOG-2026-08-02.md](OPERATIONS_CHANGELOG-2026-08-02.md) —
   dated timeline, backup-size explanation, current-versus-historical matrix,
   readiness guide, and documentation coverage checklist.

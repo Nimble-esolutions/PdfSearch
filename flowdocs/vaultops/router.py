@@ -1,8 +1,11 @@
+from core.database_ownership import CONTROL_DATABASE_ALIAS
+
+
 class VaultControlRouter:
     """Keep vault lifecycle authority projections in the stable control DB."""
 
     app_label = "vaultops"
-    database_alias = "control"
+    database_alias = CONTROL_DATABASE_ALIAS
 
     def db_for_read(self, model, **hints):
         if model._meta.app_label == self.app_label:

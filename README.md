@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-02
+Last verified: 2026-08-03
 Canonical source: README.md
 Supersedes: None
 
@@ -16,10 +16,11 @@ supports English, Marathi, and Hindi document processing: native PDF extraction
 is preferred, with bounded local Tesseract OCR for scanned pages, followed by
 the existing embedding and retrieval workflow.
 
-> **Current operational state:** the legacy-to-RustFS-v2 snapshot and stage
-> clone are quarantine-ready, but stage activation, the first stage backup, and
-> isolated round-trip recovery remain pending. Read
-> [STATUS-2026-08-02.md](docs/STATUS-2026-08-02.md) before operating recovery
+> **Current operational state:** stage serves the signed 242-document runtime,
+> real English/Marathi search is restored, and manual backup/recovery rehearsal
+> has succeeded. Final acceptance remains pending the immutable PR 176 image,
+> v3 readiness projection, and one final disposable restore. Read
+> [STATUS-2026-08-03.md](docs/STATUS-2026-08-03.md) before operating recovery
 > or deployment workflows.
 
 ## Start Here
@@ -50,6 +51,7 @@ For the complete environment-variable reference, see
 
 Current operational references:
 
+- [2026-08-03 current status](docs/STATUS-2026-08-03.md)
 - [2026-08-02 migration status](docs/STATUS-2026-08-02.md)
 - [dated operations changelog](docs/OPERATIONS_CHANGELOG-2026-08-02.md)
 - [legacy-versus-current state](docs/LEGACY_VS_CURRENT_STATE.md)
@@ -245,20 +247,22 @@ enabling autodeploy or pressing Deploy.
 
 ## Current Data-Custody Boundary
 
-As of 2026-08-02, the legacy source boundary is unchanged: prod_flowdocs
+As of 2026-08-03, the legacy source boundary is unchanged: prod_flowdocs
 contains 242 PDFs, 46 folders, 7 users, and 29 migrations. The verified
 RustFS v2 source generation is legacy-20260802T085639Z-86288855; the stage
 clone is clone-legacy-20260802T085639Z-86288855 with 416 objects totaling
-1,093,501,777 bytes. The clone is restored and fully searchable in quarantine,
-but it is not yet the signed active runtime generation.
+1,093,501,777 bytes. The stage-owned import is now bound to a
+signature-verified runtime pointer and serves 242/242 indexed documents.
 
 Stage is reachable at https://2026.ai-sahakar.net; healthy containers and a
-root response do not replace /readyz. Until signed activation and the first
-stage backup receipt exist, /readyz is expected to remain 503.
+root response do not replace `/readyz`. The currently deployed older readiness
+code does not project the valid v3 pointer, so final acceptance waits for the
+immutable PR 176 image and exact generation/manifest evidence there. Manual
+stage backup and isolated rehearsal have already succeeded provisionally.
 
 The old July reconciliation numbers below are retained as historical baseline
 evidence, not as the current 2026 migration inventory. See
-docs/LEGACY_VS_CURRENT_STATE.md.
+docs/STATUS-2026-08-03.md and docs/LEGACY_VS_CURRENT_STATE.md.
 
 ## Historical reconciliation baseline
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "flowdocs.settings")
@@ -83,3 +84,71 @@ class OpenAIContainmentTests(unittest.TestCase):
 
         with patch.object(settings, "EXTERNAL_AI_MODE", "not-a-mode", create=True):
             self.assertEqual(_ai_policy_mode(), "disabled")
+
+    def test_sandbox_is_forbidden_in_reachable_environments(self):
+        from django.conf import settings
+        from core.ai_guard import ExternalAIBlocked, get_openai_client
+        from core.environment import AppEnv
+
+        for app_env in (AppEnv.REVIEW, AppEnv.STAGING, AppEnv.PRODUCTION):
+            with self.subTest(app_env=app_env.value), \
+                 patch.object(
+                     settings,
+                     "ENV_IDENTITY",
+                     SimpleNamespace(app_env=app_env),
+                 ), \
+                 patch("core.ai_guard._ai_policy_mode", return_value="sandbox"), \
+                 patch.dict(os.environ, {"CI": "", "PDFSEARCH_TEST_EMBEDDINGS": ""}):
+                with self.assertRaisesRegex(ExternalAIBlocked, "restricted"):
+                    get_openai_client()
+
+    def test_explicit_ci_lifecycle_may_use_deterministic_provider(self):
+        from django.conf import settings
+        from core.ai_guard import get_openai_client
+        from core.environment import AppEnv
+
+        with patch.object(
+            settings,
+            "ENV_IDENTITY",
+            SimpleNamespace(app_env=AppEnv.STAGING),
+        ), \
+             patch("core.ai_guard._ai_policy_mode", return_value="sandbox"), \
+             patch.dict(os.environ, {"CI": "true", "PDFSEARCH_TEST_EMBEDDINGS": "1"}):
+            self.assertIn("Fake", type(get_openai_client()).__name__)
+
+    def test_test_embeddings_are_forbidden_on_ordinary_stage(self):
+        from django.conf import settings
+        from core.ai_guard import ExternalAIBlocked
+        from core.environment import AppEnv
+        from core.utils import _test_embeddings_enabled
+
+        with patch.object(
+            settings,
+            "ENV_IDENTITY",
+            SimpleNamespace(app_env=AppEnv.STAGING),
+        ), \
+             patch.dict(os.environ, {"CI": "", "PDFSEARCH_TEST_EMBEDDINGS": "1"}):
+            with self.assertRaises(ExternalAIBlocked):
+                _test_embeddings_enabled()
+
+    def test_answer_cache_is_not_read_before_provider_validation(self):
+        from core.utils import SearchDataIntegrityError, generate_gpt_answer
+
+        with patch("core.utils._get_client", side_effect=SearchDataIntegrityError("blocked")), \
+             patch("core.utils.cache.get") as cache_get:
+            with self.assertRaises(SearchDataIntegrityError):
+                generate_gpt_answer("question", "context")
+            cache_get.assert_not_called()
+
+    def test_answer_cache_uses_provider_scoped_digest(self):
+        from core.utils import generate_gpt_answer
+
+        with patch("core.utils._get_client", return_value=object()), \
+             patch("core.ai_guard.get_ai_cache_scope", return_value="test:scope"), \
+             patch("core.utils.cache.get", return_value="cached answer") as cache_get:
+            self.assertEqual(
+                generate_gpt_answer("question", "context"),
+                "cached answer",
+            )
+            cache_key = cache_get.call_args.args[0]
+            self.assertRegex(cache_key, r"^gpt_ans:v2:[0-9a-f]{64}$")

@@ -138,6 +138,22 @@ def _evaluate_scheduler() -> int:
         return 0
 
 
+def _run_dataops_cycle() -> None:
+    """Reconcile DataOps always; enqueue automatic work only when enabled."""
+    from dataops.job_scheduler import automatic_backup_scheduling_enabled
+    from dataops.quarantine import cleanup_mirror_quarantines
+    from dataops.worker import reconcile_receipts
+
+    if automatic_backup_scheduling_enabled():
+        from dataops.job_scheduler import queue_due_backup_jobs
+        from dataops.worker import queue_backup_if_due
+
+        queue_backup_if_due(trigger="scheduler")
+        queue_due_backup_jobs()
+    reconcile_receipts(limit=10)
+    cleanup_mirror_quarantines()
+
+
 def _execute_local_job(job):
     if (
         job.options.get("candidate_required")
@@ -239,14 +255,7 @@ class Command(BaseCommand):
                 and now - last_dataops_eval >= SCHEDULER_INTERVAL_SECONDS
             ):
                 try:
-                    from dataops.job_scheduler import queue_due_backup_jobs
-                    from dataops.quarantine import cleanup_mirror_quarantines
-                    from dataops.worker import queue_backup_if_due, reconcile_receipts
-
-                    queue_backup_if_due(trigger="scheduler")
-                    queue_due_backup_jobs()
-                    reconcile_receipts(limit=10)
-                    cleanup_mirror_quarantines()
+                    _run_dataops_cycle()
                 except Exception as exc:
                     logger.warning("Data Operations reconciliation failed: %s", getattr(exc, "reason_code", "dataops_reconcile_failed"))
                 last_dataops_eval = now

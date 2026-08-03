@@ -8,7 +8,7 @@ Supersedes: None
 # Persistent Data Release Contract
 ## Current-state pointer
 
-For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
+For the verified state as of 2026-08-03, use [STATUS-2026-08-03.md](STATUS-2026-08-03.md).
 Earlier dated sections in this page remain historical evidence and must not
 be used as current deployment state without reconciling them to that record.
 
@@ -17,9 +17,10 @@ be used as current deployment state without reconciling them to that record.
 The current release candidate is the cloned stage generation, not the older
 reconciled active-custody dataset described in the historical sections below.
 The source generation is legacy-20260802T085639Z-86288855 and the stage clone is
-clone-legacy-20260802T085639Z-86288855. It is quarantine-ready after migration,
-OCR fallback, embeddings, and indexing for 242 PDFs, but it has no signed
-runtime activation or stage backup receipt yet.
+clone-legacy-20260802T085639Z-86288855. The stage-owned import derived from it
+is signature-verified and active with 242/242 indexed PDFs. Manual stage backup
+and isolated rehearsal receipts exist; repeat them from the final immutable
+PR 176 image before release acceptance.
 
 
 ## Scope

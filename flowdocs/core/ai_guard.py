@@ -8,7 +8,7 @@ All OpenAI calls must go through one of these entry points:
 Respects the AI-specific policy first, falling back to the broader external
 side-effect policy for backwards compatibility:
   enabled  → real OpenAI client
-  sandbox  → deterministic fake provider
+  sandbox  → deterministic fake provider in development/test only
   disabled → raises ExternalAIBlocked
 
 ``EXTERNAL_AI_MODE`` deliberately stays separate from
@@ -23,6 +23,8 @@ import os
 from typing import Any, Callable
 
 from django.conf import settings
+
+from .environment import AppEnv
 
 
 class ExternalAIBlocked(RuntimeError):
@@ -43,12 +45,48 @@ def _ai_policy_mode() -> str:
     return identity.external_side_effects.value
 
 
+def _sandbox_ai_allowed() -> bool:
+    """Return whether deterministic AI providers are safe in this runtime."""
+    identity = getattr(settings, "ENV_IDENTITY", None)
+    app_env = getattr(identity, "app_env", None)
+    if app_env in {AppEnv.DEVELOPMENT, AppEnv.TEST}:
+        return True
+
+    # Lifecycle certification deliberately exercises staging policy and signed
+    # activation without external network calls.  Require both the standard CI
+    # marker and the existing deterministic-embedding marker so this exception
+    # cannot be selected by an ordinary stage deployment accidentally.
+    ci_runtime = os.getenv("CI", "").strip().lower() in {"1", "true", "yes", "on"}
+    test_embeddings = os.getenv("PDFSEARCH_TEST_EMBEDDINGS", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    return ci_runtime and test_embeddings
+
+
+def assert_sandbox_ai_allowed() -> None:
+    """Fail closed when a fake provider is selected outside a test runtime."""
+    if not _sandbox_ai_allowed():
+        raise ExternalAIBlocked(
+            "Deterministic sandbox AI is restricted to development and test runtimes"
+        )
+
+
+def get_ai_cache_scope() -> str:
+    """Return a non-secret cache namespace for the effective AI provider."""
+    identity = getattr(settings, "ENV_IDENTITY", None)
+    app_env = getattr(getattr(identity, "app_env", None), "value", "unknown")
+    release = str(getattr(settings, "APP_RELEASE_VERSION", "") or "unknown")
+    model = str(getattr(settings, "OPENAI_CHAT_MODEL", "gpt-4o-mini"))
+    return f"{app_env}:{_ai_policy_mode()}:{model}:{release}"
+
+
 def get_openai_client():
     """Return an OpenAI client or raise ExternalAIBlocked."""
     mode = _ai_policy_mode()
     if mode == "disabled":
         raise ExternalAIBlocked("OpenAI calls disabled by side-effect policy")
     if mode == "sandbox":
+        assert_sandbox_ai_allowed()
         return _FakeOpenAIClient()
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY", "")
@@ -63,6 +101,7 @@ def get_embedding_provider() -> Callable:
     if mode == "disabled":
         raise ExternalAIBlocked("Embedding generation disabled by side-effect policy")
     if mode == "sandbox":
+        assert_sandbox_ai_allowed()
         return _fake_embeddings
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY", "")
@@ -83,6 +122,7 @@ def get_chat_provider() -> Callable:
     if mode == "disabled":
         raise ExternalAIBlocked("Chat generation disabled by side-effect policy")
     if mode == "sandbox":
+        assert_sandbox_ai_allowed()
         return _fake_chat
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY", "")

@@ -1,8 +1,11 @@
+from core.database_ownership import CONTROL_DATABASE_ALIAS
+
+
 class DataOpsControlRouter:
     """Keep Data Operations control records in the disposable control DB."""
 
     app_label = "dataops"
-    database_alias = "control"
+    database_alias = CONTROL_DATABASE_ALIAS
 
     def db_for_read(self, model, **hints):
         return self.database_alias if model._meta.app_label == self.app_label else None

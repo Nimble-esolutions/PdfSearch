@@ -4785,3 +4785,42 @@ msgstr "इतिहास आणि तांत्रिक पुरावा
 
 msgid "Storage and automation"
 msgstr "साठवण आणि स्वयंचलन"
+
+msgid "Data protection"
+msgstr "डेटा संरक्षण"
+
+msgid "Check health"
+msgstr "डेटा स्थिती तपासा"
+
+msgid "Back up data"
+msgstr "डेटाचा बॅकअप घ्या"
+
+msgid "Recovery points"
+msgstr "पुनर्प्राप्ती बिंदू"
+
+msgid "Search maintenance"
+msgstr "शोध देखभाल"
+
+msgid "Activity and technical evidence"
+msgstr "क्रियाकलाप आणि तांत्रिक पुरावा"
+
+msgid "Discover latest recovery point"
+msgstr "नवीनतम पुनर्प्राप्ती बिंदू शोधा"
+
+msgid "Local derived data"
+msgstr "स्थानिक व्युत्पन्न डेटा"
+
+msgid "Maintenance jobs"
+msgstr "देखभाल कार्ये"
+
+msgid "Prepare search update"
+msgstr "शोध अद्यतन तयार करा"
+
+msgid "This verifies the completed search artifacts and prepares an immutable runtime candidate. Active search remains unchanged."
+msgstr "हे पूर्ण झालेल्या शोध घटकांची पडताळणी करून अपरिवर्तनीय रनटाइम उमेदवार तयार करते. सक्रिय शोध बदलत नाही."
+
+msgid "Review search update activation"
+msgstr "शोध अद्यतन सक्रियकरणाचा आढावा घ्या"
+
+msgid "The verified search update is ready. Activation still requires the exact signed confirmation shown on the next screen."
+msgstr "पडताळलेले शोध अद्यतन तयार आहे. सक्रियकरणासाठी पुढील स्क्रीनवर दाखवलेली अचूक स्वाक्षरीकृत पुष्टी अजूनही आवश्यक आहे."

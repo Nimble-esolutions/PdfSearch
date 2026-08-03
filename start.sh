@@ -21,6 +21,7 @@ MIGRATION_MARKER="$DATA_ROOT/.legacy_migration_complete"
 SEED_VALIDATION_MARKER="$DATA_ROOT/.declared_seed_validation.pending"
 DATA_BOOTSTRAP_MODE="${DATA_BOOTSTRAP_MODE:-strict}"
 SEED_DB_COPIED=0
+RUNTIME_START_MODE="disabled"
 
 if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
     for mutation_switch in IMPORT_LEGACY_DATA RUN_JSON_MIGRATIONS CREATE_SUPERUSER; do
@@ -174,7 +175,8 @@ if [ "${RUN_JSON_MIGRATIONS:-0}" = "1" ] && [ -x /usr/local/bin/apply_sqlite_jso
     python /usr/local/bin/apply_sqlite_json.py
 fi
 
-if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ]; then
+if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ] \
+    && [ "$RUNTIME_START_MODE" != "initial-bootstrap" ]; then
     echo "[migrate] Verifying immutable runtime has no pending migrations"
     python manage.py shell -c '
 import sys
@@ -185,7 +187,7 @@ pending = executor.migration_plan(executor.loader.graph.leaf_nodes())
 sys.exit(1 if pending else 0)
 '
 else
-    echo "[migrate] Running application database migrations"
+    echo "[migrate] Running mutable bootstrap database migrations"
     python manage.py migrate --noinput
 fi
 echo "[migrate] Running stable control database migrations"

@@ -95,7 +95,7 @@ automatic activation.
 | RESTORE_SOURCE_DATASET_ID | Restore source boundary | blank | stage dataset or explicit source | blank | Must match the selected profile and manifest |
 | DATA_PINNED_GENERATION | Exact generation to use | blank | explicit during rehearsal | blank | Pinning prevents moving-target restores; record the digest |
 | EXTERNAL_SIDE_EFFECTS_MODE | Email, webhook, payment, and similar effects | sandbox | sandbox | enabled | Never let production-derived stage data trigger real external effects |
-| EXTERNAL_AI_MODE | AI-only provider policy | sandbox or disabled | enabled by reviewed policy | enabled by reviewed policy | This does not authorize unrelated side effects |
+| EXTERNAL_AI_MODE | AI-only provider policy | sandbox or disabled | enabled by reviewed policy | enabled by reviewed policy | Sandbox is refused in review/stage/prod; this does not authorize unrelated side effects |
 | APP_RELEASE_VERSION | Human-readable release identity | local-dev | approved Git SHA | approved Git SHA | Must agree with release evidence |
 | APP_IMAGE_DIGEST | Immutable running image identity | blank locally | immutable GHCR digest | immutable GHCR digest | Mutable tags are aliases; verify the digest from the running container |
 | PDFSEARCH_IMAGE | Compose image reference | local image may be used | immutable digest | immutable digest | A tag pull is not proof that the intended image is running |
@@ -183,7 +183,7 @@ automatic activation.
 | MAINTENANCE_WORKER_HEARTBEAT_PATH | Worker liveness file | /app/data-control/runtime/maintenance-worker.heartbeat | Paired with readiness evidence |
 | MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS | Worker heartbeat freshness | 30 | Stale evidence degrades readiness |
 | MAINTENANCE_WORKER_READINESS_REQUIRED | Require worker readiness | 1 | Keep enabled in stage/production |
-| MAINTENANCE_JOB_TIMEOUT_SECONDS | Maintenance job bound | 7200 | Prevents unbounded reindex/OCR work |
+| MAINTENANCE_JOB_TIMEOUT_SECONDS | Maintenance job bound | 7200 | Shared bound for migration rehearsal, candidate preparation, reindex, and OCR; large legacy databases must not use a separate short timeout |
 | MAINTENANCE_SCHEDULER_ENABLED | Automatic scheduler | 0 in reviewed examples | Enable only with writer fencing and budgets |
 | MAINTENANCE_WORKSPACE_ROOT | Isolated workspaces | /app/data-control/maintenance-workspaces | Never use the active generation as a scratch area |
 | GUNICORN_WORKERS | Web worker count | 1 local, 2 stage, 4 production example | Match memory and concurrency budget |
@@ -309,12 +309,16 @@ automatic activation.
 | DATAOPS_OPERATION_LEASE_SECONDS | Operation lease | 3600 | Prevents competing mutations |
 | DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING | Automatic activation after restore | 0 | This must remain 0 until explicitly redesigned and approved |
 | DATAOPS_RESTORE_REQUIRE_PRODUCTION_CONFIRMATION | Confirmation for production-derived restore | 1 | Keeps custody boundary explicit |
-| DATAOPS_RESTORE_STAGING_ROOT | Restore quarantine root | /var/lib/flowdocs/dataops-restore or /app/data/restore-quarantine | Must not be the active volume |
 | DATAOPS_CLONE_REBIND_ENABLED | Explicit cross-dataset clone/rebind | 0 by default | Requires source generation, destination profile, confirmation, collision and digest checks |
 | DATAOPS_UI_CONFIG_ENABLED | Show Data Operations configuration UI | 1 in operator control plane | UI is not a secret store |
 | DATAOPS_UI_SECRET_ENTRY_ENABLED | Permit UI secret entry | 0 | Use the secret provider |
 | DATAOPS_MIRROR_QUARANTINE_RETENTION_DAYS | Retain guarded mirror deletions | 30 | Cleanup is bounded and recoverable; it is not RustFS retention |
 | DATAOPS_MIRROR_QUARANTINE_CLEANUP_MAX_OBJECTS | Per-pass mirror cleanup bound | 100 | Prevents a single maintenance pass from deleting a large set |
+
+The restore quarantine is intentionally derived as
+`DATA_ROOT/restore-quarantine`; it is not configurable through an environment
+variable. This keeps verified candidates on the shared data volume visible to
+both the maintenance worker and activation supervisor.
 
 ### Canonical profile identities
 
@@ -378,6 +382,12 @@ PDFSEARCH_TEST_EMBEDDINGS is reserved for disposable CI/test runs. It must
 remain 0 in stage and production; it is not a substitute for the approved
 embedding provider or a recovery validation.
 
+`EXTERNAL_AI_MODE=sandbox` follows the same boundary. It is valid only for
+development/test. A stage-like disposable lifecycle certification must carry
+both `CI=true` and `PDFSEARCH_TEST_EMBEDDINGS=1`; an ordinary reachable stage,
+review, or production process fails closed instead of returning plausible fake
+answers or vectors.
+
 ## 13. Safe change recipes
 
 | Change | Update together | Verification | Rollback |
@@ -424,7 +434,8 @@ contents, or raw authentication data in evidence or documentation.
 - docs/ENVIRONMENT_CONFIGURATION_GUIDE.md — impact matrix and operational caveats
 - docs/dataops/ENV_CONTRACT.md — Data Operations profile and operation contract
 - docs/dataops/ROLLOUT.md — staged profile rollout and receipt gates
-- docs/STATUS-2026-08-02.md — current migration, stage, OCR, and readiness evidence
+- docs/STATUS-2026-08-03.md — current activation, stage search, backup, recovery, and readiness evidence
+- docs/STATUS-2026-08-02.md — historical migration, clone, OCR, and quarantine evidence
 - docs/OPERATIONS_RUNBOOK.md — backup, restore, activation, and incident procedures
 - docs/LEGACY_VS_CURRENT_STATE.md — old-versus-current documentation contract
 - .env.example — local copyable reference

@@ -55,7 +55,6 @@ CRITICAL_KEYS = {
     "DATAOPS_AUTO_HEAL_REINDEX_PER_RUN",
     "DATAOPS_AUTO_HEAL_REINDEX_PER_DAY",
     "DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING",
-    "DATAOPS_RESTORE_STAGING_ROOT",
     "STAGE_PUBLIC_AUTH_EXCEPTION_REQUIRED",
     "STAGE_PUBLIC_AUTH_EXCEPTION_APPROVED",
     "STAGE_PUBLIC_AUTH_EXCEPTION_OWNER",
@@ -72,6 +71,7 @@ CRITICAL_KEYS = {
     "DATASET_ID",
     "AUTHORITATIVE_DATASET_ID",
     "PRODUCTION_SOURCE_ID",
+    "SECRET_KEY",
     "DATA_MODE",
     "DATA_PINNED_GENERATION",
     "RESTORE_SOURCE_DATASET_ID",
@@ -127,6 +127,7 @@ CRITICAL_KEYS = {
     "ACTIVATION_RECOVERY_SUPERADMIN_USERNAME",
     "ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD",
     "EXTERNAL_SIDE_EFFECTS_MODE",
+    "EXTERNAL_AI_MODE",
 }
 
 
@@ -205,8 +206,12 @@ def find_topology_errors(services):
         for target in SHARED_MOUNTS:
             if target not in _mount_targets(service):
                 errors.append(f"{name}_{target.rsplit('/', 1)[-1]}_mount_missing")
-        if _depends_condition(service, "redis") != "service_healthy":
-            errors.append(f"{name}_redis_healthy_dependency_missing")
+        if name == "web" and _depends_condition(service, "redis") != "service_healthy":
+            errors.append("web_redis_healthy_dependency_missing")
+        if name == "maintenance" and _depends_condition(
+            service, "web"
+        ) != "service_healthy":
+            errors.append("maintenance_web_healthy_dependency_missing")
     redis = services.get("redis", {})
     if isinstance(redis, dict) and not redis.get("healthcheck"):
         errors.append("redis_healthcheck_missing")

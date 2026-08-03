@@ -80,11 +80,15 @@ The implementation recognises these controls (all have safe defaults):
 | `DATAOPS_UI_SECRET_STORAGE_ENABLED` | Permit explicitly opted-in encrypted DB credentials. |
 | `DATAOPS_CONFIG_ENCRYPTION_KEY` | Key reference for AES-256-GCM fallback values; never log the value. |
 | `DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING` | Auto-activate only after all staging gates pass. |
-| `DATAOPS_RESTORE_STAGING_ROOT` | Isolated quarantine root used by the staging command; never the active data root. |
 | `DATAOPS_CLONE_REBIND_ENABLED` | Enable the reviewed Advanced-only cross-dataset clone/rebind control. |
 | `STAGE_PUBLIC_AUTH_EXCEPTION_REQUIRED` | Declare that restored production authentication data is present on stage. |
 | `STAGE_PUBLIC_AUTH_EXCEPTION_APPROVED` | Security-owner approval switch; defaults to blocked. |
 | `STAGE_PUBLIC_AUTH_EXCEPTION_OWNER` / `..._MONITORING` / `..._INCIDENT_RESPONSE` / `..._ROLLBACK_AUTHORITY` | Non-secret exception record required before public stage authentication can be enabled. |
+
+Restore quarantine is not an environment setting. The application derives it
+as `DATA_ROOT/restore-quarantine`, guaranteeing that web and maintenance use
+the same mounted data volume. The `stage_dataops_restore` command still accepts
+an explicit `--destination` for disposable operator rehearsals.
 
 ## Compatibility window
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from datetime import timedelta
 
 from django.db import transaction
@@ -11,9 +12,8 @@ from django.utils import timezone
 
 from core.models import MaintenanceJob
 
-from .models import DataOperation, DataOpsAuditEvent
+from .models import DataConnection, DataOperation, DataOpsAuditEvent
 from .pipeline import DataOpsPipelineError, execute_operation_record
-from .config import resolve_selectors
 
 
 def _lease_deadline():
@@ -74,7 +74,34 @@ def _finish_pipeline_operation(operation, *, lease_token=""):
 
     lease = (lambda: _renew_operation_lease(operation.pk, operation.lease_token)) if operation.lease_token else None
     try:
-        if operation.kind == DataOperation.Kind.SYNC:
+        if (
+            operation.kind
+            in {
+                DataOperation.Kind.BACKUP,
+                DataOperation.Kind.RESTORE,
+                DataOperation.Kind.TEST_RECOVERY,
+                DataOperation.Kind.IMPORT,
+            }
+            and (operation.lifecycle_plan or {}).get("contract_version") == 3
+        ):
+            from .v3_executor import V3ExecutionError, execute_backup_operation
+            from .v3_legacy_executor import execute_legacy_import_operation
+            from .v3_restore_executor import execute_restore_operation
+
+            try:
+                if operation.kind == DataOperation.Kind.BACKUP:
+                    result = execute_backup_operation(operation, lease=lease)
+                elif operation.kind == DataOperation.Kind.IMPORT:
+                    result = execute_legacy_import_operation(operation, lease=lease)
+                else:
+                    result = execute_restore_operation(operation, lease=lease)
+            except V3ExecutionError as exc:
+                raise DataOpsPipelineError(
+                    exc.code,
+                    stage=exc.stage,
+                    retryable=exc.retryable,
+                ) from exc
+        elif operation.kind == DataOperation.Kind.SYNC:
             from .job_executor import execute_backup_job
 
             result = execute_backup_job(operation, lease=lease)
@@ -126,23 +153,72 @@ def _finish_pipeline_operation(operation, *, lease_token=""):
         operation.lease_expires_at = None
         operation.save(update_fields=["state", "pipeline_stage", "error_code", "error_detail", "finished_at", "lease_token", "lease_expires_at", "updated_at"])
         return operation
-    if operation.lease_token:
+    owned_lease_token = operation.lease_token
+    if owned_lease_token:
         try:
-            _renew_operation_lease(operation.pk, operation.lease_token)
+            _renew_operation_lease(operation.pk, owned_lease_token)
         except DataOpsPipelineError:
             return operation
-    operation.state = DataOperation.State.SUCCEEDED
-    operation.pipeline_stage = "publish_receipt"
-    operation.result = result
-    operation.release_id = str(result.get("release_id", operation.release_id) or operation.release_id)
-    operation.source_profile_key = str(result.get("source_profile", operation.source_profile_key) or operation.source_profile_key)
-    operation.destination_profile_key = str(result.get("destination_profile", operation.destination_profile_key) or operation.destination_profile_key)
-    operation.error_code = ""
-    operation.error_detail = ""
-    operation.finished_at = timezone.now()
-    operation.lease_token = ""
-    operation.lease_expires_at = None
-    operation.save(update_fields=["state", "pipeline_stage", "result", "release_id", "source_profile_key", "destination_profile_key", "error_code", "error_detail", "finished_at", "lease_token", "lease_expires_at", "updated_at"])
+    activation = result.get("activation")
+    if not isinstance(activation, Mapping):
+        activation = {}
+    with transaction.atomic(using="control"):
+        current = DataOperation.objects.using("control").select_for_update().get(pk=operation.pk)
+        if owned_lease_token and (
+            current.state != DataOperation.State.RUNNING
+            or current.lease_token != owned_lease_token
+        ):
+            return operation
+        current.state = DataOperation.State.SUCCEEDED
+        current.pipeline_stage = "publish_receipt"
+        current.result = result
+        current.release_id = str(result.get("release_id", current.release_id) or current.release_id)
+        current.source_profile_key = str(
+            result.get("source_profile", current.source_profile_key) or current.source_profile_key
+        )
+        current.destination_profile_key = str(
+            result.get("destination_profile", current.destination_profile_key)
+            or current.destination_profile_key
+        )
+        current.error_code = ""
+        current.error_detail = ""
+        current.finished_at = timezone.now()
+        current.lease_token = ""
+        current.lease_expires_at = None
+        current.save(
+            using="control",
+            update_fields=[
+                "state",
+                "pipeline_stage",
+                "result",
+                "release_id",
+                "source_profile_key",
+                "destination_profile_key",
+                "error_code",
+                "error_detail",
+                "finished_at",
+                "lease_token",
+                "lease_expires_at",
+                "updated_at",
+            ],
+        )
+        DataOpsAuditEvent.objects.using("control").create(
+            operation_id=current.public_id,
+            profile_key=(
+                current.destination_profile_key
+                or current.source_profile_key
+                or current.profile_key
+            ),
+            action="pipeline_receipt_published",
+            outcome=current.state,
+            evidence={
+                "manifest_digest": result.get("manifest_digest", ""),
+                "active_generation": activation.get("active_generation", ""),
+                "source_profile": result.get("source_profile", ""),
+                "destination_profile": result.get("destination_profile", ""),
+            },
+        )
+        operation = current
     if operation.kind == DataOperation.Kind.BACKUP:
         try:
             from core.backup_policy import clear_dirty_flag
@@ -150,18 +226,6 @@ def _finish_pipeline_operation(operation, *, lease_token=""):
             clear_dirty_flag()
         except Exception:
             pass
-    DataOpsAuditEvent.objects.using("control").create(
-        operation_id=operation.public_id,
-        profile_key=operation.destination_profile_key or operation.source_profile_key or operation.profile_key,
-        action="pipeline_receipt_published",
-        outcome=operation.state,
-        evidence={
-            "manifest_digest": result.get("manifest_digest", ""),
-            "active_generation": result.get("activation", {}).get("active_generation", ""),
-            "source_profile": result.get("source_profile", ""),
-            "destination_profile": result.get("destination_profile", ""),
-        },
-    )
     return operation
 
 
@@ -178,13 +242,32 @@ def json_safe_detail(value):
 
 
 def queue_backup_if_due(*, trigger: str = "scheduled", force: bool = False, requested_by_id=None, requested_by_name: str = ""):
-    """Coalesce scheduled/change-triggered backup requests into one operation."""
+    """Compile and coalesce one policy-approved v3 backup operation."""
     from django.conf import settings
+    from .job_scheduler import automatic_backup_scheduling_enabled
+    from .v3_planning import action_status, compile_requested_plan, runtime_config
 
     if not getattr(settings, "DATAOPS_ENABLED", False):
         return None
-    mode = str(getattr(settings, "DATAOPS_BACKUP_MODE", "manual")).strip().lower()
+    if not force and not automatic_backup_scheduling_enabled():
+        return None
+    try:
+        config = runtime_config()
+    except Exception:
+        return None
+    backup_policy = config.policy.get("backup", {})
+    if not isinstance(backup_policy, Mapping):
+        return None
+    mode = str(backup_policy.get("mode", "manual") or "manual").strip().lower()
     if mode == "manual" and not force:
+        return None
+    if mode not in {"manual", "scheduled", "changes"}:
+        return None
+    if not config.connection or config.connection.source != "control_database":
+        return None
+    if action_status(config).get("backup") != "ready":
+        return None
+    if not force and trigger == "change" and mode != "changes":
         return None
     if mode == "changes" and not force:
         from django.core.cache import cache
@@ -194,48 +277,82 @@ def queue_backup_if_due(*, trigger: str = "scheduled", force: bool = False, requ
         if dirty_at is None:
             return None
         try:
-            quiet_period = int(getattr(settings, "DATAOPS_BACKUP_QUIET_PERIOD_SECONDS", 120))
+            quiet_period = int(backup_policy.get("quiet_period_seconds", 120))
             if (timezone.now().timestamp() - float(dirty_at)) < quiet_period:
                 return None
         except (TypeError, ValueError):
             return None
-    selectors = resolve_selectors()
-    destination_key = selectors.get("backup_destination") or selectors.get("backup")
-    source_key = selectors.get("backup_source") or ""
-    if not destination_key:
-        return None
     now = timezone.now()
-    interval = int(getattr(settings, "DATAOPS_BACKUP_INTERVAL_SECONDS", 900))
+    try:
+        interval = int(
+            backup_policy.get("interval_seconds")
+            or backup_policy.get("maximum_delay_seconds")
+            or 900
+        )
+    except (TypeError, ValueError):
+        return None
+    interval = max(1, interval)
     latest = DataOperation.objects.using("control").filter(
         kind=DataOperation.Kind.BACKUP,
         state=DataOperation.State.SUCCEEDED,
+        lifecycle_plan__contract_version=3,
     ).first()
     if not force and latest and latest.finished_at and (now - latest.finished_at).total_seconds() < interval:
         return None
-    bucket = int(now.timestamp() // max(1, interval))
-    idempotency = f"dataops-backup:{destination_key}:{mode}:{bucket}"
-    operation, created = DataOperation.objects.using("control").get_or_create(
-        kind=DataOperation.Kind.BACKUP,
-        idempotency_key=idempotency,
-        defaults={
-            "state": DataOperation.State.QUEUED,
-            "profile_key": destination_key,
-            "source_profile_key": source_key,
-            "destination_profile_key": destination_key,
-            "request_id": str(requested_by_id or ""),
-            "checkpoint": {"trigger": trigger},
-        },
-    )
-    if created:
-        DataOpsAuditEvent.objects.using("control").create(
-            actor_id=requested_by_id,
-            actor_name=requested_by_name,
-            action="backup_queued_automatically",
-            operation_id=operation.public_id,
-            profile_key=destination_key,
-            outcome="queued",
-            evidence={"trigger": trigger, "mode": mode},
+    try:
+        compiled_config, plan = compile_requested_plan(
+            action="backup",
+            activate=False,
+            confirmation_present=False,
         )
+    except Exception:
+        return None
+    if (
+        not plan.allowed
+        or plan.contract_version != 3
+        or compiled_config.digest != config.digest
+    ):
+        return None
+    try:
+        connection = DataConnection.objects.using("control").get(
+            public_id=config.connection.public_id
+        )
+    except Exception:
+        return None
+    bucket = int(now.timestamp() // max(1, interval))
+    idempotency = f"dataops-v3-backup:{config.digest[:16]}:{mode}:{bucket}"
+    with transaction.atomic(using="control"):
+        operation, created = DataOperation.objects.using("control").get_or_create(
+            kind=DataOperation.Kind.BACKUP,
+            idempotency_key=idempotency,
+            defaults={
+                "state": DataOperation.State.QUEUED,
+                "connection": connection,
+                "request_id": str(requested_by_id or ""),
+                "pipeline_stage": "planned",
+                "lifecycle_route": plan.route,
+                "lifecycle_plan": plan.as_dict(),
+                "lifecycle_plan_digest": plan.plan_digest,
+                "checkpoint": {
+                    "configuration_digest": config.digest,
+                    "trigger": trigger,
+                },
+            },
+        )
+        if created:
+            DataOpsAuditEvent.objects.using("control").create(
+                actor_id=requested_by_id,
+                actor_name=requested_by_name,
+                action="backup_queued_automatically",
+                operation_id=operation.public_id,
+                outcome="queued",
+                evidence={
+                    "trigger": trigger,
+                    "mode": mode,
+                    "plan_digest": plan.plan_digest,
+                    "configuration_digest": config.digest,
+                },
+            )
     return operation if created else None
 
 
@@ -246,7 +363,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     changed = 0
     for operation in DataOperation.objects.using("control").filter(
         state=DataOperation.State.QUEUED,
-    ).exclude(kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC}).order_by("created_at")[:limit]:
+    ).exclude(kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.TEST_RECOVERY, DataOperation.Kind.IMPORT, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC}).order_by("created_at")[:limit]:
         with transaction.atomic(using="control"):
             current = DataOperation.objects.using("control").select_for_update().get(pk=operation.pk)
             if current.state != DataOperation.State.QUEUED:
@@ -281,7 +398,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     claims = []
     queued_ids = DataOperation.objects.using("control").filter(
         state=DataOperation.State.QUEUED,
-        kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
+        kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.TEST_RECOVERY, DataOperation.Kind.IMPORT, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
     ).order_by("created_at").values_list("pk", flat=True)[:limit]
     for operation_id in queued_ids:
         claim = _claim_pipeline_operation(operation_id)
@@ -291,7 +408,7 @@ def reconcile_receipts(*, limit: int = 50) -> int:
     if remaining:
         stale_ids = DataOperation.objects.using("control").filter(
             state=DataOperation.State.RUNNING,
-            kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
+            kind__in={DataOperation.Kind.BACKUP, DataOperation.Kind.RESTORE, DataOperation.Kind.TEST_RECOVERY, DataOperation.Kind.IMPORT, DataOperation.Kind.CLONE_REBIND, DataOperation.Kind.SYNC},
         ).filter(Q(lease_expires_at__isnull=True) | Q(lease_expires_at__lte=timezone.now())).order_by("created_at").values_list("pk", flat=True)[:remaining]
         for operation_id in stale_ids:
             claim = _claim_pipeline_operation(operation_id)

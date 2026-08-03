@@ -30,6 +30,8 @@ on:
       - .dockerignore
       - docker-compose.ci.yml
       - scripts/ci/**
+      - scripts/ops/release_integrity.py
+      - scripts/ops/verify_running_release.py
       - init/**
       - locale/**
       - flowdocs/locale/**
@@ -44,7 +46,12 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish an image from dev
+        description: Publish an immutable SHA candidate
+        required: true
+        default: false
+        type: boolean
+      candidate_only:
+        description: Allow a review-branch candidate without promoting dev/latest
         required: true
         default: false
         type: boolean
@@ -79,10 +86,13 @@ jobs:
         run: git diff --check
 
       - name: Validate shell scripts
-        run: bash -n start.sh docker-entrypoint.sh scripts/ops/run_recovery_certification.sh
+        run: bash -n start.sh docker-entrypoint.sh worker-entrypoint.sh scripts/ops/run_recovery_certification.sh
 
       - name: Compile Python source
         run: python3 -m compileall -q flowdocs
+
+      - name: Test release integrity and startup compatibility contracts
+        run: python3 -m unittest scripts.ci.test_release_integrity
 
       - name: Install documentation validation tools
         env:
@@ -169,6 +179,22 @@ jobs:
             .
           revision="$(docker image inspect "$LOCAL_IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
           test "$revision" = "$GITHUB_SHA"
+
+      - name: Verify locally built release-integrity sentinels
+        env:
+          LOCAL_IMAGE: pdfsearch-ci:source
+        run: |
+          set -euo pipefail
+          expected="$RUNNER_TEMP/release-integrity.checkout.json"
+          actual="$RUNNER_TEMP/release-integrity.local-image.json"
+          python3 scripts/ops/release_integrity.py manifest --root . --output "$expected"
+          docker run --rm --entrypoint python "$LOCAL_IMAGE" \
+            /app/scripts/ops/release_integrity.py verify \
+            --root /app --manifest /app/release-integrity.json
+          docker run --rm --entrypoint python "$LOCAL_IMAGE" \
+            /app/scripts/ops/release_integrity.py manifest --root /app > "$actual"
+          python3 scripts/ops/release_integrity.py compare \
+            --expected "$expected" --actual "$actual"
 
       - name: Prove startup restore policy fails closed
         env:
@@ -261,10 +287,11 @@ jobs:
         run: bash scripts/ci/run_vault_integration.sh
 
   candidate:
-    name: Build and certify immutable dev candidate
+    name: Build and certify immutable candidate
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev' && inputs.publish == true)
+      (github.event_name == 'workflow_dispatch' && inputs.publish == true &&
+      (github.ref == 'refs/heads/dev' || inputs.candidate_only == true))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -320,6 +347,26 @@ jobs:
           sbom: true
           cache-from: type=gha,scope=buildkit-${{ hashFiles('Dockerfile', 'requirements-web.lock') }}
           cache-to: type=gha,scope=buildkit-${{ hashFiles('Dockerfile', 'requirements-web.lock') }},mode=max
+
+      - name: Verify published candidate release-integrity sentinels
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${IMAGE_NAME}@${DIGEST}"
+          expected="$RUNNER_TEMP/release-integrity.checkout.json"
+          actual="$RUNNER_TEMP/release-integrity.published-image.json"
+          docker pull "$IMAGE_REF"
+          revision="$(docker image inspect "$IMAGE_REF" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          test "$revision" = "$GITHUB_SHA"
+          python3 scripts/ops/release_integrity.py manifest --root . --output "$expected"
+          docker run --rm --entrypoint python "$IMAGE_REF" \
+            /app/scripts/ops/release_integrity.py verify \
+            --root /app --manifest /app/release-integrity.json
+          docker run --rm --entrypoint python "$IMAGE_REF" \
+            /app/scripts/ops/release_integrity.py manifest --root /app > "$actual"
+          python3 scripts/ops/release_integrity.py compare \
+            --expected "$expected" --actual "$actual"
 
       - name: Resolve immutable Redis smoke image
         id: release_redis
