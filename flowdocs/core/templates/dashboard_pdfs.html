@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load i18n %}
+{% load static i18n %}
 
 {% block title %}{{ folder.name }} - {% trans "Document Workbench" %}{% endblock %}
 
@@ -58,47 +58,205 @@
     {% endif %}
 
     {% if role == 'admin' or role == 'superadmin' %}
-      <div class="admin-panel">
-        <div class="admin-page-heading">
-          <h2>{% trans "Receiving Dock" %}</h2>
-          <p>{% trans "Uploads are accepted only after PDF validation and preprocessing complete." %}</p>
+      {% url 'upload_batch_create' folder_id=folder.id as upload_batch_create_url %}
+      {% url 'upload_batch_detail' batch_id='00000000-0000-0000-0000-000000000000' as upload_batch_detail_url %}
+      {% url 'upload_batch_item' batch_id='00000000-0000-0000-0000-000000000000' as upload_batch_item_url %}
+      {% url 'upload_batch_finalize' batch_id='00000000-0000-0000-0000-000000000000' as upload_batch_finalize_url %}
+      {% url 'upload_batch_discard' batch_id='00000000-0000-0000-0000-000000000000' as upload_batch_discard_url %}
+      <section class="admin-panel intake-registry"
+               id="pdf-intake"
+               data-pdf-intake
+               data-folder-id="{{ folder.id }}"
+               data-create-url="{{ upload_batch_create_url }}"
+               data-detail-url-template="{{ upload_batch_detail_url }}"
+               data-item-url-template="{{ upload_batch_item_url }}"
+               data-finalize-url-template="{{ upload_batch_finalize_url }}"
+               data-discard-url-template="{{ upload_batch_discard_url }}"
+               data-batch-placeholder="00000000-0000-0000-0000-000000000000"
+               data-max-files="50"
+               data-max-file-size-bytes="{{ upload_max_file_size_bytes }}"
+               data-concurrency="3"
+               data-text-selected="{% trans 'Ready to upload' %}"
+               data-text-waiting="{% trans 'Waiting' %}"
+               data-text-uploading="{% trans 'Uploading' %}"
+               data-text-received="{% trans 'Received' %}"
+               data-text-queued="{% trans 'Queued for processing' %}"
+               data-text-processing="{% trans 'Processing' %}"
+               data-text-searchable="{% trans 'Searchable' %}"
+               data-text-failed="{% trans 'Needs attention' %}"
+               data-text-restored="{% trans 'Restored from intake receipt' %}"
+               data-text-invalid-pdf="{% trans 'Choose PDF files only.' %}"
+               data-text-duplicate="{% trans 'That file is already listed in this intake.' %}"
+               data-text-file-too-large="{% blocktrans %}This PDF exceeds the {{ upload_max_file_size_mb }} MB limit.{% endblocktrans %}"
+               data-text-limit="{% trans 'A single intake can contain up to 50 PDFs.' %}"
+               data-text-create-error="{% trans 'The intake could not be created. Try again.' %}"
+               data-text-upload-error="{% trans 'Upload failed. Retry this file.' %}"
+               data-text-status-error="{% trans 'The latest intake status is temporarily unavailable.' %}"
+               data-text-finalize-error="{% trans 'Processing could not be started. Your received files remain in this intake.' %}"
+               data-text-finalized="{% trans 'Processing started for the received documents.' %}"
+               data-text-job-complete="{% trans 'All received documents finished processing.' %}"
+               data-text-job-failed="{% trans 'Processing finished with documents that need attention.' %}"
+               data-text-discarded="{% trans 'The draft intake was discarded.' %}"
+               data-text-unsaved="{% trans 'Uploads are still running. Leaving now may interrupt them.' %}"
+               data-text-retry-reselect="{% trans 'Choose the same file again to retry after a refresh.' %}"
+               data-text-title-label="{% trans 'Document title' %}"
+               data-text-remove-label="{% trans 'Remove file' %}"
+               data-text-retry-label="{% trans 'Retry file' %}">
+        <div class="intake-registry__heading">
+          <div class="admin-page-heading mb-0">
+            <p class="admin-kicker">{% trans "Intake manifest" %}</p>
+            <h2>{% trans "Add Documents" %}</h2>
+            <p>{% trans "Select up to 50 PDFs. Each file is received independently, then processed together." %}</p>
+          </div>
+          <div class="intake-registry__count" aria-label="{% trans 'Intake capacity' %}">
+            <strong data-intake-count>0</strong><span>/ 50</span>
+          </div>
         </div>
-        <form method="post" enctype="multipart/form-data" action="{% url 'dashboard_folder' folder_id=folder.id %}" class="row g-3 align-items-end">
-          {% csrf_token %}
-          {% if form.non_field_errors %}
-            <div class="col-12">
-              <div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div>
+
+        {% if form.non_field_errors or form.title.errors or form.file.errors %}
+          <div class="alert alert-danger" role="alert">
+            {{ form.non_field_errors }}{{ form.title.errors }}{{ form.file.errors }}
+          </div>
+        {% endif %}
+
+        <div class="intake-dropzone" data-intake-dropzone>
+          <input id="pdf-intake-files"
+                 class="visually-hidden"
+                 type="file"
+                 name="files"
+                 accept="application/pdf,.pdf"
+                 multiple
+                 data-intake-input>
+          <label for="pdf-intake-files" class="intake-dropzone__label">
+            <span class="intake-dropzone__seal" aria-hidden="true">PDF</span>
+            <span class="intake-dropzone__copy">
+              <strong>{% trans "Drop PDFs here or choose files" %}</strong>
+              <small>{% blocktrans %}PDF only · maximum {{ upload_max_file_size_mb }} MB each · 50 files per intake{% endblocktrans %}</small>
+            </span>
+            <span class="btn btn-primary intake-dropzone__button" aria-hidden="true">{% trans "Choose PDFs" %}</span>
+          </label>
+        </div>
+
+        <div class="intake-manifest" data-intake-manifest hidden>
+          <div class="intake-manifest__toolbar">
+            <div>
+              <strong>{% trans "Receiving register" %}</strong>
+              <span data-intake-summary>{% trans "No files selected" %}</span>
             </div>
-          {% endif %}
-          <div class="col-12 col-lg-5">
-            <label for="{{ form.title.id_for_label }}" class="form-label">{% trans "PDF Title" %}</label>
-            {{ form.title }}
-            {% if form.title.errors %}
-              <div class="invalid-feedback d-block">{{ form.title.errors }}</div>
-            {% endif %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-intake-retry-all hidden>
+              {% trans "Retry Failed" %}
+            </button>
           </div>
-          <div class="col-12 col-lg-5">
-            <label for="{{ form.file.id_for_label }}" class="form-label">{% trans "PDF File" %}</label>
-            {{ form.file }}
-            {% if form.file.errors %}
-              <div class="invalid-feedback d-block">{{ form.file.errors }}</div>
-            {% endif %}
+          <ol class="intake-manifest__list" data-intake-list aria-label="{% trans 'Selected PDF files' %}"></ol>
+          <div class="intake-manifest__footer">
+            <div class="intake-manifest__status" data-intake-live aria-live="polite" aria-atomic="true"></div>
+            <div class="intake-manifest__actions">
+              <button type="button" class="btn btn-outline-secondary" data-intake-discard disabled>{% trans "Discard Draft" %}</button>
+              <button type="button" class="btn btn-outline-primary" data-intake-receive disabled>{% trans "Receive Selected Files" %}</button>
+              <button type="button" class="btn btn-primary" data-intake-finalize disabled>{% trans "Process Ready Documents" %}</button>
+              <button type="button" class="btn btn-primary" data-intake-new hidden>{% trans "Start New Intake" %}</button>
+            </div>
           </div>
-          <div class="col-12 col-lg-2">
-            <button type="submit" class="btn btn-success w-100">{% trans "Receive" %}</button>
+        </div>
+
+        <template id="pdf-intake-item-template">
+          <li class="intake-item" data-intake-item>
+            <div class="intake-item__file">
+              <span class="intake-item__sequence" data-intake-sequence aria-hidden="true"></span>
+              <span class="intake-item__filename" data-intake-filename></span>
+              <span class="intake-item__size" data-intake-size></span>
+            </div>
+            <div class="intake-item__title">
+              <label data-intake-title-label>{% trans "Document title" %}</label>
+              <input type="text" class="form-control" name="title" maxlength="200" autocomplete="off" data-intake-title required>
+            </div>
+            <div class="intake-item__progress">
+              <span class="intake-state" data-intake-state>{% trans "Waiting" %}</span>
+              <progress max="100" value="0" data-intake-progress><span>0%</span></progress>
+              <small data-intake-error></small>
+            </div>
+            <div class="intake-item__actions">
+              <button type="button" class="btn btn-outline-primary btn-sm" data-intake-retry hidden>{% trans "Retry" %}</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-intake-remove>{% trans "Remove" %}</button>
+            </div>
+          </li>
+        </template>
+
+        <noscript>
+          <div class="intake-fallback">
+            <p>{% trans "JavaScript is unavailable. You can still add one PDF at a time." %}</p>
+            <form method="post" enctype="multipart/form-data" action="{% url 'dashboard_folder' folder_id=folder.id %}" class="row g-3 align-items-end">
+              {% csrf_token %}
+              <div class="col-12 col-lg-5">
+                <label for="{{ form.title.id_for_label }}" class="form-label">{% trans "PDF Title" %}</label>
+                {{ form.title }}
+              </div>
+              <div class="col-12 col-lg-5">
+                <label for="{{ form.file.id_for_label }}" class="form-label">{% trans "PDF File" %}</label>
+                {{ form.file }}
+              </div>
+              <div class="col-12 col-lg-2">
+                <button type="submit" class="btn btn-primary w-100">{% trans "Add PDF" %}</button>
+              </div>
+            </form>
           </div>
-        </form>
-      </div>
+        </noscript>
+      </section>
     {% endif %}
 
     <div class="admin-panel">
-      <div class="admin-page-heading admin-page-heading--split">
+      <div class="admin-page-heading admin-page-heading--split document-workbench-heading">
         <div>
-          <h2>{% trans "PDF Workbench" %}</h2>
-          <p>{% trans "Each row shows ownership, search readiness, and available actions." %}</p>
+          <p class="admin-kicker">{% trans "Official register" %}</p>
+          <h2>{% trans "Documents" %}</h2>
+          <p>{% trans "Find a document, check whether it is searchable, or open its contextual actions." %}</p>
         </div>
+        <span class="document-register-count">{% blocktrans count counter=pdfs.paginator.count %}{{ counter }} document{% plural %}{{ counter }} documents{% endblocktrans %}</span>
       </div>
-      <div class="document-list" role="list" aria-label="{% trans 'Documents in this category' %}">
+      <form method="get" class="document-filters" role="search" aria-label="{% trans 'Filter documents' %}">
+        <label class="document-filters__search" for="document-query">
+          <span>{% trans "Title" %}</span>
+          <input id="document-query" type="search" name="document_query" value="{{ stats.document_filters.query }}" class="form-control" placeholder="{% trans 'Search by document title…' %}" autocomplete="off">
+        </label>
+        <label for="document-status">
+          <span>{% trans "Status" %}</span>
+          <select id="document-status" name="document_state" class="form-select">
+            <option value="">{% trans "All statuses" %}</option>
+            <option value="searchable"{% if stats.document_filters.state == 'searchable' %} selected{% endif %}>{% trans "Searchable" %}</option>
+            <option value="queued"{% if stats.document_filters.state == 'queued' %} selected{% endif %}>{% trans "Queued" %}</option>
+            <option value="processing"{% if stats.document_filters.state == 'processing' %} selected{% endif %}>{% trans "Processing" %}</option>
+            <option value="needs_attention"{% if stats.document_filters.state == 'needs_attention' %} selected{% endif %}>{% trans "Needs attention" %}</option>
+            <option value="hidden"{% if stats.document_filters.state == 'hidden' %} selected{% endif %}>{% trans "Hidden" %}</option>
+            <option value="unavailable"{% if stats.document_filters.state == 'unavailable' %} selected{% endif %}>{% trans "Source unavailable" %}</option>
+          </select>
+        </label>
+        <label for="document-owner">
+          <span>{% trans "Owner" %}</span>
+          <select id="document-owner" name="document_owner" class="form-select">
+            <option value="">{% trans "All owners" %}</option>
+            <option value="unknown"{% if stats.document_filters.owner == 'unknown' %} selected{% endif %}>{% trans "Owner missing" %}</option>
+            {% for owner in owner_options %}
+              {% with owner_id=owner.id|stringformat:"s" %}
+                <option value="{{ owner.id }}"{% if stats.document_filters.owner == owner_id %} selected{% endif %}>{{ owner.username }}</option>
+              {% endwith %}
+            {% endfor %}
+          </select>
+        </label>
+        <label for="document-sort">
+          <span>{% trans "Sort" %}</span>
+          <select id="document-sort" name="document_sort" class="form-select">
+            <option value="newest"{% if stats.document_filters.sort == 'newest' %} selected{% endif %}>{% trans "Newest First" %}</option>
+            <option value="oldest"{% if stats.document_filters.sort == 'oldest' %} selected{% endif %}>{% trans "Oldest First" %}</option>
+            <option value="title"{% if stats.document_filters.sort == 'title' %} selected{% endif %}>{% trans "Title" %}</option>
+            <option value="status"{% if stats.document_filters.sort == 'status' %} selected{% endif %}>{% trans "Status" %}</option>
+          </select>
+        </label>
+        <div class="document-filters__actions">
+          <button type="submit" class="btn btn-primary">{% trans "Apply Filters" %}</button>
+          <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="btn btn-outline-secondary">{% trans "Clear" %}</a>
+        </div>
+      </form>
+      <div class="document-list"{% if pdfs %} role="list"{% else %} role="status"{% endif %} aria-label="{% trans 'Documents in this category' %}">
         {% for pdf in pdfs %}
           <article class="document-record" role="listitem">
             <div class="document-record__identity">
@@ -106,38 +264,31 @@
               <span>{% trans "Owner" %}: {% if pdf.uploaded_by %}{{ pdf.uploaded_by.username }}{% else %}{% trans "Unknown" %}{% endif %}</span>
               <span>{% trans "Received" %}: {{ pdf.uploaded_at|date:"d M Y H:i" }}</span>
             </div>
-            <div class="document-record__status" aria-label="{% trans 'Readiness' %}">
-                  {% if pdf.lifecycle == 'unavailable' %}
-                    <span class="badge text-bg-danger">{% trans "Unavailable" %}</span>
-                  {% elif pdf.indexed %}
-                    <span class="badge text-bg-success">{% trans "Indexed" %}</span>
-                  {% else %}
-                    <span class="badge text-bg-warning">{% trans "Needs index" %}</span>
-                  {% endif %}
-                  {% if pdf.lifecycle == 'deprecated' %}
-                    <span class="badge text-bg-secondary">{% trans "Deprecated" %}</span>
-                  {% elif pdf.lifecycle == 'archived' %}
-                    <span class="badge text-bg-dark">{% trans "Archived" %}</span>
-                  {% elif pdf.lifecycle == 'processing' %}
-                    <span class="badge text-bg-info">{% trans "Processing" %}</span>
-                  {% elif pdf.lifecycle == 'ready' %}
-                    <span class="badge text-bg-success">{% trans "Ready" %}</span>
-                  {% endif %}
-                  {% if pdf.lifecycle == 'unavailable' %}
-                    {% if role == 'admin' or role == 'superadmin' %}
-                      {% include "components/operator_evidence.html" with presentation=unavailable_presentation technical_code="document_media_unavailable" show_action=False only %}
-                    {% else %}
-                      <p>{{ unavailable_presentation.title }}</p>
-                      <p>{{ unavailable_presentation.detail }}</p>
-                    {% endif %}
-                  {% endif %}
-                  {% if not pdf.uploaded_by %}
-                    <span class="badge text-bg-light">{% trans "Owner review" %}</span>
-                  {% endif %}
+            <div class="document-record__status" aria-label="{% trans 'Document state' %}">
+              {% if pdf.lifecycle == 'unavailable' %}
+                <span class="document-state document-state--danger">{% trans "Source unavailable" %}</span>
+              {% elif pdf.lifecycle == 'deprecated' %}
+                <span class="document-state document-state--muted">{% trans "Hidden · Superseded" %}</span>
+              {% elif pdf.lifecycle == 'archived' %}
+                <span class="document-state document-state--muted">{% trans "Hidden · Archived" %}</span>
+              {% elif pdf.processing_status == 'failed' %}
+                <span class="document-state document-state--warning">{% trans "Needs attention" %}</span>
+              {% elif pdf.processing_status == 'queued' %}
+                <span class="document-state document-state--processing">{% trans "Queued" %}</span>
+              {% elif pdf.lifecycle == 'processing' or pdf.processing_status == 'running' %}
+                <span class="document-state document-state--processing">{% trans "Processing" %}</span>
+              {% elif pdf.indexed %}
+                <span class="document-state document-state--success">{% trans "Searchable" %}</span>
+              {% elif pdf.lifecycle == 'ready' %}
+                <span class="document-state document-state--warning">{% trans "Needs attention" %}</span>
+              {% else %}
+                <span class="document-state document-state--processing">{% trans "Queued" %}</span>
+              {% endif %}
+              {% if not pdf.uploaded_by %}<small>{% trans "Owner missing" %}</small>{% endif %}
             </div>
             <div class="document-record__primary">
                   {% if pdf.lifecycle == 'unavailable' %}
-                    <span class="text-muted">{% trans "File unavailable" %}</span>
+                    <span class="text-muted">{% trans "Document file is unavailable" %}</span>
                   {% else %}
                     <a href="{% url 'view_pdf' pdf.id %}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm document-primary-action">
                       {% trans "View" %}
@@ -146,14 +297,20 @@
             </div>
             {% if role == 'admin' or role == 'superadmin' %}
               <details class="document-actions"{% if media_quarantine_form.pdf_id == pdf.id %} open{% endif %}>
-                <summary aria-label="{% trans 'Manage document' %}: {{ pdf.title }}">{% trans "Manage" %}</summary>
-                <div class="document-action-panel admin-row-actions">
+                <summary aria-label="{% trans 'Manage document actions for' %} {{ pdf.title }}">{% trans "Actions" %}</summary>
+                <div class="document-action-panel">
+                  <section class="document-action-section" aria-labelledby="routine_actions_{{ pdf.id }}">
+                    <div class="document-action-section__heading">
+                      <strong id="routine_actions_{{ pdf.id }}">{% trans "Document Details" %}</strong>
+                      <span>{% trans "Routine changes to this register entry." %}</span>
+                    </div>
+                    <div class="admin-row-actions">
                       {% if not pdf.uploaded_by %}
                         <button type="button"
                                 class="btn btn-outline-secondary btn-sm"
                                 data-action="assign-owner"
                                 data-pdf-id="{{ pdf.id }}"
-                                data-pdf-title="{{ pdf.title|escapejs }}"
+                                data-pdf-title="{{ pdf.title|escape }}"
                                 data-action-url="{% url 'assign_pdf_owner' pdf.id %}"
                                 aria-label="{% trans 'Assign owner' %}: {{ pdf.title }}">
                           {% trans "Assign Owner" %}
@@ -163,12 +320,33 @@
                               class="btn btn-outline-primary btn-sm"
                               data-action="rename"
                               data-pdf-id="{{ pdf.id }}"
-                              data-pdf-title="{{ pdf.title|escapejs }}"
+                              data-pdf-title="{{ pdf.title|escape }}"
                               data-action-url="{% url 'rename_pdf' pdf.id %}"
                               aria-label="{% trans 'Rename PDF' %}: {{ pdf.title }}">
                         {% trans "Rename" %}
                       </button>
+                      {% if pdf.processing_status == 'failed' or not pdf.indexed and pdf.lifecycle == 'ready' %}
+                        <form method="post" action="{% url 'retry_pdf_processing' pdf.id %}" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-outline-warning btn-sm">
+                            {% trans "Retry Processing" %}
+                          </button>
+                        </form>
+                      {% endif %}
+                    </div>
+                    {% with receipt=pdf.upload_batch_items.first %}
+                      {% if receipt %}
+                        <p class="document-receipt">
+                          {% trans "Intake receipt" %}: <bdi lang="en" dir="ltr">{{ receipt.batch.public_id|stringformat:"s"|slice:":8" }}</bdi>
+                        </p>
+                      {% endif %}
+                    {% endwith %}
+                  </section>
+                  <details class="document-advanced"{% if media_quarantine_form.pdf_id == pdf.id %} open{% endif %}>
+                    <summary>{% trans "Visibility & Recovery" %}</summary>
+                    <div class="document-advanced__body">
                       {% if pdf.lifecycle == 'unavailable' %}
+                        {% include "components/operator_evidence.html" with presentation=unavailable_presentation technical_code="document_media_unavailable" show_action=False only %}
                         <form method="post" action="{% url 'restore_pdf' pdf.id %}" class="d-inline">
                           {% csrf_token %}
                           <button type="submit" class="btn btn-outline-success btn-sm"{% if not pdf.media_expected_sha256 or pdf.media_expected_size == None %} disabled aria-describedby="restore_blocker_{{ pdf.id }}"{% endif %}>
@@ -217,18 +395,16 @@
                           </details>
                         {% endif %}
                       {% elif pdf.lifecycle != 'deprecated' and pdf.lifecycle != 'archived' %}
-                        <form method="post" action="{% url 'deprecate_pdf' pdf.id %}" class="d-inline">
+                        <form method="post" action="{% url 'remove_pdf_from_search' pdf.id %}" class="document-remove-search" data-confirm-form data-confirm-title="{% trans 'Remove document from search' %}" data-confirm-message="{% trans 'The PDF and register entry will be preserved. The selected reason controls how it can be restored.' %}" data-confirm-submit="{% trans 'Remove from Search' %}">
                           {% csrf_token %}
-                          <button type="submit" class="btn btn-outline-secondary btn-sm"
-                                  onclick="return confirm('{% trans 'Deprecate this document? It will be hidden from search results.' %}')">
-                            {% trans "Deprecate" %}
-                          </button>
-                        </form>
-                        <form method="post" action="{% url 'archive_pdf' pdf.id %}" class="d-inline">
-                          {% csrf_token %}
-                          <button type="submit" class="btn btn-outline-dark btn-sm"
-                                  onclick="return confirm('{% trans 'Archive this document? It will be hidden from search and lists.' %}')">
-                            {% trans "Archive" %}
+                          <label for="remove_reason_{{ pdf.id }}" class="form-label">{% trans "Why should this document leave search?" %}</label>
+                          <select id="remove_reason_{{ pdf.id }}" name="reason_code" class="form-select" required>
+                            <option value="">{% trans "Choose a reason" %}</option>
+                            <option value="superseded">{% trans "A newer document replaces it" %}</option>
+                            <option value="historical_record">{% trans "Keep it as a historical record" %}</option>
+                          </select>
+                          <button type="submit" class="btn btn-outline-secondary btn-sm">
+                            {% trans "Remove from Search" %}
                           </button>
                         </form>
                         <details class="d-inline-block"{% if media_quarantine_form.pdf_id == pdf.id %} open{% endif %}>
@@ -292,38 +468,64 @@
                           </button>
                         </form>
                       {% endif %}
-                      <form method="post" action="{% url 'delete_pdf' pdf.id %}" class="d-inline">
+                    </div>
+                  </details>
+                  {% if role == 'superadmin' %}
+                  <details class="document-advanced document-advanced--danger">
+                    <summary>{% trans "Danger Zone" %}</summary>
+                    <div class="document-advanced__body">
+                      <p class="ops-control-note">{% trans "Permanent deletion removes the register row and stored file. Review backup and index impact first." %}</p>
+                      <form method="post" action="{% url 'delete_pdf' pdf.id %}" class="d-inline" data-confirm-form data-confirm-title="{% trans 'Delete PDF permanently' %}" data-confirm-message="{% trans 'This removes the document row and stored file. This action cannot be undone from this page.' %}" data-confirm-submit="{% trans 'Delete Permanently' %}" data-confirm-danger="true">
                         {% csrf_token %}
+                        <label for="delete_reason_{{ pdf.id }}" class="form-label">{% trans "Deletion Reason" %}</label>
+                        <textarea id="delete_reason_{{ pdf.id }}" name="reason" class="form-control" rows="2" minlength="10" maxlength="500" autocomplete="off" required></textarea>
+                        <label for="delete_confirmation_{{ pdf.id }}" class="form-label mt-2">
+                          {% trans "Enter this exact confirmation:" %} <bdi lang="en" dir="ltr" translate="no">DELETE {{ pdf.id }}</bdi>
+                        </label>
+                        <input id="delete_confirmation_{{ pdf.id }}" name="confirmation" class="form-control" lang="en" dir="ltr" autocomplete="off" spellcheck="false" required>
                         <button type="submit"
-                                class="btn btn-outline-danger btn-sm"
-                                aria-label="{% trans 'Delete PDF' %}: {{ pdf.title }}"
-                                onclick="return confirm('{% trans 'Delete this PDF? Confirm backup and index impact before continuing.' %}')">
-                          {% trans "Delete" %}
+                                class="btn btn-outline-danger btn-sm mt-3"
+                                aria-label="{% trans 'Delete PDF permanently' %}: {{ pdf.title }}">
+                          {% trans "Delete Permanently" %}
                         </button>
                       </form>
+                    </div>
+                  </details>
+                  {% endif %}
                 </div>
               </details>
             {% endif %}
           </article>
         {% empty %}
-          <p class="text-center text-muted py-4">{% trans "No PDFs available in this category." %}</p>
+          <div class="admin-empty-state document-empty-state">
+            <h3>{% trans "No Documents Found" %}</h3>
+            {% if stats.document_filters.query or stats.document_filters.state or stats.document_filters.owner %}
+              <p>{% trans "Try clearing one or more filters." %}</p>
+              <a href="{% url 'dashboard_folder' folder_id=folder.id %}" class="btn btn-outline-primary mt-3">{% trans "Clear Filters" %}</a>
+            {% else %}
+              <p>{% trans "Add the first PDF to begin this category register." %}</p>
+            {% endif %}
+          </div>
         {% endfor %}
       </div>
       {% if pdfs.paginator.num_pages > 1 %}
-        <nav class="cockpit-pagination" aria-label="{% trans 'Document pages' %}">
-          {% if pdfs.has_previous %}<a href="?document_page={{ pdfs.previous_page_number }}">{% trans "Previous" %}</a>{% endif %}
-          <span>{% blocktrans with current=pdfs.number total=pdfs.paginator.num_pages %}Page {{ current }} of {{ total }}{% endblocktrans %}</span>
-          {% if pdfs.has_next %}<a href="?document_page={{ pdfs.next_page_number }}">{% trans "Next" %}</a>{% endif %}
-        </nav>
+        {% with filter_query=stats.document_filters.query filter_state=stats.document_filters.state filter_owner=stats.document_filters.owner filter_sort=stats.document_filters.sort %}
+          <nav class="cockpit-pagination" aria-label="{% trans 'Document pages' %}">
+            {% if pdfs.has_previous %}<a href="?document_query={{ filter_query|urlencode }}&amp;document_state={{ filter_state|urlencode }}&amp;document_owner={{ filter_owner|urlencode }}&amp;document_sort={{ filter_sort|urlencode }}&amp;document_page={{ pdfs.previous_page_number }}">{% trans "Previous" %}</a>{% endif %}
+            <span>{% blocktrans with current=pdfs.number total=pdfs.paginator.num_pages %}Page {{ current }} of {{ total }}{% endblocktrans %}</span>
+            {% if pdfs.has_next %}<a href="?document_query={{ filter_query|urlencode }}&amp;document_state={{ filter_state|urlencode }}&amp;document_owner={{ filter_owner|urlencode }}&amp;document_sort={{ filter_sort|urlencode }}&amp;document_page={{ pdfs.next_page_number }}">{% trans "Next" %}</a>{% endif %}
+          </nav>
+        {% endwith %}
       {% endif %}
     </div>
   </div>
 
   <aside class="cockpit-rail">
-    <section class="admin-panel">
+    <section class="admin-panel registry-overview">
       <div class="admin-page-heading">
-        <h2>{% trans "Blast Radius" %}</h2>
-        <p>{% trans "Use this before renaming, deleting, or moving documents." %}</p>
+        <p class="admin-kicker">{% trans "Registry overview" %}</p>
+        <h2>{% trans "Category Health" %}</h2>
+        <p>{% trans "A compact view of records that may need attention." %}</p>
       </div>
       <div class="cockpit-queue">
         <div class="cockpit-queue-item">
@@ -339,11 +541,13 @@
           <span>{% trans "documents need owner review" %}</span>
         </div>
       </div>
-      <div class="ops-control-group" aria-label="{% trans 'Index operations' %}">
-        <div class="ops-control-group__heading">
-          <strong>{% trans "Index Operations" %}</strong>
-          <span>{% trans "Scoped to this category only; actions open a local preview in Documents & Indexes." %}</span>
-        </div>
+      <details class="technical-operations">
+        <summary>{% trans "Technical Index Operations" %}</summary>
+        <div class="ops-control-group" aria-label="{% trans 'Index operations' %}">
+          <div class="ops-control-group__heading">
+            <strong>{% trans "Category Index" %}</strong>
+            <span>{% trans "Advanced operations scoped to this category. Use only when normal processing cannot recover." %}</span>
+          </div>
         {% if role == 'superadmin' %}
         <form method="post" action="{% url 'folder_operations' folder.id %}">
           {% csrf_token %}
@@ -359,13 +563,12 @@
             {% trans "Reprocess Needed" %}
           </button>
         </form>
-        <form method="post" action="{% url 'folder_operations' folder.id %}">
+        <form method="post" action="{% url 'folder_operations' folder.id %}" data-confirm-form data-confirm-title="{% trans 'Reprocess every PDF' %}" data-confirm-message="{% trans 'This may call the embedding service and overwrite stored chunks for every document in this category.' %}" data-confirm-submit="{% trans 'Reprocess All Documents' %}" data-confirm-danger="true">
           {% csrf_token %}
           <input type="hidden" name="operation" value="reprocess_all">
           <button type="submit"
                     class="btn btn-outline-danger btn-sm w-100"
                     {% if not folder_stats.searchable_pdfs %}disabled{% endif %}
-                    onclick="return confirm('{% trans 'Reprocess every PDF in this category? This may call the embedding service and overwrite stored chunks.' %}')"
                     title="{% trans 'Reprocess all documents with explicit confirmation; this is a full selected-folder reindex.' %}">
             {% trans "Reprocess All" %}
           </button>
@@ -375,7 +578,8 @@
             {% trans "Superadmin access is required for reindexing and reprocessing controls." %}
           </div>
         {% endif %}
-      </div>
+        </div>
+      </details>
     </section>
   </aside>
 </section>
@@ -405,7 +609,15 @@
   </div>
 {% endif %}
 
-<div id="actionModal" class="modal fade" tabindex="-1">
+<div id="actionModal"
+     class="modal fade"
+     tabindex="-1"
+     aria-labelledby="actionModalTitle"
+     aria-hidden="true"
+     data-rename-title="{% trans 'Rename PDF' %}"
+     data-rename-submit="{% trans 'Rename' %}"
+     data-owner-title="{% trans 'Assign Owner' %}"
+     data-owner-submit="{% trans 'Save Owner' %}">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
@@ -416,8 +628,19 @@
         <form id="actionModalForm" method="post">
           {% csrf_token %}
           <input type="hidden" name="action_type" id="actionModalType">
-          <div id="actionModalFields"></div>
-          <div class="mt-3">
+          <p id="actionModalDocument" class="action-modal__document" aria-live="polite"></p>
+          <div id="actionRenameFields" data-action-fields="rename" hidden>
+            <label for="actionNewTitle" class="form-label">{% trans "New Title" %}</label>
+            <input id="actionNewTitle" type="text" class="form-control" name="title" maxlength="255" autocomplete="off" disabled required>
+          </div>
+          <div id="actionOwnerFields" data-action-fields="assign-owner" hidden>
+            <label for="actionOwner" class="form-label">{% trans "Owner" %}</label>
+            <select id="actionOwner" class="form-select" name="owner_id" disabled required>
+              <option value="">{% trans "Choose active user" %}</option>
+              {% for owner in owner_options %}<option value="{{ owner.id }}">{{ owner.username }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="modal-footer action-modal__footer">
             <button type="submit" class="btn btn-primary" id="actionModalSubmit">{% trans "Submit" %}</button>
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
           </div>
@@ -426,56 +649,27 @@
     </div>
   </div>
 </div>
+
+<div id="confirmActionModal" class="modal fade" tabindex="-1" aria-labelledby="confirmActionTitle" aria-describedby="confirmActionMessage" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmActionTitle">{% trans "Confirm Action" %}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmActionMessage"></p>
+        <p class="confirm-action__context" id="confirmActionContext"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+        <button type="button" class="btn btn-primary" id="confirmActionSubmit">{% trans "Confirm" %}</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const modal = new bootstrap.Modal(document.getElementById("actionModal"));
-
-  function openActionModal(button) {
-    const action = button.getAttribute("data-action");
-    const pdfId = button.getAttribute("data-pdf-id");
-    const pdfTitle = button.getAttribute("data-pdf-title");
-    const actionUrl = button.getAttribute("data-action-url");
-
-    const titleEl = document.getElementById("actionModalTitle");
-    const form = document.getElementById("actionModalForm");
-    const fields = document.getElementById("actionModalFields");
-    const typeInput = document.getElementById("actionModalType");
-    const submitBtn = document.getElementById("actionModalSubmit");
-
-    typeInput.value = action;
-    form.action = actionUrl;
-
-    if (action === "rename") {
-      titleEl.textContent = "{% trans 'Rename PDF' %}";
-      fields.innerHTML =
-        '<label class="form-label">{% trans "New Title" %}</label>' +
-        '<input type="text" class="form-control" name="title" value="' + pdfTitle + '" required>';
-      submitBtn.textContent = "{% trans 'Rename' %}";
-    } else if (action === "assign-owner") {
-      titleEl.textContent = "{% trans 'Assign Owner' %}";
-      fields.innerHTML =
-        '<p class="text-muted mb-3">' + pdfTitle + '</p>' +
-        '<label class="form-label">{% trans "Owner" %}</label>' +
-        '<select class="form-select" name="owner_id" required>' +
-        '<option value="">{% trans "Choose active user" %}</option>' +
-        '{% for owner in owner_options %}' +
-        '<option value="{{ owner.id }}">{{ owner.username|escapejs }}</option>' +
-        '{% endfor %}' +
-        '</select>';
-      submitBtn.textContent = "{% trans 'Save Owner' %}";
-    }
-
-    modal.show();
-  }
-
-  document.querySelectorAll("[data-action]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      openActionModal(btn);
-    });
-  });
-});
-</script>
+<script src="{% static 'main/js/pdf-workbench.js' %}" defer></script>
 {% endblock %}
