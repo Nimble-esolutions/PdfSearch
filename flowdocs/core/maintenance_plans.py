@@ -22,6 +22,7 @@ from .artifact_cleanup import (
     inventory_local_artifacts,
 )
 from .maintenance import queue_job
+from .operator_presentation import UI_REASON_CODES
 from .search_artifact_health import classify_search_artifacts
 from .models import (
     Folder,
@@ -206,7 +207,7 @@ def _values(data, name: str) -> list[str]:
     return [str(value).strip() for value in values if str(value).strip()]
 
 
-def normalize_selection(data) -> dict:
+def normalize_selection(data, *, allow_all: bool = False) -> dict:
     raw_folder_ids = _values(data, "folder_ids")
     raw_pdf_ids = _values(data, "pdf_ids")
     if (
@@ -220,6 +221,7 @@ def normalize_selection(data) -> dict:
     if indexed not in {"", "true", "false"}:
         raise MaintenancePlanError("malformed_filters", "filter_indexed")
     result = {
+        "scope_mode": "selected",
         "folder_ids": folder_ids,
         "pdf_ids": pdf_ids,
         "filters": {
@@ -250,7 +252,9 @@ def normalize_selection(data) -> dict:
     ):
         raise MaintenancePlanError("malformed_filters", "uploaded_date_range")
     if not folder_ids and not pdf_ids:
-        raise MaintenancePlanError("empty_scope")
+        if not allow_all:
+            raise MaintenancePlanError("maintenance_scope_required")
+        result["scope_mode"] = "all"
     return result
 
 
@@ -258,7 +262,9 @@ def _selection_query(selection: dict):
     query = PDFFile.objects.filter(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
     folder_ids = selection["folder_ids"]
     pdf_ids = selection["pdf_ids"]
-    if folder_ids and pdf_ids:
+    if selection.get("scope_mode") == "all":
+        pass
+    elif folder_ids and pdf_ids:
         query = query.filter(Q(folder_id__in=folder_ids) | Q(pk__in=pdf_ids))
     elif folder_ids:
         query = query.filter(folder_id__in=folder_ids)
@@ -431,7 +437,10 @@ def create_plan(*, operation: str, data, actor, idempotency_key: str) -> Mainten
         raise MaintenancePlanError(reason)
     if not idempotency_key or len(idempotency_key) > 128:
         raise MaintenancePlanError("invalid_idempotency_key")
-    selection = normalize_selection(data)
+    selection = normalize_selection(
+        data,
+        allow_all=operation in {"validate", "repair_indexes", "reindex_needed"},
+    )
     existing = MaintenancePlan.objects.filter(
         idempotency_key=idempotency_key, operation=operation
     ).first()
@@ -564,6 +573,7 @@ def _serialize_local_job_payload(
     *,
     prepared_workspace_by_job=None,
     include_audit=False,
+    operation_reasons=None,
 ) -> dict:
     prepared_workspace_by_job = prepared_workspace_by_job or {}
     payload = {
@@ -575,21 +585,24 @@ def _serialize_local_job_payload(
         "failed_items": int(job.failed_items if hasattr(job, "failed_items") else job["failed_items"]),
         # Keep raw error_summary server-side for the existing audit/support
         # contract. Browser read models expose only a bounded stable code.
-        "safe_error_code": (
-            "maintenance_job_failed"
-            if str(
-                job.error_summary
-                if hasattr(job, "error_summary")
-                else job["error_summary"]
-            )
-            else ""
-        ),
+        "safe_error_code": "",
         "updated_at": (
             job.updated_at.isoformat() if hasattr(job, "updated_at")
             else job["updated_at"].isoformat()
         ),
         "options": job.options if hasattr(job, "options") else job.get("options", {}),
     }
+    raw_error = str(
+        job.error_summary
+        if hasattr(job, "error_summary")
+        else job["error_summary"]
+    ).strip()
+    if raw_error:
+        payload["safe_error_code"] = (
+            raw_error
+            if raw_error in UI_REASON_CODES
+            else "maintenance_job_failed"
+        )
     payload["state_version"] = _job_state_version(
         {
             "public_id": payload["public_id"],
@@ -599,10 +612,17 @@ def _serialize_local_job_payload(
             "updated_at": (job.updated_at if hasattr(job, "updated_at") else job["updated_at"]),
         }
     )
+    retry_reason = ""
+    if payload["status"] == "failed":
+        retry_reason = str((operation_reasons or {}).get(payload["kind"]) or "")
     payload["allowed_actions"] = {
         "cancel": payload["status"] in {"queued", "running"},
-        "retry": payload["status"] == "failed",
+        "retry": payload["status"] == "failed" and not retry_reason,
+        "retry_reason": retry_reason,
     }
+    payload["retry_blocker"] = (
+        {"reason_code": retry_reason} if retry_reason else {}
+    )
     candidate_reason = ""
     prepared_workspace_id = ""
     if payload["status"] != "completed":
@@ -769,6 +789,7 @@ def workbench_maintenance_state(
         _serialize_local_job_payload(
             job,
             prepared_workspace_by_job=prepared_workspace_by_job,
+            operation_reasons=reasons,
         )
         for job in job_records
     ]
@@ -776,6 +797,7 @@ def workbench_maintenance_state(
         _serialize_local_job_payload(
             job,
             prepared_workspace_by_job=prepared_workspace_by_job,
+            operation_reasons=reasons,
         )
         for job in active_job_records
     ]
@@ -785,10 +807,11 @@ def workbench_maintenance_state(
             _serialize_local_job_payload(
                 record,
                 prepared_workspace_by_job=prepared_workspace_by_job,
+                operation_reasons=reasons,
             )
             for record in attention_candidate_records
         )
-        if any(
+        if job["status"] == "failed" or any(
             job["allowed_actions"].get(action)
             for action in ("retry", "prepare_activation", "review_activation")
         )
@@ -805,11 +828,14 @@ def workbench_maintenance_state(
         _serialize_local_job_payload(
             job,
             prepared_workspace_by_job=prepared_workspace_by_job,
+            operation_reasons=reasons,
         )
         for job in job_history_records
     ]
     plans = list(
-        MaintenancePlan.objects.select_related("job").values(
+        MaintenancePlan.objects.select_related("job")
+        .order_by("-created_at", "-pk")
+        .values(
             "public_id", "operation", "state", "preview", "state_version",
             "expires_at", "external_embeddings_required",
             "job__public_id", "job__status",
@@ -822,6 +848,17 @@ def workbench_maintenance_state(
         ),
         None,
     )
+    if selected_plan_id and selected_plan is None:
+        selected_plan = (
+            MaintenancePlan.objects.select_related("job")
+            .filter(public_id=selected_plan_id)
+            .values(
+                "public_id", "operation", "state", "preview", "state_version",
+                "expires_at", "external_embeddings_required",
+                "job__public_id", "job__status",
+            )
+            .first()
+        )
     selected_job = None
     if selected_job_id:
         selected_job = next(
@@ -837,6 +874,7 @@ def workbench_maintenance_state(
                 selected_job_record,
                 prepared_workspace_by_job=prepared_workspace_by_job,
                 include_audit=True,
+                operation_reasons=reasons,
             )
         if selected_job and not selected_job["audit_events"]:
             selected_job["audit_events"] = [

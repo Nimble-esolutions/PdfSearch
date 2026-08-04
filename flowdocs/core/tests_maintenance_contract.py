@@ -37,6 +37,7 @@ from core.maintenance_plans import (
     workbench_maintenance_state,
 )
 from core.models import CustomUser, Folder, MaintenanceJob, MaintenancePlan, PDFFile
+from core.operator_navigation import operator_section_url
 
 
 LOCAL_GATES = override_settings(
@@ -543,9 +544,36 @@ class MaintenancePlanningTests(TestCase):
                 }
             )
 
-    def test_normalize_selection_rejects_empty_or_non_numeric_scope(self):
-        with self.assertRaisesRegex(MaintenancePlanError, "empty_scope"):
+    def test_normalize_selection_rejects_empty_or_non_numeric_selected_scope(self):
+        with self.assertRaisesRegex(
+            MaintenancePlanError, "maintenance_scope_required"
+        ):
             normalize_selection({"folder_ids": ["not-a-number"]})
+
+    def test_safe_operations_default_an_empty_selection_to_all_documents(self):
+        plan = create_plan(
+            operation="validate",
+            data={},
+            actor=self.superadmin,
+            idempotency_key=f"test:{uuid.uuid4()}",
+        )
+
+        self.assertEqual(plan.selection["scope_mode"], "all")
+        self.assertEqual(plan.preview["pdf_ids"], [self.pdf.pk])
+        self.assertEqual(plan.preview["pdf_count"], 1)
+
+    def test_selected_reindex_never_defaults_to_all_documents(self):
+        with self.assertRaisesRegex(
+            MaintenancePlanError, "maintenance_scope_required"
+        ):
+            create_plan(
+                operation="reindex_selected",
+                data={},
+                actor=self.superadmin,
+                idempotency_key=f"test:{uuid.uuid4()}",
+            )
+
+        self.assertFalse(MaintenancePlan.objects.exists())
 
     def test_normalize_selection_accepts_equal_date_boundary(self):
         selection = normalize_selection(
@@ -782,6 +810,12 @@ class MaintenancePlanningTests(TestCase):
             response,
             "Repair and reindex work cannot prepare a safe candidate yet.",
         )
+        self.assertContains(response, "Restore or activate a verified generation")
+        self.assertContains(response, operator_section_url("restore"))
+        self.assertContains(
+            response,
+            "No category selected: validate all eligible documents.",
+        )
         self.assertContains(
             response,
             'name="operation" value="validate"',
@@ -873,6 +907,64 @@ class MaintenancePlanningTests(TestCase):
         failed.refresh_from_db()
         self.assertEqual(failed.status, "queued")
         self.assertEqual(failed.failed_items, 0)
+
+    def test_failed_job_preserves_safe_reason_and_blocks_futile_retry(self):
+        self.client.force_login(self.superadmin)
+        failed = MaintenanceJob.objects.create(
+            kind="repair_indexes",
+            status="failed",
+            failed_items=1,
+            error_summary="maintenance_source_pointer_unverified",
+            requested_by=self.superadmin,
+        )
+        with patch(
+            "core.maintenance_plans.maintenance_source_capability_reason",
+            return_value="maintenance_source_pointer_unverified",
+        ):
+            response = self.client.get(reverse("dataops:advanced"))
+
+        job_state = next(
+            job for job in response.context["state"]["maintenance"]["attention_jobs"]
+            if job["public_id"] == str(failed.public_id)
+        )
+        self.assertEqual(
+            job_state["safe_error_code"],
+            "maintenance_source_pointer_unverified",
+        )
+        self.assertFalse(job_state["allowed_actions"]["retry"])
+        self.assertEqual(
+            job_state["allowed_actions"]["retry_reason"],
+            "maintenance_source_pointer_unverified",
+        )
+        self.assertContains(response, "Retry is not useful yet")
+        self.assertNotContains(
+            response,
+            reverse(
+                "vaultops:maintenance_job_retry",
+                kwargs={"job_id": failed.public_id},
+            ),
+        )
+
+        with patch(
+            "vaultops.views.capability_reasons",
+            return_value={
+                "repair_indexes": "maintenance_source_pointer_unverified"
+            },
+        ):
+            refused = self.client.post(
+                reverse(
+                    "vaultops:maintenance_job_retry",
+                    kwargs={"job_id": failed.public_id},
+                ),
+                {"state_version": job_state["state_version"]},
+            )
+
+        self.assertEqual(
+            refused["X-DataOps-Reason-Code"],
+            "maintenance_source_pointer_unverified",
+        )
+        failed.refresh_from_db()
+        self.assertEqual(failed.status, "failed")
 
     def test_legacy_generation_operations_are_rejected(self):
         self.client.force_login(self.superadmin)

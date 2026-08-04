@@ -15,7 +15,7 @@
     {% for blocker in state.maintenance.capability_blockers %}
       <aside class="maintenance-shared-blocker" id="{{ blocker.dom_id }}" aria-labelledby="maintenance-shared-blocker-heading-{{ forloop.counter }}">
         <p class="dataops-eyebrow" id="maintenance-shared-blocker-heading-{{ forloop.counter }}">{% trans "Shared requirement" %}</p>
-        {% include "components/operator_evidence.html" with presentation=blocker.presentation technical_code=blocker.reason_code show_action=False only %}
+        {% include "components/operator_evidence.html" with presentation=blocker.presentation technical_code=blocker.reason_code show_action=True only %}
         <p>{% blocktrans count affected=blocker.affected_operations|length %}This requirement blocks one maintenance action.{% plural %}This requirement blocks {{ affected }} maintenance actions.{% endblocktrans %}</p>
       </aside>
     {% endfor %}
@@ -28,28 +28,32 @@
         <article{% if not capability.enabled %} aria-disabled="true"{% endif %}{% if capability.shared_blocker %} aria-describedby="{{ capability.shared_blocker_id }}"{% endif %}>
           <h4>{% trans "Validate files" %}</h4>
           <p>{% trans "Read-only checks for database rows, media references, and stored search artifacts." %}</p>
-          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="validate">{% trans "Preview validation" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
+          <p class="maintenance-action-scope">{% trans "No category selected: validate all eligible documents." %}</p>
+          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="validate">{% trans "Preview validation" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=True only %}</div>{% endif %}
         </article>
         {% endwith %}
         {% with capability=state.maintenance.capabilities.repair_indexes %}
         <article{% if not capability.enabled %} aria-disabled="true"{% endif %}{% if capability.shared_blocker %} aria-describedby="{{ capability.shared_blocker_id }}"{% endif %}>
           <h4>{% trans "Repair stored indexes" %}</h4>
           <p>{% trans "Rebuild category indexes from existing chunks and embeddings; no new external embedding request." %}</p>
-          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="repair_indexes">{% trans "Preview index repair" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
+          <p class="maintenance-action-scope">{% trans "No category selected: preview repair for all eligible categories." %}</p>
+          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="repair_indexes">{% trans "Preview index repair" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=True only %}</div>{% endif %}
         </article>
         {% endwith %}
         {% with capability=state.maintenance.capabilities.reindex_needed %}
         <article{% if not capability.enabled %} aria-disabled="true"{% endif %}{% if capability.shared_blocker %} aria-describedby="{{ capability.shared_blocker_id }}"{% endif %}>
           <h4>{% trans "Reindex only what is needed" %}</h4>
           <p>{% trans "Reprocess documents whose searchable artifacts are missing or invalid." %}</p>
-          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="reindex_needed">{% trans "Preview needed reindex" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
+          <p class="maintenance-action-scope">{% trans "No category selected: find all eligible documents that need reindexing." %}</p>
+          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="reindex_needed">{% trans "Preview needed reindex" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=True only %}</div>{% endif %}
         </article>
         {% endwith %}
         {% with capability=state.maintenance.capabilities.reindex_selected %}
         <article{% if not capability.enabled %} aria-disabled="true"{% endif %}{% if capability.shared_blocker %} aria-describedby="{{ capability.shared_blocker_id }}"{% endif %}>
           <h4>{% trans "Reindex a selected scope" %}</h4>
           <p>{% trans "Deliberately regenerate searchable artifacts for the reviewed selection." %}</p>
-          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="reindex_selected">{% trans "Preview selected reindex" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=False only %}<p>{{ capability.presentation.action_label }}</p></div>{% endif %}
+          <p class="maintenance-action-scope">{% trans "Selection required: this action never defaults to every document." %}</p>
+          {% if capability.enabled and can_act %}<button class="dataops-button" type="submit" name="operation" value="reindex_selected">{% trans "Preview selected reindex" %}</button>{% elif capability.enabled %}<p class="maintenance-action-availability">{% trans "Superadmin approval required." %}</p>{% elif capability.shared_blocker %}<p class="maintenance-action-availability">{% trans "Unavailable until the shared requirement is resolved." %}</p>{% else %}<div role="status">{% include "components/operator_evidence.html" with presentation=capability.presentation technical_code=capability.reason_code show_action=True only %}</div>{% endif %}
         </article>
         {% endwith %}
       </div>
@@ -68,7 +72,7 @@
           <div class="maintenance-scope__grid" data-maintenance-scope-list>
             {% for folder in state.maintenance.folders %}<label data-maintenance-scope-item><input type="checkbox" name="folder_ids" value="{{ folder.id }}"> <span>{{ folder.name }}</span> <small>{{ folder.pdf_count }} {% trans "documents" %}</small></label>{% endfor %}
           </div>
-        {% else %}<p>{% trans "No categories are available. A preview with no matching items will be refused." %}</p>{% endif %}
+        {% else %}<p>{% trans "No categories are available. Validation can still preview all eligible documents; selected reindexing remains unavailable until a scope exists." %}</p>{% endif %}
       </fieldset>
       <details>
         <summary>{% trans "Optional document filters" %}</summary>

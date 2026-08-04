@@ -528,6 +528,8 @@ class DataOpsV3RenderedActionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, blocker, count=1)
         self.assertContains(response, "Shared requirement")
+        self.assertContains(response, "Review maintenance safety configuration")
+        self.assertContains(response, operator_section_url("configuration"))
         self.assertContains(response, "data-maintenance-scope")
         self.assertContains(response, 'name="folder_ids"', count=46)
         self.assertContains(response, "maintenance-scope.js")

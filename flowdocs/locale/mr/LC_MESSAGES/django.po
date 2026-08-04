@@ -5399,3 +5399,40 @@ msgstr "क्रियेची पुष्टी करा"
 #: flowdocs/core/templates/dashboard_pdfs.html:664
 msgid "Confirm"
 msgstr "पुष्टी करा"
+
+msgid "Choose a scope for selected reindexing"
+msgstr "निवडक पुनःअनुक्रमणासाठी व्याप्ती निवडा"
+
+msgid "Selected reindexing never assumes every document. Choose at least one category or document before previewing it."
+msgstr "निवडक पुनःअनुक्रमणात सर्व दस्तऐवज गृहीत धरले जात नाहीत. त्याचे पूर्वावलोकन करण्यापूर्वी किमान एक श्रेणी किंवा दस्तऐवज निवडा."
+
+msgid "No maintenance plan was created and active search is unchanged."
+msgstr "देखभाल आराखडा तयार झाला नाही आणि सक्रिय शोध अपरिवर्तित आहे."
+
+msgid "Choose categories and preview again"
+msgstr "श्रेण्या निवडा आणि पुन्हा पूर्वावलोकन करा"
+
+msgid "No category selected: validate all eligible documents."
+msgstr "कोणतीही श्रेणी निवडलेली नाही: सर्व पात्र दस्तऐवजांची पडताळणी करा."
+
+msgid "No category selected: preview repair for all eligible categories."
+msgstr "कोणतीही श्रेणी निवडलेली नाही: सर्व पात्र श्रेण्यांच्या दुरुस्तीचे पूर्वावलोकन करा."
+
+msgid "No category selected: find all eligible documents that need reindexing."
+msgstr "कोणतीही श्रेणी निवडलेली नाही: पुनःअनुक्रमण आवश्यक असलेले सर्व पात्र दस्तऐवज शोधा."
+
+msgid "Selection required: this action never defaults to every document."
+msgstr "निवड आवश्यक: या क्रियेत सर्व दस्तऐवज आपोआप निवडले जात नाहीत."
+
+msgid "No categories are available. Validation can still preview all eligible documents; selected reindexing remains unavailable until a scope exists."
+msgstr "कोणत्याही श्रेण्या उपलब्ध नाहीत. तरीही सर्व पात्र दस्तऐवजांच्या पडताळणीचे पूर्वावलोकन करता येते; व्याप्ती उपलब्ध होईपर्यंत निवडक पुनःअनुक्रमण उपलब्ध राहणार नाही."
+
+msgid "Retry is not useful yet"
+msgstr "आत्ताच पुन्हा प्रयत्न करणे उपयुक्त नाही"
+
+msgid "Resolve the current requirement first; retry will become available automatically."
+msgstr "प्रथम सध्याची आवश्यकता पूर्ण करा; त्यानंतर पुन्हा प्रयत्न करण्याचा पर्याय आपोआप उपलब्ध होईल."
+
+#, python-format
+msgid "Next: %(action)s"
+msgstr "पुढील पाऊल: %(action)s"
