@@ -2,7 +2,7 @@
 Status: Pending merge and stage deployment
 Audience: Maintainer, Operator, Reviewer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
+Last verified: 2026-08-04
 Canonical source: docs/releases/2026-08-03-operator-workbench-truth-and-scale.md
 ---
 
@@ -23,6 +23,28 @@ underlying mutation safety gates:
 | Every document in a category rendered at once | Full metrics plus deterministic 25-document pages |
 | Successful logins consumed the failed-attempt limit | Successful authentication clears the failed-attempt counter |
 | Deployment validation rejected the approved stage `:latest` channel | Stage permits one shared always-pulled image reference; production still requires an immutable digest |
+| Category index buttons looked usable even though the runtime would reject them | The category page consumes the server capability decision, explains one shared blocker, and disables dead-end submissions |
+| Recovery guidance used a retired `?section=...` route that discarded the task | One canonical resolver sends recovery, maintenance, jobs, and configuration guidance to the current DataOps v3 page while retaining plan/job/profile context |
+
+## Certification incidents and durable judgments
+
+| Incident found by | Root cause | Judgment now enforced |
+| --- | --- | --- |
+| Hosted data-release gate after all unit/browser tests passed | The new `intake` lifecycle existed in the model but three release validators kept independent allow-lists | Persisted states derive from one canonical contract; releases test every valid value and reject unknown values |
+| Real category page and mobile screenshot | The template rendered index forms from counts and role alone while POST used `capability_reasons()` | Render and submit paths share one capability authority; test blocked and enabled HTML states |
+| Stale-submit redirect test | DataOps v3 treated every legacy section as Search maintenance and dropped task context | Stable reason sections resolve centrally to current task URLs; compatibility tests cover recovery, maintenance, jobs, configuration, and contextual identifiers |
+| Local browser verification | The running Docker service still contained the prior image after source edits | UI claims require rebuilding/recreating the relevant local service and validating the rendered page, not reading source alone |
+
+```mermaid
+flowchart LR
+  C["Server capability reason"] --> P["Authored operator presentation"]
+  L["Legacy section link"] --> N["Canonical operator navigation"]
+  P --> N
+  N --> R["Data protection / recovery points"]
+  N --> M["Search maintenance + plan/job"]
+  N --> J["Jobs"]
+  N --> F["Configuration + profile"]
+```
 
 ## Read-model flow
 
@@ -85,12 +107,13 @@ COMPOSE_PROJECT_NAME=pdfsearch-operator-workbench-smoke WEB_PORT=18003 \
   bash scripts/ci/run_compose_smoke.sh
 ```
 
-The disposable Linux stack passed 593 active Django tests (one documented
-runtime-image documentation skip), seven applicable desktop/mobile browser
-tests (one intentional project skip), package integrity, the data-release gate
-with 108 rows and 112 files, index compatibility, and seed recovery. The scale
-fixture writes valid PDF media, so browser setup cannot leave false custody
-debt. The hosted workflow remains the merge gate.
+The final disposable Linux stack passed 599 active Django tests (one documented
+runtime-image documentation skip), nine applicable desktop/mobile browser
+tests (one intentional project skip), authenticated admin HTTP smoke, package
+integrity, the data-release gate with 110 rows and 114 files, 1 loadable FAISS
+file/vector at the expected 1,536 dimensions, and isolated 17-row seed
+recovery. The scale fixture writes valid PDF media, so browser setup cannot
+leave false custody debt. The hosted workflow remains the merge gate.
 
 ## Stage deployment and rollback
 

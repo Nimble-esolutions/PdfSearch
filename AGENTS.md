@@ -89,6 +89,25 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
 - Bulk indexing, OCR repair, and folder operations must queue durable
   maintenance jobs; never put embedding or FAISS work back into a synchronous
   web request. Preserve cancellation, retry, and per-item failure state.
+- **Capability parity:** An operator control must be rendered from the same
+  server-authoritative capability decision that its POST/queue path rechecks.
+  Never show an enabled button for an operation that the current runtime will
+  deterministically reject. Render the authored reason, consequence, and next
+  action before submission; retain the server recheck for stale-page races.
+  Mocked success-path tests do not prove a control is usable in a real runtime
+  posture—add blocked and enabled rendered-state tests.
+- **Operator destination parity:** Stable reason sections are evidence, not
+  URLs. Resolve them through `core.operator_navigation`; do not construct
+  `?section=...` links in templates or views. When a control-plane UI is
+  replaced, test every compatibility entry point with task context such as
+  plan, job, and profile identifiers. A redirect that drops the requested task
+  is a broken control even when the destination returns `200`.
+- **Cross-contract state changes:** Adding or renaming a persisted lifecycle or
+  state-machine value requires an impact matrix covering model choices,
+  inventory, candidate preparation, publication, restore, readiness, UI
+  capability projection, and negative unknown-state tests. Do not maintain
+  independent valid-state allow-lists when they can derive from one canonical
+  contract.
 - **Migration discipline:** Before generating a new Django migration, check
   the base branch (`git fetch origin dev && git show origin/dev:flowdocs/core/migrations/`)
   to determine the next available number. Renumber manually if needed; never

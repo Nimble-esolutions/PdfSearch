@@ -121,6 +121,19 @@ profile. If a control is disabled, read its adjacent guidance: local
 maintenance policy, runtime read-only posture, external embedding policy, and
 force-reindex approval are independent gates.
 
+Category pages use those same server checks before presenting index actions. If
+the active search source has not been verified, the page disables repair and
+reprocessing, explains that no signed active generation is available, and links
+to Restore/Activation guidance. This is not a missing API key or a failed PDF;
+it prevents maintenance from deriving a candidate from unverified mounted
+bytes. After a verified generation is activated, refresh the category page and
+use the bounded preview flow. A direct or stale form submission is checked
+again and redirects to the same recovery guidance instead of creating a job.
+Recovery guidance opens the Data protection recovery-point register; routine
+index guidance opens Search maintenance. Older bookmarked `?section=...` links
+are translated to the same current task and retain any selected plan, job, or
+profile context.
+
 Advanced Vault and runtime evidence is collapsed on the Documents & Search
 page. Expand it only when diagnosing publication or recovery; routine document
 care does not require interpreting generation, lease, or authority identifiers.
