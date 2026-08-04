@@ -128,8 +128,8 @@ test.describe('Operations Cockpit', () => {
 
     await page.goto('/dashboard/?readiness=unavailable');
     await page.getByRole('link', { name: /Codex Smoke Category Renamed/ }).first().click();
-    await expect(page.getByText('Document file is unavailable')).toBeVisible();
     const unavailableRecord = page.locator('.document-record').filter({ hasText: 'Codex Unavailable PDF' });
+    await expect(unavailableRecord.getByText('Document file is unavailable').first()).toBeVisible();
     await unavailableRecord.locator('summary[aria-label^="Manage document"]').click();
     const editKeywords = page.getByRole('button', { name: 'Edit Keywords' });
     await editKeywords.hover();
@@ -191,7 +191,7 @@ test.describe('Operations Cockpit', () => {
 
     await switchLanguage(page, 'mr');
     await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
-    await expect(page.getByText('दस्तऐवज संचिका उपलब्ध नाही')).toBeVisible();
+    await expect(unavailableRecord.getByText('दस्तऐवज संचिका उपलब्ध नाही').first()).toBeVisible();
     await expect(page.getByText('अपेक्षित संचिका आकार (बाइटमध्ये)').first()).toHaveCount(1);
     await expectNoVisibleMachineTokens(page);
 
@@ -236,7 +236,12 @@ test.describe('Operations Cockpit', () => {
     await page.keyboard.press('Enter');
     await expect(firstRecord.locator('.document-action-panel')).toBeVisible();
     await expect(firstRecord.getByRole('button', { name: /Rename PDF/ })).toBeVisible();
-    await expect(firstRecord.getByRole('button', { name: /Delete PDF/ })).toBeVisible();
+    const dangerZone = firstRecord.locator('.document-advanced--danger');
+    const permanentDelete = dangerZone.locator('button[aria-label^="Delete PDF permanently"]');
+    await expect(dangerZone.getByText('Danger Zone', { exact: true })).toBeVisible();
+    await expect(permanentDelete).toBeHidden();
+    await dangerZone.locator('summary').click();
+    await expect(permanentDelete).toBeVisible();
     await expectNoSeriousAxeViolations(page);
   });
 
