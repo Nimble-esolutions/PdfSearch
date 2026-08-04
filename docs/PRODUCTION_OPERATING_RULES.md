@@ -104,6 +104,22 @@ activation; on crash recovery, it detects partial activations and rolls back
 to the last known-good state. Never manually move or symlink data directories
 on a live instance.
 
+### Release migrations on an activated runtime
+
+Treat the migration plan as a release artifact. The activated-runtime startup
+path may apply only operations accepted by `apply_safe_runtime_migrations` and
+only after a verified paired recovery set exists. The accepted class is
+deliberately narrow: new tables, new indexes, state-only model metadata, and
+field metadata changes that produce no database DDL. Data migrations, custom
+SQL, field/table rewrites, rename/removal, reverse plans, and unknown operations
+must use an isolated candidate or expand-contract rollout.
+
+Start web first; maintenance depends on web health and must never race schema
+application. If the new image exits, restore the previous exact digest and
+prove `/readyz`, signed generation identity, and indexing ratio before retrying.
+Never solve a pending migration by changing runtime path variables, disabling
+activation, editing `django_migrations`, or executing ad hoc SQL.
+
 ### Restore Pipeline
 
 The restore pipeline (`core/restore_pipeline.py`) enforces a strict sequence:

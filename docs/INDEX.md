@@ -7,6 +7,10 @@ Supersedes: None
 
 # Documentation Index
 
+## Current operational incidents and decisions
+
+- [Activated-runtime additive migration rollout](incidents/2026-08-04-activated-runtime-migration-gap.md)
+
 ## Current operational status
 
 - [STATUS-2026-08-03.md](STATUS-2026-08-03.md) — canonical current record for

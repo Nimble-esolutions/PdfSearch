@@ -1,13 +1,14 @@
 # Staging Runtime Activation
 
-## Current stage state (2026-08-02)
+## Current stage state (2026-08-04)
 
-The cloned legacy generation is quarantine-ready but not active. The current
-stage route is healthy at the container level while /readyz remains 503 because
-there is no signed active generation and no stage backup receipt. Keep both
-activation flags at zero until the control database contains the prepared
-generation, exact canonical manifest digest, validation evidence, and an
-approved signed activation request.
+The cloned legacy generation is signed and active. The current stage route and
+`/readyz` return `200`, the active generation is
+`dataops-import-legacy-20260802-86288855-stage-2026`, and the indexing ratio is
+`1.0`. On 2026-08-04 a release containing migration `core.0028` correctly
+failed closed under the older startup contract and automatically rolled back to
+the prior certified image; the signed generation remained ready throughout the
+recovery. See the incident record linked from `docs/INDEX.md`.
 
 The stage environment uses DATAOPS_RESTORE_PROFILE=stage_2026 and
 DATAOPS_BACKUP_PROFILE=stage_2026. The legacy prod_flowdocs mount remains
@@ -102,6 +103,40 @@ Separating operational/session writes from immutable content custody is
 residual architecture debt. Until that storage split exists, verification must
 compare database schema and table-level content, explicitly allow only those
 operational fields, and fail closed on any other drift.
+
+### Release schema upgrades
+
+An activated runtime must not require a manual environment switch for an
+ordinary additive release. Web startup runs `apply_safe_runtime_migrations`
+when the signed active database has pending migrations. The command acquires a
+control-volume lock, classifies the complete forward plan, creates or reuses a
+verified paired application/control recovery set, applies the plan, and proves
+that no migration remains. Maintenance starts only after web is healthy.
+
+The automatic path accepts only:
+
+- new models/tables;
+- new indexes;
+- model option/manager state changes; and
+- `AlterField` operations that Django proves produce no database change.
+
+It rejects custom Python or SQL, field additions/removals or database-changing
+alterations, constraints added to existing tables, model/table deletion or
+rename, reverse plans, and unknown operations. Rejected plans retain the prior
+image/runtime and require an isolated candidate or an expand-contract release.
+Do not bypass the classifier by disabling activation or running `migrate`
+directly against the active SQLite file.
+
+Preview the decision without mutation:
+
+```bash
+docker compose exec -T --user appuser web \
+  python manage.py apply_safe_runtime_migrations --check
+```
+
+No new environment variable enables this behavior. Safety comes from the
+operation classifier, recovery evidence, deployment order, and fail-closed
+startup result.
 
 The smoke-query file must contain at least one English and one Marathi query:
 
