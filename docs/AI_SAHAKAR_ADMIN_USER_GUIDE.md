@@ -121,6 +121,21 @@ profile. If a control is disabled, read its adjacent guidance: local
 maintenance policy, runtime read-only posture, external embedding policy, and
 force-reindex approval are independent gates.
 
+Scope defaults are shown beside each maintenance action. With no category
+selected, **Validate files**, **Repair stored indexes**, and **Reindex only what
+is needed** preview all eligible records (still bounded by the preview limit);
+they do not start work until the preview is confirmed. **Reindex a selected
+scope** never assumes all documents and requires an explicit category or
+document scope. A filter that matches no eligible document produces an
+informational no-match result and changes nothing.
+
+Failed work appears under **Needs attention** with a plain-language cause,
+consequence, next action, and collapsed technical evidence. Retry is offered
+only when the operation is currently capable of running. If a signed source,
+worker, embedding provider, or maintenance policy is still unavailable, resolve
+that requirement first; the retry control becomes available after the server
+can prove the prerequisite.
+
 Category pages use those same server checks before presenting index actions. If
 the active search source has not been verified, the page disables repair and
 reprocessing, explains that no signed active generation is available, and links

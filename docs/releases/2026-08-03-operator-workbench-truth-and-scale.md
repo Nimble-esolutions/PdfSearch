@@ -25,6 +25,8 @@ underlying mutation safety gates:
 | Deployment validation rejected the approved stage `:latest` channel | Stage permits one shared always-pulled image reference; production still requires an immutable digest |
 | Category index buttons looked usable even though the runtime would reject them | The category page consumes the server capability decision, explains one shared blocker, and disables dead-end submissions |
 | Recovery guidance used a retired `?section=...` route that discarded the task | One canonical resolver sends recovery, maintenance, jobs, and configuration guidance to the current DataOps v3 page while retaining plan/job/profile context |
+| An enabled validation button rejected its untouched form as `empty_scope` | Safe preview actions state and implement an all-eligible default; selected reindexing remains explicit-scope only |
+| Failed maintenance collapsed every cause into one generic error and offered futile retries | Approved typed causes retain authored guidance and a real recovery link; retry rechecks current capability before it is shown or accepted |
 
 ## Certification incidents and durable judgments
 
@@ -34,6 +36,7 @@ underlying mutation safety gates:
 | Real category page and mobile screenshot | The template rendered index forms from counts and role alone while POST used `capability_reasons()` | Render and submit paths share one capability authority; test blocked and enabled HTML states |
 | Stale-submit redirect test | DataOps v3 treated every legacy section as Search maintenance and dropped task context | Stable reason sections resolve centrally to current task URLs; compatibility tests cover recovery, maintenance, jobs, configuration, and contextual identifiers |
 | Local browser verification | The running Docker service still contained the prior image after source edits | UI claims require rebuilding/recreating the relevant local service and validating the rendered page, not reading source alone |
+| Real untouched validation submission | The form looked ready but backend normalization required a category that the UI did not mark required | An enabled button is tested in its default state; empty-scope meaning is explicit and broad selected operations never infer all |
 
 ```mermaid
 flowchart LR
@@ -65,9 +68,15 @@ flowchart LR
 ## Safety properties retained
 
 - Maintenance mutations remain POST-only and superadmin-only.
-- Preview expiry, idempotency, non-empty scope, state-version checks,
+- Preview expiry, idempotency, non-empty preview result, state-version checks,
   source-digest revalidation, recovery-set creation, and exact confirmation are
   unchanged.
+- Validation, stored-index repair, and needed-only reindex may preview all
+  eligible records when no category is selected; the 5,000-document bound and
+  confirm-before-queue gate remain. Selected/force reindex still requires an
+  explicit scope.
+- Failed jobs remain visible even when retry is currently unsafe. Retry is
+  projected and accepted only after a fresh server capability check.
 - Ordinary admins can inspect state but do not receive dead mutation buttons.
 - Rename and owner assignment preserve only validated same-origin return URLs.
 - Recovery-evidence validation reopens the exact document/action disclosure;
