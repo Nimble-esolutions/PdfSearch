@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
+Last verified: 2026-08-04
 Canonical source: README.md
 Supersedes: None
 
@@ -39,6 +39,7 @@ Use the route that matches the work:
 - Public/admin design lock: [`docs/design/AI_SAHAKAR_UI_CONTRACT.md`](docs/design/AI_SAHAKAR_UI_CONTRACT.md)
 - Developer UI guide: [`docs/AI_SAHAKAR_DEVELOPER_GUIDE.md`](docs/AI_SAHAKAR_DEVELOPER_GUIDE.md)
 - Admin user guide: [`docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md`](docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md)
+- Multi-file intake and document lifecycle: [`docs/DOCUMENT_INTAKE_WORKBENCH.md`](docs/DOCUMENT_INTAKE_WORKBENCH.md)
 - `dev` cleanup scope: [`docs/DEV_CLEANUP_SCOPE.md`](docs/DEV_CLEANUP_SCOPE.md)
 - Environment impact guide and reviewed examples: [`docs/ENVIRONMENT_CONFIGURATION_GUIDE.md`](docs/ENVIRONMENT_CONFIGURATION_GUIDE.md), [`docs/environments/`](docs/environments/)
 - Contribution and dev-to-release workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md)
@@ -116,7 +117,7 @@ Visual sources:
 | Area | Owns | Start with |
 | --- | --- | --- |
 | Django shell | settings, URLs, WSGI/ASGI, runtime paths | flowdocs/flowdocs/ |
-| Safety and lifecycle | environment identity, side-effect policy, restore, activation, leases | flowdocs/core/ |
+| Safety and lifecycle | environment identity, upload intake, document lifecycle, restore, activation, leases | flowdocs/core/ |
 | Document intelligence | PDF extraction, OCR fallback, chunking, embeddings, FAISS/Chroma | flowdocs/data/ |
 | Data Operations | profile selection, backup/restore routes, operation contracts, readiness | flowdocs/dataops/ |
 | Vault Operations | control database, workbench, receipts, signed activation, supervisors | flowdocs/vaultops/ |

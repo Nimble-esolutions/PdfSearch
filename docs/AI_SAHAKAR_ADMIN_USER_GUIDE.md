@@ -37,13 +37,21 @@ boundary, not a broken visual control.
 The operational flow is:
 
 ```text
-Dashboard → Category Yard → PDF intake → queued maintenance/indexing
+Dashboard → Category Yard → reviewed PDF intake → grouped maintenance/indexing
 → Search readiness → public source-backed answers
 ```
 
-Create or select the correct category, upload an approved PDF, and wait for its
-processing/indexing state before relying on search. Use descriptive titles and
-retain the original official file through the approved document policy.
+Create or select the correct category, choose up to 50 approved PDFs, review
+their generated titles, and select **Receive Selected Files**. Resolve any
+individual rejection before selecting **Process Ready Documents**. The intake
+then queues one grouped job while retaining per-document status. Wait for the
+Searchable state before relying on a new document in search.
+
+Use **Actions** for contextual recovery. **Remove from Search** asks why the
+document should be hidden and preserves the PDF. **Retry Processing** queues
+only the incomplete document. Permanent deletion is restricted to the
+superadmin Danger Zone and is not the normal way to remove a document from
+search. See [DOCUMENT_INTAKE_WORKBENCH.md](DOCUMENT_INTAKE_WORKBENCH.md).
 
 The attention queue is ordered by operational impact. Category filters are
 server-calculated and can be combined for readiness, provenance, occupancy, and

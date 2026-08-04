@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
+Last verified: 2026-08-04
 Canonical source: docs/INDEX.md
 Supersedes: None
 
@@ -110,12 +110,13 @@ maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
 
 - [`CLIENT_USER_MANUAL.md`](CLIENT_USER_MANUAL.md) — sign-in, upload, search, permissions, and support guidance
 - [`AI_SAHAKAR_ADMIN_USER_GUIDE.md`](AI_SAHAKAR_ADMIN_USER_GUIDE.md) — Operations Cockpit and document-management workflow
+- [`DOCUMENT_INTAKE_WORKBENCH.md`](DOCUMENT_INTAKE_WORKBENCH.md) — reviewed multi-file intake, receipt states, reason-based lifecycle controls, impact, and verification
 - [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md) — protected public/admin design and interaction contract
 - [`AI_SAHAKAR_DEVELOPER_GUIDE.md`](AI_SAHAKAR_DEVELOPER_GUIDE.md) — safe UI extension and verification workflow
 - [`DEV_CLEANUP_SCOPE.md`](DEV_CLEANUP_SCOPE.md) — read-only cleanup audit for `dev`
 - `/dashboard/operations/` — operations dashboard
 - `/dashboard/users/` — user management dashboard
-- PDF lifecycle — PDF upload, processing, indexing, and archival lifecycle
+- PDF lifecycle — reviewed intake, receipt, processing, indexing, reversible search removal, and custody-aware recovery
 - Generation lifecycle — data generation creation, validation, and promotion lifecycle
 
 ## Management Commands

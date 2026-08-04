@@ -146,10 +146,14 @@ not be confused with byte-level restore/activation evidence.
 
 ### PDF Lifecycle
 
-PDFs follow: `uploaded` → `processing` → `ready` → `deprecated` → `archived`.
-Deprecated PDFs are hidden from search. Archived PDFs are hidden from both
-search and dashboard. Restore resets to `uploaded` and requeues reindex.
-Lifecycle transitions are role-gated (superadmin for deprecate/archive).
+New PDFs follow `intake` → `uploaded`/`processing` → `ready`. The `intake`
+state is never searchable. A reason-based Remove from Search action transitions
+an ordinary searchable state to `deprecated` (superseded) or `archived`
+(historical record) while preserving the file and dashboard register row.
+`unavailable` remains custody-evidence-gated. Restore resets a hidden document
+to `uploaded` and requires processing before it is searchable again. Permanent
+deletion is superadmin-only and requires an exact typed confirmation plus a
+written reason.
 
 ## Startup and Health
 
