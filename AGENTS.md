@@ -124,6 +124,17 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   push two branches with the same migration number. The CI migration guard
   (`scripts/ci/validate_migrations.py`) catches collisions at PR time, but
   avoid them by checking first.
+- **Activated-runtime migration discipline:** A release with pending migrations
+  must be classified before deployment. Activated-runtime startup may apply
+  only recovery-backed additive operations accepted by
+  `apply_safe_runtime_migrations`; custom Python/SQL, data movement, field or
+  table rewrites, rename/removal, reverse, and unknown operations must fail
+  closed and use an isolated candidate/expand-contract rollout. Never disable
+  activation, point environment paths at the active generation, fake migration
+  history, or mutate its SQLite file with an ad hoc container. Deploy web
+  first and start maintenance only after web health proves schema readiness.
+  A failed new-image startup must restore the previous image and prove the
+  signed generation/readiness evidence before another attempt.
 - **Test file isolation:** When multiple PRs add test classes that would
   conflict in a monolithic `tests.py`, split new test classes into separate
   files (`core/tests/test_feature.py`) and import from `__init__.py`. This
