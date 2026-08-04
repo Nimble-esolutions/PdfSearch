@@ -127,8 +127,8 @@ REASONS = {
         "Maintenance work needs review",
         "A local maintenance job did not complete.",
         "The active runtime remains unchanged, but the requested work is incomplete.",
-        "Review jobs",
-        "jobs",
+        "Review maintenance evidence",
+        "maintenance",
         "danger",
     ),
     "index_debt_present": (
