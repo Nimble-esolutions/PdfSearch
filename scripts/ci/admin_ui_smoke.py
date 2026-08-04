@@ -240,13 +240,24 @@ def main():
 
         folder_page = client.get(f"/dashboard/folder/{folder.pk}/")
         require(folder_page.status_code == 200, f"folder page failed: {folder_page.status_code}")
-        require(
-            "Document Workbench" in folder_page.text
-            and "Blast Radius" in folder_page.text
-            and "Edit Keywords" in folder_page.text
-            and "PDF Title" in folder_page.text,
-            "folder UI missing",
-        )
+        for expected in (
+            "Document Workbench",
+            "Edit Keywords",
+            "Intake manifest",
+            "Official register",
+            "Registry overview",
+            "Receive Selected Files",
+            "Process Ready Documents",
+            "PDF Title",
+            'data-pdf-intake',
+            'data-max-files="50"',
+            'name="files"',
+            'multiple',
+        ):
+            require(
+                expected in folder_page.text,
+                f"document intake workbench missing: {expected}",
+            )
 
         token = csrf_token(folder_page.text)
         update_keywords = client.post(
