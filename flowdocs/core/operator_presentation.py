@@ -1050,6 +1050,7 @@ UI_REASON_CODES = frozenset(
         "unknown_operation",
         "workspace_not_activation_ready",
         "empty_scope",
+        "maintenance_scope_required",
     }
 )
 
@@ -1421,6 +1422,14 @@ REASONS.update(
             "The selected folders, documents, and filters produced no eligible work.",
             "No maintenance plan was created.",
             "Choose a different scope",
+            "maintenance",
+            "info",
+        ),
+        "maintenance_scope_required": _authored(
+            "Choose a scope for selected reindexing",
+            "Selected reindexing never assumes every document. Choose at least one category or document before previewing it.",
+            "No maintenance plan was created and active search is unchanged.",
+            "Choose categories and preview again",
             "maintenance",
             "info",
         ),

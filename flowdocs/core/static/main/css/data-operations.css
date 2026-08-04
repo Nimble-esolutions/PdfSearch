@@ -139,6 +139,9 @@
 .maintenance-shared-blocker { margin: .9rem 0; padding: .85rem 1rem; background: #fff7e8; border: 1px solid #d9b876; border-left: 4px solid var(--dataops-ochre); }
 .maintenance-shared-blocker > p:last-child { margin-bottom: 0; color: var(--dataops-muted); font-size: .78rem; }
 .maintenance-action-availability { margin-top: auto; font-weight: 700; }
+.maintenance-action-scope { margin-top: auto; padding-top: .45rem; color: var(--dataops-muted); font-size: .76rem; }
+.maintenance-retry-blocker { margin-top: .75rem; padding: .75rem; border-left: 4px solid var(--dataops-ochre); background: #fff7e8; }
+.maintenance-retry-blocker > p { margin: .25rem 0 .65rem; }
 .maintenance-scope { margin-top: 1rem; }
 .maintenance-scope__toolbar { display: grid; grid-template-columns: minmax(14rem, 1fr) auto; align-items: end; gap: .65rem 1rem; margin-bottom: .7rem; }
 .maintenance-scope__toolbar > label { display: grid !important; gap: .25rem; margin: 0 !important; }

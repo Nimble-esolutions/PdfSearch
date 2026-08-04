@@ -19,6 +19,7 @@ from django.views.decorators.http import require_GET, require_POST
 from core.views import superadmin_required
 from core.maintenance_plans import (
     MaintenancePlanError,
+    capability_reasons,
     create_plan as create_maintenance_plan,
     queue_plan as queue_maintenance_plan,
     workbench_maintenance_state,
@@ -343,18 +344,25 @@ def _mutation_error(request, exc, *, section="overview"):
             section,
             type(exc).__name__,
         )
+    presentation = present_reason(reason_code)
     if _wants_json(request):
         return _api_response(
             status="blocked",
             reason_code=reason_code,
-            severity="warning",
-            recommended_action="Refresh state and review the blocking reason.",
+            severity=presentation["severity"],
+            recommended_action=presentation["action_label"],
             http_status=http_status,
         )
-    presentation = present_reason(reason_code)
+    message_parts = [presentation["title"], presentation["detail"]]
+    if presentation["consequence"]:
+        message_parts.append(presentation["consequence"])
+    if presentation["action_label"]:
+        message_parts.append(
+            gettext("Next: %(action)s") % {"action": presentation["action_label"]}
+        )
     messages.error(
         request,
-        f"{presentation['title']} {presentation['detail']}",
+        " ".join(part for part in message_parts if part),
     )
     response = _form_redirect(section)
     # Keep browser-driven operations diagnosable without exposing exception
@@ -546,6 +554,9 @@ def _local_job_action(request, job_id, *, action):
             event_type = "cancelled"
             reason_code = "maintenance_job_cancellation_recorded"
         elif action == "retry" and job.status == "failed":
+            reason = capability_reasons().get(job.kind, "unknown_operation")
+            if reason:
+                raise MaintenancePlanError(reason)
             job.status = "queued"
             job.error_summary = ""
             job.finished_at = None
