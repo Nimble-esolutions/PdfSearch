@@ -37,6 +37,16 @@ class Folder(models.Model):
         return self.name
 
 
+PDF_LIFECYCLE_CHOICES = (
+    ("intake", "Intake"),
+    ("uploaded", "Uploaded"),
+    ("processing", "Processing"),
+    ("ready", "Ready"),
+    ("deprecated", "Deprecated"),
+    ("archived", "Archived"),
+    ("unavailable", "Unavailable"),
+)
+VALID_PDF_LIFECYCLES = frozenset(value for value, _label in PDF_LIFECYCLE_CHOICES)
 SEARCHABLE_PDF_LIFECYCLES = ("uploaded", "processing", "ready")
 
 
@@ -102,15 +112,7 @@ class PDFFile(models.Model):
     embedding_dimension = models.PositiveIntegerField(null=True, blank=True)
     lifecycle = models.CharField(
         max_length=20,
-        choices=(
-            ("intake", "Intake"),
-            ("uploaded", "Uploaded"),
-            ("processing", "Processing"),
-            ("ready", "Ready"),
-            ("deprecated", "Deprecated"),
-            ("archived", "Archived"),
-            ("unavailable", "Unavailable"),
-        ),
+        choices=PDF_LIFECYCLE_CHOICES,
         default="uploaded",
         help_text="Document lifecycle state for search and visibility control",
     )

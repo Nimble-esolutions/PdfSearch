@@ -23,6 +23,7 @@ from core.media_quarantine import (
     storage_key_evidence,
     verify_local_media_file,
 )
+from core.models import VALID_PDF_LIFECYCLES
 
 
 INVENTORY_SCHEMA = "pdfsearch-artifact-inventory/v1"
@@ -421,17 +422,9 @@ def build_manifest(
         }
     )
     missing_rows = sum(not item["exists"] for item in pdf_rows)
-    valid_lifecycles = {
-        "uploaded",
-        "processing",
-        "ready",
-        "deprecated",
-        "archived",
-        "unavailable",
-    }
     if "lifecycle" in pdf_schema["columns"]:
         lifecycle_invalid = any(
-            item["metadata"].get("lifecycle") not in valid_lifecycles
+            item["metadata"].get("lifecycle") not in VALID_PDF_LIFECYCLES
             for item in pdf_rows
         )
     else:

@@ -18,6 +18,7 @@ from core.media_quarantine import (
     build_unavailable_attestation,
     validate_unavailable_attestation,
 )
+from core.models import VALID_PDF_LIFECYCLES
 from core.global_writer import (
     acquire_global_writer,
     release_global_writer,
@@ -284,18 +285,10 @@ def _validate_snapshot_media_evidence(evidence):
         or counts.get("pdf_rows") != len(pdfs)
     ):
         raise PublicationError("snapshot_media_evidence_invalid")
-    valid_lifecycles = {
-        "uploaded",
-        "processing",
-        "ready",
-        "deprecated",
-        "archived",
-        "unavailable",
-    }
     if any(
         not isinstance(item, dict)
         or not isinstance(item.get("metadata"), dict)
-        or item["metadata"].get("lifecycle") not in valid_lifecycles
+        or item["metadata"].get("lifecycle") not in VALID_PDF_LIFECYCLES
         for item in pdfs
     ):
         raise PublicationError("snapshot_media_evidence_invalid")

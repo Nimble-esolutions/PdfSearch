@@ -38,7 +38,17 @@ from .configuration_registry import build_configuration_groups
 from . import utils as core_utils
 from .data_release_validation import validate_release
 from .management.commands.inventory_artifacts import build_manifest, compare_manifests
-from .models import Folder, PDFFile, MaintenanceJob, MaintenanceAuditEvent, MaintenancePlan, ArtifactGeneration, ArtifactValidation, SiteSetting
+from .models import (
+    ArtifactGeneration,
+    ArtifactValidation,
+    Folder,
+    MaintenanceAuditEvent,
+    MaintenanceJob,
+    MaintenancePlan,
+    PDFFile,
+    SiteSetting,
+    VALID_PDF_LIFECYCLES,
+)
 from .maintenance import run_job, queue_job, _audit, _record_validation, promote_active_generation, rollback_to_generation, purge_generation, purge_expired_generations, deprecate_pdf, archive_pdf, bind_unavailable_recovery_evidence, mark_pdf_unavailable, restore_pdf, restore_unavailable_pdf, _verified_local_media_evidence
 from .media_quarantine import (
     MediaFileUnsafeError,
@@ -1995,6 +2005,48 @@ class ArtifactInventoryTests(TestCase):
         self.assertFalse(pdf['exists'])
         self.assertEqual(pdf['file_status'], 'missing')
         self.assertIsNone(pdf['sha256'])
+
+    def test_inventory_accepts_every_model_lifecycle_including_intake(self):
+        root = self._root_with_pdf()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.execute(
+            'ALTER TABLE core_pdffile ADD COLUMN lifecycle varchar(20)'
+        )
+        connection.commit()
+
+        try:
+            for lifecycle in sorted(VALID_PDF_LIFECYCLES):
+                with self.subTest(lifecycle=lifecycle):
+                    connection.execute(
+                        'UPDATE core_pdffile SET lifecycle = ? WHERE id = 1',
+                        (lifecycle,),
+                    )
+                    connection.commit()
+                    manifest = build_manifest(root)
+                    self.assertEqual(
+                        manifest['pdfs'][0]['metadata']['lifecycle'],
+                        lifecycle,
+                    )
+        finally:
+            connection.close()
+
+    def test_inventory_rejects_lifecycle_outside_model_contract(self):
+        root = self._root_with_pdf()
+        connection = sqlite3.connect(root / 'db.sqlite3')
+        connection.execute(
+            'ALTER TABLE core_pdffile ADD COLUMN lifecycle varchar(20)'
+        )
+        connection.execute(
+            "UPDATE core_pdffile SET lifecycle = 'unknown' WHERE id = 1"
+        )
+        connection.commit()
+        connection.close()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            '^pdf_inventory_lifecycle_invalid$',
+        ):
+            build_manifest(root)
 
     def test_inventory_rejects_symlinked_media_entries(self):
         root = self._root_with_pdf()
