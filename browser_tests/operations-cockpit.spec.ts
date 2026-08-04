@@ -136,13 +136,14 @@ test.describe('Operations Cockpit', () => {
     await expectNoSeriousAxeViolations(page);
     await editKeywords.focus();
     await expectNoSeriousAxeViolations(page);
-    await expect(page.getByText('document_media_unavailable')).toBeHidden();
-    const technical = page.getByText('Technical details').first();
+    const unavailableCode = unavailableRecord.getByText('document_media_unavailable', { exact: true });
+    await expect(unavailableCode).toBeHidden();
+    const technical = unavailableRecord.getByText('Technical details').first();
     await technical.focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByText('document_media_unavailable')).toBeVisible();
+    await expect(unavailableCode).toBeVisible();
     await page.keyboard.press('Enter');
-    await expect(page.getByText('document_media_unavailable')).toBeHidden();
+    await expect(unavailableCode).toBeHidden();
 
     const bindRecovery = unavailableRecord.getByText('Bind recovery evidence').first();
     await bindRecovery.click();
