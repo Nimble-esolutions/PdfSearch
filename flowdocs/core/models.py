@@ -103,6 +103,7 @@ class PDFFile(models.Model):
     lifecycle = models.CharField(
         max_length=20,
         choices=(
+            ("intake", "Intake"),
             ("uploaded", "Uploaded"),
             ("processing", "Processing"),
             ("ready", "Ready"),
@@ -342,6 +343,108 @@ class MaintenanceJobItem(models.Model):
         ]
         indexes = [
             models.Index(fields=["job", "status"]),
+        ]
+
+
+class UploadBatch(models.Model):
+    """Durable intake manifest assembled before PDF processing is queued."""
+
+    MAX_FILES = 50
+    STATUS_CHOICES = (
+        ("draft", "Draft"),
+        ("finalized", "Finalized"),
+        ("discarded", "Discarded"),
+        ("expired", "Expired"),
+    )
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    folder = models.ForeignKey(
+        Folder,
+        on_delete=models.PROTECT,
+        related_name="upload_batches",
+    )
+    uploader = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="upload_batches",
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="draft")
+    expires_at = models.DateTimeField()
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    maintenance_job = models.ForeignKey(
+        MaintenanceJob,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="upload_batches",
+    )
+    manifest_sha256 = models.CharField(max_length=64, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["status", "expires_at"],
+                name="core_upload_status_9e8a9c_idx",
+            ),
+            models.Index(
+                fields=["uploader", "created_at"],
+                name="core_upload_uploade_7c9b75_idx",
+            ),
+        ]
+
+
+class UploadBatchItem(models.Model):
+    """One retry-idempotent file receipt within an upload batch."""
+
+    STATE_CHOICES = (
+        ("received", "Received"),
+        ("rejected", "Rejected"),
+        ("removed", "Removed"),
+    )
+
+    batch = models.ForeignKey(
+        UploadBatch,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    idempotency_key = models.CharField(max_length=128)
+    original_filename = models.CharField(max_length=255)
+    title = models.CharField(max_length=200)
+    state = models.CharField(max_length=16, choices=STATE_CHOICES)
+    checksum_sha256 = models.CharField(max_length=64, blank=True, default="")
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    error_message = models.CharField(max_length=500, blank=True, default="")
+    pdf_file = models.ForeignKey(
+        PDFFile,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="upload_batch_items",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["batch", "idempotency_key"],
+                name="uniq_upload_item_idempotency",
+            ),
+            models.UniqueConstraint(
+                fields=["pdf_file"],
+                condition=models.Q(pdf_file__isnull=False),
+                name="uniq_upload_item_pdf",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["batch", "state"],
+                name="core_upload_batch_i_48ab08_idx",
+            ),
         ]
 
 
