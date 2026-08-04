@@ -621,7 +621,12 @@ def _serialize_local_job_payload(
         "retry_reason": retry_reason,
     }
     payload["retry_blocker"] = (
-        {"reason_code": retry_reason} if retry_reason else {}
+        {
+            "reason_code": retry_reason,
+            "matches_error": retry_reason == payload["safe_error_code"],
+        }
+        if retry_reason
+        else {}
     )
     candidate_reason = ""
     prepared_workspace_id = ""
@@ -758,7 +763,7 @@ def workbench_maintenance_state(
         maintenance_jobs.filter(
             Q(status="failed")
             | Q(status="completed", options__candidate_state="activation_ready")
-        ).order_by("-created_at", "-pk")
+        ).order_by("-created_at", "-pk")[:20]
     )
     selected_job_id = str(selected_job_id).strip()
     selected_job_record = next(

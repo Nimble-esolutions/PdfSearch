@@ -937,6 +937,11 @@ class MaintenancePlanningTests(TestCase):
             "maintenance_source_pointer_unverified",
         )
         self.assertContains(response, "Retry is not useful yet")
+        self.assertContains(
+            response,
+            "Active search source is not verified",
+            count=2,
+        )
         self.assertNotContains(
             response,
             reverse(

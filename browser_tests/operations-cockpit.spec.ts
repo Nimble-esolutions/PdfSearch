@@ -301,6 +301,30 @@ test.describe('Operations Cockpit', () => {
     await expect(scope.locator('input[type="checkbox"]:checked')).toHaveCount(1);
     await scope.getByRole('button', { name: 'Clear selection' }).click();
     await expect(scope.locator('input[type="checkbox"]:checked')).toHaveCount(0);
+    await expect(
+      page.getByText('No category selected: validate all eligible documents.'),
+    ).toBeVisible();
+    const previewValidation = page.getByRole('button', { name: 'Preview validation' });
+    if (await previewValidation.count()) {
+      const [previewResponse] = await Promise.all([
+        page.waitForResponse(response => (
+          response.request().method() === 'POST'
+          && new URL(response.url()).pathname
+            === '/dashboard/operations/api/v1/maintenance/plans/'
+        )),
+        previewValidation.click(),
+      ]);
+      expect(previewResponse.status()).toBe(302);
+      expect(previewResponse.headers()['x-dataops-reason-code']).toBeUndefined();
+      await expect(page.getByText('Selected preview', { exact: true })).toBeVisible();
+    } else {
+      await expect(
+        page.getByText('Document maintenance is temporarily unavailable'),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('link', { name: 'Review maintenance worker status' }),
+      ).toBeVisible();
+    }
 
     await page.setViewportSize({ width: 320, height: 844 });
     const firstVisible = scope.locator('[data-maintenance-scope-item]:visible').first();
