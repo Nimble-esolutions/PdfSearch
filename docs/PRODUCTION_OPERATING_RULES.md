@@ -155,6 +155,12 @@ to `uploaded` and requires processing before it is searchable again. Permanent
 deletion is superadmin-only and requires an exact typed confirmation plus a
 written reason.
 
+Every persisted lifecycle value must have one canonical code contract. Before
+release, reconcile any state addition against artifact inventory, candidate
+validation, publication, restore, readiness, search filtering, and operator
+capability projection. Keep a negative test proving unknown stored values still
+fail closed.
+
 ## Startup and Health
 
 - Migrations must fail closed.
@@ -189,6 +195,17 @@ written reason.
 - Do not clean or prune the production server during an incident.
 - Separate code rollback from database/data rollback.
 - Perform a restore drill after recovery.
+- Treat an enabled UI control that the server will deterministically reject as
+  an incident-worthy contract mismatch. Preserve the backend safety gate, make
+  the page consume the same capability decision, show one authored blocker and
+  recovery action, and keep a second server-side check for stale pages.
+- A mocked endpoint success test is not operational proof. Reproduce the real
+  rendered posture and run the next release/data gate after the UI flow; this
+  catches state leakage and validator drift that isolated tests can miss.
+- A successful compatibility redirect is not enough. After replacing an
+  operations UI, verify that every legacy section reaches the current recovery,
+  maintenance, job, or configuration task and preserves plan/job/profile
+  context. Centralize this mapping; never let templates guess route semantics.
 
 ## Side-Effect Safety
 
