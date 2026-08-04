@@ -199,6 +199,13 @@ fail closed.
   an incident-worthy contract mismatch. Preserve the backend safety gate, make
   the page consume the same capability decision, show one authored blocker and
   recovery action, and keep a second server-side check for stale pages.
+- Test the untouched/default state of every enabled operator form. State beside
+  the action whether no selection means all eligible records or is forbidden.
+  Validation-style previews may use an explicit bounded all-eligible default;
+  force, destructive, and selected-scope actions must never widen silently.
+- Do not turn a known failed job into a retry loop. Preserve an approved stable
+  failure code for authored operator guidance, keep raw exceptions server-side,
+  and recheck current capability both when projecting and accepting retry.
 - A mocked endpoint success test is not operational proof. Reproduce the real
   rendered posture and run the next release/data gate after the UI flow; this
   catches state leakage and validator drift that isolated tests can miss.

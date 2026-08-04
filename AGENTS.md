@@ -96,6 +96,16 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
   action before submission; retain the server recheck for stale-page races.
   Mocked success-path tests do not prove a control is usable in a real runtime
   posture—add blocked and enabled rendered-state tests.
+- **Action-default and recovery parity:** Before rendering an enabled operator
+  button, test its untouched/default submission against the real handler. The
+  page must state whether an empty selection means all eligible records or is
+  forbidden; broad or destructive actions must never infer “all.” Every
+  refusal must render authored cause, consequence, and a working next-action
+  link. A failed-job retry must recheck current capability and stay unavailable
+  when the same unmet prerequisite would make it fail again. Cover default,
+  selected, no-match, stale, blocked, failed-worker, and retry states before
+  claiming the control works. Source inspection or a rendered button alone is
+  not evidence.
 - **Operator destination parity:** Stable reason sections are evidence, not
   URLs. Resolve them through `core.operator_navigation`; do not construct
   `?section=...` links in templates or views. When a control-plane UI is

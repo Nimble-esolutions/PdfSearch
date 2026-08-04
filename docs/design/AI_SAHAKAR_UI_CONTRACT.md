@@ -109,7 +109,7 @@ Every interactive component must retain understandable static states:
 | Answer | complete accessible text, source summary, disclaimer, functional actions |
 | Source card/drawer | missing metadata handled, long/Devanagari names wrap, Escape close, focus restore |
 | Error/no-result | plain-language cause, retry or next action, no raw exception |
-| Admin action | permission-aware, confirmation for destructive work, success/error feedback |
+| Admin action | permission-aware; explicit empty-scope behavior; confirmation for destructive work; success/error feedback; retry hidden or disabled while its prerequisite remains unmet |
 
 ## Machine evidence and operator language
 
@@ -121,6 +121,15 @@ authored English and Marathi:
 - what happened or why the control is unavailable;
 - the operational consequence; and
 - the safest next action.
+
+An enabled button is a promise that its default form state has a valid,
+documented meaning. Safe bounded discovery actions may define no selection as
+all eligible records, but must say so beside the button. A force, destructive,
+or explicitly selected action must require scope and must never silently widen
+to all records. Server-side checks remain authoritative. When they refuse a
+stale request, the response must preserve a stable reason and send the operator
+to a real recovery destination. Do not offer retry while the current
+capability check proves the same attempt will fail again.
 
 Dashboard, public, and ordinary-user surfaces never display internal codes.
 Authorized superadmins may reveal bounded, redacted evidence through the shared
