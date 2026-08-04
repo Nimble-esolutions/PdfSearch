@@ -9,6 +9,8 @@ from copy import deepcopy
 from django.urls import reverse
 from django.utils.translation import gettext, gettext_noop
 
+from .operator_navigation import operator_section_url
+
 
 UNKNOWN_REASON = {
     "title": "Additional technical evidence requires review.",
@@ -1655,7 +1657,7 @@ def present_reason(code, *, action_url=""):
         if section == "dashboard":
             action_url = reverse("dashboard")
         else:
-            action_url = f"{reverse('operations_panel')}?section={section}"
+            action_url = operator_section_url(section)
     return {
         "title": gettext(title),
         "detail": gettext(detail),

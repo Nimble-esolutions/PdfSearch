@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.models import MaintenanceJob, MaintenancePlan
+from core.operator_navigation import operator_section_url
 from dataops.config import resolve_profiles
 from dataops.models import (
     BackupJob,
@@ -46,6 +47,49 @@ class DataOpsControlPlaneUITests(TestCase):
             self.assertNotContains(overview, "Choose one outcome")
             advanced = self.client.get(reverse("dataops:advanced"))
             self.assertContains(advanced, "Choose one outcome")
+
+    def test_legacy_section_links_keep_the_requested_v3_task_and_context(self):
+        for section in (
+            "overview",
+            "restore",
+            "activation",
+            "generations",
+            "retention",
+            "maintenance",
+            "jobs",
+            "sync",
+            "configuration",
+        ):
+            with self.subTest(section=section):
+                response = self.client.get(
+                    reverse("operations_panel"),
+                    {"section": section},
+                )
+                self.assertRedirects(
+                    response,
+                    operator_section_url(section),
+                    fetch_redirect_response=False,
+                )
+
+        maintenance = self.client.get(
+            reverse("operations_panel"),
+            {"section": "maintenance", "plan": "plan-1", "job": "job-1"},
+        )
+        configuration = self.client.get(
+            reverse("operations_panel"),
+            {"section": "configuration", "profile": "stage"},
+        )
+
+        self.assertRedirects(
+            maintenance,
+            operator_section_url("maintenance", plan="plan-1", job="job-1"),
+            fetch_redirect_response=False,
+        )
+        self.assertRedirects(
+            configuration,
+            operator_section_url("configuration", profile="stage"),
+            fetch_redirect_response=False,
+        )
 
     def test_compatibility_refresh_is_read_only_and_does_not_regress_to_500(self):
         response = self.client.post(reverse("dataops:refresh"))

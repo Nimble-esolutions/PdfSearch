@@ -59,7 +59,8 @@ from .media_quarantine import (
     validate_unavailable_attestation,
     verify_local_media_file,
 )
-from .maintenance_plans import queue_plan
+from .maintenance_plans import MaintenancePlanError, queue_plan
+from .operator_navigation import operator_section_url
 from .management.commands.run_maintenance_jobs import _recover_orphaned_jobs, _write_heartbeat
 from .worker_readiness import heartbeat_path
 from .views import (
@@ -1701,7 +1702,7 @@ class DashboardTests(TestCase):
         self.assertContains(response, "assigned to new-owner")
         self.assertNotContains(response, "Owner review")
 
-    def test_folder_blast_radius_shows_superadmin_index_controls(self):
+    def test_folder_index_controls_explain_shared_runtime_blocker(self):
         superadmin = get_user_model().objects.create_user(
             username="ops-superadmin",
             password="test-password",
@@ -1717,13 +1718,111 @@ class DashboardTests(TestCase):
         )
         self.client.force_login(superadmin)
 
-        response = self.client.get(reverse("dashboard_folder", args=[folder.pk]))
+        with override_settings(
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            VAULT_MUTATION_TRACKING_ENABLED=True,
+            MAINTENANCE_WORKER_READINESS_REQUIRED=False,
+            EXTERNAL_EMBEDDINGS_ENABLED=True,
+            FORCE_REINDEX_ENABLED=True,
+            ACTIVE_RUNTIME=None,
+            RUNTIME_GENERATION_ID="",
+            RUNTIME_MANIFEST_DIGEST="",
+        ):
+            response = self.client.get(
+                reverse("dashboard_folder", args=[folder.pk])
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Index Operations")
+        self.assertContains(response, "Active search source is not verified")
+        self.assertContains(
+            response,
+            "Restore or activate a verified generation",
+        )
+        self.assertContains(response, "Open search maintenance")
+        self.assertContains(
+            response,
+            'value="repair_stored_index">',
+            html=False,
+        )
+        self.assertFalse(
+            response.context["folder_index_operations"]["any_enabled"]
+        )
+        self.assertEqual(
+            len(response.context["folder_index_operations"]["blockers"]),
+            1,
+        )
+
+    def test_folder_index_controls_are_enabled_when_capabilities_are_ready(self):
+        superadmin = get_user_model().objects.create_user(
+            username="ready-ops-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        folder = Folder.objects.create(name="Documents", created_by=superadmin)
+        PDFFile.objects.create(
+            title="Needs repair",
+            file="pdfs/needs-repair.pdf",
+            folder=folder,
+            uploaded_by=superadmin,
+            indexed=False,
+        )
+        self.client.force_login(superadmin)
+
+        with override_settings(
+            LOCAL_INDEX_MAINTENANCE_ENABLED=True,
+            VAULT_MUTATION_TRACKING_ENABLED=True,
+            MAINTENANCE_WORKER_READINESS_REQUIRED=False,
+            EXTERNAL_EMBEDDINGS_ENABLED=True,
+            FORCE_REINDEX_ENABLED=True,
+            ACTIVE_RUNTIME=None,
+            RUNTIME_GENERATION_ID="generation-ready-test",
+            RUNTIME_MANIFEST_DIGEST="d" * 64,
+        ):
+            response = self.client.get(reverse("dashboard_folder", args=[folder.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Active search source is not verified")
         self.assertContains(response, "Repair Stored Index")
         self.assertContains(response, "Reprocess Needed")
         self.assertContains(response, "Reprocess All")
+        self.assertTrue(
+            response.context["folder_index_operations"]["any_enabled"]
+        )
+        self.assertFalse(
+            response.context["folder_index_operations"]["blockers"]
+        )
+
+    def test_folder_operation_blocker_redirects_to_recovery_guidance(self):
+        superadmin = get_user_model().objects.create_user(
+            username="blocked-ops-superadmin",
+            password="test-password",
+            role="superadmin",
+        )
+        folder = Folder.objects.create(name="Documents", created_by=superadmin)
+        self.client.force_login(superadmin)
+
+        with patch(
+            "core.views.create_maintenance_plan",
+            side_effect=MaintenancePlanError(
+                "maintenance_source_pointer_unverified"
+            ),
+        ):
+            response = self.client.post(
+                reverse("folder_operations", args=[folder.pk]),
+                {"operation": "repair_stored_index"},
+                follow=True,
+            )
+
+        self.assertRedirects(
+            response,
+            operator_section_url("restore"),
+        )
+        self.assertContains(response, "Active search source is not verified")
+        self.assertContains(
+            response,
+            "No signed active search generation is available",
+        )
 
     def test_folder_operations_requires_superadmin(self):
         folder = Folder.objects.create(name="Documents", created_by=self.user)
@@ -1814,7 +1913,7 @@ class DashboardTests(TestCase):
 
         self.assertRedirects(
             response,
-            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            operator_section_url("maintenance", plan=plan.public_id),
             fetch_redirect_response=False,
         )
         pdf.refresh_from_db()
@@ -1871,7 +1970,7 @@ class DashboardTests(TestCase):
 
         self.assertRedirects(
             response,
-            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            operator_section_url("maintenance", plan=plan.public_id),
             fetch_redirect_response=False,
         )
         precompute.assert_called_once_with(needed_pdf, rebuild_index=False)
@@ -1924,7 +2023,7 @@ class DashboardTests(TestCase):
 
         self.assertRedirects(
             response,
-            f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}",
+            operator_section_url("maintenance", plan=plan.public_id),
             fetch_redirect_response=False,
         )
         precompute.assert_not_called()

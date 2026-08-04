@@ -13,6 +13,7 @@ from core.operator_presentation import (
     label_for,
     present_reason,
 )
+from core.operator_navigation import operator_section_url
 from vaultops.runtime_verification_contract import (
     SAFE_RUNTIME_VERIFICATION_REASONS,
 )
@@ -148,11 +149,44 @@ class OperatorPresentationTests(SimpleTestCase):
         )
         self.assertEqual(
             generation["action_url"],
-            "/dashboard/operations/?section=restore",
+            operator_section_url("restore"),
         )
         self.assertEqual(
             observation["action_url"],
-            "/dashboard/operations/?section=jobs",
+            operator_section_url("jobs"),
+        )
+
+    def test_operator_sections_resolve_to_current_v3_tasks(self):
+        expected_sections = {
+            "overview": "/dashboard/data-operations/#dataops-status-heading",
+            "restore": "/dashboard/data-operations/#dataops-recovery-points-heading",
+            "activation": "/dashboard/data-operations/#dataops-recovery-points-heading",
+            "generations": "/dashboard/data-operations/#dataops-recovery-points-heading",
+            "retention": "/dashboard/data-operations/#dataops-recovery-points-heading",
+            "maintenance": (
+                "/dashboard/data-operations/advanced/"
+                "#dataops-search-maintenance-heading"
+            ),
+            "jobs": "/dashboard/data-operations/jobs/",
+            "sync": "/dashboard/data-operations/jobs/",
+            "configuration": "/dashboard/data-operations/configuration/",
+        }
+        for section, expected_url in expected_sections.items():
+            with self.subTest(section=section):
+                self.assertEqual(operator_section_url(section), expected_url)
+
+        self.assertEqual(
+            operator_section_url("maintenance", plan="plan-1", job="job-1"),
+            "/dashboard/data-operations/advanced/?plan=plan-1&job=job-1"
+            "#dataops-search-maintenance-heading",
+        )
+        self.assertEqual(
+            operator_section_url("configuration", profile="stage"),
+            "/dashboard/data-operations/configuration/?profile=stage",
+        )
+        self.assertEqual(
+            operator_section_url("future-section"),
+            "/dashboard/data-operations/#dataops-status-heading",
         )
 
     def test_unknown_reason_never_infers_copy_from_token(self):

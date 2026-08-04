@@ -24,6 +24,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from core.maintenance_plans import workbench_maintenance_state
 from core.models import MaintenanceJob, PDFFile
+from core.operator_navigation import operator_section_url
 from core.operator_presentation import decorate_operator_state
 from .config import resolve_profiles, resolve_selectors, validate_profiles
 from .models import BackupJob, DataConnection, DataOperation, DataProfile, DataOpsAuditEvent, MirrorDeletionPreview, RecoveryPoint
@@ -559,8 +560,16 @@ def _render_workbench(request, **extra_context):
 
 @login_required
 def workbench(request):
-    if request.GET.get("section"):
-        return redirect("dataops:advanced")
+    section = request.GET.get("section")
+    if section:
+        return redirect(
+            operator_section_url(
+                section,
+                plan=request.GET.get("plan", ""),
+                job=request.GET.get("job", ""),
+                profile=request.GET.get("profile", ""),
+            )
+        )
     return _render_workbench(request)
 
 

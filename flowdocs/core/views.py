@@ -91,6 +91,7 @@ from .maintenance import (
 from .maintenance_plans import (
     LOCAL_OPERATIONS as LOCAL_MAINTENANCE_JOB_KINDS,
     MaintenancePlanError,
+    capability_reasons,
     create_plan as create_maintenance_plan,
 )
 from .forms import UploadForm
@@ -101,6 +102,7 @@ from .services.document_lifecycle import (
     remove_from_search,
 )
 from .operator_presentation import present_reason
+from .operator_navigation import operator_section_url
 from datetime import datetime
 from .utils import (
     detect_language,
@@ -1328,16 +1330,53 @@ def folder_operations(request, folder_id):
             idempotency_key=f"folder:{folder.pk}:{uuid.uuid4()}",
         )
     except MaintenancePlanError as exc:
-        messages.error(request, present_reason(exc.reason_code)["title"])
-        return redirect("dashboard_folder", folder_id=folder.pk)
+        presentation = present_reason(exc.reason_code)
+        messages.error(
+            request,
+            f"{presentation['title']}. {presentation['detail']}",
+        )
+        return redirect(presentation["action_url"])
     messages.success(
         request,
         f"Maintenance preview created for {plan.preview['pdf_count']} "
         "document(s); confirm it in Documents & Indexes.",
     )
-    return redirect(
-        f"{reverse('operations_panel')}?section=maintenance&plan={plan.public_id}"
-    )
+    return redirect(operator_section_url("maintenance", plan=plan.public_id))
+
+
+def _folder_index_operation_state():
+    """Project server-authoritative maintenance capability into the category UI."""
+    reasons = capability_reasons()
+    operation_names = {
+        "repair_stored_index": "repair_indexes",
+        "reprocess_needed": "reindex_needed",
+        "reprocess_all": "reindex_selected",
+    }
+    operations = {}
+    blockers = []
+    seen_reasons = set()
+    for name, operation in operation_names.items():
+        reason_code = reasons.get(operation, "unknown_operation")
+        presentation = present_reason(reason_code) if reason_code else None
+        operations[name] = {
+            "enabled": not reason_code,
+            "reason_code": reason_code,
+            "presentation": presentation,
+        }
+        if reason_code and reason_code not in seen_reasons:
+            blockers.append(
+                {
+                    "reason_code": reason_code,
+                    "presentation": presentation,
+                }
+            )
+            seen_reasons.add(reason_code)
+    return {
+        "operations": operations,
+        "blockers": blockers,
+        "any_enabled": any(item["enabled"] for item in operations.values()),
+        "workbench_url": operator_section_url("maintenance"),
+    }
 
 # ---------------- DPDA / Legal Pages ----------------
 LEGAL_NAVIGATION = (
@@ -1434,6 +1473,11 @@ def dashboard(request, folder_id=None):
                             "folder": folder,
                             "pdfs": pdfs,
                             "folder_stats": folder_stats,
+                            "folder_index_operations": (
+                                _folder_index_operation_state()
+                                if role == "superadmin"
+                                else None
+                            ),
                             "form": form,
                             "role": role,
                             "owner_options": owner_options,
@@ -1472,6 +1516,11 @@ def dashboard(request, folder_id=None):
                 "folder": folder,
                 "pdfs": pdfs,
                 "folder_stats": folder_stats,
+                "folder_index_operations": (
+                    _folder_index_operation_state()
+                    if role == "superadmin"
+                    else None
+                ),
                 "form": form,
                 "role": role,
                 "owner_options": owner_options,
