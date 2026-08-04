@@ -138,20 +138,51 @@ df -h /
 
 ## Dokploy volume identity
 
-The root production Compose file treats Redis, application data, and control
-volumes as external and derives their names from the Compose project identity.
-Dokploy must preserve the project name across redeploys. For the current 2026
-stage project, the expected names are:
+The root Compose file treats Redis, application data, and control as ordinary
+project-scoped named volumes. Only the read-only legacy source is external.
+Docker Compose derives the runtime names from the stable project identity, so
+Dokploy must preserve that identity across redeploys. For the current 2026 stage
+project, the expected names are:
 
     sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_redis_data
     sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_flowdocs_data
     sahakar-ai-sahakar-frontend-2026-prod-ruhj6z_flowdocs_control
 
-If any required volume is absent, Compose fails instead of creating an empty
-replacement. The local development and CI Compose files retain their
-disposable named volumes and are unaffected.
-Because these are external volumes, Compose does not manage their labels;
-Dokploy backup policy must cover the exact external volume names separately.
+When Compose creates one of these volumes, it adds internal ownership labels:
+
+```text
+com.docker.compose.project=sahakar-ai-sahakar-frontend-2026-prod-ruhj6z
+com.docker.compose.volume=flowdocs_data|flowdocs_control|redis_data
+com.docker.compose.version=<running Compose version>
+```
+
+If an expected named volume exists with `Labels: null`, Compose warns that it
+was not created by Compose. This is historical Docker metadata drift, not a
+reason to add custom YAML labels, declare the volume external, or add a
+`COMPOSE_PROJECT_NAME` environment variable. Local-volume labels cannot be
+amended with `docker volume update`; that command supports cluster volumes
+only.
+
+Do not silence the warning by deleting a populated volume. A correction
+requires a deliberate, paired recovery operation:
+
+1. Prove readiness, recovery receipts, exact image identity, and no active
+   maintenance or Vault jobs.
+2. Stop the affected project writers.
+3. Copy each quiescent data/control/Redis volume to an explicitly named
+   recovery volume and compare full metadata/content digests.
+4. Remove and recreate only the exact original names with the three internal
+   Compose labels.
+5. Restore each copy, compare the full digests again, and start the exact
+   certified image.
+6. Prove database integrity, foreign keys, document/index counts, signed
+   readiness, and a second no-warning Compose apply before deleting recovery
+   copies.
+
+Never use `docker compose down -v` for this repair, never touch the read-only
+`prod_flowdocs` source, and never manually pre-create replacement volumes
+without the internal ownership labels. The local development and CI Compose
+files retain their disposable project-scoped volumes and are unaffected.
 
 ## Required post-deploy evidence
 
