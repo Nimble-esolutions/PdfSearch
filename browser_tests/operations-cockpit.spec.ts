@@ -237,6 +237,34 @@ test.describe('Operations Cockpit', () => {
       expect(dimensions.listScroll).toBeLessThanOrEqual(dimensions.listClient + 1);
     }
 
+    const technicalOperations = page.locator('details.technical-operations');
+    await technicalOperations.locator(':scope > summary').click();
+    const indexGuidance = technicalOperations.locator('.operator-guidance');
+    await expect(indexGuidance).toHaveCount(1);
+    await expect(indexGuidance).toBeVisible();
+    await expect(
+      technicalOperations.getByRole('button', { name: 'Repair Stored Index' }),
+    ).toBeDisabled();
+    await expect(
+      technicalOperations.getByRole('button', { name: 'Reprocess Needed' }),
+    ).toBeDisabled();
+    await expect(
+      technicalOperations.getByRole('button', { name: 'Reprocess All' }),
+    ).toBeDisabled();
+    await expect(
+      technicalOperations.getByRole('link', { name: 'Open search maintenance' }),
+    ).toHaveAttribute(
+      'href',
+      '/dashboard/data-operations/advanced/#dataops-search-maintenance-heading',
+    );
+    const indexEvidence = indexGuidance.locator('details.operator-evidence');
+    await expect(indexEvidence.locator('code')).toBeHidden();
+    await expectNoVisibleMachineTokens(page);
+    await indexEvidence.locator('summary').click();
+    await expect(indexEvidence.locator('code')).toBeVisible();
+    await indexEvidence.locator('summary').click();
+    await expect(indexEvidence.locator('code')).toBeHidden();
+
     const firstRecord = page.locator('.document-record').first();
     const view = firstRecord.getByRole('link', { name: 'View' });
     const manage = firstRecord.locator('summary[aria-label^="Manage document"]');

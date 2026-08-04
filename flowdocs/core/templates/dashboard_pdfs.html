@@ -549,17 +549,20 @@
             <span>{% trans "Advanced operations scoped to this category. Use only when normal processing cannot recover." %}</span>
           </div>
         {% if role == 'superadmin' %}
+        {% for blocker in folder_index_operations.blockers %}
+          {% include "components/operator_evidence.html" with presentation=blocker.presentation technical_code=blocker.reason_code show_action=True only %}
+        {% endfor %}
         <form method="post" action="{% url 'folder_operations' folder.id %}">
           {% csrf_token %}
           <input type="hidden" name="operation" value="repair_stored_index">
-          <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if not folder_stats.searchable_pdfs %}disabled{% endif %} title="{% trans 'Builds or rebuilds searchable indexes for this category without editing source PDFs.' %}">
+          <button type="submit" class="btn btn-outline-primary btn-sm w-100" {% if not folder_stats.searchable_pdfs or not folder_index_operations.operations.repair_stored_index.enabled %}disabled{% endif %} title="{% trans 'Builds or rebuilds searchable indexes for this category without editing source PDFs.' %}">
             {% trans "Repair Stored Index" %}
           </button>
         </form>
         <form method="post" action="{% url 'folder_operations' folder.id %}">
           {% csrf_token %}
           <input type="hidden" name="operation" value="reprocess_needed">
-          <button type="submit" class="btn btn-outline-warning btn-sm w-100" {% if not folder_stats.needs_index_pdfs %}disabled{% endif %} title="{% trans 'Previews only documents needing reindex and uses embedding for missing text artifacts.' %}">
+          <button type="submit" class="btn btn-outline-warning btn-sm w-100" {% if not folder_stats.needs_index_pdfs or not folder_index_operations.operations.reprocess_needed.enabled %}disabled{% endif %} title="{% trans 'Previews only documents needing reindex and uses embedding for missing text artifacts.' %}">
             {% trans "Reprocess Needed" %}
           </button>
         </form>
@@ -568,11 +571,14 @@
           <input type="hidden" name="operation" value="reprocess_all">
           <button type="submit"
                     class="btn btn-outline-danger btn-sm w-100"
-                    {% if not folder_stats.searchable_pdfs %}disabled{% endif %}
+                    {% if not folder_stats.searchable_pdfs or not folder_index_operations.operations.reprocess_all.enabled %}disabled{% endif %}
                     title="{% trans 'Reprocess all documents with explicit confirmation; this is a full selected-folder reindex.' %}">
             {% trans "Reprocess All" %}
           </button>
         </form>
+        <a class="btn btn-outline-secondary btn-sm w-100" href="{{ folder_index_operations.workbench_url }}">
+          {% trans "Open search maintenance" %}
+        </a>
         {% else %}
           <div class="ops-control-note">
             {% trans "Superadmin access is required for reindexing and reprocessing controls." %}
