@@ -162,14 +162,6 @@ fi
 
 cd /app/flowdocs
 
-PENDING_MIGRATIONS=$(python manage.py showmigrations --plan | grep -c '\[ \]' || true)
-if [ "$PENDING_MIGRATIONS" -gt 0 ] && [ -s "$DB_PATH" ]; then
-    echo "[recovery] Pending migrations detected; creating required recovery set"
-    python manage.py emergency_db create --reason pre-migration
-else
-    echo "[recovery] No pending migrations; no restart backup required"
-fi
-
 if [ "${RUN_JSON_MIGRATIONS:-0}" = "1" ] && [ -x /usr/local/bin/apply_sqlite_json.py ]; then
     echo "[migrate] Applying explicit JSON migrations"
     python /usr/local/bin/apply_sqlite_json.py
@@ -177,17 +169,17 @@ fi
 
 if [ "${STAGING_RUNTIME_ACTIVATION_ENABLED:-0}" = "1" ] \
     && [ "$RUNTIME_START_MODE" != "initial-bootstrap" ]; then
-    echo "[migrate] Verifying immutable runtime has no pending migrations"
-    python manage.py shell -c '
-import sys
-from django.db import connection
-from django.db.migrations.executor import MigrationExecutor
-executor = MigrationExecutor(connection)
-pending = executor.migration_plan(executor.loader.graph.leaf_nodes())
-sys.exit(1 if pending else 0)
-'
+    echo "[migrate] Applying only recovery-backed additive runtime migrations"
+    python manage.py apply_safe_runtime_migrations
 else
     echo "[migrate] Running mutable bootstrap database migrations"
+    PENDING_MIGRATIONS=$(python manage.py showmigrations --plan | grep -c '\[ \]' || true)
+    if [ "$PENDING_MIGRATIONS" -gt 0 ] && [ -s "$DB_PATH" ]; then
+        echo "[recovery] Pending migrations detected; creating required recovery set"
+        python manage.py emergency_db create --reason pre-migration
+    else
+        echo "[recovery] No pending migrations; no restart backup required"
+    fi
     python manage.py migrate --noinput
 fi
 echo "[migrate] Running stable control database migrations"

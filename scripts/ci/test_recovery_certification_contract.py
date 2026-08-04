@@ -106,6 +106,16 @@ class RecoveryCertificationContractTests(unittest.TestCase):
         self.assertIn('RUNTIME_START_MODE" != "initial-bootstrap"', worker)
         self.assertIn("STAGING_INITIAL_ACTIVATION_ENABLED", worker)
 
+    def test_activated_runtime_uses_the_bounded_migration_command(self):
+        start = (ROOT / "start.sh").read_text(encoding="utf-8")
+        self.assertIn("python manage.py apply_safe_runtime_migrations", start)
+        self.assertIn(
+            "Applying only recovery-backed additive runtime migrations", start
+        )
+        self.assertNotIn(
+            "Verifying immutable runtime has no pending migrations", start
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
