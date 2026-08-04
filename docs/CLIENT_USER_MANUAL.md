@@ -61,14 +61,15 @@ your organization instructs you to do so.
 
 ## 4. Uploading a PDF
 
-Authorized users can upload documents from the dashboard:
+Authorized document operators can create a reviewed intake from the dashboard:
 
 1. Open the target folder.
-2. Select the upload control.
-3. Choose a valid PDF file.
-4. Enter a clear title.
-5. Submit the upload.
-6. Wait for indexing to complete before searching the new document.
+2. Choose or drop up to 50 valid PDF files.
+3. Review and edit each generated title.
+4. Select **Receive Selected Files**.
+5. Retry, replace, or remove any individually rejected file.
+6. Select **Process Ready Documents** when every remaining file is received.
+7. Wait for each document to become Searchable before relying on it in search.
 
 ### Upload Rules
 
@@ -76,7 +77,8 @@ Authorized users can upload documents from the dashboard:
 - The maximum upload size is configured by the organization; the default
   documented limit is 10 MB unless support announces another limit.
 - The file must be a real PDF, not only a renamed file.
-- Use descriptive titles and avoid duplicate titles when possible.
+- Exact duplicate file content in one intake is rejected even when the title is different.
+- Use descriptive titles; titles remain editable until files are received.
 - Do not upload passwords, API keys, private credentials, or documents outside
   your organization’s approved data policy.
 
@@ -91,15 +93,16 @@ Depending on your role, you may be able to:
 - add keywords;
 - upload documents;
 - rename documents;
-- delete documents;
+- remove documents from search while preserving their files;
 - manage users.
 
 If an action is not visible or returns a permission message, your account does
 not have that permission. Ask an administrator rather than creating another
 account.
 
-Deleting a document can remove it from the application and its searchable
-index. Confirm the document is no longer required before deleting it.
+Use **Remove from Search** for superseded or historical documents. It preserves
+the file and can be reversed. Permanent deletion is a separate superadmin-only
+action that requires an exact confirmation and a written reason.
 
 ## 6. Language
 

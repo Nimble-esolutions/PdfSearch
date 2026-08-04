@@ -3,7 +3,7 @@
 **Status:** Active
 **Audience:** Developer, Operator
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-08-03
+**Last verified:** 2026-08-04
 **Canonical source:** docs/ARCHITECTURE_OVERVIEW.md
 
 Primary knowledge transfer artifact for the PdfSearch system. Read this first.
@@ -78,7 +78,7 @@ or `superadmin`.
 ## 2.1 Repository structure
 
     flowdocs/
-      core/       environment, safety, activation, restore, custody primitives
+      core/       intake, lifecycle, environment, safety, activation, restore
       data/       PDF lifecycle, native extraction, OCR, embeddings, indexes
       dataops/    profile resolution and backup/restore operation contracts
       vaultops/   control plane, workbench, receipts, activation/read models
@@ -108,6 +108,9 @@ flowchart LR
   F["folder_cockpit_context"] --> P["25-document page"]
   P --> V["View"]
   P --> A["Manage lifecycle actions"]
+  U["UploadBatch + UploadBatchItem"] --> I["Reviewed intake manifest"]
+  I --> Q["One grouped process_pdf job"]
+  Q --> P
 ```
 
 Dashboard does not independently reconstruct runtime authority. It projects
@@ -116,6 +119,12 @@ existing preview, confirmation, idempotency, source-digest, and superadmin
 mutation gates, while grouping repeated capability reasons and ensuring active
 or actionable work cannot disappear behind bounded history. Category metrics
 cover the full authorized queryset; only the rendered document list is paged.
+
+The intake boundary is deliberately separate from processing. A draft batch
+owns at most 50 independently validated receipts. Finalization seals a SHA-256
+manifest and queues one grouped maintenance job. The temporary `intake` PDF
+lifecycle is excluded from search; failed files do not roll back accepted
+siblings. See [DOCUMENT_INTAKE_WORKBENCH.md](DOCUMENT_INTAKE_WORKBENCH.md).
 
 All modules live under `flowdocs/core/`. Grouped by concern:
 
@@ -131,6 +140,8 @@ All modules live under `flowdocs/core/`. Grouped by concern:
 
 | Module | Purpose |
 |--------|---------|
+| `services/upload_intake.py` | Durable 50-file intake with operator ownership, per-file idempotency, content-digest duplicate rejection, transactional finalization, and bounded draft cleanup. |
+| `services/document_lifecycle.py` | Reason-based reversible search-removal policy and impact projection; permanent deletion is intentionally outside this service. |
 | `artifact_vault.py` | S3/RustFS content-addressed immutable storage. `ArtifactVault` class with `put`/`get`/`head`/`put_pdf`/`put_faiss`/`put_manifest`. Validates SHA-256 on put and get. Rejects mutable release aliases (`latest`, `dev`, `prod`). |
 | `registration.py` | Dataset registration with conditional create (never overwrite). `register_dataset()` creates once; `validate_registration()` checks before every authoritative operation. `update_authoritative_pointer_cas()` publishes generation pointers with CAS fencing. |
 | `global_writer.py` | Cross-deployment single-writer fencing using S3 conditional operations (`If-None-Match` for first acquisition, `If-Match` with ETag for renewal/takeover). Prevents two deployments from both publishing as authoritative writer. |
