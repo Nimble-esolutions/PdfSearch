@@ -32,7 +32,12 @@ from .media_quarantine import (
     validate_unavailable_attestation,
     verify_local_media_file,
 )
-from .models import MaintenanceAuditEvent, MaintenanceJob, PDFFile
+from .models import (
+    MaintenanceAuditEvent,
+    MaintenanceJob,
+    PDFFile,
+    VALID_PDF_LIFECYCLES,
+)
 
 WORKSPACE_MANIFEST = "maintenance-candidate.json"
 
@@ -943,15 +948,7 @@ def validate_candidate(workspace: Path) -> dict:
         raise CandidateMaintenanceError("candidate_sqlite_integrity_failed")
     if foreign_keys:
         raise CandidateMaintenanceError("candidate_foreign_keys_failed")
-    valid_lifecycles = {
-        "uploaded",
-        "processing",
-        "ready",
-        "deprecated",
-        "archived",
-        "unavailable",
-    }
-    if any(row[2] not in valid_lifecycles for row in lifecycle_rows):
+    if any(row[2] not in VALID_PDF_LIFECYCLES for row in lifecycle_rows):
         raise CandidateMaintenanceError("candidate_lifecycle_invalid")
     media_rows = [
         (pdf_id, value)
