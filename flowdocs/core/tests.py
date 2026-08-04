@@ -784,7 +784,7 @@ class PDFViewTests(TestCase):
             admin = get_user_model().objects.create_user(
                 username="pdf-delete-admin",
                 password="test-password",
-                role="admin",
+                role="superadmin",
             )
             pdf = PDFFile.objects.create(
                 title="Delete document",
@@ -795,10 +795,42 @@ class PDFViewTests(TestCase):
 
             response = self.client.post(
                 reverse("delete_pdf", args=[pdf.pk]),
+                {"confirmation": f"DELETE {pdf.pk}", "reason": "Verified duplicate document"},
                 HTTP_REFERER="https://evil.example/redirect",
             )
 
             self.assertRedirects(response, reverse("dashboard"))
+
+    def test_permanent_delete_requires_superadmin_confirmation_and_reason(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            admin = get_user_model().objects.create_user(
+                username="ordinary-delete-admin",
+                password="test-password",
+                role="admin",
+            )
+            superadmin = get_user_model().objects.create_user(
+                username="permanent-delete-superadmin",
+                password="test-password",
+                role="superadmin",
+            )
+            pdf = PDFFile.objects.create(
+                title="Protected document",
+                uploaded_by=admin,
+                file=SimpleUploadedFile("protected.pdf", b"%PDF-1.7\nprotected"),
+            )
+
+            self.client.force_login(admin)
+            denied = self.client.post(reverse("delete_pdf", args=[pdf.pk]))
+            self.assertEqual(denied.status_code, 403)
+            self.assertTrue(PDFFile.objects.filter(pk=pdf.pk).exists())
+
+            self.client.force_login(superadmin)
+            incomplete = self.client.post(
+                reverse("delete_pdf", args=[pdf.pk]),
+                {"confirmation": f"DELETE {pdf.pk}", "reason": "short"},
+            )
+            self.assertEqual(incomplete.status_code, 302)
+            self.assertTrue(PDFFile.objects.filter(pk=pdf.pk).exists())
 
 
 class SearchAndAuthenticationTests(TestCase):
@@ -1529,11 +1561,11 @@ class DashboardTests(TestCase):
         self.assertContains(response, reverse("dashboard_folder", args=[folder.pk]))
         self.assertContains(response, "Edit Keywords")
         self.assertContains(response, "Document Workbench")
-        self.assertContains(response, "Blast Radius")
+        self.assertContains(response, "Category Health")
         self.assertContains(response, 'rel="noopener noreferrer"')
         self.assertContains(response, "Assign Owner")
         self.assertContains(response, reverse("assign_pdf_owner", args=[pdf.pk]))
-        self.assertContains(response, 'aria-label="Close"', count=2)
+        self.assertContains(response, 'aria-label="Close"', count=3)
         self.assertContains(response, "Superadmin access is required")
         self.assertNotContains(response, "Repair Stored Index")
 
@@ -3392,6 +3424,7 @@ class DocumentLifecycleTests(TestCase):
             reverse("dashboard_folder", args=[self.folder.pk])
         )
 
+        self.assertContains(response, "Source unavailable")
         self.assertContains(response, "Document file is unavailable")
         self.assertContains(response, "Technical details")
         self.assertContains(response, "document_media_unavailable")
@@ -3542,15 +3575,18 @@ class DocumentLifecycleTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("dashboard_folder", args=[self.folder.pk]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Deprecated")
+        self.assertContains(response, "Hidden · Superseded")
         self.assertContains(response, "Restore")
 
-    def test_dashboard_renders_deprecate_and_archive_buttons(self):
+    def test_dashboard_renders_reason_based_remove_from_search_control(self):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("dashboard_folder", args=[self.folder.pk]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Deprecate")
-        self.assertContains(response, "Archive")
+        self.assertContains(response, "Remove from Search")
+        self.assertContains(response, "A newer document replaces it")
+        self.assertContains(response, "Keep it as a historical record")
+        self.assertNotContains(response, ">Deprecate<")
+        self.assertNotContains(response, ">Archive<")
 
 
 class UnavailableAttestationTests(SimpleTestCase):

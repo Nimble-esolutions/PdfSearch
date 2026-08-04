@@ -74,7 +74,7 @@ from django.utils import timezone
 
 DOCUMENT_PAGE_SIZE = 25
 
-from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceAuditEvent, SEARCHABLE_PDF_LIFECYCLES, SiteSetting
+from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceJobItem, MaintenanceAuditEvent, SEARCHABLE_PDF_LIFECYCLES, SiteSetting
 from .configuration_registry import build_configuration_groups
 from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultConfigurationError
 from .metrics import metrics_view
@@ -96,6 +96,10 @@ from .maintenance_plans import (
 from .forms import UploadForm
 from .forms import UserRegisterForm, UserManageForm, DEPARTMENT_CHOICES
 from .services.dashboard_read_model import build_dashboard_state
+from .services.document_lifecycle import (
+    LifecycleDecisionRejected,
+    remove_from_search,
+)
 from .operator_presentation import present_reason
 from datetime import datetime
 from .utils import (
@@ -267,12 +271,45 @@ def admin_cockpit_context(user, category_query=""):
     return folders, cockpit
 
 
-def folder_cockpit_context(user, folder, *, page_number=1):
-    pdfs = visible_pdfs(
+DOCUMENT_SORTS = {
+    "newest": ("-uploaded_at", "-pk"),
+    "oldest": ("uploaded_at", "pk"),
+    "title": ("title", "pk"),
+    "status": ("processing_status", "lifecycle", "title", "pk"),
+}
+
+
+def normalize_document_filters(params):
+    """Return a bounded, URL-safe folder document filter projection."""
+    query = params.get("document_query", "").strip()[:200]
+    state = params.get("document_state", "").strip()
+    owner = params.get("document_owner", "").strip()
+    sort = params.get("document_sort", "newest").strip()
+    if state not in {
+        "",
+        "searchable",
+        "queued",
+        "processing",
+        "needs_attention",
+        "hidden",
+        "unavailable",
+    }:
+        state = ""
+    if owner != "unknown" and not owner.isdecimal():
+        owner = ""
+    if sort not in DOCUMENT_SORTS:
+        sort = "newest"
+    return {"query": query, "state": state, "owner": owner, "sort": sort}
+
+
+def folder_cockpit_context(user, folder, *, page_number=1, document_filters=None):
+    base_pdfs = visible_pdfs(
         user,
         PDFFile.objects.filter(folder=folder),
-    ).select_related("uploaded_by", "folder").order_by("-uploaded_at", "-pk")
-    aggregate = pdfs.aggregate(
+    ).select_related("uploaded_by", "folder").prefetch_related(
+        "upload_batch_items__batch"
+    )
+    aggregate = base_pdfs.aggregate(
         total_pdfs=Count("id"),
         searchable_pdfs=Count(
             "id",
@@ -299,6 +336,44 @@ def folder_cockpit_context(user, folder, *, page_number=1):
         "unknown_uploaders": aggregate["unknown_uploaders"],
         "latest_upload": aggregate["latest_upload"],
     }
+    filters = document_filters or {
+        "query": "",
+        "state": "",
+        "owner": "",
+        "sort": "newest",
+    }
+    pdfs = base_pdfs
+    if filters["query"]:
+        pdfs = pdfs.filter(title__icontains=filters["query"])
+    if filters["state"] == "searchable":
+        pdfs = pdfs.filter(
+            indexed=True,
+            processing_status="ready",
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        )
+    elif filters["state"] == "queued":
+        pdfs = pdfs.filter(processing_status="queued")
+    elif filters["state"] == "processing":
+        pdfs = pdfs.filter(
+            Q(processing_status="running")
+            | Q(lifecycle="processing") & ~Q(processing_status="queued")
+        )
+    elif filters["state"] == "needs_attention":
+        pdfs = pdfs.filter(
+            Q(processing_status="failed")
+            | Q(indexed=False, lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
+        )
+    elif filters["state"] == "hidden":
+        pdfs = pdfs.filter(lifecycle__in=("deprecated", "archived"))
+    elif filters["state"] == "unavailable":
+        pdfs = pdfs.filter(lifecycle="unavailable")
+    if filters["owner"] == "unknown":
+        pdfs = pdfs.filter(uploaded_by__isnull=True)
+    elif filters["owner"]:
+        pdfs = pdfs.filter(uploaded_by_id=int(filters["owner"]))
+    pdfs = pdfs.order_by(*DOCUMENT_SORTS[filters["sort"]])
+    stats["filtered_pdfs"] = pdfs.count()
+    stats["document_filters"] = filters
     return Paginator(pdfs, DOCUMENT_PAGE_SIZE).get_page(page_number), stats
 
 
@@ -900,22 +975,29 @@ def create_folder(request):
 
 
 # ---------------- Delete PDF ----------------
-@login_required
+@superadmin_required
 @require_POST
 def delete_pdf(request, file_id):
     pdf = get_object_or_404(PDFFile, pk=file_id)
-
-    # Users may remove only their own uploads; admins may remove any PDF.
-    if not is_admin_user(request.user) and pdf.uploaded_by_id != request.user.pk:
-        return HttpResponseForbidden("You do not have permission to delete this PDF.")
+    confirmation = request.POST.get("confirmation", "").strip()
+    reason = request.POST.get("reason", "").strip()
+    expected_confirmation = f"DELETE {pdf.pk}"
+    if confirmation != expected_confirmation or len(reason) < 10:
+        messages.error(
+            request,
+            "Permanent deletion requires the displayed confirmation and a reason of at least 10 characters.",
+        )
+        return safe_referer_redirect(request)
 
     try:
-        if pdf.file:
-            pdf.file.delete(save=False)  # delete file from storage
         pdf.delete()
-        messages.success(request, "PDF deleted successfully.")
-    except Exception as e:
-        messages.error(request, f"Error deleting PDF: {e}")
+        messages.success(request, "Document and its stored PDF were permanently deleted.")
+    except Exception:
+        logger.exception("Permanent PDF deletion failed", extra={"pdf_id": pdf.pk})
+        messages.error(
+            request,
+            "The document could not be permanently deleted. Review the logs and try again.",
+        )
 
     return safe_referer_redirect(request)
 
@@ -940,6 +1022,78 @@ def archive_pdf_view(request, pdf_id):
     pdf = get_object_or_404(PDFFile, pk=pdf_id)
     archive_pdf(pdf, requested_by=request.user)
     messages.success(request, f"Document '{pdf.title}' archived.")
+    return safe_referer_redirect(request)
+
+
+@admin_required
+@require_POST
+def remove_pdf_from_search_view(request, pdf_id):
+    """Apply one explicit, reversible document-visibility outcome."""
+    pdf = get_object_or_404(PDFFile, pk=pdf_id)
+    reason_code = request.POST.get("reason_code", "").strip()
+    evidence = None
+    if reason_code == "source_temporarily_unavailable":
+        evidence = {
+            "quarantine_reason": request.POST.get("quarantine_reason", ""),
+            "case_reference": request.POST.get("case_reference", ""),
+            "expected_sha256": request.POST.get("expected_sha256", ""),
+            "expected_size": request.POST.get("expected_size"),
+        }
+    try:
+        outcome = remove_from_search(
+            pdf,
+            reason_code=reason_code,
+            actor=request.user,
+            evidence=evidence,
+        )
+    except LifecycleDecisionRejected as exc:
+        messages.error(request, str(exc))
+        return safe_referer_redirect(request)
+    if outcome.changed:
+        messages.success(
+            request,
+            "The document was removed from search and its PDF was preserved.",
+        )
+    else:
+        messages.info(request, "The document already has the selected visibility state.")
+    return safe_referer_redirect(request)
+
+
+@admin_required
+@require_POST
+def retry_pdf_processing_view(request, pdf_id):
+    """Queue one failed or incomplete document without rebuilding unrelated PDFs."""
+    with transaction.atomic():
+        pdf = get_object_or_404(PDFFile.objects.select_for_update(), pk=pdf_id)
+        if pdf.lifecycle in {"deprecated", "archived", "unavailable", "intake"}:
+            messages.error(
+                request,
+                "This document must be restored or finalized before processing can be retried.",
+            )
+            return safe_referer_redirect(request)
+        active = MaintenanceJobItem.objects.filter(
+            pdf=pdf,
+            status__in=("queued", "running"),
+            job__status__in=("queued", "running", "paused"),
+        ).exists()
+        if active:
+            messages.info(request, "Processing is already queued for this document.")
+            return safe_referer_redirect(request)
+        PDFFile.objects.filter(pk=pdf.pk).update(
+            lifecycle="processing",
+            indexed=False,
+            processing_status="queued",
+            processing_error_code="",
+            processing_error_message="",
+            processing_finished_at=None,
+        )
+        queue_job(
+            kind="process_pdf",
+            requested_by=request.user,
+            pdfs=[pdf],
+            options={"trigger": "document_retry"},
+        )
+    messages.success(request, "Document processing was queued for another attempt.")
     return safe_referer_redirect(request)
 
 
@@ -1218,6 +1372,7 @@ def dashboard(request, folder_id=None):
 
     if folder_id:
         folder = get_object_or_404(Folder, id=folder_id)
+        document_filters = normalize_document_filters(request.GET)
         if not is_admin_user(request.user) and folder.created_by_id != request.user.pk:
             return HttpResponseForbidden("You do not have permission to access this folder.")
         if request.method == "POST":
@@ -1228,9 +1383,6 @@ def dashboard(request, folder_id=None):
                 pdf = form.save(commit=False)
                 pdf.folder = folder
                 pdf.uploaded_by = request.user
-                # Keywords handling as before
-                raw_keywords = form.cleaned_data.get("keywords_input", "")
-                pdf.keywords = [k.strip().lower() for k in raw_keywords.split(",") if k.strip()] if raw_keywords else []
                 try:
                     with transaction.atomic():
                         pdf.save()
@@ -1272,6 +1424,7 @@ def dashboard(request, folder_id=None):
                         request.user,
                         folder,
                         page_number=request.GET.get("document_page", 1),
+                        document_filters=document_filters,
                     )
                     owner_options = CustomUser.objects.filter(is_active=True).order_by("username")
                     return render(
@@ -1284,6 +1437,8 @@ def dashboard(request, folder_id=None):
                             "form": form,
                             "role": role,
                             "owner_options": owner_options,
+                            "upload_max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+                            "upload_max_file_size_bytes": settings.MAX_FILE_SIZE,
                             "unavailable_presentation": present_reason(
                                 "document_media_unavailable"
                             ),
@@ -1307,6 +1462,7 @@ def dashboard(request, folder_id=None):
             request.user,
             folder,
             page_number=request.GET.get("document_page", 1),
+            document_filters=document_filters,
         )
         owner_options = CustomUser.objects.filter(is_active=True).order_by("username")
         return render(
@@ -1319,6 +1475,8 @@ def dashboard(request, folder_id=None):
                 "form": form,
                 "role": role,
                 "owner_options": owner_options,
+                "upload_max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+                "upload_max_file_size_bytes": settings.MAX_FILE_SIZE,
                 "unavailable_presentation": present_reason(
                     "document_media_unavailable"
                 ),

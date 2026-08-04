@@ -4932,3 +4932,470 @@ msgstr "दस्तऐवज पृष्ठे"
 #: core/templates/dashboard_pdfs.html
 msgid "Page %(current)s of %(total)s"
 msgstr "%(total)s पैकी पृष्ठ %(current)s"
+
+#: flowdocs/core/templates/dashboard.html:35
+#: flowdocs/core/templates/dashboard_pdfs.html:211
+#: flowdocs/core/templates/dataops/_advanced_maintenance.html:95
+#: flowdocs/core/templates/dataops/workbench.html:118
+#: flowdocs/core/templates/dataops/workbench.html:156
+#: flowdocs/core/templates/vaultops/workbench.html:360
+msgid "Documents"
+msgstr "दस्तऐवज"
+
+#: flowdocs/core/templates/dashboard.html:140
+#: flowdocs/core/templates/dashboard_pdfs.html:246
+msgid "Sort"
+msgstr "क्रमवारी"
+
+#: flowdocs/core/templates/dashboard.html:229
+#: flowdocs/core/templates/dashboard_pdfs.html:513
+msgid "Previous"
+msgstr "मागील"
+
+#: flowdocs/core/templates/dashboard.html:233
+#: flowdocs/core/templates/dashboard_pdfs.html:515
+msgid "Next"
+msgstr "पुढील"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:79
+msgid "Ready to upload"
+msgstr "अपलोडसाठी तयार"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:81
+msgid "Uploading"
+msgstr "अपलोड होत आहे"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:83
+msgid "Queued for processing"
+msgstr "प्रक्रियेसाठी रांगेत"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:85
+#: flowdocs/core/templates/dashboard_pdfs.html:225
+#: flowdocs/core/templates/dashboard_pdfs.html:281
+msgid "Searchable"
+msgstr "शोधण्यायोग्य"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:87
+msgid "Restored from intake receipt"
+msgstr "इनटेक पावतीवरून पुनर्स्थापित"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:88
+msgid "Choose PDF files only."
+msgstr "फक्त PDF फाइल निवडा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:89
+msgid "That file is already listed in this intake."
+msgstr "ही फाइल या इनटेकमध्ये आधीच सूचीबद्ध आहे."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:90
+#, python-format
+msgid "This PDF exceeds the %(upload_max_file_size_mb)s MB limit."
+msgstr "ही PDF %(upload_max_file_size_mb)s MB मर्यादेपेक्षा मोठी आहे."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:91
+msgid "A single intake can contain up to 50 PDFs."
+msgstr "एका इनटेकमध्ये कमाल 50 PDF असू शकतात."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:92
+msgid "The intake could not be created. Try again."
+msgstr "इनटेक तयार करता आला नाही. पुन्हा प्रयत्न करा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:93
+msgid "Upload failed. Retry this file."
+msgstr "अपलोड अयशस्वी. ही फाइल पुन्हा अपलोड करून पहा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:94
+msgid "The latest intake status is temporarily unavailable."
+msgstr "इनटेकची नवीनतम स्थिती तात्पुरती उपलब्ध नाही."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:95
+msgid ""
+"Processing could not be started. Your received files remain in this intake."
+msgstr "प्रक्रिया सुरू करता आली नाही. स्वीकारलेल्या फाइल या इनटेकमध्ये सुरक्षित आहेत."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:96
+msgid "Processing started for the received documents."
+msgstr "स्वीकारलेल्या दस्तऐवजांवर प्रक्रिया सुरू झाली."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:97
+msgid "All received documents finished processing."
+msgstr "स्वीकारलेल्या सर्व दस्तऐवजांची प्रक्रिया पूर्ण झाली."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:98
+msgid "Processing finished with documents that need attention."
+msgstr "प्रक्रिया पूर्ण झाली; काही दस्तऐवजांकडे लक्ष देणे आवश्यक आहे."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:99
+msgid "The draft intake was discarded."
+msgstr "मसुदा इनटेक रद्द केला."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:100
+msgid "Uploads are still running. Leaving now may interrupt them."
+msgstr "अपलोड अजून सुरू आहेत. आता बाहेर पडल्यास ते खंडित होऊ शकतात."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:101
+msgid "Choose the same file again to retry after a refresh."
+msgstr "पृष्ठ रीफ्रेश केल्यानंतर पुन्हा प्रयत्न करण्यासाठी तीच फाइल निवडा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:102
+#: flowdocs/core/templates/dashboard_pdfs.html:170
+msgid "Document title"
+msgstr "दस्तऐवजाचे शीर्षक"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:103
+msgid "Remove file"
+msgstr "फाइल काढा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:104
+msgid "Retry file"
+msgstr "फाइलसाठी पुन्हा प्रयत्न करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:107
+msgid "Intake manifest"
+msgstr "इनटेक नोंद"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:108
+msgid "Add Documents"
+msgstr "दस्तऐवज जोडा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:109
+msgid ""
+"Select up to 50 PDFs. Each file is received independently, then processed "
+"together."
+msgstr ""
+"कमाल 50 PDF निवडा. प्रत्येक फाइल स्वतंत्रपणे स्वीकारली जाते आणि नंतर सर्वांवर एकत्र "
+"प्रक्रिया होते."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:111
+msgid "Intake capacity"
+msgstr "इनटेक क्षमता"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:133
+msgid "Drop PDFs here or choose files"
+msgstr "PDF येथे सोडा किंवा फाइल निवडा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:134
+#, python-format
+msgid ""
+"PDF only · maximum %(upload_max_file_size_mb)s MB each · 50 files per intake"
+msgstr ""
+"फक्त PDF · प्रत्येकी कमाल %(upload_max_file_size_mb)s MB · एका इनटेकमध्ये 50 फाइल"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:136
+msgid "Choose PDFs"
+msgstr "PDF निवडा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:143
+msgid "Receiving register"
+msgstr "स्वीकृती नोंद"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:144
+msgid "No files selected"
+msgstr "कोणतीही फाइल निवडलेली नाही"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:147
+msgid "Retry Failed"
+msgstr "अयशस्वी फाइल पुन्हा पाठवा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:150
+msgid "Selected PDF files"
+msgstr "निवडलेल्या PDF फाइल"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:154
+msgid "Discard Draft"
+msgstr "मसुदा रद्द करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:155
+msgid "Receive Selected Files"
+msgstr "निवडलेल्या फाइल स्वीकारा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:156
+msgid "Process Ready Documents"
+msgstr "तयार दस्तऐवजांवर प्रक्रिया करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:157
+msgid "Start New Intake"
+msgstr "नवीन इनटेक सुरू करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:180
+msgid "Remove"
+msgstr "काढा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:187
+msgid "JavaScript is unavailable. You can still add one PDF at a time."
+msgstr "JavaScript उपलब्ध नाही. तरीही तुम्ही एका वेळी एक PDF जोडू शकता."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:199
+msgid "Add PDF"
+msgstr "PDF जोडा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:210
+msgid "Official register"
+msgstr "अधिकृत नोंदवही"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:212
+msgid ""
+"Find a document, check whether it is searchable, or open its contextual "
+"actions."
+msgstr "दस्तऐवज शोधा, तो शोधण्यायोग्य आहे का ते तपासा किंवा त्याच्या संबंधित क्रिया उघडा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:214
+#, python-format
+msgid "%(counter)s document"
+msgid_plural "%(counter)s documents"
+msgstr[0] "%(counter)s दस्तऐवज"
+msgstr[1] "%(counter)s दस्तऐवज"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:216
+msgid "Filter documents"
+msgstr "दस्तऐवज फिल्टर करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:218
+#: flowdocs/core/templates/dashboard_pdfs.html:250
+msgid "Title"
+msgstr "शीर्षक"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:219
+msgid "Search by document title…"
+msgstr "दस्तऐवजाच्या शीर्षकानुसार शोधा…"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:229
+msgid "Hidden"
+msgstr "लपवलेले"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:230
+#: flowdocs/core/templates/dashboard_pdfs.html:269
+msgid "Source unavailable"
+msgstr "स्रोत उपलब्ध नाही"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:236
+msgid "All owners"
+msgstr "सर्व जबाबदार अधिकारी"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:237
+#: flowdocs/core/templates/dashboard_pdfs.html:287
+msgid "Owner missing"
+msgstr "जबाबदार अधिकारी नाही"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:248
+msgid "Newest First"
+msgstr "नवीनतम प्रथम"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:249
+msgid "Oldest First"
+msgstr "सर्वात जुने प्रथम"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:255
+msgid "Apply Filters"
+msgstr "फिल्टर लागू करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:267
+msgid "Document state"
+msgstr "दस्तऐवजाची स्थिती"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:271
+msgid "Hidden · Superseded"
+msgstr "लपवलेले · नवीन दस्तऐवजाने बदललेले"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:273
+msgid "Hidden · Archived"
+msgstr "लपवलेले · संग्रहित"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:300
+msgid "Manage document actions for"
+msgstr "या दस्तऐवजासाठी क्रिया व्यवस्थापित करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:304
+msgid "Document Details"
+msgstr "दस्तऐवज तपशील"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:305
+msgid "Routine changes to this register entry."
+msgstr "या नोंदवहीतील नोंदीसाठी नियमित बदल."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:332
+msgid "Retry Processing"
+msgstr "प्रक्रियेसाठी पुन्हा प्रयत्न करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:340
+msgid "Intake receipt"
+msgstr "इनटेक पावती"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:346
+msgid "Visibility & Recovery"
+msgstr "दृश्यमानता आणि पुनर्प्राप्ती"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:364
+#: flowdocs/core/templates/dashboard_pdfs.html:416 flowdocs/core/views.py:1143
+#: flowdocs/core/views.py:1225
+msgid "Review the highlighted fields."
+msgstr "ठळक केलेली क्षेत्रे तपासा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:371
+#: flowdocs/core/templates/dashboard_pdfs.html:425
+msgid "Confirmation"
+msgstr "पुष्टी"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:398
+msgid "Remove document from search"
+msgstr "दस्तऐवज शोधातून वगळा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:398
+msgid ""
+"The PDF and register entry will be preserved. The selected reason controls "
+"how it can be restored."
+msgstr ""
+"PDF आणि नोंदवहीतील नोंद जतन केली जाईल. निवडलेले कारण ती कशी पुनर्स्थापित करता येईल हे "
+"ठरवते."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:398
+#: flowdocs/core/templates/dashboard_pdfs.html:407
+msgid "Remove from Search"
+msgstr "शोधातून वगळा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:400
+msgid "Why should this document leave search?"
+msgstr "हा दस्तऐवज शोधातून का वगळायचा?"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:402
+msgid "Choose a reason"
+msgstr "कारण निवडा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:403
+msgid "A newer document replaces it"
+msgstr "नवीन दस्तऐवज याची जागा घेतो"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:404
+msgid "Keep it as a historical record"
+msgstr "ऐतिहासिक नोंद म्हणून जतन करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:475
+msgid "Danger Zone"
+msgstr "धोकादायक क्रिया"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:477
+msgid ""
+"Permanent deletion removes the register row and stored file. Review backup "
+"and index impact first."
+msgstr ""
+"कायमस्वरूपी हटवल्यास नोंदवहीतील नोंद आणि संग्रहित फाइल नष्ट होते. आधी बॅकअप आणि "
+"अनुक्रमणावरील परिणाम तपासा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:478
+#: flowdocs/core/templates/dashboard_pdfs.html:488
+msgid "Delete PDF permanently"
+msgstr "PDF कायमस्वरूपी हटवा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:478
+msgid ""
+"This removes the document row and stored file. This action cannot be undone "
+"from this page."
+msgstr ""
+"यामुळे दस्तऐवजाची नोंद आणि संग्रहित फाइल नष्ट होते. ही क्रिया या पृष्ठावरून पूर्ववत करता "
+"येत नाही."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:478
+#: flowdocs/core/templates/dashboard_pdfs.html:489
+msgid "Delete Permanently"
+msgstr "कायमस्वरूपी हटवा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:480
+msgid "Deletion Reason"
+msgstr "हटवण्याचे कारण"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:483
+msgid "Enter this exact confirmation:"
+msgstr "पुष्टीसाठी हा वाक्यांश अचूक नोंदवा:"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:501
+msgid "No Documents Found"
+msgstr "कोणतेही दस्तऐवज आढळले नाहीत"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:503
+msgid "Try clearing one or more filters."
+msgstr "एक किंवा अधिक फिल्टर काढून पुन्हा प्रयत्न करा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:504
+msgid "Clear Filters"
+msgstr "फिल्टर काढा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:506
+msgid "Add the first PDF to begin this category register."
+msgstr "या श्रेणीची नोंदवही सुरू करण्यासाठी पहिली PDF जोडा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:524
+msgid "Registry overview"
+msgstr "नोंदवहीचा आढावा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:525
+msgid "Category Health"
+msgstr "श्रेणीची स्थिती"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:526
+msgid "A compact view of records that may need attention."
+msgstr "लक्ष देण्याची आवश्यकता असलेल्या नोंदींचा संक्षिप्त आढावा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:543
+msgid "Technical Index Operations"
+msgstr "तांत्रिक अनुक्रमण क्रिया"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:546
+msgid "Category Index"
+msgstr "श्रेणी अनुक्रमणिका"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:547
+msgid ""
+"Advanced operations scoped to this category. Use only when normal processing "
+"cannot recover."
+msgstr ""
+"या श्रेणीपुरत्या मर्यादित प्रगत क्रिया. सामान्य प्रक्रियेतून पुनर्प्राप्ती शक्य नसल्यासच वापरा."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:553
+msgid ""
+"Builds or rebuilds searchable indexes for this category without editing "
+"source PDFs."
+msgstr ""
+"मूळ PDF न बदलता या श्रेणीसाठी शोधण्यायोग्य अनुक्रमणिका तयार किंवा पुन्हा तयार करते."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:560
+msgid ""
+"Previews only documents needing reindex and uses embedding for missing text "
+"artifacts."
+msgstr ""
+"फक्त पुनःअनुक्रमण आवश्यक असलेले दस्तऐवज दाखवते आणि नसलेल्या मजकूर घटकांसाठी एम्बेडिंग वापरते."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:564
+msgid "Reprocess every PDF"
+msgstr "प्रत्येक PDF वर पुन्हा प्रक्रिया करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:564
+msgid ""
+"This may call the embedding service and overwrite stored chunks for every "
+"document in this category."
+msgstr ""
+"यामुळे एम्बेडिंग सेवा वापरली जाऊ शकते आणि या श्रेणीतील प्रत्येक दस्तऐवजासाठी संग्रहित "
+"भागांवर नवीन माहिती लिहिली जाऊ शकते."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:564
+msgid "Reprocess All Documents"
+msgstr "सर्व दस्तऐवजांवर पुन्हा प्रक्रिया करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:570
+msgid ""
+"Reprocess all documents with explicit confirmation; this is a full selected-"
+"folder reindex."
+msgstr ""
+"स्पष्ट पुष्टीसह सर्व दस्तऐवजांवर पुन्हा प्रक्रिया करा; यामुळे निवडलेल्या फोल्डरचे पूर्ण "
+"पुनःअनुक्रमण होते."
+
+#: flowdocs/core/templates/dashboard_pdfs.html:642
+msgid "Submit"
+msgstr "सादर करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:655
+msgid "Confirm Action"
+msgstr "क्रियेची पुष्टी करा"
+
+#: flowdocs/core/templates/dashboard_pdfs.html:664
+msgid "Confirm"
+msgstr "पुष्टी करा"

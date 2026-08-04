@@ -2,7 +2,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
-from . import views
+from . import upload_views, views
 from dataops import views as dataops_views
 
 urlpatterns = [
@@ -46,6 +46,36 @@ urlpatterns = [
     # ---------------- Dashboard ----------------
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/folder/<int:folder_id>/", views.dashboard, name="dashboard_folder"),
+    path(
+        "dashboard/folder/<int:folder_id>/upload-batches/",
+        upload_views.create_batch,
+        name="upload_batch_create",
+    ),
+    path(
+        "dashboard/upload-batches/<uuid:batch_id>/",
+        upload_views.batch_detail,
+        name="upload_batch_detail",
+    ),
+    path(
+        "dashboard/upload-batches/<uuid:batch_id>/items/",
+        upload_views.receive_batch_item,
+        name="upload_batch_item",
+    ),
+    path(
+        "dashboard/upload-batches/<uuid:batch_id>/items/<int:item_id>/remove/",
+        upload_views.remove_batch_item,
+        name="upload_batch_item_remove",
+    ),
+    path(
+        "dashboard/upload-batches/<uuid:batch_id>/finalize/",
+        upload_views.finalize_batch,
+        name="upload_batch_finalize",
+    ),
+    path(
+        "dashboard/upload-batches/<uuid:batch_id>/discard/",
+        upload_views.discard_batch,
+        name="upload_batch_discard",
+    ),
     path("dashboard/maintenance/", views.bulk_maintenance, name="bulk_maintenance"),
     path("dashboard/maintenance/preview/", views.bulk_filter_preview, name="bulk_filter_preview"),
     path("dashboard/maintenance/<uuid:job_id>/action/", views.maintenance_job_action, name="maintenance_job_action"),
@@ -82,6 +112,16 @@ urlpatterns = [
     path("pdf/<int:file_id>/delete/", views.delete_pdf, name="delete_pdf"),
     path("pdf/<int:pdf_id>/deprecate/", views.deprecate_pdf_view, name="deprecate_pdf"),
     path("pdf/<int:pdf_id>/archive/", views.archive_pdf_view, name="archive_pdf"),
+    path(
+        "pdf/<int:pdf_id>/remove-from-search/",
+        views.remove_pdf_from_search_view,
+        name="remove_pdf_from_search",
+    ),
+    path(
+        "pdf/<int:pdf_id>/retry-processing/",
+        views.retry_pdf_processing_view,
+        name="retry_pdf_processing",
+    ),
     path("pdf/<int:pdf_id>/unavailable/", views.mark_pdf_unavailable_view, name="mark_pdf_unavailable"),
     path("pdf/<int:pdf_id>/recovery-evidence/", views.bind_pdf_recovery_evidence_view, name="bind_pdf_recovery_evidence"),
     path("pdf/<int:pdf_id>/restore/", views.restore_pdf_view, name="restore_pdf"),

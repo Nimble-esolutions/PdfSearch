@@ -34,6 +34,62 @@ async function expectNoSeriousAxeViolations(page: Page) {
 }
 
 test.describe('Operations Cockpit', () => {
+  test('receives a reviewed multi-file intake and can discard it safely', async ({ page }) => {
+    await login(page);
+    await page.locator('.admin-category-card__link').filter({ hasText: 'Codex Scale Category' }).click();
+
+    const intake = page.locator('[data-pdf-intake]');
+    await expect(intake.getByRole('heading', { name: 'Add Documents' })).toBeVisible();
+    await intake.locator('[data-intake-input]').setInputFiles([
+      {
+        name: 'society-audit-order.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.7\nCodex disposable intake fixture A\n'),
+      },
+      {
+        name: 'committee-election-rules.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.7\nCodex disposable intake fixture B\n'),
+      },
+    ]);
+
+    const rows = intake.locator('[data-intake-item]');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0).locator('[data-intake-state]')).toHaveText('Ready to upload');
+    await rows.nth(1).locator('[data-intake-title]').fill('Committee Election Rules 2026');
+    await expect(rows.nth(1).locator('[data-intake-title]')).toBeEditable();
+
+    await intake.getByRole('button', { name: 'Receive Selected Files' }).click();
+    await expect(rows.nth(0).locator('[data-intake-state]')).toHaveText('Received');
+    await expect(rows.nth(1).locator('[data-intake-state]')).toHaveText('Received');
+    await expect(intake.getByRole('button', { name: 'Process Ready Documents' })).toBeEnabled();
+
+    await rows.nth(0).getByRole('button', { name: /Remove file/ }).click();
+    await expect(rows).toHaveCount(1);
+    await intake.getByRole('button', { name: 'Process Ready Documents' }).click();
+    await expect(intake.getByRole('button', { name: 'Start New Intake' })).toBeVisible();
+    await intake.getByRole('button', { name: 'Start New Intake' }).click();
+    await expect(rows).toHaveCount(0);
+
+    await intake.locator('[data-intake-input]').setInputFiles({
+      name: 'fresh-intake.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.7\nCodex disposable fresh intake fixture\n'),
+    });
+    await intake.getByRole('button', { name: 'Receive Selected Files' }).click();
+    await expect(rows.locator('[data-intake-state]')).toHaveText('Received');
+    await intake.getByRole('button', { name: 'Discard Draft' }).click();
+    await expect(rows).toHaveCount(0);
+    await expect(intake.locator('[data-intake-live]')).toHaveText('The draft intake was discarded.');
+
+    const dimensions = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
+    await expectNoSeriousAxeViolations(page);
+  });
+
   test('prioritizes work and separates routine recovery from approval-gated actions', async ({ page }) => {
     await login(page);
     await expect(page.getByRole('heading', { name: 'Operations Cockpit' })).toBeVisible();
