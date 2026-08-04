@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-26
+Last verified: 2026-08-04
 Canonical source: docs/PRODUCTION_OPERATING_RULES.md
 Supersedes: None
 
@@ -60,6 +60,14 @@ These rules apply to every PdfSearch production change.
 - Never delete a volume without a verified backup and restore path.
 - Never delete/recreate a Dokploy project, change its Compose project/volume
   name, or run `docker compose down -v` as part of a routine deployment.
+- Ordinary project-scoped volumes must carry Compose's internal `project`,
+  `volume`, and `version` labels. `Labels: null` is historical volume metadata
+  drift; do not compensate with external-volume declarations, generated project
+  variables, or custom backup labels.
+- Docker cannot relabel an existing local volume. Any ownership-label repair is
+  a non-routine recovery operation requiring stopped writers, retained paired
+  copies, full source/copy/restored digests, exact-name validation, database and
+  signed-readiness evidence, and a no-warning Compose reapply before cleanup.
 - Before and after every deployment, record and compare the image digest,
   OCI revision, Compose hash, `/app/data` volume identity, and data counts.
 - Never use a host bind path as an undocumented persistence contract.
