@@ -131,18 +131,24 @@ test.describe('Operations Cockpit', () => {
     const unavailableRecord = page.locator('.document-record').filter({ hasText: 'Codex Unavailable PDF' });
     await expect(unavailableRecord.getByText('Document file is unavailable').first()).toBeVisible();
     await unavailableRecord.locator('summary[aria-label^="Manage document"]').click();
+    const visibilityRecovery = unavailableRecord
+      .locator('details.document-advanced')
+      .filter({ hasText: 'Visibility & Recovery' });
+    await visibilityRecovery.locator('summary').first().click();
     const editKeywords = page.getByRole('button', { name: 'Edit Keywords' });
     await editKeywords.hover();
     await expectNoSeriousAxeViolations(page);
     await editKeywords.focus();
     await expectNoSeriousAxeViolations(page);
-    const unavailableCode = unavailableRecord.getByText('document_media_unavailable', { exact: true });
+    const unavailableEvidence = visibilityRecovery
+      .locator('details.operator-evidence')
+      .filter({ hasText: 'document_media_unavailable' });
+    const unavailableCode = unavailableEvidence.getByText('document_media_unavailable', { exact: true });
     await expect(unavailableCode).toBeHidden();
-    const technical = unavailableRecord.getByText('Technical details').first();
-    await technical.focus();
-    await page.keyboard.press('Enter');
+    const technical = unavailableEvidence.locator('summary');
+    await technical.click();
     await expect(unavailableCode).toBeVisible();
-    await page.keyboard.press('Enter');
+    await technical.click();
     await expect(unavailableCode).toBeHidden();
 
     const bindRecovery = unavailableRecord.getByText('Bind recovery evidence').first();
@@ -171,16 +177,21 @@ test.describe('Operations Cockpit', () => {
 
     const availableRecord = page.locator('.document-record').filter({ hasText: 'Codex Smoke PDF' });
     await availableRecord.locator('summary[aria-label^="Manage document"]').click();
-    const quarantine = availableRecord.getByText('Mark unavailable').first();
+    const availableVisibility = availableRecord
+      .locator('details.document-advanced')
+      .filter({ hasText: 'Visibility & Recovery' });
+    await availableVisibility.locator('summary').first().click();
+    const quarantine = availableVisibility.getByText('Mark unavailable').first();
     await quarantine.hover();
     await expectNoSeriousAxeViolations(page);
     await quarantine.focus();
     await expectNoSeriousAxeViolations(page);
     await page.keyboard.press('Enter');
-    await expect(page.getByLabel(/Expected digest/).first()).toBeVisible();
+    const quarantineForm = availableVisibility.locator('form[action$="/unavailable/"]');
+    await expect(quarantineForm.getByLabel(/Expected digest/)).toBeVisible();
     await expectNoSeriousAxeViolations(page);
-    await expect(page.locator('input[name="confirmation"]').first()).toHaveAttribute('lang', 'en');
-    await expect(page.locator('input[name="confirmation"]').first()).toHaveAttribute('dir', 'ltr');
+    await expect(quarantineForm.locator('input[name="confirmation"]')).toHaveAttribute('lang', 'en');
+    await expect(quarantineForm.locator('input[name="confirmation"]')).toHaveAttribute('dir', 'ltr');
 
     await page.setViewportSize({ width: 320, height: 720 });
     const quarantineDimensions = await page.evaluate(() => ({
