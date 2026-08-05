@@ -4,6 +4,10 @@ Reviewed against commit `273e5a5` on 2026-07-30. These files are handoff
 contracts for future developers and AI agents. Read the selected plan fully,
 run its drift check, and stop when a stated assumption is false.
 
+Read [`docs/HANDOFF.md`](../docs/HANDOFF.md) first for current repository,
+runtime, data, blockers, and next actions. Plans describe implementation scope;
+they do not override the living handoff's observed state.
+
 ## Status vocabulary
 
 - `DONE`: implemented decision or verified historical work; do not rebuild.

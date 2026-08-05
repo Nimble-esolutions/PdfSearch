@@ -8,9 +8,8 @@ Supersedes: None
 # Production Operating Rules
 ## Current-state pointer
 
-For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
-Earlier dated sections in this page remain historical evidence and must not
-be used as current deployment state without reconciling them to that record.
+Use the living [HANDOFF.md](HANDOFF.md) for current verified state, blockers,
+and next actions. Dated `STATUS-*.md` pages remain historical evidence.
 
 
 These rules apply to every PdfSearch production change.

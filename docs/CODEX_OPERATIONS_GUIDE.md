@@ -1,14 +1,13 @@
 Status: Active
 Audience: Codex agents and maintainers
 Source conversion: workspace `.kilo` and `.opencode` rules
-Last updated: 2026-07-24
+Last updated: 2026-08-05
 
 # Codex Operations Guide
 ## Current-state pointer
 
-For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
-Earlier dated sections in this page remain historical evidence and must not
-be used as current deployment state without reconciling them to that record.
+Use the living [HANDOFF.md](HANDOFF.md) for current verified state, blockers,
+and next actions. Dated `STATUS-*.md` pages remain historical evidence.
 
 
 This guide converts the workspace Kilo/OpenCode operations bundle into a
@@ -20,17 +19,18 @@ the full operations workspace is present.
 ## Core Rules
 
 1. Read before write.
-2. Back up before mutating production data, services, routes, or volumes.
-3. Prefer zero-downtime diagnostics and deployments.
-4. Never print secrets, `.env` values, RustFS credentials, PDF contents, or
+2. Read and update `docs/HANDOFF.md` with every operationally meaningful task.
+3. Back up before mutating production data, services, routes, or volumes.
+4. Prefer zero-downtime diagnostics and deployments.
+5. Never print secrets, `.env` values, RustFS credentials, PDF contents, or
    copied production data.
-5. Deploy production through GitHub, immutable GHCR image digests, and the
+6. Deploy production through GitHub, immutable GHCR image digests, and the
    Dokploy-connected application.
-6. Keep commits logical: separate UI, tests, docs, operations, release metadata,
+7. Keep commits logical: separate UI, tests, docs, operations, release metadata,
    and emergency evidence.
-7. Treat database, PDF, FAISS, Chroma, and manifest artifacts as one immutable
+8. Treat database, PDF, FAISS, Chroma, and manifest artifacts as one immutable
    generation when syncing or restoring through the superadmin cockpit.
-8. Never promote a staged generation without checksum, schema, count, and
+9. Never promote a staged generation without checksum, schema, count, and
    representative-search validation.
 
 ## Permission Model

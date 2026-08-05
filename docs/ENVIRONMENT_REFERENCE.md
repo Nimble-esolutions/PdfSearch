@@ -434,7 +434,8 @@ contents, or raw authentication data in evidence or documentation.
 - docs/ENVIRONMENT_CONFIGURATION_GUIDE.md — impact matrix and operational caveats
 - docs/dataops/ENV_CONTRACT.md — Data Operations profile and operation contract
 - docs/dataops/ROLLOUT.md — staged profile rollout and receipt gates
-- docs/STATUS-2026-08-03.md — current activation, stage search, backup, recovery, and readiness evidence
+- docs/HANDOFF.md — current activation, stage search, backup, recovery, and readiness evidence
+- docs/STATUS-2026-08-03.md — historical activation and recovery snapshot
 - docs/STATUS-2026-08-02.md — historical migration, clone, OCR, and quarantine evidence
 - docs/OPERATIONS_RUNBOOK.md — backup, restore, activation, and incident procedures
 - docs/LEGACY_VS_CURRENT_STATE.md — old-versus-current documentation contract
