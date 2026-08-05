@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-04
+Last verified: 2026-08-05
 Canonical source: docs/INDEX.md
 Supersedes: None
 
@@ -13,9 +13,11 @@ Supersedes: None
 
 ## Current operational status
 
-- [STATUS-2026-08-03.md](STATUS-2026-08-03.md) — canonical current record for
-  signed 242-document stage activation, search-policy repair, local and real
-  stage backup/recovery evidence, and current stage-release gates.
+- [HANDOFF.md](HANDOFF.md) — canonical living record for repository, stage,
+  legacy production, signed runtime, backup/recovery, current decisions, and
+  exact next actions.
+- [STATUS-2026-08-03.md](STATUS-2026-08-03.md) — historical snapshot of signed
+  stage activation, search-policy repair, and recovery evidence.
 - [STATUS-2026-08-02.md](STATUS-2026-08-02.md) — historical source snapshot,
   RustFS v2 publication/clone, quarantine, OCR, and migration evidence.
 - [OPERATIONS_CHANGELOG-2026-08-02.md](OPERATIONS_CHANGELOG-2026-08-02.md) —
@@ -159,7 +161,8 @@ Current operational diagrams:
 - [stage-recovery-state.mmd](diagrams/stage-recovery-state.mmd)
 - [ocr-index-lifecycle.mmd](diagrams/ocr-index-lifecycle.mmd)
 
-- `Active` is the current operational or user-facing source.
+- `Active` is a current operational or user-facing source. `HANDOFF.md` is the
+  sole current-state authority when dated status evidence differs.
 - `Proposed` describes a target that is not emitted or enforced by current tooling.
 - `Historical` preserves context and must link to its current replacement or say that none exists.
 - `Client-facing` is reserved for content intended for end users.
