@@ -47,6 +47,15 @@ www.ai-sahakar.net   →  Same static config as ai-sahakar.net
 
 ## Repository Rules
 
+- **Living handoff:** Read [`docs/HANDOFF.md`](docs/HANDOFF.md) before every
+  non-trivial task. Update it in the same branch whenever application,
+  workflow, deployment, environment, migration, data, recovery, security,
+  incident, rollback, or material decision state changes. Include what
+  changed, observed validation, blockers, and the exact safe next action.
+  Never put secrets, document contents, or raw environment values in it.
+  Dated `STATUS-*.md` pages are historical evidence, not current authority.
+  The fast PR contract enforces handoff updates for operational paths.
+
 - MANDATORY impact-analysis gate: Before changing Compose, Dockerfiles,
   Dokploy configuration, volumes, environment contracts, deployment docs, data
   custody, DNS/proxy labels, image identity, or recovery behavior, write a

@@ -17,7 +17,9 @@ on:
       - .github/pull_request_template.md
       - .github/workflows/docs-contract.yml
       - scripts/ci/docs_contract.py
+      - scripts/ci/handoff_contract.py
       - scripts/ci/test_docs_contract.py
+      - scripts/ci/test_handoff_contract.py
       - scripts/ci/test_operator_language.py
       - scripts/ci/validate_operator_language.py
   push:
@@ -29,7 +31,9 @@ on:
       - .github/pull_request_template.md
       - .github/workflows/docs-contract.yml
       - scripts/ci/docs_contract.py
+      - scripts/ci/handoff_contract.py
       - scripts/ci/test_docs_contract.py
+      - scripts/ci/test_handoff_contract.py
       - scripts/ci/test_operator_language.py
       - scripts/ci/validate_operator_language.py
   workflow_dispatch:
@@ -58,5 +62,7 @@ jobs:
         run: |
           python3 -m unittest scripts.ci.test_docs_contract
           python3 scripts/ci/docs_contract.py
+          python3 -m unittest scripts.ci.test_handoff_contract
+          python3 scripts/ci/handoff_contract.py
           python3 -m unittest scripts.ci.test_operator_language
           python3 scripts/ci/validate_operator_language.py
