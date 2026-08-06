@@ -76,6 +76,14 @@ DOCUMENT_PAGE_SIZE = 25
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceJobItem, MaintenanceAuditEvent, SEARCHABLE_PDF_LIFECYCLES, SiteSetting
 from .configuration_registry import build_configuration_groups
+from .search_ui import (
+    SEARCH_VIEW_DEFINITIONS,
+    get_primary_search_view,
+    resolve_search_view,
+    search_template_for,
+    set_primary_search_view,
+    supported_search_view,
+)
 from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultConfigurationError
 from .metrics import metrics_view
 from .maintenance import (
@@ -117,6 +125,18 @@ from .utils import (
 
 CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)
 ADMIN_ROLES = frozenset(("admin", "superadmin"))
+PUBLIC_LOCATE_US_URL = (
+    "https://www.google.com/maps/d/edit?hl=en&mid=1MoHzbONhTORm8fQ0IAZCWG82vtUgIJU"
+    "&ll=18.80607519662995%2C76.7698375&z=7"
+)
+PUBLIC_FEEDBACK_URL = (
+    "https://docs.google.com/forms/d/e/1FAIpQLSca6zWE0E5CIwoFfT6lzdGhaqaslLFpjaSu2mK654hAQVDlSg/"
+    "viewform?usp=header"
+)
+PUBLIC_SEARCH_HELP_URL = (
+    "https://docs.google.com/document/d/1K4Z0RnRcQFXXDxxO10xFVjAbFRBXu7errbWbqtIK8qE/"
+    "edit?usp=sharing"
+)
 
 
 def is_admin_user(user):
@@ -1866,22 +1886,24 @@ def sitemap_xml(request):
 def search_query(request):
     if request.method in {"GET", "HEAD"}:
         if request.path.rstrip("/") == "/search":
-            return redirect("home", permanent=True)
+            redirect_target = reverse("home")
+            requested_view = supported_search_view(request.GET.get("view"))
+            if requested_view:
+                redirect_target = f"{redirect_target}?view={requested_view}"
+            return redirect(redirect_target, permanent=True)
+        search_view = resolve_search_view(request.GET.get("view"))
         searchable_scope = visible_pdfs(
             request.user,
             public=not request.user.is_authenticated,
         )
         return render(
             request,
-            "search.html",
+            search_template_for(search_view),
             {
                 "welcome_message": gettext(
-                    "I am Sahakar AI. Learn how to ask better questions and get more useful answers."
+                    "I am Sahakar AI. Click here to learn how to questions to get correct answers."
                 ),
-                "welcome_help_url": (
-                    "https://docs.google.com/document/d/1K4Z0RnRcQFXXDxxO10xFVjAbFRBXu7errbWbqtIK8qE/"
-                    "edit?usp=sharing"
-                ),
+                "welcome_help_url": PUBLIC_SEARCH_HELP_URL,
                 "welcome_help_label": gettext("Click Here"),
                 "welcome_prompt_label": gettext("Try asking"),
                 "welcome_prompts": [
@@ -1966,6 +1988,10 @@ def search_query(request):
                 },
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
+                "locate_us_url": PUBLIC_LOCATE_US_URL,
+                "feedback_url": PUBLIC_FEEDBACK_URL,
+                "search_view": search_view,
+                "primary_search_view": get_primary_search_view(),
                 "indexed_count": searchable_scope.filter(indexed=True).count(),
                 "total_count": searchable_scope.count(),
             },
@@ -2268,6 +2294,8 @@ def settings_view(request):
         "configuration_groups": build_configuration_groups(settings, setting_values),
         "vault_status": vault_status,
         "env_fields": env_fields,
+        "primary_search_view": get_primary_search_view(),
+        "search_view_options": SEARCH_VIEW_DEFINITIONS,
         "title": "Settings & Configuration",
         "breadcrumb_items": [
             {"label": gettext("Dashboard"), "url": reverse("dashboard")},
@@ -2297,4 +2325,34 @@ def save_settings(request):
             saved += 1
 
     messages.success(request, f"Saved {saved} settings. Changes take effect immediately.")
+    return redirect("settings")
+
+
+@superadmin_required
+@require_POST
+def save_search_ui(request):
+    """Set the default public-search presentation without deployment config."""
+
+    try:
+        selected = set_primary_search_view(
+            request.POST.get("primary_search_view"),
+            updated_by=request.user,
+        )
+    except ValueError:
+        messages.error(
+            request,
+            gettext("Choose Classic search or Knowledge workbench."),
+        )
+        return redirect("settings")
+
+    selected_label = next(
+        definition.label
+        for definition in SEARCH_VIEW_DEFINITIONS
+        if definition.value == selected
+    )
+    messages.success(
+        request,
+        gettext("Primary public search view changed to %(view)s.")
+        % {"view": selected_label},
+    )
     return redirect("settings")

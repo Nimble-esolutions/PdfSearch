@@ -131,10 +131,10 @@
     <a class="workbench-nav__active" href="{% url 'home' %}">{% trans "Home" %}</a>
     <button type="button" data-about-open aria-controls="aboutDialog">{% trans "Help" %}</button>
     <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" target="_blank" rel="noopener noreferrer">{% trans "Official website" %}</a>
-    <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6" target="_blank" rel="noopener noreferrer">{% trans "Locate us" %}</a>
+    <a href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">{% trans "Locate us" %}</a>
     <form action="{% url 'set_language' %}" method="post">
       {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.path }}">
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
       {% if request.LANGUAGE_CODE == 'en' %}<input type="hidden" name="language" value="mr"><button type="submit">मराठी</button>{% else %}<input type="hidden" name="language" value="en"><button type="submit">English</button>{% endif %}
     </form>
     {% if user.is_authenticated %}
@@ -288,7 +288,7 @@ window.PdfSearch = {
   csrfToken: "{{ csrf_token }}",
   setLanguageUrl: "{% url 'set_language' %}",
   whatsappUrl: "https://wa.me/{{ whatsapp_number|default:'919421200000' }}",
-  feedbackUrl: "https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform"
+  feedbackUrl: "{{ feedback_url|escapejs }}"
 };
 </script>
 <script src="{% static 'main/js/search.js' %}"></script>
