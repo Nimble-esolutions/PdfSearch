@@ -18,7 +18,7 @@ async function mockSearch(page: Page, payload: object = { answer, references }) 
 
 test.describe('Civic Knowledge Workbench', () => {
   test('empty state exposes a clear journey and keeps the composer ready', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     const viewportWidth = page.viewportSize()?.width ?? 1440;
     await expect(page.locator('.knowledge-rail')).toBeVisible({ visible: viewportWidth >= 901 });
     await expect(page.locator('.evidence-rail')).toBeVisible({ visible: viewportWidth >= 1440 || viewportWidth <= 900 });
@@ -45,7 +45,7 @@ test.describe('Civic Knowledge Workbench', () => {
 
   test('a question produces a document-oriented answer and source evidence', async ({ page }) => {
     await mockSearch(page);
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('What is the society audit procedure?');
     await page.locator('#sendBtn').click();
     await expect(page.locator('.conversation-entry--assistant').last()).toContainText(answer);
@@ -68,7 +68,7 @@ test.describe('Civic Knowledge Workbench', () => {
       Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
     });
     await mockSearch(page, { answer: richAnswer, references });
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('What documents are required?');
     await page.locator('#sendBtn').click();
     await expect(page.locator('.answer-body strong')).toHaveText('First requirement');
@@ -95,7 +95,7 @@ test.describe('Civic Knowledge Workbench', () => {
       });
     });
     await mockSearch(page, { answer, references: [{ title: 'Unavailable source' }] });
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('What is the society audit procedure?');
     await page.locator('#sendBtn').click();
     const share = page.locator('[data-share-answer]');
@@ -113,7 +113,8 @@ test.describe('Civic Knowledge Workbench', () => {
   });
 
   test('footer partner disclosure is keyboard and touch discoverable without a layout jump', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?view=workbench');
+    await page.evaluate(() => document.fonts.ready);
     const footer = page.locator('.admin-footer__partners');
     await expect(footer).toBeVisible();
     const before = await footer.boundingBox();
@@ -130,7 +131,7 @@ test.describe('Civic Knowledge Workbench', () => {
 
   test('source drawer opens and restores focus after Escape', async ({ page }) => {
     await mockSearch(page);
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('Tell me about audits.');
     await page.locator('#sendBtn').click();
     const trigger = page.locator('[data-evidence-open]').last();
@@ -142,7 +143,7 @@ test.describe('Civic Knowledge Workbench', () => {
   });
 
   test('Marathi shell is complete and keeps the correct document language', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     await page.getByRole('button', { name: 'मराठी' }).click();
     await page.waitForLoadState('networkidle');
     await expect(page.locator('html')).toHaveAttribute('lang', 'mr');
@@ -154,7 +155,7 @@ test.describe('Civic Knowledge Workbench', () => {
   test('has no horizontal overflow and no serious or critical axe violations at 320px', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 568 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     const widths = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
     expect(widths.scroll).toBeLessThanOrEqual(widths.client + 1);
     const results = await new AxeBuilder({ page }).analyze();

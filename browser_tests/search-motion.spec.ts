@@ -57,7 +57,7 @@ test.describe('Search Desk motion profiles', () => {
   test('uses full mode for a capable connection and renders a short answer progressively', async ({ page }) => {
     await setProfile(page);
     await mockAnswer(page);
-    await page.goto('/');
+    await page.goto('/?view=workbench');
 
     await expect(page.locator('body')).toHaveAttribute('data-motion-mode', 'full');
     await page.locator('#userQuery').fill('What does Section 10 cover?');
@@ -69,14 +69,14 @@ test.describe('Search Desk motion profiles', () => {
 
   test('selects light mode for Save-Data and low-capability devices', async ({ page }) => {
     await setProfile(page, { saveData: true, effectiveType: '2g', deviceMemory: 2, hardwareConcurrency: 2 });
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     await expect(page.locator('body')).toHaveAttribute('data-motion-mode', 'light');
     await expect(page.locator('#optional-deva-font')).toHaveAttribute('media', 'not all');
   });
 
   test('selects reduced mode when the user requests reduced motion', async ({ page }) => {
     await setProfile(page, { reducedMotion: true });
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     await expect(page.locator('body')).toHaveAttribute('data-motion-mode', 'reduced');
   });
 
@@ -84,7 +84,7 @@ test.describe('Search Desk motion profiles', () => {
     await setProfile(page);
     const longAnswer = 'Long answer '.repeat(100);
     await mockAnswer(page, longAnswer);
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('Explain cooperative society elections.');
     await page.locator('#sendBtn').click();
     const answer = page.locator('.gpt-msg').last();
@@ -95,7 +95,7 @@ test.describe('Search Desk motion profiles', () => {
 
   test('prompt chips keep keyboard focus and populate the real composer', async ({ page }) => {
     await setProfile(page, { reducedMotion: true });
-    await page.goto('/');
+    await page.goto('/?view=workbench');
     const prompt = page.locator('.prompt-chip').first();
     await prompt.focus();
     await prompt.press('Enter');
