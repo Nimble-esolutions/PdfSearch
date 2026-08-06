@@ -193,7 +193,13 @@ def main():
         headers={"X-CSRFToken": token, "Referer": BASE_URL + "/search/"},
     )
     result = json.loads(body)
-    require(status == 200 and any(ref.get("title") == PDF_TITLE for ref in result.get("references", [])), f"representative search failed: {result}")
+    require(
+        status == 200
+        and result.get("language") == "mr"
+        and re.search(r"[\u0900-\u097f]", result.get("answer", ""))
+        and any(ref.get("title") == PDF_TITLE for ref in result.get("references", [])),
+        f"representative Marathi search failed: {result}",
+    )
     print("[runtime] livez readiness migrations permissions dashboard folder PDF static search: passed")
 
 

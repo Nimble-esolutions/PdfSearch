@@ -149,8 +149,25 @@ def _fake_embeddings(texts: list[str]) -> list[list[float]]:
     return result
 
 
-def _fake_chat(messages: list[dict], **kwargs) -> str:
+def _sandbox_chat_answer(messages: list[dict]) -> str:
+    """Return a deterministic answer that honours the requested prompt language.
+
+    Inspect only system instructions. User-controlled content must not be able to
+    change sandbox-provider behaviour, while lifecycle smoke tests still exercise
+    the same answer-language contract as the real provider.
+    """
+    system_text = " ".join(
+        str(message.get("content", ""))
+        for message in messages
+        if isinstance(message, dict) and message.get("role") == "system"
+    )
+    if "उत्तर फक्त मराठीत" in system_text or "देवनागरी लिपीत" in system_text:
+        return "हा चाचणीसाठी वापरला जाणारा निश्चित मराठी प्रतिसाद आहे."
     return "[SANDBOX] This is a deterministic sandbox response for testing purposes."
+
+
+def _fake_chat(messages: list[dict], **kwargs) -> str:
+    return _sandbox_chat_answer(messages)
 
 
 class _FakeOpenAIClient:
@@ -161,9 +178,7 @@ class _FakeOpenAIClient:
             @staticmethod
             def create(**kwargs):
                 messages = kwargs.get("messages", [])
-                return _FakeChatResponse(
-                    "[SANDBOX] Fake chat response."
-                )
+                return _FakeChatResponse(_sandbox_chat_answer(messages))
 
     class embeddings:
         @staticmethod
@@ -183,12 +198,13 @@ class _FakeOpenAIClient:
 
 class _FakeChatResponse:
     def __init__(self, content):
+        self._content = content
         self.choices = [self]
         self.message = self
 
     @property
     def content(self):
-        return "[SANDBOX] Deterministic fake chat response."
+        return self._content
 
 
 class _FakeEmbeddingResponse:
