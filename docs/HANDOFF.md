@@ -134,8 +134,8 @@ and indexing remained `1.0`.
 | #185 | Rebuilt the approved Classic public search as the primary view while preserving an isolated Knowledge Workbench secondary view |
 | #186 | Corrected search-intent false positives and enforced question-derived English/Marathi answer language across both themes |
 | #187 | Added a standalone, theme-consistent shell for Terms, Privacy, Disclaimer, Data Policy, and Cookie Policy |
-| #188 | Makes local macOS documentation rendering honor an explicit Puppeteer browser and select Playwright's matching headless shell instead of launching the crashing GUI Chrome-for-Testing app |
-| #189 (in review) | Keeps the Classic composer reachable after long answers, safely formats structured responses, validates typed payloads and PDF references, and gates continuity across the viewport matrix |
+| #188 | Made local macOS documentation rendering honor an explicit Puppeteer browser and select Playwright's matching headless shell instead of launching the crashing GUI Chrome-for-Testing app |
+| #189 | Keeps the Classic composer reachable after long answers, safely formats structured responses, validates typed payloads and PDF references, and gates continuity across the viewport matrix |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -149,27 +149,22 @@ no ownership warning.
 There is no data-readiness or search-language blocker. Remaining operational
 work is decision-driven:
 
-1. **Classic search continuity repair:** merge
-   `fix/classic-search-continuity` only after its viewport matrix is green,
-   publish the resulting image, and canary one long structured answer plus a
-   second query on stage. Until then, stage can still expose literal Markdown
-   and lose the composer below a long answer.
-2. **Public information rollout:** certify the image containing merged PRs #187
+1. **Public information rollout:** certify the image containing merged PRs #187
    and #189, deploy stage web and maintenance without touching volumes, and
    canary all five public-information routes in both themes, both
    mismatched-locale answer directions, and Classic long-answer continuity.
-3. **Future production project:** create and validate the dedicated 2026
+2. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
-4. **Production rehearsal:** before traffic changes, select an immutable image,
+3. **Production rehearsal:** before traffic changes, select an immutable image,
    validate rendered Compose and key-only environment posture, restore into
    isolated production-candidate volumes, run search/PDF/auth smoke checks, and
    record rollback image and generation.
-5. **Production cutover:** remains out of scope until separately authorized.
+4. **Production cutover:** remains out of scope until separately authorized.
    Do not change legacy service routing or `prod_flowdocs` while preparing it.
-6. **Stage recovery retest:** run another manual backup and disposable restore
+5. **Stage recovery retest:** run another manual backup and disposable restore
    only when recovery/data contracts change or when explicitly requested.
-7. **Local development:** start the native development stack and rerun focused
+6. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
 
