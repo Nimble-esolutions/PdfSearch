@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.cache import cache
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -84,6 +85,71 @@ class SearchThemeResolutionTests(TestCase):
             status_code=301,
             fetch_redirect_response=False,
         )
+
+    def test_policy_pages_follow_persisted_workbench_theme(self):
+        SiteSetting.objects.create(
+            key=PRIMARY_SEARCH_VIEW_SETTING,
+            value="workbench",
+        )
+        cache.clear()
+
+        for route in ("privacy", "terms", "data_policy", "cookie_policy", "disclaimer"):
+            with self.subTest(route=route):
+                response = self.client.get(reverse(route))
+                self.assertEqual(response.context["search_view"], "workbench")
+                self.assertContains(response, 'class="public-legal public-legal--workbench"')
+                self.assertContains(response, 'class="workbench-header"')
+                self.assertNotContains(response, 'class="classic-banner"')
+                self.assertNotContains(response, "data-about-open")
+
+    def test_policy_preview_override_is_allowlisted_and_preserved(self):
+        response = self.client.get(reverse("privacy") + "?view=workbench")
+
+        self.assertEqual(response.context["search_view"], "workbench")
+        self.assertContains(response, 'href="/?view=workbench"')
+        self.assertContains(response, 'href="/terms/?view=workbench"')
+        self.assertContains(
+            response,
+            '<link rel="canonical" href="https://ai-sahakar.net/privacy/">',
+            html=True,
+        )
+        self.assertNotContains(
+            response,
+            'rel="canonical" href="https://ai-sahakar.net/privacy/?view=workbench"',
+        )
+
+    def test_invalid_policy_preview_falls_back_without_reflecting_query(self):
+        SiteSetting.objects.create(
+            key=PRIMARY_SEARCH_VIEW_SETTING,
+            value="workbench",
+        )
+        cache.clear()
+
+        response = self.client.get(reverse("privacy") + "?view=arbitrary-template")
+
+        self.assertEqual(response.context["search_view"], "workbench")
+        self.assertContains(response, 'class="public-legal public-legal--workbench"')
+        self.assertNotContains(response, "arbitrary-template")
+        self.assertNotContains(response, "/terms/?view=")
+
+    def test_classic_policy_page_is_standalone_and_keeps_one_page_heading(self):
+        response = self.client.get(reverse("terms"))
+        content = response.content.decode()
+
+        self.assertContains(response, 'class="classic-banner"')
+        self.assertContains(response, 'class="legal-document" lang="en"')
+        self.assertEqual(content.count("<h1"), 1)
+        self.assertNotContains(response, "bootstrap")
+        self.assertNotContains(response, "main/css/style.css")
+
+    def test_marathi_interface_does_not_mislabel_english_policy_copy(self):
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
+
+        response = self.client.get(reverse("privacy") + "?view=workbench")
+
+        self.assertContains(response, '<html lang="mr">')
+        self.assertContains(response, '<article class="legal-document" lang="en">')
+        self.assertContains(response, 'value="/privacy/?view=workbench"')
 
 
 class SearchThemeAdminTests(TestCase):

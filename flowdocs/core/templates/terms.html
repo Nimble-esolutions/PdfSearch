@@ -1,7 +1,6 @@
 {% extends "legal_base.html" %}
 {% block content %}
-<article class="legal-document container mt-4 mb-5">
-  <h1>Terms of Service</h1>
+<article class="legal-document" lang="en">
   <p class="text-muted">Last updated: {{ legal_last_updated }}</p>
 
   <h2>1. About These Terms</h2>
@@ -18,7 +17,7 @@
     <li>View AI-generated responses along with references to source documents.</li>
     <li>Access publicly available government circulars, acts, rules, and regulations.</li>
   </ul>
-  <p>Public users are <strong>not required to create an account</strong> and no personal information is collected beyond what is necessary for the technical operation of the Platform (see our <a href="{% url 'privacy' %}">Privacy Policy</a>).</p>
+  <p>Public users are <strong>not required to create an account</strong> and no personal information is collected beyond what is necessary for the technical operation of the Platform (see our <a href="{% url 'privacy' %}{{ public_view_query }}">Privacy Policy</a>).</p>
 
   <h3>2.2 Authorized Officials (Admin Users)</h3>
   <p>Access to the administrative dashboard is restricted to authorized officials of the Registrar, Cooperative Societies, Maharashtra, and other government departments. Admin accounts are created internally by designated administrators. Admin users may:</p>
@@ -50,7 +49,7 @@
     <li><strong>Accuracy Not Guaranteed:</strong> While efforts are made to maintain accurate and current document indexes, AI-generated content may contain errors, omissions, or may not reflect the most recent amendments to laws, rules, or circulars. Always verify critical information against the original source documents or consult the relevant government office.</li>
     <li><strong>Document Currency:</strong> The documents indexed in the Platform are uploaded by authorized officials. The Platform does not independently verify the currency or completeness of uploaded documents.</li>
   </ul>
-  <p>For the full disclaimer, see our <a href="{% url 'disclaimer' %}">Disclaimer</a> page.</p>
+  <p>For the full disclaimer, see our <a href="{% url 'disclaimer' %}{{ public_view_query }}">Disclaimer</a> page.</p>
 
   <h2>5. Intellectual Property</h2>
   <p>Government documents (acts, rules, circulars, notifications) indexed on the Platform are public records. Their content remains in the public domain or subject to the copyright policy of the Government of Maharashtra and the Government of India, as applicable.</p>
@@ -60,7 +59,7 @@
   <p>The Platform integrates with third-party services, including OpenAI for AI-powered search responses. Your use of these integrated services is subject to their respective terms and policies. We do not control and are not responsible for the content, privacy practices, or availability of third-party services.</p>
 
   <h2>7. Privacy and Data Protection</h2>
-  <p>Our collection, processing, and protection of personal data is governed by our <a href="{% url 'privacy' %}">Privacy Policy</a>, which is incorporated into these Terms by reference. The Platform complies with the Digital Personal Data Protection Act, 2023 (DPDA), the Information Technology Act, 2000, and the Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011, to the extent applicable.</p>
+  <p>Our collection, processing, and protection of personal data is governed by our <a href="{% url 'privacy' %}{{ public_view_query }}">Privacy Policy</a>, which is incorporated into these Terms by reference. The Platform complies with the Digital Personal Data Protection Act, 2023 (DPDA), the Information Technology Act, 2000, and the Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011, to the extent applicable.</p>
 
   <h2>8. Limitation of Liability</h2>
   <p>To the fullest extent permitted by applicable law:</p>
@@ -86,7 +85,7 @@
   <p>For any complaints, concerns, or grievances regarding the Platform or these Terms, you may contact:</p>
   <p><strong>Grievance Officer</strong><br>
   Email: grievance@ai-sahakar.net</p>
-  <p>For privacy-specific matters or to exercise your rights under the DPDA 2023, please refer to our <a href="{% url 'privacy' %}">Privacy Policy</a>.</p>
+  <p>For privacy-specific matters or to exercise your rights under the DPDA 2023, please refer to our <a href="{% url 'privacy' %}{{ public_view_query }}">Privacy Policy</a>.</p>
 
   <h2>14. Severability</h2>
   <p>If any provision of these Terms is held to be invalid, illegal, or unenforceable by a court of competent jurisdiction, the remaining provisions shall continue in full force and effect.</p>

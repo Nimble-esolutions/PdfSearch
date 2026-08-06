@@ -115,36 +115,7 @@
 {% endblock %}
 
 {% block public_header %}
-<header class="workbench-header">
-  <a class="workbench-brand" href="{% url 'home' %}" aria-label="{% trans 'AI Sahakar home' %}">
-    <img src="{% static 'main/images/registrar-seal.webp' %}" width="48" height="54" alt="{% trans 'Registrar Co-operative Societies seal' %}">
-    <span class="workbench-brand__department">
-      <strong>{% trans "Registrar Co-operative Societies" %}</strong>
-      <small>{% trans "Maharashtra State" %}</small>
-    </span>
-  </a>
-  <div class="workbench-product" aria-label="{% trans 'AI Sahakar official document search' %}">
-    <span class="workbench-product__mark" aria-hidden="true">AI</span>
-    <span><strong>AI Sahakar</strong><small>{% trans "Official document search" %}</small></span>
-  </div>
-  <nav class="workbench-nav" aria-label="{% trans 'Public service links' %}">
-    <a class="workbench-nav__active" href="{% url 'home' %}">{% trans "Home" %}</a>
-    <button type="button" data-about-open aria-controls="aboutDialog">{% trans "Help" %}</button>
-    <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" target="_blank" rel="noopener noreferrer">{% trans "Official website" %}</a>
-    <a href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">{% trans "Locate us" %}</a>
-    <form action="{% url 'set_language' %}" method="post">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      {% if request.LANGUAGE_CODE == 'en' %}<input type="hidden" name="language" value="mr"><button type="submit">मराठी</button>{% else %}<input type="hidden" name="language" value="en"><button type="submit">English</button>{% endif %}
-    </form>
-    {% if user.is_authenticated %}
-      <a class="workbench-nav__account" href="{% url 'dashboard' %}">{% trans "Dashboard" %}<span>{{ user.username }}</span></a>
-      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">{% trans "Logout" %}</button></form>
-    {% else %}
-      <a class="workbench-nav__admin" href="{% url 'login' %}">{% trans "Admin login" %}</a>
-    {% endif %}
-  </nav>
-</header>
+{% include "components/public/workbench_header.html" %}
 {% endblock %}
 
 {% block page_content %}
