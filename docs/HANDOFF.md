@@ -20,7 +20,7 @@ how the current state was reached, but they do not override this handoff.
 Detailed contracts remain in their owning runbooks; this page links to them
 instead of duplicating their procedures.
 
-Evidence on this page was refreshed on 2026-08-05 (Asia/Kolkata). A live system
+Evidence on this page was refreshed on 2026-08-06 (Asia/Kolkata). A live system
 can change after that time, so repeat the read-only checks in
 [Resume checks](#resume-checks) before a mutation.
 
@@ -43,12 +43,12 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains `4badc118f3d00eef7d15a4c11a3f415d69cf191b` | PR #184 established this living handoff; PR #185 is the independently reviewed public-search theme candidate |
+| Repository integration baseline | `dev` contains `690ed888b30c0b61ce2ac3bc5824457469b83cf0` | PR #185 is merged; Classic and Workbench are both part of the integration baseline |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
-| Stage application artifact | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:1611a6ae7678b01cada362686a2c8cb35325665dfb04ab7f96a3f2db290bebb5` | Running OCI revision is `e0d0858da542cb14ab6f496e002a5b233cd4dec4` (PR #181) |
-| Repository versus stage | Stage still runs OCI revision `e0d0858da542cb14ab6f496e002a5b233cd4dec4` | PR #185 changes only the public search presentation and its superadmin selector; it has not been deployed to stage or production |
+| Stage application artifact | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:b38d887f784a141fe5c3d2d2ca68e721b96d92b76a50e71129d7dcbac120323c` | Running OCI revision is `690ed888b30c0b61ce2ac3bc5824457469b83cf0` (PR #185) |
+| Repository versus stage | Stage and `dev` both run revision `690ed888b30c0b61ce2ac3bc5824457469b83cf0` | The search-intent correction described below is locally verified but not yet merged or deployed |
 | Stage readiness | `status=ready`; database, cache, migrations, data, backup, and DataOps checks are `ok` | Backup, restore, and import actions report `ready` |
 | Stage inventory | 242 PDF rows, 242 indexed PDFs, 46 folders, 7 users | Indexing ratio is `1.0` |
 | Signed runtime | Generation `dataops-import-legacy-20260802-86288855-stage-2026` | Signature verifies; runtime pointer is authoritative |
@@ -101,12 +101,21 @@ backup remains off unless the operator explicitly changes that policy.
 | Backup cadence | Stage backup is manual; a successful receipt is recovery evidence, not a readiness prerequisite |
 | Activation | Signed runtime pointer plus exact manifest digest is required; quarantine presence and HTTP 200 are insufficient |
 | Public search presentation | Classic search is the fail-closed primary view; Knowledge Workbench remains isolated and can be selected by a superadmin or previewed with `?view=workbench` |
+| Public search response contract | Exact standalone greetings/thanks/identity prompts are `small_talk`; document questions are `evidence_answer` or `no_evidence`; both themes consume the same typed JSON contract |
 
-The last controlled public-search evidence (2026-08-03) returned real
-English and Marathi answers with protected references and no sandbox marker.
-It was not repeated during this documentation-only handoff refresh because it
-would invoke an external provider. Repeat it before a release acceptance or
-production promotion.
+The last controlled evidence search confirmed that `Society election rules`
+returned a real answer with three protected references. The exact stage query
+`give me most updated rules about societies` instead returned the generic
+greeting because the legacy small-talk predicate used substring matching:
+`updated` contains `date`, while ordinary words such as `this`, `membership`,
+and `historical` contain `hi`. This predates the theme engine and is a shared
+backend defect, not a Classic- or Workbench-specific failure.
+
+The current correction uses normalized whole-query intent matching, adds typed
+response outcomes, and retains the existing `answer` and `references` fields
+for compatibility. Its packaged-image verification covers 44 Django tests and
+60 Playwright checks across both themes and four viewports. Do not call it
+deployed until its merged OCI revision and stage canaries are recorded here.
 
 ## Recently completed work
 
@@ -132,10 +141,9 @@ no ownership warning.
 
 ## Open decisions and next actions
 
-There is no current stage-readiness blocker. PR #185 passed local theme,
-language, security, accessibility, and responsive browser gates before this
-handoff refresh; fresh hosted certification against the PR #184 contract is
-required before merge. Remaining work is decision-driven:
+There is no data-readiness blocker. The active search-intent candidate must be
+merged and deployed before the reported greeting misclassification is resolved
+on stage. Remaining work is decision-driven:
 
 1. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
@@ -151,10 +159,12 @@ required before merge. Remaining work is decision-driven:
 5. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
-6. **Public theme release:** after PR #185 merges, deploy it only through the
-   normal image pipeline when requested. No environment variable or database
-   migration is required; stage and legacy production remain unchanged until
-   an explicit deployment.
+6. **Search-intent release:** publish the verified candidate through the normal
+   image pipeline, deploy it to stage, and canary `/` plus
+   `/?view=workbench`. Prove exact greetings remain `small_talk`, the reported
+   rules query enters evidence search, source links render safely, and the
+   signed runtime/readiness evidence remains unchanged. No ENV or database
+   migration is required.
 
 ## Known traps that must not recur
 
@@ -170,6 +180,11 @@ required before merge. Remaining work is decision-driven:
 - Do not expose enabled UI controls whose real handler will reject the default
   request. Capability, default action, authored refusal, and retry behavior
   must be tested together.
+- Never classify conversational intent with substring matching. A small-talk
+  fast path must match the complete normalized query, and regression tests must
+  include domain words containing short conversational tokens.
+- Both public themes must preserve the backend response `kind`; a friendly
+  answer without evidence must not be presented as a document-backed answer.
 - Do not deploy a migration to an activated SQLite runtime unless the safe
   runtime migration classifier accepts it as recovery-backed and additive.
 - Do not resurrect VaultOps as a parallel product surface. DataOps v3 replaced

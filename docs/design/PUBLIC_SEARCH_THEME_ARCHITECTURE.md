@@ -44,6 +44,26 @@ Selectors in one theme must not target the other theme. Static files from one
 theme must not be loaded by the other. New behavior may be theme-specific; it
 is shared only when it belongs to the backend contract.
 
+## Shared response contract
+
+Both themes POST the same question and render the same backward-compatible JSON
+shape. `answer` and `references` remain stable; `kind` makes the backend's
+decision observable instead of forcing either frontend to infer it.
+
+| `kind` | Meaning | Source behavior |
+| --- | --- | --- |
+| `small_talk` | Exact standalone greeting, thanks, identity, or unsupported live date/time request | Always empty |
+| `evidence_answer` | Answer grounded in indexed documents | One or more protected source records |
+| `no_evidence` | Document search ran but found no support | Empty; show the authored refinement guidance |
+| `validation` | Empty or otherwise incomplete request | Empty |
+| `error` | Policy, rate-limit, integrity, or unexpected failure | Empty; use the server detail where safe |
+
+Small-talk matching is Unicode-normalized and whole-query only. Punctuation and
+letter case may vary, but a domain question containing `hi`, `date`, `time`, or
+another short token must continue through document retrieval. Examples such as
+`updated rules`, `membership rules`, and `Hi, what is Rule 79?` are required
+negative regression cases.
+
 ## Admin and URL behavior
 
 | Scenario | Result |
@@ -73,8 +93,8 @@ saved primary selection.
 - Django tests prove default, persistence, permission, invalid-value, link, and
   frontend-isolation behavior.
 - Playwright proves both themes, safe answer/source rendering, 30-word limits,
-  Marathi query preservation, 320px overflow, accessibility, and Workbench
-  motion behavior.
+  typed small-talk/evidence outcomes, Marathi query preservation, 320px
+  overflow, accessibility, and Workbench motion behavior.
 - Visual review covers 1920×1080 Classic parity and responsive Classic and
   Workbench layouts.
 - Translation catalogs compile with no fuzzy entries in the affected copy.
