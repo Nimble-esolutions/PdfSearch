@@ -1,7 +1,7 @@
-Status: Active
+Status: Historical remediation record; rescan the current image
 Audience: Developer, Release
 Owner: FlowDocs maintainers
-Last verified: 2026-08-02
+Last verified: 2026-08-06
 Canonical source: docs/SECURITY_SCAN.md
 Supersedes: None
 
@@ -26,9 +26,11 @@ dev, so they are skipped on the pull request. Do not call PR green proof that
 the new image is clean; merge, build the digest, scan that exact digest, and
 record the result before stage deployment.
 
-The stage currently remains on the previous certified b71 image and is not
-activated by this dependency change. Retain that digest as the rollback
-reference until the new image passes smoke, lifecycle, and Trivy gates.
+At the time of this remediation, stage remained on the previous certified b71
+image and was not activated by the dependency change. That is dated evidence,
+not current stage identity; use `HANDOFF.md` and retain the actual prior digest
+as rollback reference until the new image passes smoke, lifecycle, and Trivy
+gates.
 
 ## Current CI Behavior
 

@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-22
+Last verified: 2026-08-06
 Canonical source: DEPLOYMENT_GUIDE.md
 Supersedes: None
 
@@ -17,10 +17,12 @@ The container image provides immutable application code under `/app/flowdocs`.
 The Dokploy-managed `flowdocs_data` volume provides mutable data under
 `/app/data`.
 
-The canonical production domains are `ai-sahakar.net` and `www.ai-sahakar.net`.
-`2026.ai-sahakar.net` was the preview/verification host and remains a historical
-rollback reference. The merged source baseline and current release must be
-recorded from Dokploy at cutover. Dokploy must pull exact image digests with
+Legacy production remains `www.ai-sahakar.net`. `2026.ai-sahakar.net` is the
+current non-production 2026 stage/rehearsal host; it is not production and must
+not be described as a completed cutover. The future 2026 production domains
+will be `ai-sahakar.net` and `www.ai-sahakar.net` only after separately approved
+traffic changes. The merged source baseline and current release must be
+recorded from Dokploy at cutover. Production must pull exact image digests with
 `pull_policy: always`; a tag or stale local `latest` image is not valid release
 evidence.
 
@@ -38,8 +40,8 @@ It builds one shared local application image and runs an isolated pinned RustFS
 service with a bounded boto3 bucket initializer. Stage/production have the same
 web, maintenance, Redis, data/control mount, and critical-environment shape,
 but pull one immutable `repository@sha256:digest` and use external RustFS.
-Never use `down -v` for retained development data; rollback preserves both the
-legacy MinIO volume and the new RustFS volumes.
+Never use `down -v` for retained development data; rollback preserves existing
+development data/control and RustFS volumes.
 
 ## Production Principles
 
@@ -54,10 +56,11 @@ legacy MinIO volume and the new RustFS volumes.
   FAISS fingerprint validation, and explicit promotion.
 - Verify restores, not only backup creation.
 
-RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` is an isolated operator
-recovery vault containing timestamped active/legacy snapshots and checksums.
-Application-level S3 integration is opt-in and explicit; no automatic
-cross-environment synchronization exists.
+DataOps v3 uses an environment-owned RustFS connection for complete immutable
+recovery points, explicit foreign-dataset import/rebind, and isolated restore
+candidates. It never performs automatic cross-environment synchronization.
+Use [`docs/HANDOFF.md`](docs/HANDOFF.md) for the currently verified dataset,
+bucket, generation, and receipt evidence.
 
 See [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) for the complete Dokploy,
 data-custody, backup, restore, and rollback procedures. See

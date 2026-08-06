@@ -2,14 +2,14 @@ flowchart LR
   L["Legacy production<br/>www.ai-sahakar.net<br/>prod_flowdocs read-only"]
   I["Stable snapshot<br/>SQLite + hashes<br/>PDF/media + derived artifacts"]
   V["RustFS v2 source<br/>ai-sahakar-prod-v2"]
-  C["Clone/rebind<br/>explicit generation<br/>collision + digest checks"]
+  C["DataOps import/rebind<br/>explicit generation<br/>collision + digest checks"]
   S["RustFS stage dataset<br/>ai-sahakar-stage-2026"]
   Q["Quarantine<br/>migrations + OCR + embeddings<br/>242/242 ready"]
   A["Signed atomic activation<br/>runtime pointer"]
-  B["First stage backup<br/>stage_2026"]
+  B["Manual stage recovery point<br/>complete manifest"]
   R["Disposable round trip<br/>separate volumes"]
-  P["Public exposure<br/>security approval required"]
+  P["Public stage exposure<br/>approved security exception"]
 
   L --> I --> V --> C --> S --> Q --> A --> B --> R
-  A -. private validation .-> P
-  P -. blocked exception gate .-> L
+  A --> P
+  P -. does not change production .-> L

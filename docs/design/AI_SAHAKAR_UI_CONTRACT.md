@@ -140,11 +140,11 @@ Cockpit** and prioritises:
 - explicit confirmation for destructive category/document actions.
 
 Routine local document care and advanced data custody are separate operator
-journeys. Dashboard readiness actions lead directly to **Documents & Search**.
-Remote publication, generations, restore, activation, retention, and profile
-controls belong to **Vault & Recovery** and use progressive disclosure. Local
-validation, stored-index repair, and bounded reindexing must never appear to
-require a remote Vault profile.
+journeys. Dashboard readiness actions lead directly to **Search maintenance**.
+Recovery points, backup, import/rebind, restore candidates, and activation
+evidence belong to the DataOps v3 **Data protection** journey and use
+progressive disclosure. Local validation, stored-index repair, and bounded
+reindexing must never appear to require a remote recovery connection.
 
 Role visibility is part of the product contract. Do not expose admin actions by
 moving them into decorative menus or by bypassing existing authorization.

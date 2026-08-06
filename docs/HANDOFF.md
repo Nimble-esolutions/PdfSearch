@@ -43,12 +43,12 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains merge `25a2bcb2cc7d2b964365ce396d81b644e3c156a6` | PRs #185–#187 are merged; both themes, typed question-language responses, and theme-consistent public information pages are integrated |
+| Repository integration baseline | `dev` contains merge `a110913bb5c4699e8cb330f946379c332047ce49` | PRs #185–#190 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, and Classic long-answer continuity are integrated |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
 | Stage application artifact | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc` | Web and maintenance are healthy on the same image ID and OCI revision `1067c054edd6a21a7881371ca0670e428dc4cc81` |
-| Repository versus stage | Stage and `dev` both run revision `1067c054edd6a21a7881371ca0670e428dc4cc81` | Stage canaries passed for both themes and both language directions |
+| Repository versus stage | Stage remains on OCI revision `1067c054edd6a21a7881371ca0670e428dc4cc81`; current `dev` is newer | Stage canaries prove the deployed revision only. PRs #187–#190 still require an integrated image certification and stage rollout before their behavior can be claimed live. |
 | Stage readiness | `status=ready`; database, cache, migrations, data, backup, and DataOps checks are `ok` | Backup, restore, and import actions report `ready` |
 | Stage inventory | 242 PDF rows, 242 indexed PDFs, 46 folders, 7 users | Indexing ratio is `1.0` |
 | Signed runtime | Generation `dataops-import-legacy-20260802-86288855-stage-2026` | Signature verifies; runtime pointer is authoritative |
@@ -90,7 +90,7 @@ backup remains off unless the operator explicitly changes that policy.
 
 | Concern | Current decision |
 | --- | --- |
-| Data Operations | DataOps v3 is the active backup/import/restore contract; do not restore the superseded VaultOps UI or parallel control path |
+| Data Operations | DataOps v3 is the active backup/import/restore product and workbench. VaultOps remains an internal compatibility API, control schema, selected maintenance surface, and signed activation/runtime bridge; it is not a second operator product. |
 | Stage image selector | `:latest` is intentional for stage; the resolved running digest and OCI revision are the evidence |
 | Production image selector | Must be an explicitly approved immutable `repo@sha256:<digest>` |
 | Stage public authentication | Production-account exposure exception is approved and its owner, monitoring, incident response, and rollback authority are recorded |
@@ -136,6 +136,7 @@ and indexing remained `1.0`.
 | #187 | Added a standalone, theme-consistent shell for Terms, Privacy, Disclaimer, Data Policy, and Cookie Policy |
 | #188 | Made local macOS documentation rendering honor an explicit Puppeteer browser and select Playwright's matching headless shell instead of launching the crashing GUI Chrome-for-Testing app |
 | #189 | Keeps the Classic composer reachable after long answers, safely formats structured responses, validates typed payloads and PDF references, and gates continuity across the viewport matrix |
+| #190 | Updated the living handoff after the Classic continuity merge |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -149,8 +150,8 @@ no ownership warning.
 There is no data-readiness or search-language blocker. Remaining operational
 work is decision-driven:
 
-1. **Public information rollout:** certify the image containing merged PRs #187
-   and #189, deploy stage web and maintenance without touching volumes, and
+1. **Current integrated rollout:** certify an image from current `dev` containing
+   merged PRs #187–#190, deploy stage web and maintenance without touching volumes, and
    canary all five public-information routes in both themes, both
    mismatched-locale answer directions, and Classic long-answer continuity.
 2. **Future production project:** create and validate the dedicated 2026
@@ -204,7 +205,12 @@ work is decision-driven:
 - Do not deploy a migration to an activated SQLite runtime unless the safe
   runtime migration classifier accepts it as recovery-backed and additive.
 - Do not resurrect VaultOps as a parallel product surface. DataOps v3 replaced
-  it to reduce operator and code complexity.
+  its operator workbench to reduce operator and code complexity. Do not claim
+  that the package was deleted: its internal compatibility API, control schema,
+  selected maintenance handlers, and signed activation/runtime bridge remain.
+- Current operator documentation must say **Data protection** and **Search
+  maintenance**. Historical VaultOps material must identify itself as
+  historical/internal compatibility and link to the current DataOps v3 source.
 
 ## Resume checks
 

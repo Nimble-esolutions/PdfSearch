@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
+Last verified: 2026-08-06
 Canonical source: docs/ENVIRONMENT_CONTRACT.md
 Supersedes: env.minimal, env.template
 
@@ -21,25 +21,30 @@ untouched. The operator-approved stage image channel intentionally follows
     DATA_BOOTSTRAP_MODE=strict
     DATASET_ID=ai-sahakar-stage-2026
     AUTHORITATIVE_DATASET_ID=ai-sahakar-stage-2026
-    DATAOPS_ENV_PROFILES=production_v2_source,stage_2026
-    DATAOPS_RESTORE_PROFILE=stage_2026
-    DATAOPS_BACKUP_PROFILE=stage_2026
+    DATAOPS_ENABLED=1
+    ARTIFACT_VAULT_ENDPOINT=<approved-rustfs-origin>
+    ARTIFACT_VAULT_BUCKET=ai-sahakar-stage-2026-flowdocs-artifact-vault
     BACKUP_ROLE=reader
     BACKUP_SYNC_MODE=manual
     STAGING_INITIAL_ACTIVATION_ENABLED=1
     STAGING_RUNTIME_ACTIVATION_ENABLED=1
     PDFSEARCH_IMAGE=ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest
-    APP_IMAGE_DIGEST=ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest
 
-The production source profile points to the v2 bucket/dataset and the stage
-profile points to the stage-owned bucket/dataset. Credential and signing-key
-values are secret-provider material and must never appear in examples.
+The owned DataOps v3 connection points to the stage bucket/dataset. The
+production-v2 source is a separate foreign read-only connection used only by
+explicit Import. Backup and restore profile selectors are retired operator
+choreography and are not required for v3 route decisions. Credential and
+signing-key values are secret-provider material and must never appear in
+examples. Compose derives the container's `APP_IMAGE_DIGEST` marker from
+`PDFSEARCH_IMAGE`; the resolved digest remains separate inspection evidence.
 Environment edits require a controlled Compose recreate; the Dokploy project
 name must be preserved so named data/control volumes cannot be replaced by
-timestamp-derived blank volumes. See STATUS-2026-08-02.md.
+timestamp-derived blank volumes. See [`HANDOFF.md`](HANDOFF.md); dated status
+pages are historical evidence.
 
-`.env.example` is the only tracked environment example. Deleted duplicate
-templates (`env.minimal`, `env.template`) had stale PostgreSQL and loopback
+`.env.example` is the local copy target; `.env.dataops.example` and the reviewed
+files under `docs/environments/` are tracked role-specific references. Deleted
+duplicates (`env.minimal`, `env.template`) had stale PostgreSQL and loopback
 Redis guidance and are superseded by this contract.
 
 ## Required In Production
@@ -170,15 +175,16 @@ The OCI image carries build identity through:
 - `/app/flowdocs/.release` file: Git SHA, build timestamp, CI run URL
 - the resolved container image digest recorded by the deployment operator
 
-For production, `PDFSEARCH_IMAGE` and `APP_IMAGE_DIGEST` must name that exact
-immutable digest. The 2026 stage deliberately keeps both variables on
-`:latest`; its acceptance record therefore pairs the mutable channel with the
-resolved container digest and OCI revision observed after the pull.
+For production, `PDFSEARCH_IMAGE` must name that exact immutable digest.
+Production Compose passes the same reference to the application as
+`APP_IMAGE_DIGEST`. The 2026 stage deliberately keeps `PDFSEARCH_IMAGE` on
+`:latest`; its acceptance record pairs the mutable channel with the resolved
+container digest and OCI revision observed after the pull.
 
 ## Artifact Vault Configuration
 
 ```text
-# Legacy compatibility adapter; profile-based DATAOPS_* is canonical.
+# Legacy compatibility adapter; the stored DataOps v3 connection is canonical.
 ARTIFACT_VAULT_ENDPOINT=<legacy-compatibility-endpoint>
 ARTIFACT_VAULT_ACCESS_KEY=<secret-provider-reference>
 ARTIFACT_VAULT_SECRET_KEY=<secret-provider-reference>
@@ -208,7 +214,7 @@ RESTORE_POLICY=disabled|manual|startup-latest|startup-pinned
 DATA_PINNED_GENERATION=<immutable-generation-id>
 ```
 
-The active Vault Operations lifecycle is deliberately split:
+The supported DataOps v3 lifecycle is deliberately split:
 
 ```text
 publish candidate → promote authoritative pointer
@@ -217,11 +223,14 @@ select generation → verify → download → validate → sanitize → rehearse
 confirmed activation → signed intent → runtime cutover → readiness evidence
 ```
 
-`vaultops/services/restore.py` owns restore preparation and its durable
-workspace state. Compatibility and rehearsal reuse the bounded core services.
-`vaultops/services/activation.py` coordinates signed activation intents and the
-activation supervisor owns runtime cutover and crash recovery. A successful
-restore-preparation job does not claim that active bytes changed.
+DataOps v3 owns source discovery, automatic same-dataset versus foreign-source
+routing, durable operations, recovery points, and restore candidates.
+Compatibility and rehearsal reuse bounded core services. Signed activation
+currently adapts the candidate into internal `vaultops` runtime records;
+`vaultops/services/activation.py` coordinates the intent and the supervisor
+owns cutover and crash recovery. This adapter is an implementation detail, not
+a second operator configuration surface. A successful restore-preparation job
+does not claim that active bytes changed.
 
 The retired `core.maintenance.stage_generation()` path and the direct
 `core.restore_pipeline` integration seam are not the operator recovery
@@ -234,9 +243,9 @@ access, or activation. `disabled` and `manual` retain normal startup.
 but stop an absent or zero-byte database with
 `startup_restore_required_but_unavailable`; they do not perform a restore.
 `startup-pinned` requires `DATA_PINNED_GENERATION` even when `DATA_MODE` is not
-`s3-pinned`. Plan 003 still tracks the accumulated-volume and genuinely fresh
-volume deployment proofs; production RustFS remains separately
-operator-authorized.
+`s3-pinned`. Accumulated-volume and genuinely fresh-volume proofs are part of
+the recovery certification contract; current results are recorded in the
+living handoff. Production RustFS remains separately operator-authorized.
 
 `RESTORE_WORKSPACE_ROOT`, `RESTORE_STAGE_TIMEOUT_SECONDS`,
 `RESTORE_REHEARSAL_ENABLED`, `RESTORE_SANITIZE_ENABLED`, and
@@ -352,7 +361,6 @@ single worker active for the SQLite data root. Generation sync and restore remai
 fail-closed until their manifests pass staging validation.
 
 ```text
-MAINTENANCE_WORKER_POLL_SECONDS=3
 MAINTENANCE_SCHEDULER_ENABLED=0
 VAULT_MUTATION_TRACKING_ENABLED=0
 BACKUP_SYNC_MODE=manual
@@ -369,7 +377,7 @@ The worker contains unexpected execution errors to the affected durable job,
 records a bounded failure reason and audit event, and continues polling. Raw
 exception text is not an operator-facing status contract.
 
-`ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`,
+`MAINTENANCE_WORKER_POLL_SECONDS`, `ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`,
 `ARTIFACT_VAULT_BOOTSTRAP_GENERATION`, and
 `ARTIFACT_VAULT_RETENTION_COUNT` are not consumed runtime controls.
 

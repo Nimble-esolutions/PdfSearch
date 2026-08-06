@@ -19,8 +19,9 @@ reconciled active-custody dataset described in the historical sections below.
 The source generation is legacy-20260802T085639Z-86288855 and the stage clone is
 clone-legacy-20260802T085639Z-86288855. The stage-owned import derived from it
 is signature-verified and active with 242/242 indexed PDFs. Manual stage backup
-and isolated rehearsal receipts exist; repeat them from the final immutable
-PR 176 image before release acceptance.
+and isolated rehearsal receipts exist. Repeat the recovery drill when the
+recovery/data contract changes or before an approved production cutover; the
+completed PR #176 gate is not pending.
 
 
 ## Scope
@@ -41,12 +42,12 @@ with timestamped active/legacy snapshots and checksums. Application-level S3
 integration is opt-in and explicit; it does not replace Django storage or
 participate in startup synchronization.
 
-## Current Baseline
+## Historical 2026-07 baseline
 
 - Canonical production domains: `https://ai-sahakar.net` and
   `https://www.ai-sahakar.net` (pending DNS/Traefik cutover).
-- Preview domain: `https://2026.ai-sahakar.net` was used for verified preview
-  and remains a historical rollback reference, not the canonical production URL.
+- The then-preview domain was `https://2026.ai-sahakar.net`; it is now the
+  current non-production stage described by `HANDOFF.md`.
 - Merged source: `2e1ca38`.
 - Production release: Redis-enabled immutable image revision from PR #53.
 - Legacy custody: 242 PDFs and 45 FAISS files.

@@ -21,6 +21,39 @@ ACTIVE_RUNBOOKS = {
     DOCS / "EMERGENCY_DATA_RECOVERY.md",
     DOCS / "INDEX_MAINTENANCE_RUNBOOK.md",
 }
+CURRENT_TRUTH_FILES = {
+    ROOT / "README.md",
+    ROOT / "DEPLOYMENT.md",
+    ROOT / "DEPLOYMENT_GUIDE.md",
+    DOCS / "HANDOFF.md",
+    DOCS / "ARCHITECTURE_OVERVIEW.md",
+    DOCS / "AI_SAHAKAR_ADMIN_USER_GUIDE.md",
+    DOCS / "AI_SAHAKAR_DEVELOPER_GUIDE.md",
+    DOCS / "ENVIRONMENT_CONFIGURATION_GUIDE.md",
+    DOCS / "ENVIRONMENT_CONTRACT.md",
+    DOCS / "ENVIRONMENT_REFERENCE.md",
+    DOCS / "OPERATIONS_RUNBOOK.md",
+    DOCS / "RECOVERY_CERTIFICATION.md",
+    DOCS / "dataops" / "ENV_CONTRACT.md",
+    DOCS / "dataops" / "V3_ARCHITECTURE.md",
+    DOCS / "dataops" / "V3_IMPACT_ANALYSIS.md",
+}
+OBSOLETE_CURRENT_LANGUAGE = (
+    "Vault Operations Workbench",
+    "Vault & Recovery",
+    "Documents & Indexes",
+    "active Vault Operations",
+    "final immutable PR 176",
+    "atomic symlink switch",
+    "/app/data-control/active-generation",
+    "/app/data-control/previous-generation",
+    "/app/data-control/activation-journals",
+)
+BOUNDARY_TRUTH_FILES = {
+    ROOT / "README.md",
+    DOCS / "ARCHITECTURE_OVERVIEW.md",
+    DOCS / "dataops" / "V3_ARCHITECTURE.md",
+}
 STALE_ASSERTIONS = (
     "Plan 003",
     "dashboard/operations/s3",
@@ -33,10 +66,38 @@ def fail(message: str, failures: list[str]) -> None:
 
 
 def markdown_files():
-    yield from sorted(DOCS.rglob("*.md"))
-    for path in (ROOT / "README.md",):
-        if path.is_file():
-            yield path
+    paths = set(DOCS.rglob("*.md"))
+    paths.update(ROOT.glob("*.md"))
+    landing_pages = ROOT / "landing-pages"
+    if landing_pages.is_dir():
+        paths.update(landing_pages.rglob("*.md"))
+    yield from sorted(path for path in paths if path.is_file())
+
+
+def check_current_architecture_language(
+    path: Path,
+    text: str,
+    failures: list[str],
+) -> None:
+    """Reject product-language drift in designated current truth sources."""
+    if path not in CURRENT_TRUTH_FILES:
+        return
+    folded = text.casefold()
+    for stale in OBSOLETE_CURRENT_LANGUAGE:
+        if stale.casefold() in folded:
+            fail(
+                f"{path.relative_to(ROOT)}: obsolete current architecture "
+                f"language: {stale}",
+                failures,
+            )
+    if path in BOUNDARY_TRUTH_FILES:
+        for required in ("DataOps v3", "internal compatibility"):
+            if required.casefold() not in folded:
+                fail(
+                    f"{path.relative_to(ROOT)}: missing current boundary "
+                    f"language: {required}",
+                    failures,
+                )
 
 
 def heading_anchors(text: str) -> set[str]:
@@ -366,8 +427,16 @@ def main() -> int:
         check_links(path, text, failures)
         check_mermaid(path, text, failures, mermaid_sources)
         check_shell(path, text, failures)
+        check_current_architecture_language(path, text, failures)
     for path in sorted(DOCS.rglob("*.mmd")):
         source = path.read_text(encoding="utf-8")
+        for stale in OBSOLETE_CURRENT_LANGUAGE:
+            if stale.casefold() in source.casefold():
+                fail(
+                    f"{path.relative_to(ROOT)}: obsolete diagram language: "
+                    f"{stale}",
+                    failures,
+                )
         if not re.search(
             r"^\s*(flowchart|graph|sequenceDiagram|stateDiagram|classDiagram|erDiagram)",
             source,

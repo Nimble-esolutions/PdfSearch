@@ -1,14 +1,14 @@
 stateDiagram-v2
   [*] --> SourcePublished
-  SourcePublished --> StageCloned : clone/rebind verified
-  StageCloned --> QuarantineReady : restore + migrations + OCR
+  SourcePublished --> StageImported : DataOps import/rebind verified
+  StageImported --> QuarantineReady : restore + migrations + OCR
   QuarantineReady --> ActivationReady : control evidence prepared
   ActivationReady --> Active : signed atomic pointer
-  Active --> BackedUp : first stage_2026 receipt
+  Active --> BackedUp : manual recovery-point receipt
   BackedUp --> RoundTripVerified : isolated restore passes
-  RoundTripVerified --> PrivateStage : public gate not approved
-  RoundTripVerified --> PublicExceptionReview
-  PublicExceptionReview --> Public : owner approval + controls
+  RoundTripVerified --> PublicStage : approved auth exception + controls
+  PublicStage --> RecoveryRetest : recovery contract changes
+  RecoveryRetest --> RoundTripVerified : fresh isolated drill passes
   SourcePublished --> [*] : mutation or digest failure
-  StageCloned --> [*] : collision or incomplete set
-  QuarantineReady --> PrivateStage : activation not scheduled
+  StageImported --> [*] : collision or incomplete set
+  QuarantineReady --> [*] : activation not approved

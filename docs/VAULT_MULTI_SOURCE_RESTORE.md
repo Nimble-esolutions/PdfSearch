@@ -1,4 +1,16 @@
-# Vault Multi-Source Restore
+Status: Historical compatibility runbook and 2026 migration evidence
+Audience: Developer, recovery maintainer
+Owner: FlowDocs maintainers
+Last verified: 2026-08-06
+Canonical replacement: docs/dataops/V3_ARCHITECTURE.md
+
+# Historical Vault multi-source restore
+
+DataOps v3 now detects same-dataset restore versus foreign-source import from
+the selected recovery point and provenance. The explicit Vault profile and
+feature-flag workflow below is retained only to explain the compatibility
+implementation and the dated clone/rebind evidence; it is not the supported
+operator procedure.
 
 ## Current 2026 clone/rebind evidence
 
@@ -12,8 +24,9 @@ remain required.
 The destination restore passed migrations, bilingual OCR, embeddings, and
 indexing for all 242 PDFs. Clone/rebind itself did not activate anything; a
 separate signed operation later committed the stage runtime pointer, followed
-by manual backup and isolated recovery rehearsal. See STATUS-2026-08-03.md for
-current state and exact pending gates.
+by manual backup and isolated recovery rehearsal. See
+[HANDOFF.md](HANDOFF.md) for current state and
+[STATUS-2026-08-03.md](STATUS-2026-08-03.md) for the dated evidence.
 
 The vault restore path prepares a verified runtime generation; it never
 activates it by itself. Runtime activation remains a separate,
@@ -86,7 +99,7 @@ reuses completed objects. Path traversal, symlinks, hard links, case
 collisions, native executable suffixes, digest mismatch, and database or FAISS
 incoherence fail closed.
 
-## Enabling restore
+## Legacy compatibility enabling (do not use for normal DataOps v3 restore)
 
 Keep both switches disabled during initial deployment:
 
@@ -98,10 +111,9 @@ VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH=0
 VAULT_ALLOWED_S3_ENDPOINTS=https://approved-vault.example
 ```
 
-After a read-only profile probe and disposable restore rehearsal, enable
-`VAULT_RESTORE_ENABLED`. Operator job creation additionally requires
-`VAULT_ADMIN_MUTATIONS_ENABLED`. These switches do not enable runtime
-activation.
+These settings gate the retained legacy API. A normal deployment keeps them
+disabled and uses DataOps v3. Do not enable legacy publication or restore in
+parallel with v3. These switches do not enable runtime activation.
 
 The web and maintenance services must share:
 
@@ -145,7 +157,7 @@ is rejected outside staging and is default-deny.
 
 Before enabling an approved profile:
 
-1. Run Django and vaultops unit tests.
+1. Run Django, DataOps v3, and focused VaultOps compatibility tests.
 2. Parse every Compose configuration.
 3. Exercise registration, pointer, manifest, and object verification against
    disposable MinIO/RustFS.

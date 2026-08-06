@@ -1,7 +1,7 @@
-Status: Active implementation gate
+Status: Active architecture-impact record and compatibility-removal backlog
 Audience: developers, reviewers, release and operations owners
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
+Last verified: 2026-08-06
 
 # Data Operations v3 impact analysis
 
@@ -10,11 +10,10 @@ operator simplification from the low-level protections that must remain intact.
 
 ## Current evidence
 
-The 2026 stage control database has no DataOps v2 profiles, operations, or
-recovery points. Its older control plane has records from attempted recovery
-work, but stage still has no signed active runtime pointer. The verified
-production-to-stage clone exists remotely and the active application remains
-unchanged after safely failed restore attempts.
+The 2026 stage completed the DataOps v3 production-to-stage import, activated a
+signed 242-document runtime, published a manual recovery point, and passed an
+isolated restore rehearsal. The older control plane still contains compatibility
+records, but it is not the operator product or route authority.
 
 The running web container currently receives more than one hundred lifecycle
 environment keys across DataOps, VaultOps, and stage exceptions. That is an
@@ -30,9 +29,9 @@ read-only importer, destination-owned signed v3 publication, idempotent object
 reuse, isolated current-schema migration, local English/Marathi/Hindi OCR,
 selective embedding repair, complete FAISS reconstruction, and candidate
 validation against all 242 documents. The active local and production runtimes
-were not changed. Signed activation, one real stage backup, and isolated stage
-round-trip restore remain release gates; compatibility surfaces must stay
-read-only until those gates pass.
+were not changed during that local run. Signed stage activation, one real stage
+backup, and isolated stage round-trip restore subsequently passed. Repeat those
+gates when recovery contracts change and before an approved production cutover.
 
 The rehearsal also proved two failure boundaries that are now enforced in
 code. Candidate preflight rejects a configured embedding model whose default
@@ -54,8 +53,8 @@ rehearsal, while an audit write failure rolls the operation back to running.
 | Conditional registration and CAS pointers | Keep | Prevent collisions, stale workers and concurrent pointer loss |
 | Quarantine/new-generation restore | Keep | Failed restore must not overwrite active data |
 | SQLite integrity, FK and migration rehearsal | Keep | Required before candidate activation |
-| Signed activation and rollback supervisor | Adapt behind DataOps | Valuable safety primitive; VaultOps UI/API does not return |
-| VaultOps profile/workbench/readiness surfaces | Retire after v3 proof | Duplicate product and configuration system |
+| Signed activation and rollback supervisor | Retained behind DataOps | Valuable safety primitive; current `v3_activation.py` bridge still depends on it |
+| VaultOps profile/workbench/readiness surfaces | Operator workbench retired; API/settings cleanup pending | Duplicate product terminology is gone, but internal routes and flags remain |
 | Environment-direction special cases | Replace | Dataset provenance and intent determine routes; environment sets gate strength |
 | Repacked-release and same-dataset flags | Remove | Compatibility and ownership become deterministic plan decisions |
 
@@ -69,7 +68,7 @@ rehearsal, while an audit write failure rolls the operation back to running.
 | DataOps worker/executor | One resumable state machine | Duplicate/stale publication | Lease loss, restart, idempotent retry, process death |
 | Embedding/index contract | Preflight stored and configured dimensions | Mixed vector spaces or runtime query mismatch | Known model dimensions, model change, mixed vectors, deterministic provider |
 | DataOps views/templates/API | Three primary actions and plan preview | Authorization or unsafe hidden defaults | Superadmin, CSRF, rejected secret fields, browser workflow |
-| VaultOps services | Temporary internal adapters only | Coupling old flags into v3 | Adapter contract tests with explicit capability inputs |
+| VaultOps services | Internal activation/maintenance adapters remain | Coupling old flags into v3 | Adapter contract tests with explicit capability inputs |
 | Settings/Compose/env examples | Remove lifecycle key explosion | Web/maintenance drift | Effective Compose parity and redacted config digest |
 | Readiness | Separate application and DataOps posture | Website unavailable because backup is unconfigured | `/readyz` application status plus action-specific DataOps status |
 | Docs/runbooks | Replace v2/VaultOps operator language | Operators use stale instructions | Documentation link/key/contract checks |
@@ -99,7 +98,7 @@ reindex, smoke tests, or confirmation leaves it unchanged.
 | Import preparation | Available | Available | None |
 | Restore preparation/reindex/test | Available | Available | None; isolated generation |
 | Stage activation | Usually available | Briefly gated if required | Short readiness interruption accepted |
-| Production activation | Available where safe | Brief mutation barrier | Bounded write pause; no production deployment in this rollout |
+| Production activation | Not implemented | Rejected before mutation | Current runtime code hard-disables production activation; a future implementation requires separate design and certification |
 | Isolated recovery test | Available | Available | None; disposable volumes only |
 
 ## Security impact
@@ -162,14 +161,24 @@ Do not remove a key merely because it is undesirable. First trace its callers,
 provide a v3 replacement/default, update web and maintenance together, run
 Compose parity checks, and prove the affected scenario.
 
-## Rollout and rollback
+## Historical rollout and current cleanup backlog
 
-1. Add and test the pure v3 planner and manifest contract.
-2. Add read-only source inspection and v2/VaultOps compatibility import.
-3. Add v3 backup publication behind `DATAOPS_ENABLED`, with v2/VaultOps
-   publication disabled.
-4. Add quarantine restore and signed activation adapters under the DataOps
+Completed:
+
+1. Added and tested the pure v3 planner and manifest contract.
+2. Added read-only source inspection and compatibility import.
+3. Added v3 backup publication with legacy publication disabled in the normal
+   deployment posture.
+4. Added quarantine restore and signed activation adapters under the DataOps
    operation state machine.
+
+Still outstanding:
+
+1. Migrate the remaining search-maintenance forms away from VaultOps endpoints.
+2. Replace the activation bridge's VaultOps model/service dependencies without
+   weakening signed intent, pointer, rollback, or crash-recovery guarantees.
+3. Retire legacy APIs, scheduler paths, models, migrations, and environment
+   flags only after caller tracing, data migration, and rollback proof.
 5. Prove all local unit/integration/process-death cases.
 6. Build a disposable stage candidate from the feature branch; do not push or
    change active stage yet.

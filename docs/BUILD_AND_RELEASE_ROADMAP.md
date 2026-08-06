@@ -1,7 +1,7 @@
 Status: Active
 Audience: Release
 Owner: FlowDocs maintainers
-Last verified: 2026-07-24
+Last verified: 2026-08-06
 Canonical source: docs/BUILD_AND_RELEASE_ROADMAP.md
 Supersedes: docs/DOCKER_IMAGE_OPTIMIZATION.md
 
@@ -21,13 +21,14 @@ remains in `requirements.txt` for the future worker image. The earlier complete
 image was observed near 10 GB; that measurement is historical, not the current
 web-image size target.
 
-The canonical production domains are `https://ai-sahakar.net` and
-`https://www.ai-sahakar.net`. The verified preview baseline was
-`https://2026.ai-sahakar.net`; it is retained only as historical rollback
-evidence. Dokploy production promotion requires exact web/Redis digests and
+Legacy production remains `https://www.ai-sahakar.net`.
+`https://2026.ai-sahakar.net` is the current non-production stage/rehearsal
+host, not a production cutover. Future Dokploy production promotion requires
+exact application and infrastructure image digests and
 `pull_policy: always`; compatibility tags are not release identity.
 
-Current dev HEAD: `2e1ca38`.
+Use [HANDOFF.md](HANDOFF.md) for the current `dev` merge and deployed artifact;
+stable architecture documents do not hard-code a moving branch head.
 
 ## Target Image Topology
 

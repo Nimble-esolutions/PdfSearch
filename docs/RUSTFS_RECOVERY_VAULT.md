@@ -273,14 +273,17 @@ did not access or mutate production RustFS data.
 - Do not delete or rewrite a generation referenced by an incident, release, or
   restore record.
 
-## Future completion gate
+## Current implementation boundary
 
-The active `vaultops` path now provides dataset-scoped publication,
-activation-ready restore preparation, separately confirmed runtime activation,
-durable mutation epochs, snapshot barriers, a fail-closed startup posture, and
-a CI-enforced same-generation disposable proof. Plan 003 must still prove both
-deployment boundaries:
+DataOps v3 now owns the supported backup, import, recovery-point, restore, and
+recovery-test contract. It publishes complete v3 recovery points directly to
+the owned RustFS connection and prepares isolated restore candidates. The
+`vaultops` package remains installed for selected internal maintenance and
+signed activation/runtime primitives; its legacy sync/profile/restore surface
+is not a second operator product.
 
-1. an intact accumulated volume is preserved across redeploy; and
-2. a fresh disposable volume can restore the selected generation with no
-   hidden host-only state.
+The accumulated-volume and fresh disposable-volume proofs have both been run
+for the 2026 stage lineage. Repeat them whenever recovery formats, activation,
+storage, migrations, or image/data compatibility change. Current deployment
+evidence and any pending operational decisions belong in
+[HANDOFF.md](HANDOFF.md), not in this architecture contract.

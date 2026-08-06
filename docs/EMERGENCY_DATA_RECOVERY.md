@@ -94,8 +94,8 @@ why the workspace is not ready, including `required_migrations_unapplied`,
 `emergency_db validate` prints this secret-free report and exits nonzero while
 any blocker remains. The prepared workspace is preserved for investigation and
 approved reconciliation; validation never migrates it, overwrites it, or opens
-the configured live Django database aliases. Rebuild indexes through the local
-Documents & Indexes workflow and use the existing signed runtime
+the configured live Django database aliases. Rebuild indexes through
+**Operations → Search maintenance** and use the existing signed runtime
 activation/rollback workflow for any eventual cutover.
 
 ## Unavailable document media

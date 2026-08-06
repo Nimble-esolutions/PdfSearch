@@ -1,14 +1,23 @@
-# Vault lifecycle control plane
+Status: Historical foundation; active internal compatibility schema remains
+Audience: Developer, maintainer
+Owner: FlowDocs maintainers
+Last verified: 2026-08-06
+Canonical replacement: docs/dataops/V3_ARCHITECTURE.md
+
+# Internal VaultOps control schema (historical foundation)
 ## Current-state pointer
 
 Use the living [HANDOFF.md](HANDOFF.md) for current verified state.
-Earlier dated sections remain historical evidence and must be reconciled to
-the living handoff before use.
+DataOps v3 is the supported operator contract. This file documents the durable
+schema and safety primitives that remain in the `vaultops` compatibility layer;
+it is not an operator runbook.
 
 
-The `vaultops` Django app is the durable control-plane foundation for artifact
-vault operations. It deliberately does not activate a runtime, publish an
-object, move an authoritative pointer, or delete remote data.
+The `vaultops` Django app remains a durable internal control-plane foundation.
+Its models are projections rather than authority. The package now also contains
+selected maintenance endpoints and signed activation/runtime services used by
+DataOps v3's temporary bridge. DataOps v3 publishes recovery points directly;
+this schema must not be presented as a separate workbench.
 
 ## Storage boundary
 

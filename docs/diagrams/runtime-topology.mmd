@@ -1,8 +1,19 @@
 flowchart LR
     users["Users"] --> traefik["Traefik / Dokploy route"]
     traefik --> web["FlowDocs web\nimmutable image"]
+    worker["Maintenance worker\nsame immutable image"] --> data
     web --> data["flowdocs_data\n/app/data"]
+    web --> control["flowdocs_control\n/app/data-control"]
+    worker --> control
     web --> redis["Redis\ncache and queue"]
+    worker --> redis
     legacy["prod_flowdocs\nread-only quarantine"] -.->|operator-controlled evidence| web
-    web --> appnet["Application networks"]
-    rustfs["RustFS bucket\nrecovery vault"] -.->|isolated; no app S3 integration| appnet
+    legacy -.->|same read-only mount| worker
+    web --> ingress["dokploy-network\nexternal ingress only"]
+    web --> internal["internal network"]
+    worker --> internal
+    redis --> internal
+    worker --> dataops["DataOps v3\nbackup · import · restore"]
+    dataops --> rustfs["RustFS\nimmutable recovery points"]
+    dataops --> bridge["Internal signed-activation bridge"]
+    bridge --> control

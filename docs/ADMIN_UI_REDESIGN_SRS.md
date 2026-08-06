@@ -105,8 +105,9 @@ path("health/config/", config_health, name="health_config"),
 ---
 
 > Historical design only: the dedicated S3 page and direct bulk mutations are
-> retired. Current operators use Vault Operations, with local maintenance under
-> **Documents & Indexes** and remote lifecycle controls kept separate.
+> retired. Current operators use DataOps v3 **Data protection**, with local
+> work under **Search maintenance**. The `vaultops` package remains internal
+> compatibility infrastructure, not an operator product.
 
 ## Phase 2 — S3 & Bulk Operations Dashboard (historical)
 

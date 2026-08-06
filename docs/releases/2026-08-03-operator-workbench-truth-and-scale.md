@@ -1,12 +1,16 @@
 ---
-Status: Pending merge and stage deployment
+Status: Historical, completed release record
 Audience: Maintainer, Operator, Reviewer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-04
+Last verified: 2026-08-06
 Canonical source: docs/releases/2026-08-03-operator-workbench-truth-and-scale.md
 ---
 
 # Operator workbench truth and scale correction
+
+This record describes the PR #178 delivery. It is not current deployment
+evidence; use [`../HANDOFF.md`](../HANDOFF.md) for current repository and stage
+state.
 
 ## Outcome
 

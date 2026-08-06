@@ -1,7 +1,7 @@
-Status: Active
+Status: Historical baseline; current state is in docs/HANDOFF.md
 Audience: Operator, Recovery
 Owner: FlowDocs maintainers
-Last verified: 2026-07-26
+Last verified: 2026-08-06
 Canonical source: docs/PRODUCTION_BASELINE.md
 Supersedes: None
 
@@ -19,7 +19,7 @@ not PDF contents or secrets.
 ## Runtime
 
 - Canonical domains: `https://ai-sahakar.net` and `https://www.ai-sahakar.net`.
-- Preview domain: `https://2026.ai-sahakar.net` (historical verification host).
+- Current non-production stage/rehearsal domain: `https://2026.ai-sahakar.net`.
 - Merged source: `2e1ca38`.
 - Current release: Redis-enabled immutable image revision from PR #53.
 - Release identity: exact web and Redis image digests recorded in Dokploy.
@@ -29,8 +29,9 @@ not PDF contents or secrets.
   be recorded together.
 - Health gates: `/livez`, `/readyz`, `/health/data/`, `/health/lease/`,
   `/health/metrics/`; the endpoints do not validate PDF or FAISS contents.
-- Management commands: `config_inspect`, `sync_active_generation`,
-  `probe_capabilities` (via shell), `get_authoritative_pointer` (via shell).
+- Historical diagnostics included `config_inspect` and direct Python helpers.
+  Do not copy helper names as management commands; use the maintained command
+  inventory in [`INDEX.md`](INDEX.md) and the current DataOps workflow.
 
 ## Data Baseline
 

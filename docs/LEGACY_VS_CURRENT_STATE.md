@@ -2,7 +2,7 @@
 Status: Active, living comparison
 Audience: Maintainer, Operator, Reviewer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-05
+Last verified: 2026-08-06
 Canonical source: docs/LEGACY_VS_CURRENT_STATE.md
 Update trigger: every verified migration, release, activation, backup, or rollback
 ---
@@ -110,7 +110,7 @@ publish a complete manifest and verify every referenced object.
 | Root route 200 | application is ready | only proxy/web reachability |
 | Container healthy | data is restored | process health only |
 | Quarantine files exist | stage is active | restore evidence only |
-| Profile is configured | backup succeeded | destination selected; receipt still required |
+| Owned connection is configured | backup succeeded | destination selected; receipt still required |
 | Pointer file exists | generation is trusted | verify signature, digest, and readiness |
 | PDF row count | search works | verify extracted text, chunks, embeddings, and indexed state |
 

@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developers, operators, reviewers, and release managers
 Owner: FlowDocs maintainers
-Last verified: 2026-08-02
+Last verified: 2026-08-06
 Canonical source: docs/ENVIRONMENT_REFERENCE.md
 Related: docs/ENVIRONMENT_CONTRACT.md, docs/ENVIRONMENT_CONFIGURATION_GUIDE.md
 
@@ -21,11 +21,11 @@ and readiness evidence have been inspected together.
 | Need | Use | Safe default |
 | --- | --- | --- |
 | Start local development | .env.example and docs/environments/development.env.example | Empty local dataset, sandboxed side effects, no automatic activation |
-| Configure the 2026 stage | docs/environments/stage.env.example plus .env.dataops.example | Stage profile for restore/backup, manual backup until receipt verification, signed activation still off |
+| Configure the 2026 stage | docs/environments/stage.env.example plus .env.dataops.example | One owned stage recovery connection; signed activation remains separately gated |
 | Review production posture | docs/environments/production.env.example | Verify production identity from the running service; do not copy stage or migration-source values |
 | Understand validation rules | docs/ENVIRONMENT_CONTRACT.md | Startup rejects unsafe identity, role, and restore combinations |
 | Understand effects of a change | docs/ENVIRONMENT_CONFIGURATION_GUIDE.md | Inspect effective values without printing secrets |
-| Operate Data Operations | docs/dataops/ENV_CONTRACT.md and docs/dataops/ROLLOUT.md | Profile-based RustFS access, explicit operations, immutable receipts |
+| Operate Data Operations | docs/dataops/ENV_CONTRACT.md and docs/dataops/ROLLOUT.md | One owned RustFS connection, automatic route decisions, immutable receipts |
 
 ## One variable, one source of truth
 
@@ -35,15 +35,16 @@ There are three configuration layers:
 | --- | --- | --- | --- |
 | Application template | .env.example | Copyable local reference and compatibility map | Lowest |
 | Environment template | docs/environments/*.env.example | Reviewed dev, stage, and production posture | Human-controlled deployment input |
-| Data Operations contract | .env.dataops.example | Structured RustFS profiles and recovery controls | Authoritative for Data Operations |
+| Data Operations contract | .env.dataops.example | Minimal v3 identity and owned-connection bootstrap | Authoritative for standard Data Operations |
 | Deployment secrets | Dokploy secret provider | Passwords, API keys, signing keys, object-store credentials | Never committed |
 | Effective runtime | Compose/Dokploy container environment | What the process actually uses | Operational truth |
 
-If two variables describe the same concern, the newer contract wins. The
-profile-based DATAOPS_* contract is authoritative for RustFS recovery. The
-older ARTIFACT_VAULT_* and VAULT_* values remain for compatibility and explicit
-operator workflows; they must not silently create cross-dataset transfers or
-automatic activation.
+If two variables describe the same concern, the v3 contract wins. DataOps uses
+one control-database connection owned by `DATASET_ID`; `ARTIFACT_VAULT_*` may
+bootstrap that connection when none is stored. Old `DATAOPS_*_PROFILE` and
+`VAULT_*` settings remain compatibility implementation only. They must not
+create a parallel operator workflow, cross-dataset transfer, or automatic
+activation.
 
 ## Environment posture at a glance
 
@@ -55,8 +56,8 @@ automatic activation.
 | External side effects | sandbox | sandbox | enabled |
 | External AI | sandbox or disabled | enabled only for approved retrieval/embeddings | enabled only by approved policy |
 | Public anonymous search | enabled locally | enabled for the current search route; does not approve public authentication data | enabled by product policy |
-| Backup role | disabled | reader at the application boundary; stage Data Operations profile is both | disabled in the unchanged legacy production baseline |
-| Data Operations backup | manual local profile | stage_2026, manual until first receipt | Separate reviewed production policy |
+| Backup role | disabled | reader at the legacy application boundary; DataOps v3 owns recovery through its connection | disabled in the unchanged legacy production baseline |
+| Data Operations backup | manual | explicit operator action to the owned stage connection | Separate reviewed production policy |
 | Restore auto-activation | disabled | disabled | disabled |
 | Signed activation | disabled | pending operator evidence | disabled |
 | Exact production authentication data | never copied | private-only unless a security owner approves the permanent exception | authoritative |
@@ -84,6 +85,7 @@ automatic activation.
 | ALLOW_INSECURE_DEFAULTS | Allows local-only defaults | 1 | 0 | 0 | Keep 0 wherever data or users are real |
 | APP_ENV | Runtime policy selector | development | staging | production | Changes validation, side-effect, bootstrap, and backup rules |
 | DEPLOYMENT_ID | Unique deployment identity | local-dev | stage-2026-ai-sahakar | Verify from deployment | Used in receipts, leases, logs, and generation ownership |
+| REPLICA_ID | Process/replica identity in writer and diagnostic evidence | Derived locally unless set | Normally derived | Deployment-specific if explicitly managed | Do not reuse one replica ID across concurrent workers |
 | DATASET_ID | Dataset boundary for reads/writes | ai-sahakar-dev | ai-sahakar-stage-2026 | Verify from running production | A mismatch must fail; never use it to bypass custody |
 | AUTHORITATIVE_DATASET_ID | Dataset accepted as authoritative | Local dataset | Stage dataset | Verify from running production | Prevents accidental writes to another environment |
 | PRODUCTION_SOURCE_ID | Source identity used in lineage | local-dev | ai-sahakar-prod-v2 | Operator-supplied | Stage uses the v2 migration source, not the stage identity |
@@ -97,7 +99,7 @@ automatic activation.
 | EXTERNAL_SIDE_EFFECTS_MODE | Email, webhook, payment, and similar effects | sandbox | sandbox | enabled | Never let production-derived stage data trigger real external effects |
 | EXTERNAL_AI_MODE | AI-only provider policy | sandbox or disabled | enabled by reviewed policy | enabled by reviewed policy | Sandbox is refused in review/stage/prod; this does not authorize unrelated side effects |
 | APP_RELEASE_VERSION | Human-readable release identity | local-dev | stage channel/revision marker | approved Git SHA | Record the resolved stage digest separately |
-| APP_IMAGE_DIGEST | Runtime image marker | blank locally | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest` | immutable GHCR digest | Stage intentionally tracks latest; production never does |
+| APP_IMAGE_DIGEST | Runtime image marker received by the application | blank locally | Derived by Compose from `PDFSEARCH_IMAGE` | Derived by Compose from `PDFSEARCH_IMAGE` | Do not configure it independently in standard Compose; inspect the running container for the resolved digest |
 | PDFSEARCH_IMAGE | Compose image reference | local image may be used | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest` | immutable digest | Stage always pulls and records the resolved digest |
 | PDFSEARCH_DEV_IMAGE | Local development image | pdfsearch-dev:local | unused | unused | Never use a local tag for deployment |
 | LOCAL_BUILD_REVISION | Local build marker | local-dev | unused | unused | Useful for local diagnostics only |
@@ -116,13 +118,14 @@ automatic activation.
 | CHROMA_DIR | Optional vector store | /app/data/chroma_db | Include only when present and compatible |
 | PDF_CACHE_DIR | Render or extraction cache | /app/data/pdf_cache | Include in recovery when it is part of the approved generation |
 | BACKUP_DIR | Local backup workspace | /app/data/backups | Never treat local history as the authoritative RustFS generation |
+| RECOVERY_SET_ROOT | Local recovery-set evidence root | /app/data/backups/recovery-sets | Internal evidence storage; not the RustFS recovery-point namespace |
 | DATA_CONTROL_ROOT | Control-plane data | /app/data-control | Keep paired with data volumes for activation and recovery evidence |
 | CONTROL_DB_PATH | Control database | /app/data-control/control.sqlite3 | Contains registrations, receipts, leases, and activation state |
 | VAULT_RESTORE_ROOT | Quarantine restore root | /app/data/restore-quarantine | Never make quarantine the active runtime implicitly |
 | RUNTIME_GENERATIONS_ROOT | Atomic runtime generations | /app/data/runtime-generations | Activation changes a pointer only after signed evidence |
 | LEGACY_DATA_ROOT | Read-only legacy mount | /mnt/legacy | Source boundary only; never use as an active target |
 | IMPORT_LEGACY_DATA | One-time legacy import switch | 0 | Enable only in a disposable, read-only-source migration procedure |
-| DATA_BOOTSTRAP_MODE | Empty versus populated startup | empty locally, empty for current stage rehearsal, strict in production | An empty value is not a restore; it deliberately starts without data |
+| DATA_BOOTSTRAP_MODE | Empty versus populated startup | empty locally, strict for current stage, strict in production | An empty value is not a restore; it deliberately starts without data |
 | DECLARED_SEED_DB | Optional image/mount seed database | blank unless declared | A seed must be inventoried and compatible |
 | DECLARED_SEED_MEDIA | Optional image/mount seed media | blank unless declared | Do not silently mix seed media with a production-derived database |
 | FIXTURE_BACKUP | Test fixture backup behavior | 0 | Never enable for production custody |
@@ -179,38 +182,51 @@ automatic activation.
 | Variable | Purpose | Reviewed value | Notes |
 | --- | --- | --- | --- |
 | REDIS_URL | Cache/queue endpoint | redis://redis:6379/1 | In Dokploy, redis is the service name; localhost means the web container |
-| MAINTENANCE_WORKER_POLL_SECONDS | Maintenance polling cadence | 3 | Lower values increase load |
 | MAINTENANCE_WORKER_HEARTBEAT_PATH | Worker liveness file | /app/data-control/runtime/maintenance-worker.heartbeat | Paired with readiness evidence |
 | MAINTENANCE_WORKER_HEARTBEAT_MAX_AGE_SECONDS | Worker heartbeat freshness | 30 | Stale evidence degrades readiness |
 | MAINTENANCE_WORKER_READINESS_REQUIRED | Require worker readiness | 1 | Keep enabled in stage/production |
 | MAINTENANCE_JOB_TIMEOUT_SECONDS | Maintenance job bound | 7200 | Shared bound for migration rehearsal, candidate preparation, reindex, and OCR; large legacy databases must not use a separate short timeout |
 | MAINTENANCE_SCHEDULER_ENABLED | Automatic scheduler | 0 in reviewed examples | Enable only with writer fencing and budgets |
+| MAINTENANCE_CANDIDATE_EXECUTION | Internal child-process guard | 0 in normal services | Set by candidate launchers only; operators must not enable it on web/worker services |
 | MAINTENANCE_WORKSPACE_ROOT | Isolated workspaces | /app/data-control/maintenance-workspaces | Never use the active generation as a scratch area |
 | GUNICORN_WORKERS | Web worker count | 1 local, 2 stage, 4 production example | Match memory and concurrency budget |
 | GUNICORN_MAX_REQUESTS | Worker recycling bound | 100 local, 500 stage, 1000 production | Protects long-lived workers |
 | GUNICORN_MAX_REQUESTS_JITTER | Recycling jitter | 0 local, 25 stage, 50 production | Avoids synchronized recycling |
 | GUNICORN_TIMEOUT | Request timeout seconds | 300 | Does not replace background-job bounds |
-| WEB_PORT | Internal web port | 8000 | Traefik/proxy owns public ingress |
+| WEB_PORT | Loopback host port bound to container port 8000 | 8000 | Traefik/proxy owns public ingress; the container port does not change |
 
-## 6. Legacy artifact-vault compatibility
+Development-only host/service controls:
+
+| Variable | Purpose | Default | Notes |
+| --- | --- | --- | --- |
+| REDIS_PORT | Loopback Redis host port | 6379 | Development Compose only; container port remains 6379 |
+| RUSTFS_S3_PORT | Loopback RustFS S3 host port | 19000 | Development Compose only; container port remains 9000 |
+| RUSTFS_CONSOLE_PORT | Loopback RustFS console host port | 19001 | Development Compose only; container port remains 9001 |
+| DEV_RUSTFS_INIT_TIMEOUT_SECONDS | RustFS bucket-initializer wait bound | 120 | Development initializer only; does not bound DataOps operations |
+
+`MAINTENANCE_WORKER_POLL_SECONDS` is a retired/unconsumed name in the current
+runtime. Do not add it to new examples.
+
+## 6. DataOps v3 connection bootstrap and artifact compatibility
 
 | Variable | Purpose | Reviewed posture | Notes |
 | --- | --- | --- | --- |
-| ARTIFACT_VAULT_ENABLED | Older S3/RustFS adapter | 0 in root and stage examples; local dev may use local RustFS | Data Operations profiles are canonical for new recovery work |
-| ARTIFACT_VAULT_ENDPOINT | Older endpoint | Blank unless explicitly local/legacy | Do not point it at a new bucket accidentally |
-| ARTIFACT_VAULT_BUCKET | Older bucket | Blank or explicitly reviewed | The v2 source and stage buckets belong in DATAOPS_PROFILE_MANIFEST |
+| ARTIFACT_VAULT_ENABLED | Enables the older artifact adapter/writer checks | 1 only when that compatibility path is required | DataOps v3 bootstrap does not read this flag; `DATAOPS_ENABLED` is the product gate |
+| ARTIFACT_VAULT_ENDPOINT | Bootstrap endpoint | Approved exact RustFS origin | Required with bucket when no stored connection exists |
+| ARTIFACT_VAULT_BUCKET | Bucket owned by this `DATASET_ID` | Explicitly reviewed | Foreign source buckets belong in read-only DataOps connections, not here |
 | ARTIFACT_VAULT_REGION | S3 region | us-east-1 when local/approved | Must match the provider configuration |
-| ARTIFACT_VAULT_ACCESS_KEY | Older access key | Secret provider only | Never commit |
-| ARTIFACT_VAULT_SECRET_KEY | Older secret key | Secret provider only | Never commit |
-| ARTIFACT_VAULT_AUTO_SYNC | Older automatic sync | 0 | Do not enable alongside profile-based controls without a reviewed migration |
-| ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY | Pull on empty startup | 0 | Startup must not select an arbitrary generation |
-| ARTIFACT_VAULT_BOOTSTRAP_GENERATION | Older pinned generation | blank | Use explicit Data Operations restore instead |
-| ARTIFACT_VAULT_RETENTION_COUNT | Older local retention | 5 | Does not control RustFS immutable retention |
+| ARTIFACT_VAULT_CREDENTIAL_REF | Optional bootstrap reference when deployment wiring passes it | `env://ARTIFACT_VAULT` or approved file reference | Current Compose normally derives the env reference from the injected key pair |
+| ARTIFACT_VAULT_ACCESS_KEY | Bootstrap access key | Secret provider only | Worker resolves it only at execution time; never commit |
+| ARTIFACT_VAULT_SECRET_KEY | Bootstrap secret key | Secret provider only | Worker resolves it only at execution time; never commit |
+| ARTIFACT_VAULT_SESSION_TOKEN | Optional SDK session token | Direct-process only in the current release | Standard web/maintenance Compose does not pass it; temporary session credentials are unsupported there until Compose wiring is added |
 | DEV_RUSTFS_ACCESS_KEY | Local RustFS access key | local-test-only | Disposable local value only; never reuse in stage or production |
 | DEV_RUSTFS_SECRET_KEY | Local RustFS secret key | local-test-only-change-me | Disposable local value only; never commit a real credential |
 | DEV_RUSTFS_BUCKET | Local RustFS bucket | pdfsearch-dev | Keep local buckets separate from recovery buckets |
 
-## 7. Vault sync and snapshot safety
+## 7. Legacy Vault sync and snapshot compatibility
+
+This family still has active callers and focused tests, but it is not DataOps
+v3 backup. Keep `VAULT_SYNC_ENABLED=0` in the normal v3 posture.
 
 | Variable | Effect | Safe reviewed posture | Operational warning |
 | --- | --- | --- | --- |
@@ -222,7 +238,7 @@ automatic activation.
 | VAULT_SYNC_MAX_LAG_SECONDS | Freshness bound | 3600 | Stale evidence must be visible |
 | VAULT_SYNC_MAX_PARALLEL_UPLOADS | Upload concurrency | 4 | Increase only with provider and host evidence |
 | VAULT_SYNC_MAX_PARALLEL_HASHERS | Hash concurrency | 2 | Hashing competes with OCR/indexing for CPU |
-| VAULT_DEFAULT_PROFILE | Older profile selector | production | Prefer DATAOPS_* profile selection |
+| VAULT_DEFAULT_PROFILE | Legacy profile selector | production | Do not use as a DataOps v3 route selector |
 | VAULT_SNAPSHOT_ROOT | Candidate workspace | /app/data-control/snapshots | Keep outside active data |
 | VAULT_SNAPSHOT_BARRIER_TIMEOUT_SECONDS | Snapshot barrier bound | 30 | Failed barriers do not publish |
 | VAULT_SNAPSHOT_CLEANUP_GRACE_SECONDS | Cleanup delay | 120 | Allows evidence review |
@@ -241,13 +257,16 @@ automatic activation.
 | VAULT_JOB_STALE_SECONDS | Stale job threshold | 90 | Stale work can be retried, not silently promoted |
 | VAULT_VALIDATION_MAX_AGE_SECONDS | Validation freshness | 1800 | Activation requires current evidence |
 
-## 8. Vault networking, credentials, restore, and UI
+## 8. Legacy Vault networking, restore API, and UI compatibility
+
+These controls belong to the retained authenticated compatibility API. They
+are not the supported Data protection workflow and remain disabled by default.
 
 | Variable | Purpose | Safe posture | Notes |
 | --- | --- | --- | --- |
-| VAULT_RESTORE_ENABLED | Enables controlled restore | 0 by default | Enable only for an explicit operation |
-| STAGE_SAME_DATASET_RESTORE_ENABLED | Allows an explicitly gated stage recovery point to be restored back into the same stage dataset | 0 by default | Stage-only rehearsal switch; keep disabled in production and retain admin/confirmation gates |
-| VAULT_ADMIN_MUTATIONS_ENABLED | Allows operator mutations | 0 by default | UI visibility is not mutation authority |
+| VAULT_RESTORE_ENABLED | Enables legacy restore API | 0 | Normal restore uses DataOps v3 |
+| STAGE_SAME_DATASET_RESTORE_ENABLED | Old stage restore exception | 0 | V3 treats same-dataset restore as the normal deterministic route |
+| VAULT_ADMIN_MUTATIONS_ENABLED | Allows legacy API mutations | 0 | UI visibility is not mutation authority |
 | VAULT_MUTATION_TRACKING_ENABLED | Tracks source mutations | 0 unless sync is enabled | Required before source publication |
 | VAULT_ALLOWED_S3_ENDPOINTS | Exact permitted origins | Approved HTTPS origins only | Prevents endpoint substitution |
 | VAULT_CREDENTIAL_ALIASES | Server-side credential alias map | Approved aliases only | Values name secret references, not secret contents |
@@ -261,7 +280,7 @@ automatic activation.
 | VAULT_RESTORE_ALLOW_REPACKED_RELEASE_MISMATCH | Staging-only repack exception | 0 | Provenance and structural checks still apply |
 | VAULT_RESTORE_MIN_FREE_BYTES | Free-space floor | 0 in examples | Set a measured floor before high-volume restore |
 | VAULT_RESTORE_MIN_FREE_INODES | Free-inode floor | 0 in examples | Set a measured floor before high-file-count restore |
-| VAULT_UI_PROFILE_CONFIGURATION_ENABLED | Allow profile config in UI | 0 production, 1 local/stage control plane | Configuration must remain auditable |
+| VAULT_UI_PROFILE_CONFIGURATION_ENABLED | Allow legacy profile UI | 0 | DataOps v3 owns current connection configuration |
 | VAULT_UI_SECRET_ENTRY_ENABLED | Allow secret entry in UI | 0 | Use the secret provider |
 | VAULT_PROFILE_ENCRYPTION_KEY | Encrypt UI fallback data | Secret only | Never place a real key in a file |
 | LOCAL_INDEX_MAINTENANCE_ENABLED | Local index jobs | 0 by default | Enable only on the approved worker |
@@ -269,7 +288,11 @@ automatic activation.
 | MAINTENANCE_CANDIDATE_PREPARATION_ENABLED | Build candidate generation | 0 | Does not activate a candidate |
 | MAINTENANCE_CANDIDATE_WRITER_MODE | Authorize candidate writer | 0 | Exactly one fenced writer |
 
-## 9. Atomic activation
+## 9. Staging atomic activation
+
+These settings cannot enable production activation. Current code rejects a
+runtime pointer change when `APP_ENV=production`; production support requires a
+future implementation and recovery certification.
 
 | Variable | Purpose | Reviewed posture | Required evidence |
 | --- | --- | --- | --- |
@@ -283,71 +306,47 @@ automatic activation.
 | ACTIVATION_SUPERVISOR_POLL_SECONDS | Supervisor cadence | 2 | Does not weaken the gates |
 | ACTIVATION_READINESS_TIMEOUT_SECONDS | Activation readiness bound | 120 | Timeout leaves the prior pointer active |
 
-## 10. Data Operations and RustFS profiles
+## 10. Data Operations v3 and RustFS connections
 
 | Variable | Purpose | Current reviewed posture | Notes |
 | --- | --- | --- | --- |
-| DATAOPS_ENABLED | Enables profile-based Data Operations | 1 in reviewed deployment templates | Startup still validates credentials and permissions |
-| DATAOPS_PROFILE_MANIFEST | Structured profile definitions | v2 source plus stage_2026 | Contains bucket/dataset/namespace identity, never secret values |
-| DATAOPS_ENV_PROFILES | Enabled profile names | production_v2_source,stage_2026 | Keep names stable for receipts and automation |
-| DATAOPS_BACKUP_PROFILE | Backup destination profile | stage_2026 | First backup remains manual until receipt verification |
-| DATAOPS_RESTORE_PROFILE | Restore profile | stage_2026 for stage | Explicit operation still selects a generation |
-| DATAOPS_BACKUP_SOURCE_PROFILE | Optional source override | blank | Set only for an approved cross-profile operation |
-| DATAOPS_BACKUP_DESTINATION_PROFILE | Optional destination override | blank | Set only for an approved operation |
-| DATAOPS_RESTORE_SOURCE_PROFILE | Optional restore source override | blank | Must agree with the operation request |
-| DATAOPS_RESTORE_DESTINATION_PROFILE | Optional restore destination override | blank | Must be a separate quarantine target for rehearsal |
-| DATAOPS_BACKUP_MODE | Manual or scheduled backup | manual | Change only after a successful first receipt |
-| DATAOPS_BACKUP_INTERVAL_SECONDS | Scheduled backup interval | 900 | Bounded cadence, not a durability guarantee |
-| DATAOPS_BACKUP_QUIET_PERIOD_SECONDS | Stable source quiet period | 120 | Mutation during scan invalidates publication |
-| DATAOPS_BACKUP_MAX_LAG_SECONDS | Backup freshness bound | 3600 | Readiness can degrade when stale |
-| DATAOPS_AUTO_HEAL_ENABLED | Bounded recovery worker | 1 stage, 0 local | Does not authorize activation |
-| DATAOPS_AUTO_HEAL_INTERVAL_SECONDS | Auto-heal cadence | 60 | Keep bounded |
-| DATAOPS_AUTO_HEAL_REINDEX_PER_RUN | Per-run reindex budget | 500 | Protects CPU and provider spend |
-| DATAOPS_AUTO_HEAL_REINDEX_PER_DAY | Daily reindex budget | 5000 | Reset is evidence-tracked |
-| DATAOPS_AUTO_HEAL_STALE_SECONDS | Stale operation threshold | 90 | Enables retry after worker failure |
-| DATAOPS_AUTO_HEAL_MAX_RETRIES | Retry count | 3 | Permanent mismatch must fail closed |
-| DATAOPS_OPERATION_LEASE_SECONDS | Operation lease | 3600 | Prevents competing mutations |
-| DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING | Automatic activation after restore | 0 | This must remain 0 until explicitly redesigned and approved |
-| DATAOPS_RESTORE_REQUIRE_PRODUCTION_CONFIRMATION | Confirmation for production-derived restore | 1 | Keeps custody boundary explicit |
-| DATAOPS_CLONE_REBIND_ENABLED | Explicit cross-dataset clone/rebind | 0 by default | Requires source generation, destination profile, confirmation, collision and digest checks |
-| DATAOPS_UI_CONFIG_ENABLED | Show Data Operations configuration UI | 1 in operator control plane | UI is not a secret store |
-| DATAOPS_UI_SECRET_ENTRY_ENABLED | Permit UI secret entry | 0 | Use the secret provider |
-| DATAOPS_MIRROR_QUARANTINE_RETENTION_DAYS | Retain guarded mirror deletions | 30 | Cleanup is bounded and recoverable; it is not RustFS retention |
-| DATAOPS_MIRROR_QUARANTINE_CLEANUP_MAX_OBJECTS | Per-pass mirror cleanup bound | 100 | Prevents a single maintenance pass from deleting a large set |
+| `DATAOPS_ENABLED` | Enables Data protection and the v3 executor | `1` after the owned connection is checked | Does not bypass authorization or operation gates |
+| `APP_ENV` | Selects policy strength | Exact environment | V3 accepts development, staging, production, review, and test |
+| `DEPLOYMENT_ID` | Stable operation identity | Unique per deployment | Bound into plans and receipts |
+| `DATASET_ID` | Locally owned dataset | Stable | Must match the stored primary connection |
+| `ARTIFACT_VAULT_ENDPOINT` | Temporary owned-connection bootstrap endpoint | Approved exact origin | Used only when no primary connection is stored |
+| `ARTIFACT_VAULT_BUCKET` | Temporary owned-connection bootstrap bucket | Bucket owned by `DATASET_ID` | A foreign import source is stored separately |
+| `ARTIFACT_VAULT_REGION` | Bootstrap region | Provider region | Non-secret |
+| `ARTIFACT_VAULT_ACCESS_KEY` / `ARTIFACT_VAULT_SECRET_KEY` | Bootstrap worker credentials | Deployment secret provider only | Presence is represented internally as `env://ARTIFACT_VAULT`; browser and receipts never contain values |
 
-The restore quarantine is intentionally derived as
-`DATA_ROOT/restore-quarantine`; it is not configurable through an environment
-variable. This keeps verified candidates on the shared data volume visible to
-both the maintenance worker and activation supervisor.
+DataOps v3 stores one primary `DataConnection` for the local dataset in the
+control database. Backup and same-dataset restore use that connection. Import
+uses an explicit foreign read-only connection and preserves parent lineage.
+Route choice comes from intent and provenance, not from environment profile
+roles or source/destination selectors.
 
-### Canonical profile identities
+The restore quarantine is derived as `DATA_ROOT/restore-quarantine`; it is not
+an operator environment selector. This keeps verified candidates on the shared
+data volume visible to both the maintenance worker and activation supervisor.
 
-| Profile | Bucket | Dataset | Role | Use |
-| --- | --- | --- | --- | --- |
-| production_v2_source | ai-sahakar-prod-flowdocs-artifact-vault-v2 | ai-sahakar-prod-v2 | restore | Immutable verified legacy-production source generation |
-| stage_2026 | ai-sahakar-stage-2026-flowdocs-artifact-vault | ai-sahakar-stage-2026 | both | Stage clone, stage recovery points, and round-trip backups |
+### Retired v2 selector families
 
-The profile credential reference may point to the existing production secret
-reference as approved, but the application must not receive RustFS root
-credentials. Provisioning and permission tests are operator-only.
+The application still parses the following families for compatibility, but a
+new v3 deployment leaves them blank or disabled:
 
-### Profile variable expansion
-
-The compatibility form DATAOPS_PROFILE_<NAME>_* uses an uppercase normalized
-profile name. Prefer DATAOPS_PROFILE_MANIFEST because it keeps the complete
-identity in one auditable value. If the compatibility form is used, verify all
-of these fields before enabling a profile:
-
-| Field | Example for production_v2_source | Example for stage_2026 |
+| Family | Status | Safe action |
 | --- | --- | --- |
-| PROVIDER | rustfs | rustfs |
-| ENDPOINT | approved HTTPS RustFS origin | approved HTTPS RustFS origin |
-| BUCKET | v2 source bucket | stage bucket |
-| REGION | us-east-1 | us-east-1 |
-| DATASET_ID | ai-sahakar-prod-v2 | ai-sahakar-stage-2026 |
-| SOURCE_ID | ai-sahakar-prod-v2 | stage-2026 |
-| NAMESPACE | production-v2 | stage-2026 |
-| CREDENTIAL_REF | DATAOPS_PRODUCTION | DATAOPS_PRODUCTION |
+| `DATAOPS_PROFILE_MANIFEST`, `DATAOPS_ENV_PROFILES`, `DATAOPS_PROFILE_<NAME>_*` | V2 connection model | Leave blank; use the v3 stored/bootstrapped connection |
+| `DATAOPS_BACKUP_PROFILE`, `DATAOPS_RESTORE_PROFILE`, source/destination overrides | V2 route selectors | Leave blank; v3 derives the route |
+| `DATAOPS_BACKUP_MODE`, interval/quiet-period/auto-heal tuning | Legacy scheduler/repair policy | Do not treat as the v3 operator contract |
+| `DATAOPS_CLONE_REBIND_ENABLED`, `STAGE_SAME_DATASET_RESTORE_ENABLED` | Retired exception switches | Leave disabled; v3 import/restore is deterministic |
+| `DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING` | Retired automatic activation choice | Leave disabled; activation is separately signed |
+
+The historical 2026 connection names `production_v2_source` and `stage_2026`
+remain valid receipt/evidence identifiers. They are not required environment
+profile names for a new v3 deployment. RustFS root credentials remain limited
+to one-time provisioning; the application receives only scoped credentials or
+a server-side reference.
 
 ## 11. Public authentication exception
 
@@ -394,8 +393,8 @@ answers or vectors.
 | --- | --- | --- | --- |
 | Add a new local OCR language | PDF_OCR_LANGUAGES, image traineddata, OCR tests | Representative PDFs, OCR evidence, index ratio | Restore prior image/config and reprocess affected documents |
 | Change embedding model | OPENAI_EMBED_MODEL, release identity, index policy | Reindex budget, vector dimension/model evidence, search smoke tests | Keep prior generation and index pointer |
-| Enable stage backup | DATAOPS_BACKUP_PROFILE, mode, credentials, permissions | First receipt, manifest digest, object count, profile fields | Return to manual and retain failed target |
-| Restore a stage generation | Restore source/destination selectors, quarantine root | Checksums, migrations, counts, search, readiness | Do not touch active volumes; discard only after evidence review |
+| Enable stage backup | Owned DataOps connection, scoped credentials, checked capabilities | First receipt, manifest digest, object count, connection/dataset fields | Leave the active runtime unchanged and retain failed evidence |
+| Restore a stage generation | Select a same-dataset recovery point; DataOps derives the quarantine candidate | Checksums, migrations, counts, search, readiness | Do not touch active volumes; discard only after evidence review |
 | Activate a generation | Activation flags, signed intent, smoke query file | Signed pointer and exact manifest digest | Leave previous pointer unchanged |
 | Change public-search posture | PUBLIC_SEARCH_ENABLED and allowlist/rate limits | Route response, authentication boundary, security review | Revert flag and verify route |
 | Change external provider policy | EXTERNAL_AI_MODE, API secret, model, side-effect mode | Provider call policy and redaction checks | Disable provider; local OCR remains available |
@@ -418,7 +417,7 @@ For a deployment, record:
 | Image repository and immutable digest | Proves code identity |
 | Web and maintenance effective lifecycle keys | Prevents split-brain worker posture |
 | Data and control volume identities | Proves paired custody |
-| Dataset, source, profile, and generation IDs | Proves boundary and lineage |
+| Dataset, connection, source, and generation IDs | Proves boundary and lineage |
 | SQLite integrity, migration, media, and PDF counts | Proves artifact compatibility |
 | OCR language/budget and indexing ratio | Proves document intelligence readiness |
 | Backup/restore receipt and manifest digest | Proves recovery behavior |
@@ -432,12 +431,12 @@ contents, or raw authentication data in evidence or documentation.
 
 - docs/ENVIRONMENT_CONTRACT.md — startup validation and required identity rules
 - docs/ENVIRONMENT_CONFIGURATION_GUIDE.md — impact matrix and operational caveats
-- docs/dataops/ENV_CONTRACT.md — Data Operations profile and operation contract
-- docs/dataops/ROLLOUT.md — staged profile rollout and receipt gates
+- docs/dataops/ENV_CONTRACT.md — Data Operations v3 connection and operation contract
+- docs/dataops/ROLLOUT.md — staged recovery rollout and receipt gates
 - docs/HANDOFF.md — current activation, stage search, backup, recovery, and readiness evidence
 - docs/STATUS-2026-08-03.md — historical activation and recovery snapshot
 - docs/STATUS-2026-08-02.md — historical migration, clone, OCR, and quarantine evidence
 - docs/OPERATIONS_RUNBOOK.md — backup, restore, activation, and incident procedures
 - docs/LEGACY_VS_CURRENT_STATE.md — old-versus-current documentation contract
 - .env.example — local copyable reference
-- .env.dataops.example — canonical Data Operations template
+- .env.dataops.example — canonical minimal Data Operations v3 template

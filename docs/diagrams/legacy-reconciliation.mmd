@@ -1,11 +1,11 @@
 flowchart LR
-    legacy["Legacy\n242 PDFs\n45 FAISS"] --> compare["Inventory and compare"]
-    active["Active\n17 PDF rows\n0 PDFs\n11 FAISS"] --> compare
-    compare --> overlap["6 overlapping PDF paths"]
-    compare --> divergence["Divergent SQLite databases"]
-    overlap --> classify["Conflict classification"]
-    divergence --> classify
-    classify --> stage["Staged selected restore"]
+    legacy["Legacy source\nread-only custody"] --> compare["Inventory rows, media, indexes, and hashes"]
+    target["Target instance\nseparate custody boundary"] --> compare
+    compare --> overlap["Classify matching and conflicting paths"]
+    compare --> divergence["Classify database and schema divergence"]
+    overlap --> import["DataOps foreign-source import / rebind"]
+    divergence --> import
+    import --> stage["Isolated restore candidate"]
     stage --> validate["FAISS fingerprints and search"]
     validate --> promote["Explicit promotion only"]
-    direct["Direct copy"] -. "prohibited" .-> stage
+    direct["Direct copy or silent merge"] -. "prohibited" .-> stage

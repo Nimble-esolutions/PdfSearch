@@ -1,6 +1,6 @@
 # Internal legacy data → artifact vault migration
 
-## Current 2026-08-02 execution record
+## Historical 2026-08-02 execution record
 
 The current migration is not the older 2026-07-25 port described in the
 historical section below. The live legacy source was read-only snapshotted into
@@ -14,9 +14,10 @@ the v2 bucket and dataset, then cloned through the explicit stage rebind path.
 The clone was restored to stage quarantine, migrated through
 0027_pdffile_processing_evidence, and reconciled to 242 ready/indexed PDFs.
 Nine PDFs used bounded local OCR fallback with English, Marathi, and Hindi
-language packs. The stage runtime pointer has not been activated and the first
-stage backup has not been published. The authoritative as-of record is
-STATUS-2026-08-02.md.
+language packs. At the time of this snapshot activation and backup were still
+pending; both later succeeded. The authoritative current record is
+[`HANDOFF.md`](HANDOFF.md), while `STATUS-2026-08-02.md` preserves this dated
+execution evidence.
 
 This runbook describes the developer/operator tool for importing a legacy
 PdfSearch data root into the S3-compatible artifact vault. It is intentionally

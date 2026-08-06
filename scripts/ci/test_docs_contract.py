@@ -10,6 +10,41 @@ from scripts.ci import docs_contract
 
 
 class DocumentationContractTests(unittest.TestCase):
+    def test_current_architecture_language_rejects_retired_operator_surface(self):
+        failures = []
+
+        docs_contract.check_current_architecture_language(
+            docs_contract.DOCS / "ARCHITECTURE_OVERVIEW.md",
+            "DataOps v3 uses internal compatibility. Open Vault & Recovery.",
+            failures,
+        )
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("obsolete current architecture language", failures[0])
+
+    def test_current_architecture_language_requires_boundary_truth(self):
+        failures = []
+
+        docs_contract.check_current_architecture_language(
+            docs_contract.ROOT / "README.md",
+            "DataOps v3 is the operator product.",
+            failures,
+        )
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("internal compatibility", failures[0])
+
+    def test_historical_document_is_not_rewritten_as_current(self):
+        failures = []
+
+        docs_contract.check_current_architecture_language(
+            docs_contract.DOCS / "STATUS-2026-08-02.md",
+            "Vault & Recovery was used in this dated record.",
+            failures,
+        )
+
+        self.assertEqual(failures, [])
+
     def test_heading_anchors_match_duplicates_unicode_and_explicit_ids(self):
         anchors = docs_contract.heading_anchors(
             "# Restore & Activation\n"

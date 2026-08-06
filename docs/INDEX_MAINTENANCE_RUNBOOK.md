@@ -6,7 +6,7 @@ Owner: Operations
 
 Last reviewed: 2026-08-02
 
-Use **Vault Operations → Documents & Indexes**. This section changes or checks
+Use **Operations → Search maintenance**. This section changes or checks
 local content/search artifacts; it never publishes, promotes, restores, or
 moves remote Vault authority.
 
@@ -53,7 +53,7 @@ destination instead of an implicit mutation:
 | `profile_unavailable`, `inventory_unavailable`, `inventory_unverified` | Configuration → run a read-only probe or verify authoritative inventory |
 | `runtime_observation_unavailable`, `critical_job_unhealthy` | Jobs & Audit → inspect the durable job and checkpoint |
 | `runtime_not_ready` | Restore & Activation → review prepared workspace evidence |
-| `capacity_degraded` | Documents & Indexes → restore free-space and inode reserve before queueing |
+| `capacity_degraded` | Search maintenance → restore free-space and inode reserve before queueing |
 
 In local development, publication, restore, production activation, and
 external embedding calls are disabled or explicitly gated by environment

@@ -242,8 +242,8 @@ displayed desired image can refer to different bytes over time, or a recreated
 container can continue using an older local image. A tag can also move between
 CI certification and deployment. `pull_policy: always` reduces stale-cache
 risk but cannot prove which certified commit was selected. The 2026 stage
-accepts that tradeoff by policy: keep `PDFSEARCH_IMAGE` and `APP_IMAGE_DIGEST`
-on the approved `:latest` channel and use the actual-container verifier above
+accepts that tradeoff by policy: keep `PDFSEARCH_IMAGE` on the approved
+`:latest` channel (Compose derives the application marker from it) and use the actual-container verifier above
 to record the resolved digest and OCI revision. Production instead sets
 `PDFSEARCH_IMAGE` to the certified `repo@sha256:<digest>`. Do not add Dokploy
 project IDs, generated labels, or Compose-project variables to the checked-in

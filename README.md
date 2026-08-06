@@ -141,10 +141,9 @@ SVGs: [public shell source](docs/diagrams/ui-shell-and-evidence.mmd),
 | Area | Owns | Start with |
 | --- | --- | --- |
 | Django shell | settings, URLs, WSGI/ASGI, runtime paths | flowdocs/flowdocs/ |
-| Safety and lifecycle | environment identity, upload intake, document lifecycle, restore, activation, leases | flowdocs/core/ |
-| Document intelligence | PDF extraction, OCR fallback, chunking, embeddings, FAISS/Chroma | flowdocs/data/ |
-| Data Operations | profile selection, backup/restore routes, operation contracts, readiness | flowdocs/dataops/ |
-| Vault Operations | control database, workbench, receipts, signed activation, supervisors | flowdocs/vaultops/ |
+| Core application and document intelligence | environment identity, upload intake, PDF extraction, OCR fallback, chunking, embeddings, FAISS/Chroma, document lifecycle, and safety gates | flowdocs/core/ |
+| Data Operations v3 | the only supported operator workbench; backup, import, restore, recovery points, policy, and readiness | flowdocs/dataops/ |
+| Internal recovery compatibility | durable legacy control records, selected search-maintenance endpoints, and the signed runtime-activation bridge; not a separate operator product | flowdocs/vaultops/ |
 | Delivery and operations | migration, recovery certification, CI contracts, parity checks | scripts/ |
 | Verification | browser behavior, RustFS/MinIO lifecycle, restore and process-death gates | browser_tests/ and integration_tests/ |
 | Documentation | contracts, runbooks, evidence, architecture and lifecycle diagrams | docs/ |
@@ -157,23 +156,36 @@ the same runtime role.
 ```mermaid
 flowchart LR
   U["Users / operators"] --> W["Django web + workbench"]
-  W --> D["flowdocs/data<br/>PDF, OCR, embeddings, indexes"]
-  W --> O["flowdocs/dataops<br/>profiles + operations"]
-  O --> V["flowdocs/vaultops<br/>receipts + signed activation"]
-  V --> R["RustFS<br/>immutable datasets"]
+  W --> M["Maintenance worker<br/>same immutable image"]
+  W --> D["flowdocs/core<br/>PDF, OCR, embeddings, indexes"]
+  M --> D
+  W --> O["DataOps v3<br/>backup · import · restore"]
+  M --> O
+  O --> R["RustFS<br/>immutable recovery points"]
+  O --> V["Internal activation bridge<br/>flowdocs/vaultops"]
+  V --> P["Signed runtime pointer<br/>atomic activation / rollback"]
   D --> Q["SQLite + media + FAISS + Chroma"]
+  V --> X["flowdocs_control<br/>control DB + signed evidence"]
   W --> C["Redis<br/>cache + queue"]
+  M --> C
   T["scripts + browser_tests + integration_tests"] --> W
 ```
+
+DataOps v3 is the product and operator-language boundary. The `vaultops`
+package has **not** been deleted: its control schema, compatibility API,
+selected maintenance handlers, and activation/runtime primitives are still
+installed and tested. They are implementation details and cleanup debt, not a
+second workbench or a configuration path that operators should assemble. The
+retired `/dashboard/operations/vault/` page redirects to the current DataOps
+workbench.
 
 ### Project structure
 
     flowdocs/
       flowdocs/       Django settings, URLs, WSGI/ASGI, runtime configuration
-      core/           environment, safety, data lifecycle, activation primitives
-      data/           PDF models, extraction, OCR, embeddings, indexing
-      dataops/        profile resolution, backup/restore operation contracts
-      vaultops/       control plane, workbench, activation, receipts, read models
+      core/           application models, PDF/OCR/search, environment and lifecycle safety
+      dataops/        operator workbench and v3 backup/import/restore lifecycle
+      vaultops/       internal compatibility schema, maintenance API, activation bridge
       locale/         application translation assets
     scripts/
       ci/             contract, parity, lifecycle, and release checks
@@ -209,9 +221,15 @@ web container
     backups/
     .instance_id             stable instance identity
   /app/data-control          activation control plane
-    active-generation        atomic symlink to active workspace
-    previous-generation      rollback target
-    activation-journals/     crash recovery journals
+    runtime/active.json      signed active-generation pointer
+    runtime/previous.json    rollback-generation pointer
+    activation/intents/      signed activation requests
+    activation/acks/         web/worker coordination evidence
+    activation/results/      signed activation or rollback results
+    activation/activation.lock  activation serialization lock
+
+  /app/data/runtime-generations/  immutable projected generations
+  /app/data/restore-quarantine/   isolated restore candidates
 
 redis container
   /data                      cache/queue persistence in redis_data
@@ -261,9 +279,10 @@ valuable recovery evidence, but it is not an availability prerequisite.
 - Production release identity: `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:<digest>`
 - Pull policy: the effective Dokploy Compose configuration must use `pull_policy: always`
 
-The 2026 stage deliberately tracks `:latest` for both `PDFSEARCH_IMAGE` and
-`APP_IMAGE_DIGEST`; `pull_policy: always` plus the resolved container digest
-provides its deployment evidence. Production must instead set
+The 2026 stage deliberately tracks `:latest` through `PDFSEARCH_IMAGE`; Compose
+passes that reference to the application as its image marker. `pull_policy:
+always` plus the separately resolved container digest provides deployment
+evidence. Production must instead set
 `PDFSEARCH_IMAGE` to an approved immutable digest. Never infer the running
 artifact from a tag alone.
 

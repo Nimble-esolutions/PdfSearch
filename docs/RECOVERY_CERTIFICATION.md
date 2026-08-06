@@ -13,10 +13,10 @@ cloned generation: migrations through 0027, SQLite integrity, case-insensitive
 PDF inventory, bilingual OCR fallback, extracted text, chunks, embeddings, and
 indexed readiness for all 242 PDFs. This is preparation evidence only.
 
-Fresh-control local certification and a real stage isolated rehearsal have now
-run successfully. Stage also has a signed active pointer for all 242 documents.
-These runs remain provisional until repeated from the final immutable PR 176
-image with corrected v3 readiness evidence. Every round-trip target must use
+Fresh-control local certification and a real stage isolated rehearsal have run
+successfully. Stage also has a signed active pointer for all 242 documents, and
+the corrected DataOps v3 readiness evidence was accepted. Repeat the drill when
+recovery contracts change or before an approved production cutover. Every round-trip target must use
 separate disposable data and control volumes and must never reuse the active
 stage volumes. The complete record is
 [STATUS-2026-08-03.md](STATUS-2026-08-03.md).

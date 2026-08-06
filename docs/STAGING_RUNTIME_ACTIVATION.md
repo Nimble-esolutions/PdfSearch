@@ -10,15 +10,18 @@ failed closed under the older startup contract and automatically rolled back to
 the prior certified image; the signed generation remained ready throughout the
 recovery. See the incident record linked from `docs/INDEX.md`.
 
-The stage environment uses DATAOPS_RESTORE_PROFILE=stage_2026 and
-DATAOPS_BACKUP_PROFILE=stage_2026. The legacy prod_flowdocs mount remains
-read-only at /mnt/legacy and is never an activation target. See
-[STATUS-2026-08-02.md](STATUS-2026-08-02.md) for the verified generation,
-OCR/indexing evidence, and remaining gates.
+The stage dataset is owned by one DataOps v3 recovery connection. Same-dataset
+recovery points route to restore automatically; the production-v2 source is a
+foreign read-only connection used only for import. Operators do not set backup
+and restore profile selectors for this decision. The legacy `prod_flowdocs`
+mount remains read-only at `/mnt/legacy` and is never an activation target. See
+[HANDOFF.md](HANDOFF.md) for current evidence and
+[STATUS-2026-08-02.md](STATUS-2026-08-02.md) for the dated migration record.
 
-This runbook covers the staging-only runtime cutover protocol introduced by the
-vault control plane. Production activation is hard-disabled in Django settings,
-the coordinator, the legacy activation helper, and the process supervisor.
+This runbook covers the staging-only runtime cutover protocol used by DataOps
+v3. Signed activation currently crosses an internal `vaultops` compatibility
+bridge. Production activation is hard-disabled in Django settings, the
+coordinator, the legacy activation helper, and the process supervisor.
 
 ## Safety model
 
@@ -64,15 +67,12 @@ ACTIVATION_RECOVERY_SUPERADMIN_USERNAME=<staging-recovery-user>
 ACTIVATION_RECOVERY_SUPERADMIN_PASSWORD=<staging-only-secret>
 ```
 
-Run activation management commands as the application account:
-
-```bash
-docker compose exec -T --user appuser web \
-  python manage.py <activation-command>
-```
-
-Do not use an unqualified `docker compose exec` for activation. Docker starts
-such an exec as root in this image; signed intent directories created by root
+Activation is initiated through the confirmed DataOps workflow and processed by
+the queued executor plus internal signed-activation bridge; there is no generic
+`<activation-command>` management command. When a runbook names a real Django
+management command for diagnosis or reconciliation, execute it as `appuser`.
+Do not use an unqualified `docker compose exec`: Docker starts such an exec as
+root in this image, and signed intent directories created by root
 are intentionally private and therefore inaccessible to the appuser runtime
 supervisor.
 
@@ -165,14 +165,15 @@ a staging activation acceptance probe.
 1. Back up the application and control SQLite databases.
 2. Confirm `/app/data-control` is durable, shared, writable by the application
    user, and not inside a runtime generation.
-3. Restore and validate the current staging dataset through the vault restore
-   pipeline. The resulting workspace must be `activation_ready`.
+3. Restore and validate the selected same-dataset recovery point through
+   DataOps v3. The resulting candidate must be activation-ready.
 4. Confirm the prepared runtime contains:
    `db.sqlite3`, `media/`, `pdf_cache/`, `faiss_indexes/`, `chroma_db/`, and
    `runtime-evidence.json`.
-5. Create the initial signed `runtime/active.json` through the same
-   `vaultops.runtime_control.build_runtime_pointer()` implementation used by the
-   coordinator. Do not hand-edit a pointer.
+5. Create the initial signed `runtime/active.json` through the DataOps
+   activation action. Its current internal adapter uses
+   `vaultops.runtime_control.build_runtime_pointer()`; do not call the adapter
+   directly or hand-edit a pointer.
 6. Start both services with activation still disabled and verify `/livez` and
    `/readyz`.
 7. Enable `STAGING_RUNTIME_ACTIVATION_ENABLED=1` for both services and restart
