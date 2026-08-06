@@ -201,6 +201,9 @@ msgstr "संबंधित स्रोत तपासत आहोत…"
 msgid "Preparing an answer…"
 msgstr "उत्तर तयार करत आहोत…"
 
+msgid "Answer ready"
+msgstr "उत्तर तयार आहे"
+
 #: core/templates/base.html:8 core/templates/home.html:8
 msgid ""
 "Commissioner for Cooperation and Registrar, Cooperative Societies, "

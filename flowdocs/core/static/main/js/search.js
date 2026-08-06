@@ -28,7 +28,6 @@ let requestTimeout = null;
 let stageTimer = null;
 let answerSequence = 0;
 const answerStore = new Map();
-const ANSWER_REVEAL_LIMIT = 900;
 
 function detectPerformanceProfile() {
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -301,6 +300,7 @@ function appendWelcomeMessage(text, href, label) {
 function appendErrorMessage(title, detail, retryQuery) {
     const box = document.createElement('div');
     box.className = 'search-error conversation-entry conversation-entry--assistant';
+    box.setAttribute('role', 'alert');
 
     const content = document.createElement('div');
     const heading = document.createElement('strong');
@@ -330,13 +330,7 @@ function typeEffect(text, references = [], query = "", responseKind = "evidence_
     if (["en", "mr"].includes(language)) div.lang = language;
     div.setAttribute("aria-live", "off");
     chatMain.appendChild(div);
-    let answerFormatted = false;
-
     const finish = () => {
-        if (!answerFormatted) {
-            div.replaceChildren();
-            appendFormattedAnswer(div, text);
-        }
         div.classList.add("answer-complete");
         appendReferences(div, references);
         appendAnswerActions(div, {answer: text, query, references});
@@ -345,49 +339,15 @@ function typeEffect(text, references = [], query = "", responseKind = "evidence_
         announcement.className = "visually-hidden";
         announcement.setAttribute("role", "status");
         announcement.setAttribute("aria-live", "polite");
-        announcement.textContent = text;
+        announcement.textContent = searchMessages.answer_ready || "Answer ready";
         div.appendChild(announcement);
     };
 
-    const hasStructuredFormatting = /(^|\n)(#{1,3}\s|[-*]\s|\d+[.)]\s)|\*\*/.test(text);
-    const renderImmediately = performanceProfile.mode !== "full"
-        || text.length > ANSWER_REVEAL_LIMIT
-        || hasStructuredFormatting;
-    if (renderImmediately) {
-        appendFormattedAnswer(div, text);
-        answerFormatted = true;
-        finish();
-        return div;
-    }
-
-    let cursor = document.createElement("span");
-    cursor.className = "cursor";
-    div.appendChild(cursor);
-
-    const segmenter = Intl.Segmenter
-        ? new Intl.Segmenter('mr', { granularity: 'grapheme' })
-        : null;
-    const graphemes = segmenter
-        ? [...segmenter.segment(text)].map(seg => seg.segment)
-        : [...text];
-
-    let i = 0;
-    function typing() {
-        if (i < graphemes.length) {
-            if (graphemes[i] === "\n") {
-                cursor.before(document.createElement("br"));
-            } else {
-                cursor.before(document.createTextNode(graphemes[i]));
-            }
-            chatMain.scrollTop = chatMain.scrollHeight;
-            i++;
-            setTimeout(typing, 8);
-        } else {
-            cursor.remove();
-            finish();
-        }
-    }
-    typing();
+    // The response is already complete when this JSON endpoint resolves.
+    // Rendering it synchronously avoids adding up to several seconds of
+    // artificial character-by-character latency after the network wait.
+    appendFormattedAnswer(div, text);
+    finish();
     return div;
 }
 

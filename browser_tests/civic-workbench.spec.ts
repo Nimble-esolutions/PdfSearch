@@ -59,6 +59,55 @@ test.describe('Civic Knowledge Workbench', () => {
     await expect(page.locator('[data-evidence-answer]')).not.toHaveAttribute('hidden');
   });
 
+  test('keeps answer order and composer continuity across immediate sequential searches', async ({ page }) => {
+    let requestCount = 0;
+    await page.route('**/search/**', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      requestCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'evidence_answer',
+          language: 'en',
+          answer: requestCount === 1 ? 'First completed answer.' : 'Second completed answer.',
+          references,
+        }),
+      });
+    });
+    await page.goto('/?view=workbench');
+    await page.locator('#userQuery').fill('First question');
+    await page.locator('#sendBtn').click();
+    await expect(page.locator('.conversation-entry--assistant').last()).toContainText('First completed answer.');
+    await page.locator('#userQuery').fill('Second question');
+    await page.locator('#sendBtn').click();
+
+    const responses = page.locator('.conversation-entry--assistant[data-response-kind]');
+    await expect(responses).toHaveCount(2);
+    await expect(responses.nth(0)).toContainText('First completed answer.');
+    await expect(responses.nth(1)).toContainText('Second completed answer.');
+    await expect(page.locator('#userQuery')).toBeVisible();
+    await expect(page.locator('#userQuery')).toBeEditable();
+  });
+
+  test('announces request failures without removing the composer', async ({ page }) => {
+    await page.route('**/search/**', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'search_unavailable', detail: 'Please try again later.' }),
+      });
+    });
+    await page.goto('/?view=workbench');
+    await page.locator('#userQuery').fill('Unavailable search');
+    await page.locator('#sendBtn').click();
+
+    await expect(page.locator('.search-error').last()).toHaveAttribute('role', 'alert');
+    await expect(page.locator('#userQuery')).toBeVisible();
+    await expect(page.locator('#userQuery')).toBeEditable();
+  });
+
   test('renders a typed small-talk response without fabricating source evidence', async ({ page }) => {
     await mockSearch(page, {
       kind: 'small_talk',
