@@ -3,6 +3,7 @@
 **Updated:** 2026-08-06
 **Merged:** PRs #185 and #186; stage revision `1067c054edd6a21a7881371ca0670e428dc4cc81`
 **Stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc`
+**In review:** PR #187 adds the theme-consistent public information shell; it is not stage evidence until its release and canaries complete
 
 ## Delivered
 
@@ -21,30 +22,39 @@
 - The shared backend resolves answer language from each question and both
   themes apply the returned `language` as accessible DOM metadata; changing the
   primary theme cannot change answer language.
-- Public policy/information pages use the active or explicitly previewed theme
-  through a standalone visitor shell. They do not inherit admin UI assets.
+- PR #187 prepares public policy/information pages to use the active or
+  explicitly previewed theme through a standalone visitor shell. They do not
+  inherit admin UI assets; deployment remains pending at this handoff point.
 
 ## Verification evidence
 
 Completed locally in the isolated development Compose stack:
 
 - Django system check: pass.
-- Targeted Django theme/SEO/search/language/auth tests: 38 pass.
+- Targeted Django theme/SEO/search/language/auth tests: 39 pass for PR #187.
 - Migration drift: none.
 - Marathi catalog compile/fuzzy check and operator-language validation: pass.
 - Classic/Workbench/motion Playwright matrix: 72 pass across desktop, laptop,
   tablet, and mobile.
+- Public information Playwright matrix: 16 pass across five routes, both
+  themes, four viewport classes, canonical/asset isolation, responsive
+  overflow, allowlisted preview propagation, and zero serious/critical Axe
+  findings.
 - Visual review: Classic 1920×1080, Classic 390×844, Workbench 1440×900.
 
 ## Deployment and rollback
 
-PR #185 is deployed on stage. Existing databases required no migration. Classic
+PRs #185 and #186 are deployed on stage. Existing databases required no migration. Classic
 is the default unless a superadmin saves Workbench, and either view remains
 available through its request-only `?view=` override.
 
 Rollback by selecting Workbench in Settings, or by reverting the feature PR.
 Neither action changes documents, indexes, search sources, backups, or runtime
 generations.
+
+PR #187 is locally verified and in review. Do not claim its public-information
+shell is deployed until the merged image revision is running on both stage web
+and maintenance and both theme variants of every public information route pass.
 
 ## Current evidence
 

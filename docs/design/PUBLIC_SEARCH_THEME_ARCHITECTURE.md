@@ -3,7 +3,7 @@
 **Status:** Active
 **Owner:** FlowDocs maintainers
 **Last verified:** 2026-08-06
-**Scope:** Public search presentation only
+**Scope:** Public search and public information presentation
 
 ## Outcome
 
@@ -32,12 +32,15 @@ that persists the allowlisted primary value.
 | Boundary | Classic | Knowledge Workbench | Shared |
 | --- | --- | --- | --- |
 | Django template | `search_classic.html` | `search.html` | View context contract |
+| Public header | `components/public/classic_header.html` | `components/public/workbench_header.html` | None; each partial stays inside its theme |
 | Presentation CSS | `search-classic.css` | `civic-workbench.css`, `search.css` | None |
 | Application JS | `search-classic.js` | `search.js` | None |
 | Layout | Legacy service composition | Three-region evidence workspace | None |
+| Public information pages | Classic header in `legal_base.html` | Workbench header in `legal_base.html` | Policy articles, `public-legal.css`, `public-legal.js` |
 | Search POST | Existing form/JSON request | Existing form/JSON request | `search_query` backend |
 | Sources/PDFs | Safe DOM records | Safe DOM records/drawer | Protected backend URLs |
-| Language | Django locale session | Django locale session | English/Marathi catalog |
+| Interface language | Django locale session | Django locale session | English/Marathi catalog |
+| Answer language | Render backend `language` | Render backend `language` | Derived from question and script-validated |
 | Security | CSRF, escaping, URL allowlist | CSRF, escaping, URL allowlist | Django policy |
 
 Selectors in one theme must not target the other theme. Static files from one
@@ -132,3 +135,10 @@ saved primary selection.
 - Visual review covers 1920×1080 Classic parity and responsive Classic and
   Workbench layouts.
 - Translation catalogs compile with no fuzzy entries in the affected copy.
+
+## Diagrams
+
+- [Public shell and answer-language flow](../diagrams/ui-shell-and-evidence.mmd)
+  ([rendered SVG](../diagrams/ui-shell-and-evidence.svg))
+- [UI impact, PR, release, and stage change control](../diagrams/ui-change-control.mmd)
+  ([rendered SVG](../diagrams/ui-change-control.svg))

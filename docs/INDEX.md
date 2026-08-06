@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-05
+Last verified: 2026-08-06
 Canonical source: docs/INDEX.md
 Supersedes: None
 
@@ -10,6 +10,7 @@ Supersedes: None
 ## Current operational incidents and decisions
 
 - [Activated-runtime additive migration rollout](incidents/2026-08-04-activated-runtime-migration-gap.md)
+- [Chrome for Testing macOS application-registration crash](incidents/2026-08-06-chrome-for-testing-macos-registration-crash.md) — resolved local tooling incident; use the installed headless shell for diagram/document rendering
 
 ## Current operational status
 
@@ -119,6 +120,7 @@ maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
 - [`DOCUMENT_INTAKE_WORKBENCH.md`](DOCUMENT_INTAKE_WORKBENCH.md) — reviewed multi-file intake, receipt states, reason-based lifecycle controls, impact, and verification
 - [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md) — protected public/admin design and interaction contract
 - [`design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md`](design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md) — isolated Classic/Workbench selection and rollback contract
+- [`handoffs/PUBLIC_SEARCH_THEME_ENGINE.md`](handoffs/PUBLIC_SEARCH_THEME_ENGINE.md) — current public-theme delivery, release, and stage evidence
 - [`AI_SAHAKAR_DEVELOPER_GUIDE.md`](AI_SAHAKAR_DEVELOPER_GUIDE.md) — safe UI extension and verification workflow
 - [`DEV_CLEANUP_SCOPE.md`](DEV_CLEANUP_SCOPE.md) — read-only cleanup audit for `dev`
 - `/dashboard/operations/` — operations dashboard
@@ -150,8 +152,8 @@ Historical documents remain for context and are not deployment instructions:
 - [`data-custody-promotion.mmd`](diagrams/data-custody-promotion.mmd) — snapshot-to-promotion controls
 - [`incident-recovery.mmd`](diagrams/incident-recovery.mmd) — incident evidence and isolated recovery
 - [`legacy-reconciliation.mmd`](diagrams/legacy-reconciliation.mmd) — active versus legacy data classification
-- [`ui-shell-and-evidence.mmd`](diagrams/ui-shell-and-evidence.mmd) — public workbench regions and mobile source drawer
-- [`ui-change-control.mmd`](diagrams/ui-change-control.mmd) — enhancement, verification, and human-approval flow
+- [`ui-shell-and-evidence.mmd`](diagrams/ui-shell-and-evidence.mmd) / [`SVG`](diagrams/ui-shell-and-evidence.svg) — Classic, Workbench, public-information shell, and question-language backend boundaries
+- [`ui-change-control.mmd`](diagrams/ui-change-control.mmd) / [`SVG`](diagrams/ui-change-control.svg) — impact analysis, verification, PR, release, stage-canary, and audit flow
 - [`admin-operator-workflow.mmd`](diagrams/admin-operator-workflow.mmd) — admin document-to-search readiness flow
 
 ## Document Lifecycle

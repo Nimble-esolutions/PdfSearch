@@ -49,7 +49,10 @@ missing configuration safely resolves to Classic.
 
 Both choices use the same documents, search service, PDF authorization,
 feedback destination, and English/Marathi session. Changing the presentation
-does not reindex documents, alter data, start a backup, or change admin pages.
+also changes the public header and navigation shown on `/terms/`, `/privacy/`,
+`/disclaimer/`, `/data-policy/`, and `/cookies/`. A valid preview query follows
+those public links for that visit. It does not reindex documents, alter data,
+start a backup, or change any authenticated admin page.
 
 ## Daily document workflow
 

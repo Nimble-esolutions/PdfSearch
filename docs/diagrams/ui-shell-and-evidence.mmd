@@ -1,13 +1,32 @@
-flowchart LR
-    H[Official header<br/>Department identity · AI Sahakar · language] --> W
-    subgraph W[Public Civic Knowledge Workbench]
-        L[Knowledge rail<br/>Topics · starters · help]
-        C[Conversation workspace<br/>Empty state · questions · answers · composer]
-        E[Evidence rail<br/>Sources · excerpts · official PDF · support]
-    end
-    L -->|choose topic| C
-    C -->|search official documents| E
-    E -->|inspect evidence| C
-    C -->|mobile/tablet| D[Accessible source drawer<br/>Escape · focus restore · inline summary]
-    E --> D
-    C --> F[Footer<br/>Privacy · terms · accessibility · official site]
+flowchart TD
+    A["Public request<br/>/ or information route"] --> R{"Allowlisted view resolver"}
+    S["Superadmin SiteSetting<br/>Classic or Workbench"] --> R
+    Q["Optional request preview<br/>?view=classic or workbench"] --> R
+
+    R -->|Classic| CH["Classic header partial"]
+    R -->|Workbench| WH["Workbench header partial"]
+
+    CH --> CS["Classic search workspace<br/>search-classic.css + search-classic.js"]
+    WH --> WS["Knowledge Workbench<br/>civic-workbench.css + search.css + search.js"]
+    CH --> LP["Standalone information shell<br/>terms · privacy · data policy · cookies · disclaimer"]
+    WH --> LP
+
+    LP --> I["public-legal.css + public-legal.js<br/>canonical URL · policy navigation · accessible tables"]
+
+    CS --> B["Shared secured search backend"]
+    WS --> B
+    B --> D["Detect language from question<br/>page locale is fallback only"]
+    D --> P["Retrieve evidence and prepare answer"]
+    P --> V{"Dominant script matches?"}
+    V -->|Yes| C["Typed response<br/>kind · language · answer · references"]
+    V -->|No, first time| X["One bounded repair request"]
+    X --> V
+    V -->|No, after repair| E["Explicit language mismatch error"]
+    C --> O["Selected theme renders answer<br/>with backend language and protected sources"]
+
+    classDef classic fill:#fff7e8,stroke:#a85f16,color:#2f2116
+    classDef workbench fill:#f5eee7,stroke:#6d1825,color:#251b1b
+    classDef shared fill:#edf5f0,stroke:#2e6a4f,color:#19372b
+    class CH,CS classic
+    class WH,WS workbench
+    class B,D,P,V,C,X,E,O,LP,I,R shared

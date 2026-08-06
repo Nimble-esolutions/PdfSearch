@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-05
+Last verified: 2026-08-06
 Canonical source: README.md
 Supersedes: None
 
@@ -90,6 +90,12 @@ Settings; URL previews never persist. Both views share the same secured Django
 search/PDF backend and complete English/Marathi session behavior, but not
 templates, presentation CSS, or frontend JavaScript.
 
+Answer language is derived from each question, not from the selected theme or
+page locale. Marathi questions produce Marathi answers and English questions
+produce English answers. The backend validates the dominant script before
+caching, permits one bounded repair attempt, and fails explicitly rather than
+presenting a wrong-language response as successful.
+
 The public information pages at `/privacy/`, `/terms/`, `/data-policy/`,
 `/cookies/`, and `/disclaimer/` follow the same saved or explicitly previewed
 theme. They use a standalone public document shell—never the authenticated
@@ -123,7 +129,12 @@ The deployed system has four cooperating boundaries:
 Visual sources:
 [legacy-to-stage-2026.mmd](docs/diagrams/legacy-to-stage-2026.mmd),
 [stage-recovery-state.mmd](docs/diagrams/stage-recovery-state.mmd), and
-[ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd).
+[ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd). Public UI and
+change-control views are available as editable Mermaid sources and rendered
+SVGs: [public shell source](docs/diagrams/ui-shell-and-evidence.mmd),
+[public shell visual](docs/diagrams/ui-shell-and-evidence.svg),
+[change-control source](docs/diagrams/ui-change-control.mmd), and
+[change-control visual](docs/diagrams/ui-change-control.svg).
 
 ### Repository map: where to start
 

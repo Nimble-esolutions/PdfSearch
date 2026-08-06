@@ -1,7 +1,7 @@
 Status: Client-facing
 Audience: Client
 Owner: Client support team
-Last verified: 2026-07-25
+Last verified: 2026-08-06
 Canonical source: docs/CLIENT_USER_MANUAL.md
 Supersedes: None
 
@@ -37,13 +37,15 @@ your organization instructs you to do so.
 ## 3. Searching Documents
 
 1. Open the AI Sahakar search page.
+   The organization may use the Classic or Knowledge Workbench presentation;
+   both search the same approved documents and expose the same source records.
 2. Choose a suggested topic or ask one specific question in natural language.
 3. Include useful terms such as department, document type, subject, date, or
    rule number.
 4. Submit the question.
 5. Review the answer, source summary, and contextual caution.
 6. Open the listed references or choose **View sources** before relying on it.
-6. If the answer is incomplete, try a narrower question or use terminology
+7. If the answer is incomplete, try a narrower question or use terminology
    that appears in the source document.
 
 ### Good Questions
@@ -108,8 +110,15 @@ action that requires an exact confirmation and a written reason.
 
 AI Sahakar supports complete English and Marathi interface flows. Use
 **English | मराठी**; your question is not changed when the interface language
-changes. Search quality depends on the language, OCR quality, document text,
-and the terms used in the question.
+changes. The answer follows the language of the question: ask in Marathi for a
+Marathi answer and in English for an English answer, even if the surrounding
+page is using the other language. Search quality depends on OCR quality,
+document text, and the terms used in the question.
+
+The Terms, Privacy, Disclaimer, Data Policy, and Cookie Policy links keep the
+active public presentation so visitors do not unexpectedly enter the admin
+interface. Policy article text is currently authored in English even when the
+surrounding navigation is Marathi.
 
 ## 7. Common Problems
 

@@ -133,6 +133,7 @@ and indexing remained `1.0`.
 | #184 | Established this enforced living project handoff |
 | #185 | Rebuilt the approved Classic public search as the primary view while preserving an isolated Knowledge Workbench secondary view |
 | #186 | Corrected search-intent false positives and enforced question-derived English/Marathi answer language across both themes |
+| #187 (in review) | Adds a standalone, theme-consistent shell for Terms, Privacy, Disclaimer, Data Policy, and Cookie Policy; locally verified but not yet stage evidence |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -146,18 +147,22 @@ no ownership warning.
 There is no data-readiness or search-language blocker. Remaining operational
 work is decision-driven:
 
-1. **Future production project:** create and validate the dedicated 2026
+1. **Public information rollout:** finish PR #187 checks/review, merge only when
+   green, certify the new image, deploy stage web and maintenance without
+   touching volumes, and canary all five routes in both themes plus both
+   mismatched-locale answer directions.
+2. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
-2. **Production rehearsal:** before traffic changes, select an immutable image,
+3. **Production rehearsal:** before traffic changes, select an immutable image,
    validate rendered Compose and key-only environment posture, restore into
    isolated production-candidate volumes, run search/PDF/auth smoke checks, and
    record rollback image and generation.
-3. **Production cutover:** remains out of scope until separately authorized.
+4. **Production cutover:** remains out of scope until separately authorized.
    Do not change legacy service routing or `prod_flowdocs` while preparing it.
-4. **Stage recovery retest:** run another manual backup and disposable restore
+5. **Stage recovery retest:** run another manual backup and disposable restore
    only when recovery/data contracts change or when explicitly requested.
-5. **Local development:** start the native development stack and rerun focused
+6. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
 

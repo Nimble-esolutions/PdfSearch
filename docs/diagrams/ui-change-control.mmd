@@ -1,11 +1,29 @@
 flowchart TD
-    A[Human request or evidence-backed enhancement] --> B{Preserves UI contract?}
-    B -->|No| X[Stop and request explicit human direction]
-    B -->|Yes| C[Record component, breakpoint, locale, state, accessibility, performance, backend boundary]
-    C --> D[Implement small contextual change with existing Django and CSS tokens]
-    D --> E[Run focused tests and browser states]
-    E --> F{Checks green?}
-    F -->|No| G[Root-cause analysis and repair]
-    G --> E
-    F -->|Yes| H[Update contract/guides when needed]
-    H --> I[Commit logical chunk, push PR to dev, wait for review; never self-merge]
+    A["Approved request or evidence-backed defect"] --> B["Read UI contract, workflow rules, and current handoff"]
+    B --> C["Trace callers, templates, assets, tests, and affected routes"]
+    C --> D["Record impact matrix<br/>theme · public info · language · admin · data · operations"]
+    D --> E{"Direction and safety contract preserved?"}
+    E -->|No| X["Stop and request explicit operator direction"]
+    E -->|Yes| F["Implement bounded change on a feature branch"]
+    F --> G["Remove only proven-dead affected artifacts"]
+    G --> H["Run focused Django, browser, accessibility, docs, and static gates"]
+    H --> I{"All required checks green?"}
+    I -->|No| J["Root-cause failure and repair without weakening the gate"]
+    J --> H
+    I -->|Yes| K["Commit logical chunks and push one reviewable PR to dev"]
+    K --> L["Resolve review feedback and wait for hosted checks"]
+    L --> M{"Green and operator-authorized merge?"}
+    M -->|No| L
+    M -->|Yes| N["Merge, certify immutable release, and record image identity"]
+    N --> O["Deploy stage without touching production or data volumes"]
+    O --> P["Canary both themes, all public information routes, and both language directions"]
+    P --> Q{"Stage evidence correct?"}
+    Q -->|No| R["Keep prior stage/data authority, diagnose, and roll back code if needed"]
+    Q -->|Yes| T["Update handoff, diagrams, and secret-free audit ledger"]
+
+    classDef decision fill:#fff4db,stroke:#9a6500,color:#3f2b00
+    classDef safe fill:#eef6f1,stroke:#317356,color:#173d2b
+    classDef stop fill:#fbe9eb,stroke:#9f2638,color:#5f1420
+    class E,I,M,Q decision
+    class F,G,H,K,L,N,O,P,T safe
+    class X,R stop

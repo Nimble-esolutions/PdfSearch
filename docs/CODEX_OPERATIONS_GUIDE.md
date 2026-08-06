@@ -140,10 +140,14 @@ docker compose -f docker-compose.yml exec -T maintenance sh -lc 'cd /app/flowdoc
 ```
 
 The public search page is intentionally anonymous and defaults to English. A
-visitor's Marathi selection is session-backed and must be sent explicitly with
-the search request so the answer language cannot be inferred incorrectly from
-the query text. `/register/` is never public: only authenticated `admin` and
-`superadmin` users may create accounts. Department-scoped admin roles are a
+visitor's English/Marathi selection is session-backed presentation state, not
+answer-language authority. The backend derives answer language from the
+question, uses client locale only for input with no language-bearing letters,
+validates provider output by script before caching, and permits one bounded
+repair attempt before returning an explicit mismatch error. Stage canaries must
+exercise Marathi input with an English client locale and English input with a
+Marathi client locale. `/register/` is never public: only authenticated `admin`
+and `superadmin` users may create accounts. Department-scoped admin roles are a
 phase-2 authorization boundary and must be designed server-side before use.
 
 If a test intentionally exercises a mocked failure path, tracebacks can appear
