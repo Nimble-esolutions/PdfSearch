@@ -44,7 +44,7 @@ can change after that time, so repeat the read-only checks in
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
 | Repository integration baseline | `dev` contains merge `51f0dd7` (PR #191) | PRs #185–#191 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, and the repository-truth audit are integrated |
-| Search latency work | PR #192 is in review and is not deployed | Local gates pass (637 Django and 116 four-viewport browser tests). Pre-change stage baseline was 23,738 ms uncached and 12,910 ms on an immediate repeat; the PR moves exact caching before retrieval, reuses a signed-runtime corpus, caches provider-scoped query embeddings, adds phase telemetry, and removes Workbench reveal delay |
+| Search latency work | PR #192 is ready for review and is not deployed | Local gates pass (637 Django and 116 four-viewport browser tests). Pre-change stage baseline was 23,738 ms uncached and 12,910 ms on an immediate repeat; the PR moves exact caching before retrieval, reuses a signed-runtime corpus, caches provider-scoped query embeddings, adds phase telemetry, and removes Workbench reveal delay |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
