@@ -490,6 +490,7 @@ def _log_search_completed(
     embedding_cache_hit=0,
     answer_cache_hit=0,
     chat_failed=0,
+    cache_errors=0,
     runtime_corpus_hit=0,
     corpus_vectors=0,
     corpus_bytes=0,
@@ -502,7 +503,7 @@ def _log_search_completed(
         "search_completed route=%s outcome=%s public=%s language=%s "
         "visible_folders=%s folders_scanned=%s references=%s "
         "integrity_failures=%s embedding_calls=%s chat_calls=%s "
-        "result_cache_hit=%s embedding_cache_hit=%s answer_cache_hit=%s chat_failed=%s "
+        "result_cache_hit=%s embedding_cache_hit=%s answer_cache_hit=%s chat_failed=%s cache_errors=%s "
         "runtime_corpus_hit=%s corpus_vectors=%s corpus_bytes=%s "
         "embedding_ms=%s retrieval_ms=%s answer_ms=%s "
         "duration_ms=%s",
@@ -520,6 +521,7 @@ def _log_search_completed(
         embedding_cache_hit,
         answer_cache_hit,
         chat_failed,
+        cache_errors,
         runtime_corpus_hit,
         corpus_vectors,
         corpus_bytes,
@@ -2310,6 +2312,7 @@ def search_query(request):
                 embedding_cache_hit=diagnostics.get("embedding_cache_hit", 0),
                 answer_cache_hit=diagnostics.get("answer_cache_hit", 0),
                 chat_failed=diagnostics.get("chat_failed", 0),
+                cache_errors=diagnostics.get("cache_errors", 0),
                 runtime_corpus_hit=diagnostics.get("runtime_corpus_hit", 0),
                 corpus_vectors=diagnostics.get("corpus_vectors", 0),
                 corpus_bytes=diagnostics.get("corpus_bytes", 0),
