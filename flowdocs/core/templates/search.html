@@ -26,7 +26,7 @@
     <div class="text-end">
       <a href="{% url 'login' %}" class="text-white text-decoration-none me-2">{% trans "Admin Login" %}</a> |
       <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" class="text-white text-decoration-none me-2">{% trans "Home" %}</a> |
-      <a href="https://www.google.com/maps/d/u/4/viewer?mid=1nGBPe3fJCLDL0tsUEluGKT6RVTljhiw&ll=18.848903177273304%2C76.7698375&z=6" class="text-white text-decoration-none me-2">{% trans "Locate Us" %}</a> |
+      <a href="https://www.google.com/maps/d/edit?hl=en&mid=1MoHzbONhTORm8fQ0IAZCWG82vtUgIJU&ll=18.80607519662995%2C76.7698375&z=7" class="text-white text-decoration-none me-2">{% trans "Locate Us" %}</a> |
       
       <form action="{% url 'set_language' %}" method="post" class="d-inline">
         {% csrf_token %}
@@ -79,7 +79,7 @@
 </a>
 
 <!-- Feedback button -->
-<a href="https://docs.google.com/forms/d/e/1FAIpQLSecBg9pBb4Z_HDwK06-DnibIxltK2Bzo5gMpSO63hAQPM8hnA/viewform" target="_blank" class="feedback-link">
+<a href="https://docs.google.com/forms/d/e/1FAIpQLSca6zWE0E5CIwoFfT6lzdGhaqaslLFpjaSu2mK654hAQVDlSg/viewform" target="_blank" class="feedback-link">
   <picture>
     <source media="(max-width: 768px)" srcset="{% static 'main/images/fd-btn-mobile.jpg' %}">
     <img src="{% static 'main/images/fd-btn.jpg' %}" alt="Feedback" style="height:40px; cursor:pointer;">
