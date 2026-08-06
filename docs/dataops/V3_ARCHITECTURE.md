@@ -1,7 +1,7 @@
-Status: Local and stage rehearsal passed; final immutable release pending
+Status: Active operator contract; local and stage recovery certified
 Audience: operators, developers, reviewers
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
+Last verified: 2026-08-06
 
 # Data Operations v3 architecture
 
@@ -10,12 +10,13 @@ backup, restore, and import for development, stage, and production without
 requiring operators to assemble internal storage routes from profile selectors
 and feature flags.
 
-VaultOps is not being brought back as a product, UI, API, or configuration
-contract. During the transition, proven low-level safety functions may run
-behind DataOps adapters. Those functions include consistent snapshotting,
-immutable publication, quarantine restore, signed activation, compare-and-swap
-runtime pointers, and rollback. Their old operator surfaces are retired after
-DataOps v3 passes local and real-stage certification.
+VaultOps is not a supported product, workbench, or operator configuration
+contract. The package is nevertheless still installed. DataOps v3 uses selected
+VaultOps signed-activation/runtime primitives as a temporary internal bridge;
+search maintenance also retains selected internal endpoints. The old
+authenticated compatibility API, models, migrations, scheduler, and settings
+remain code-removal debt and must stay default-off unless a focused legacy test
+requires them. The former mixed-control page redirects to DataOps.
 
 ## The operator contract
 
@@ -247,25 +248,33 @@ The target contract has:
 - zero public VaultOps settings;
 - zero secret values in manifests, plans, receipts, UI exports, or logs.
 
+These are operator-contract guarantees, not a claim that every legacy setting,
+model, or route has already been deleted from the implementation.
+
 ## Environment behavior
 
 | Environment | Backup | Restore/import | Activation |
 | --- | --- | --- | --- |
 | Development | Manual by default | Supported | Local confirmation |
 | Stage | Manual by default; real test supported | Supported | Explicit signed confirmation |
-| Production | Scheduled after storage certification | Supported | Pre-backup, maintenance window, signed approval, atomic swap and rollback |
+| Production | Scheduled after storage certification | Supported for isolated candidate preparation | Runtime activation is currently hard-disabled in production and requires a future reviewed implementation |
 
 Environment changes gate strength and defaults. It does not remove backup or
 restore capability.
 
-## Transition rule
+## Compatibility-removal rule
 
-DataOps v2 and VaultOps may be read as compatibility sources while v3 is being
-certified. They must not both publish new recovery points. After v3 proves
-legacy import, 242-document stage activation, stage backup, and isolated
-round-trip restore, obsolete selectors, jobs, public VaultOps routes, duplicate
-profile models, and special-case environment flags can be removed in reviewed
-commits.
+DataOps v3 has proved legacy import, 242-document stage activation, stage
+backup, and isolated round-trip restore. The operator/UI cutover is complete,
+but code cleanup is not: legacy selectors, jobs, the authenticated internal
+VaultOps API, duplicate profile models, scheduler paths, and special-case flags
+remain. They must not publish alongside v3 in a normal deployment.
+
+Remove them only in a separate reviewed impact-analysis PR that first migrates
+search-maintenance callers, the runtime supervisor, activation models and
+services, database history, settings imports, integration fixtures, and worker
+scheduling. Until then, document them as internal compatibility and keep their
+feature gates off by default.
 
 ## Real local certification — 2026-08-03
 
@@ -315,7 +324,7 @@ rehearsal enabled embeddings only inside the isolated candidate process.
 
 The certified image contains Tesseract English, Marathi, and Hindi language
 packs, `cryptography` 48.0.1, and no runtime `setuptools` or `wheel` package.
-Stage remains the next gate: publish the branch image by immutable digest,
-repeat import/candidate preparation, run representative searches, activate
-with signed evidence, publish one stage backup, and restore it into disposable
-volumes.
+Stage subsequently passed import/candidate preparation, representative search,
+signed activation, one manual backup, and a disposable restore rehearsal. Use
+[`../HANDOFF.md`](../HANDOFF.md) for the latest deployed image and evidence;
+repeat these gates when the recovery contract changes.

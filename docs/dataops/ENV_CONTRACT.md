@@ -1,99 +1,101 @@
-# Data Operations environment contract
+Status: Active
+Audience: Operator, Developer
+Owner: FlowDocs maintainers
+Last verified: 2026-08-06
+Canonical source: docs/dataops/ENV_CONTRACT.md
 
-The Data Operations control plane uses `DATAOPS_*` variables only. This
-contract is intentionally small enough to be copied into Dokploy as a single
-environment update. Values are never printed by the application or exported
-from the UI; the UI exports key names and redacted placeholders only.
+# Data Operations v3 environment contract
 
-## Resolution order
+DataOps v3 deliberately keeps normal operation configuration small. The
+operator chooses an outcome—Backup, Restore, Test recovery, or Import—and the
+lifecycle planner derives the route from dataset ownership and provenance.
+Profile roles, source/destination selectors, clone flags, and same-dataset
+exceptions are not part of the supported operator contract.
 
-For every setting the effective value follows the **ENV → DB → default**
-precedence order:
+## Standard settings
 
-1. Process environment (`DATAOPS_*`) — authoritative and read-only in the UI.
-2. An encrypted database fallback — used only when the corresponding
-   environment key is absent and `DATAOPS_UI_CONFIG_ENABLED=1`.
-3. The documented safe default.
+| Key | Purpose | Safe posture |
+| --- | --- | --- |
+| `DATAOPS_ENABLED` | Makes the Data protection workbench and v3 executor available | `1` only after the owned connection can be checked |
+| `APP_ENV` | Selects development, staging, production, review, or test policy strength | Exact deployment environment |
+| `DEPLOYMENT_ID` | Stable identity bound into plans and receipts | Unique and persistent |
+| `DATASET_ID` | Dataset owned by this instance | Stable; must match the owned connection |
 
-The UI may edit fallback values and can produce a reviewed, commented ENV patch
-for Dokploy. It must never mutate the running process environment. A restart or
-redeploy is required for an ENV change to take effect.
+The runtime configuration digest contains only redacted connection metadata,
+environment identity, and policy. It never contains credentials.
 
-## Profile model
+## One owned recovery connection
 
-`DATAOPS_PROFILE_MANIFEST` is the canonical JSON list of named profiles. Each
-profile has a role (`backup`, `restore`, or `both`), an independent
-bucket/dataset, and an explicit namespace/prefix:
+The control database may hold one primary `DataConnection` for the local
+dataset. DataOps uses it for backup and same-dataset restore. Import may read a
+separate foreign connection, but that source never becomes the local owner and
+is never selected through environment profile choreography.
+
+Resolution is deterministic:
+
+1. use the stored primary connection whose dataset matches `DATASET_ID`;
+2. otherwise compile a temporary bootstrap connection from
+   `ARTIFACT_VAULT_ENDPOINT`, `ARTIFACT_VAULT_BUCKET`, region, and the
+   deployment-injected credential pair;
+3. if neither exists, show a typed `owned_connection_*` requirement and do not
+   queue a storage operation.
+
+The temporary bootstrap accepts:
 
 ```dotenv
-DATAOPS_PROFILE_MANIFEST=[{"name":"primary_backup","role":"backup","endpoint":"https://s3.example.invalid","bucket":"example-backups","region":"ap-south-1","dataset_id":"flowdocs-prod","source_id":"prod","namespace":"primary","credential_ref":"DATAOPS_PRIMARY_BACKUP","enabled":true}]
+ARTIFACT_VAULT_ENABLED=1
+ARTIFACT_VAULT_ENDPOINT=https://rustfs.example.invalid
+ARTIFACT_VAULT_BUCKET=<owned-recovery-bucket>
+ARTIFACT_VAULT_REGION=us-east-1
 ```
 
-The legacy `DATAOPS_ENV_PROFILES` CSV plus `DATAOPS_PROFILE_<NAME>_*` form is
-accepted during migration. `DATAOPS_BACKUP_PROFILE` selects a backup
-destination and `DATAOPS_RESTORE_PROFILE` selects a restore source;
-`DATAOPS_*_SOURCE_PROFILE` and `DATAOPS_*_DESTINATION_PROFILE` provide
-per-operation overrides.
+`ARTIFACT_VAULT_ACCESS_KEY`, `ARTIFACT_VAULT_SECRET_KEY`, and an optional
+session token stay in the deployment secret provider. When the pair is present,
+the bootstrap records the internal `env://ARTIFACT_VAULT` reference and only
+the worker resolves it at execution time. Stored connections also support an
+approved file-backed server-side credential reference. The browser, plan,
+receipt, audit event, and diagnostics never receive secret values.
 
-The 2026 recovery lineage uses two separate datasets and buckets:
+Before publication, the connection check proves bucket access, dataset
+ownership, read/write capability, conditional writes, and the required object
+store semantics. A new empty bucket may be healthy after this check; it does
+not contain a recovery point until a backup or import succeeds.
 
-```dotenv
-DATAOPS_BACKUP_PROFILE=stage_2026
-DATAOPS_RESTORE_PROFILE=stage_2026
-# production_v2_source remains an explicit source for clone/rebind only.
-```
+## Policy and routing
 
-`clone/rebind` is not an ordinary copy. It is an advanced, typed operation
-that requires an explicit source generation, destination profile, and exact
-confirmation phrase. It verifies every content-addressed object, rewrites
-dataset-bound keys and references, preserves parent manifest lineage, and
-advances only the destination authoritative pointer. Dataset mismatch checks
-remain enforced for normal backup, restore, copy, and transfer operations.
+Policy lives in the control database. If no row exists, DataOps derives safe
+defaults from `APP_ENV`; ordinary retry, interval, concurrency, activation, and
+route decisions are not assembled from dozens of environment flags.
 
-Keep `DATAOPS_CLONE_REBIND_ENABLED=0` until RustFS bucket registration,
-conditional writes, and scoped profile permissions have been proven. The
-reference credential is a secret-provider alias; RustFS root credentials are
-for one-time bucket provisioning only and must not be passed to the app.
-
-Credential values are supplied by the referenced prefix (`*_ACCESS_KEY` and
-`*_SECRET_KEY`) or by an explicitly enabled encrypted database credential. They
-are never part of a backup package.
-
-## Runtime and recovery controls
-
-The implementation recognises these controls (all have safe defaults):
-
-| Key | Meaning |
+| Intent | DataOps decision |
 | --- | --- |
-| `DATAOPS_ENABLED` | Enable the control plane. |
-| `DATAOPS_BACKUP_PROFILE` / `DATAOPS_RESTORE_PROFILE` | Profile IDs selected for each direction. |
-| `DATAOPS_BACKUP_MODE` | `manual`, `scheduled`, or `changes`. |
-| `DATAOPS_BACKUP_INTERVAL_SECONDS` | Minimum interval for scheduled/change backups. |
-| `DATAOPS_MAX_LAG_SECONDS` | Maximum tolerated source lag before a refresh is suggested. |
-| `DATAOPS_AUTO_HEAL_ENABLED` | Enable bounded, non-destructive repair. |
-| `DATAOPS_AUTO_HEAL_INTERVAL_SECONDS` | Reconciler interval. |
-| `DATAOPS_AUTO_HEAL_MAX_RETRIES` | Retry cap per operation. |
-| `DATAOPS_OPERATION_LEASE_SECONDS` | Expiring control-plane lease used to prevent duplicate worker execution and reclaim crashed preflight operations. |
-| `DATAOPS_AUTO_HEAL_REINDEX_PER_RUN` / `DATAOPS_AUTO_HEAL_REINDEX_PER_DAY` | Reindex budgets. |
-| `DATAOPS_STALE_AFTER_SECONDS` | Age after which an observation is stale. |
-| `DATAOPS_UI_CONFIG_ENABLED` | Allow editing encrypted DB fallbacks. |
-| `DATAOPS_UI_SECRET_STORAGE_ENABLED` | Permit explicitly opted-in encrypted DB credentials. |
-| `DATAOPS_CONFIG_ENCRYPTION_KEY` | Key reference for AES-256-GCM fallback values; never log the value. |
-| `DATAOPS_RESTORE_AUTO_ACTIVATE_STAGING` | Auto-activate only after all staging gates pass. |
-| `DATAOPS_CLONE_REBIND_ENABLED` | Enable the reviewed Advanced-only cross-dataset clone/rebind control. |
-| `STAGE_PUBLIC_AUTH_EXCEPTION_REQUIRED` | Declare that restored production authentication data is present on stage. |
-| `STAGE_PUBLIC_AUTH_EXCEPTION_APPROVED` | Security-owner approval switch; defaults to blocked. |
-| `STAGE_PUBLIC_AUTH_EXCEPTION_OWNER` / `..._MONITORING` / `..._INCIDENT_RESPONSE` / `..._ROLLBACK_AUTHORITY` | Non-secret exception record required before public stage authentication can be enabled. |
+| Backup | Snapshot the active authoritative data and publish one complete v3 recovery point to the owned connection |
+| Restore | Require a same-dataset recovery point and prepare a new isolated candidate |
+| Import | Read a foreign/legacy source, copy and verify missing objects, rebind ownership, preserve parent lineage, then prepare a candidate |
+| Test recovery | Restore into a disposable target and prove integrity/readiness without changing the active pointer |
 
-Restore quarantine is not an environment setting. The application derives it
-as `DATA_ROOT/restore-quarantine`, guaranteeing that web and maintenance use
-the same mounted data volume. The `stage_dataops_restore` command still accepts
-an explicit `--destination` for disposable operator rehearsals.
+Activation remains separately signed and confirmation-gated. A successful
+backup, import, or restore never silently changes the runtime pointer.
 
-## Compatibility window
+## Compatibility settings
 
-`ARTIFACT_VAULT_*` names remain accepted as a temporary compatibility profile
-when no structured manifest is present. They are never copied into a profile
-receipt or exposed as secret values. Generic retired `VAULT_*` credential
-aliases continue to fail closed; remove them after all services consume the
-manifest.
+The application still parses old `DATAOPS_PROFILE_*`, `VAULT_*`, and some
+special-case feature flags because selected maintenance endpoints, integration
+fixtures, and the signed activation bridge have not yet been migrated. Their
+presence in settings or Compose is not a supported operator contract.
+
+| Family | Current status | Standard action |
+| --- | --- | --- |
+| `DATAOPS_PROFILE_MANIFEST`, `DATAOPS_ENV_PROFILES`, `DATAOPS_*_PROFILE` selectors | DataOps v2 compatibility | Leave blank in a new v3 deployment |
+| `DATAOPS_CLONE_REBIND_ENABLED`, same-dataset/auto-activate switches | Retired operator choices | Leave disabled; v3 derives the route and keeps activation separate |
+| `VAULT_SYNC_*` and mutation/snapshot tuning | Disabled legacy publication path | Keep `VAULT_SYNC_ENABLED=0` |
+| `VAULT_RESTORE_*`, profile UI, and admin mutation flags | Disabled legacy restore/API path | Keep restore/admin/profile UI flags disabled |
+| `vaultops` activation/runtime settings | Temporary internal bridge | Change only through the signed activation runbook and impact review |
+
+Do not remove these keys from code or Compose merely because they are absent
+from the standard contract. First trace all callers, migrate durable control
+records, preserve rollback and crash recovery, update web/maintenance parity,
+and certify recovery in a separate code-change PR.
+
+See [V3_ARCHITECTURE.md](V3_ARCHITECTURE.md) for lifecycle invariants and
+[V3_IMPACT_ANALYSIS.md](V3_IMPACT_ANALYSIS.md) for the cleanup backlog.

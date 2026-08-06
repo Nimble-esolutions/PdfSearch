@@ -1,13 +1,21 @@
-# Vault Active Sync
+Status: Historical design; disabled compatibility implementation remains
+Audience: Developer, maintainer
+Owner: FlowDocs maintainers
+Last verified: 2026-08-06
+Canonical replacement: docs/dataops/V3_ARCHITECTURE.md
+
+# Historical Vault Active Sync design
 ## Current-state pointer
 
 Use the living [HANDOFF.md](HANDOFF.md) for current verified state.
-Earlier dated sections remain historical evidence and must be reconciled to
-the living handoff before use.
+DataOps v3 is the supported backup/import/restore contract. The implementation
+described here remains behind disabled legacy flags for compatibility and
+focused tests; it is not the normal operator backup path. Do not enable it in
+parallel with DataOps v3 publication.
 
 
-Vault Active Sync is the publication control plane for coherent application
-data generations. It is deliberately disabled by default and is separate from
+Historically, Vault Active Sync was the publication control plane for coherent
+application data generations. It remains disabled by default and separate from
 runtime activation.
 
 ## Safety contract
@@ -150,7 +158,7 @@ Replaying the same key and request returns the original receipt; concurrent
 submissions increment the retry counter and append `job_requeued` exactly once.
 Reusing a key for another actor or state version fails closed.
 
-The operator interface distinguishes three retry modes. A sync job resumes a
+The legacy compatibility interface distinguishes three retry modes. A sync job resumes a
 verified snapshot checkpoint only when the finalized workspace, trusted
 control-plane evidence, immutable configuration sidecar, and completed snapshot
 step agree on deployment identity, snapshot identity, digest, epoch, and the
@@ -253,7 +261,7 @@ publication safety input; otherwise it creates a fresh snapshot first.
 A manifest already published remains a candidate. A pointer already promoted
 requires a separately confirmed compensating promotion.
 
-## Initial rollout
+## Historical rollout (not current deployment instructions)
 
 1. Deploy the shared control volume and migrations with Active Sync disabled.
 2. Verify the control database and snapshot root survive container restart.

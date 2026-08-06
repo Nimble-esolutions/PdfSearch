@@ -19,12 +19,13 @@ The current system is best understood as four cooperating planes:
 | Recovery | RustFS profiles, manifests, content-addressed objects, receipts | dataset-scoped buckets |
 | External AI | local OCR first, configured embeddings and answer preparation | side-effect policy and provider boundary |
 
-The 2026 stage clone has been migrated, reconciled, and activated through a
-verified signed control pointer. Stage serves 242/242 indexed documents.
-Manual stage backup and isolated recovery rehearsal have succeeded, while final
-acceptance waits for the immutable PR 176 image, corrected v3 readiness
-projection, and one repeatable disposable restore. Exact evidence is maintained
-in STATUS-2026-08-03.md and the old/new comparison in LEGACY_VS_CURRENT_STATE.md.
+DataOps v3 is the sole supported operator contract for backup, import, restore,
+recovery testing, and recovery readiness. The `vaultops` Django application is
+still installed as internal compatibility infrastructure: selected maintenance
+endpoints, durable legacy control records, and the signed activation/runtime
+bridge still depend on it. It is not a second operator workbench. Exact live
+deployment evidence belongs in [HANDOFF.md](HANDOFF.md); dated status documents
+are historical evidence and do not define the current architecture.
 
 ### Current custody topology
 
@@ -95,8 +96,8 @@ fails closed with an explicit mismatch error.
     flowdocs/
       core/       intake, lifecycle, environment, safety, activation, restore
       data/       PDF lifecycle, native extraction, OCR, embeddings, indexes
-      dataops/    profile resolution and backup/restore operation contracts
-      vaultops/   control plane, workbench, receipts, activation/read models
+      dataops/    operator workbench and v3 backup/import/restore lifecycle
+      vaultops/   internal compatibility schema, maintenance API, activation bridge
       flowdocs/   Django settings, URLs, WSGI/ASGI, runtime paths
     scripts/
       ci/         hosted contract, parity, lifecycle, and release checks
@@ -165,7 +166,12 @@ All modules live under `flowdocs/core/`. Grouped by concern:
 | `backup_policy.py` | Dirty-state tracking via Redis cache keys, fingerprint-based no-change detection, minimum-interval enforcement, and idempotency keys. `queue_backup_if_needed()` creates `sync_generation` maintenance jobs. |
 | `lease.py` | Writer lease with Redis `SET NX EX` (atomic) + DB fallback. `WriterLease` carries a monotonically increasing fencing token (`writer_epoch`) that must be presented for authoritative publication. |
 
-### Restore & Activation
+### Legacy core restore compatibility modules
+
+These modules remain in the repository for historical pipelines and focused
+compatibility tests. They are not the DataOps v3 operator route; current
+staging activation crosses the internal signed runtime bridge described below,
+and production activation remains disabled.
 
 | Module | Purpose |
 |--------|---------|
@@ -173,7 +179,7 @@ All modules live under `flowdocs/core/`. Grouped by concern:
 | `restore_workspace.py` | `RestoreWorkspace` state machine with 16 states (`CREATED` → `DOWNLOADING` → ... → `ACTIVE`). `VALID_TRANSITIONS` dict enforces legal state changes. Workspace is always outside the active data tree. |
 | `sanitize.py` | PII sanitization for non-prod data. `sanitize_database()` replaces user emails/names with deterministic hashes, deletes sessions, nullifies password reset tokens. `validate_sanitization()` checks for non-sanitized email domains. |
 | `rehearsal.py` | `rehearse_migrations()` — runs Django migrations against an isolated copy of the restored database. Checks integrity, foreign keys, and reports whether image rollback is safe. |
-| `activate.py` | Atomic symlink-based generation activation. `activate_generation()` acquires lock, preserves previous pointer, switches active symlink, validates, and records audit event. `rollback_to_previous()` restores the prior pointer. |
+| `activate.py` | Legacy core symlink-activation primitive retained for compatibility. It is not the current DataOps v3 staging runtime-pointer path and explicitly rejects production. |
 | `activation_journal.py` | `ActivationJournal` with heartbeat-based crash recovery. `acquire_activation_lock()` uses `O_EXCL` with liveness detection. `reconcile_incomplete_activations()` runs at startup to detect and recover crashed activations. |
 | `compatibility.py` | `check_generation_compatibility()` — pre-activation checks for manifest version, migration compatibility, embedding model match, FAISS index presence, and sanitization status. |
 
@@ -257,98 +263,70 @@ EnvironmentIdentity.from_env()
 
 ## 4. Data Flow: Publication → Restore → Activation
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        PRODUCTION (SOURCE)                         │
-│                                                                     │
-│  1. Acquire writer lease  (lease.py: Redis SET NX EX)              │
-│  2. Acquire global writer (global_writer.py: S3 If-None-Match)    │
-│  3. Register dataset      (registration.py: conditional create)    │
-│  4. Build manifest        (inventory_artifacts command)            │
-│  5. Upload artifacts      (artifact_vault.py: PDFs, FAISS, DB)    │
-│  6. Upload manifest       (artifact_vault.py: put_manifest)       │
-│  7. Update authoritative  (registration.py: CAS pointer update)   │
-│     pointer                                                         │
-│  8. Release global writer (global_writer.py: delete control obj)   │
-│  9. Release lease         (lease.py: cache.delete)                 │
-└──────────────────┬──────────────────────────────────────────────────┘
-                   │  S3 bucket (RustFS / MinIO)
-                   │  datasets/{id}/generations/{gen}/...
-                   │  datasets/{id}/control/authoritative.json
-                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      STAGING / DEV (TARGET)                         │
-│                                                                     │
-│  1. Resolve generation  (restore_pipeline.py: authoritative ptr)   │
-│  2. Create workspace    (restore_workspace.py: isolated dir)       │
-│  3. DOWNLOADING         (restore_pipeline.py: fetch all artifacts) │
-│  4. DOWNLOADED          (verify manifest completeness)             │
-│  5. SOURCE_VALIDATED    (SQLite integrity check)                   │
-│  6. PREFLIGHT_PASSED    (compatibility.py: schema/embedding/FAISS) │
-│  7. [SANITIZING]        (sanitize.py: PII removal, if non-prod)   │
-│  8. [SANITIZED]         (validate_sanitization)                    │
-│  9. [MIGRATION_REHEARSAL] (rehearsal.py: isolated migration run)  │
-│ 10. [MIGRATION_READY]   (integrity + FK checks passed)             │
-│ 11. APPLICATION_VALIDATED                                           │
-│ 12. ACTIVATION_READY                                                │
-│ 13. ACTIVATING          (activate.py: acquire lock)                │
-│ 14. ACTIVE              (atomic symlink switch)                    │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  S["Consistent application snapshot"] --> B["DataOps v3 backup"]
+  B --> R["Immutable recovery point<br/>owned RustFS connection"]
+  R --> P["Automatic same-dataset restore<br/>or foreign import/rebind"]
+  P --> Q["Isolated restore-quarantine candidate"]
+  Q --> V["Integrity · migration · media · index · search gates"]
+  V --> I["Signed activation intent<br/>staging only"]
+  I --> C["Compare-and-swap runtime/active.json"]
+  C --> E["Exact generation + manifest readiness"]
+  E -->|pass| O["Signed result; previous pointer retained"]
+  E -->|fail| X["Rollback to runtime/previous.json"]
 ```
 
-### Rollback Path
-
-```
-activate_generation()
-  ├── preserve_previous_pointer()   # /app/data-control/previous-generation
-  ├── write_active_pointer(target)  # atomic symlink rename
-  ├── verify pointer resolves
-  └── on failure:
-       └── rollback_to_previous()   # restore previous symlink
-```
+Production candidate preparation is supported, but runtime activation is
+currently rejected in production by both the core and runtime-control guards.
+It requires a future reviewed implementation and certification.
 
 ### Current orchestration boundary
 
-The active Workbench and maintenance-worker call graph uses the `vaultops`
-control plane:
+The active operator workbench and recovery lifecycle are DataOps v3:
 
 ```text
-Workbench Sync
-  -> durable VaultJob
-  -> consistent snapshot and dataset-scoped candidate
-  -> separate confirmed CAS authoritative promotion
+DataOps backup
+  -> durable DataOperation
+  -> neutral consistent snapshot
+  -> immutable v3 RecoveryPoint in owned RustFS storage
 
-Workbench Restore
-  -> authoritative inventory verification
-  -> isolated compatibility, sanitization, and migration rehearsal
-  -> activation-ready RestoreWorkspace
+DataOps import / restore
+  -> source discovery and automatic same/foreign dataset route
+  -> isolated compatibility, migration, and index gates
+  -> v3 RestoreCandidate bound to exact lineage and manifest
 
-Workbench Activate/Rollback
-  -> separately confirmed signed intent
-  -> web and maintenance runtime supervisors
+DataOps activation
+  -> internal VaultOps compatibility bridge
+  -> separately confirmed signed intent and runtime supervisors
   -> atomic pointer switch
   -> exact generation + manifest readiness
   -> signed result reconciliation
 ```
 
-Promotion remains remote-authority evidence, not byte-level activation.
+DataOps v3 stores and transfers recovery points directly; it does not route
+ordinary backup through Vault Active Sync. Search-maintenance forms and the
+activation bridge still call selected `vaultops` endpoints/services. The old
+VaultOps workbench is not URL-routed, and the retired mixed-control page
+redirects to DataOps. Removing the package, API, models, migrations, or flags
+requires a separate code-impact PR because active callers remain.
+
 Runtime-ready language requires the signed activation result, switched runtime
 pointer, and post-cutover readiness evidence. The retired
 `core.maintenance.stage_generation()` compatibility path is not the operator
 contract.
 
-### Activation Journal Crash Recovery
+### Signed activation crash recovery
 
 ```
-Startup: reconcile_incomplete_activations()
-  ├── Scan /app/data-control/activation-journals/*.json
-  ├── Skip completed journals
-  ├── For incomplete:
-  │    ├── If lock held by live process → skip
-  │    ├── If active pointer matches target → mark complete (activation succeeded)
-  │    ├── If active pointer matches previous → mark rollback confirmed
-  │    └── Otherwise → rollback to previous generation
-  └── Return reconciliation actions
+Runtime supervisor
+  ├── Read signed activation intent from /app/data-control/activation/intents/
+  ├── Coordinate web and maintenance acknowledgements
+  ├── Preserve runtime/previous.json
+  ├── Compare-and-swap runtime/active.json to the exact generation/manifest
+  ├── Start fresh processes and verify /livez plus exact /readyz evidence
+  ├── On success: write signed activation/results/ evidence
+  └── On failure: restore the previous pointer and write a signed rollback result
 ```
 
 ---
@@ -422,19 +400,22 @@ pdfsearch_is_production                   # 1 if APP_ENV=production
 | `/app/data/backups/` | Local backups and restore workspaces | RW |
 | `/app/data/chroma_db/` | Chroma vector database (legacy) | RW |
 | `/app/data/.instance_id` | Stable instance identity | RW (created once) |
-| `/app/data-control/active-generation` | Atomic symlink to active workspace | RW |
-| `/app/data-control/previous-generation` | Rollback target symlink | RW |
-| `/app/data-control/activation-journals/` | Crash recovery journals | RW |
-| `/app/data-control/activation.lock` | O_EXCL activation lock file | RW |
+| `/app/data-control/runtime/active.json` | Signed active-generation pointer | RW |
+| `/app/data-control/runtime/previous.json` | Previous-generation rollback pointer | RW |
+| `/app/data-control/activation/intents/` | Signed activation requests | RW |
+| `/app/data-control/activation/acks/` | Web/worker coordination acknowledgements | RW |
+| `/app/data-control/activation/results/` | Signed activation/rollback results | RW |
+| `/app/data-control/activation/activation.lock` | Activation serialization lock | RW |
+| `/app/data/runtime-generations/` | Projected immutable runtime generations | RW |
+| `/app/data/restore-quarantine/` | Isolated DataOps restore candidates | RW |
 | `/mnt/legacy` | Read-only legacy data volume | RO |
 | `/app/flowdocs/` | Application code (immutable image) | RO |
 | `/app/.oci-labels.json` | OCI image labels | RO |
 | `/app/RELEASE.txt` | Release version file | RO |
 
 **Critical rule:** The restore workspace is always created under
-`/app/data/backups/restore-workspaces/`, which is outside the active data tree.
-`validate_workspace_paths()` enforces this — a workspace inside the active root
-is rejected.
+`/app/data/restore-quarantine/`, which is outside every projected runtime
+generation. Path validation rejects the active generation as a restore target.
 
 ---
 
@@ -447,6 +428,8 @@ is rejected.
 | `docker-compose.ci.yml` | CI disposable stack | `APP_ENV=development`, `EXTERNAL_SIDE_EFFECTS_MODE=sandbox`, `DATA_BOOTSTRAP_MODE=empty`, `BACKUP_ROLE=disabled` |
 | `docker-compose.dev.yml` | Local development | One native application image shared by web/maintenance, pinned in-stack RustFS, local-only credentials and volumes |
 | `docker-compose.integration.yml` | Disposable RustFS lifecycle and staging runtime crash-recovery stack | RustFS required by default; explicit MinIO mode is S3 compatibility only; isolated volumes/network |
+| `docker-compose.maintenance-e2e.yml` | Disposable maintenance lifecycle certification | Worker, candidate, and activation coordination gates |
+| `docker-compose.recovery-cert.yml` | Disposable paired-volume recovery certification | Separate data/control targets and isolated readiness proof |
 | `docker-compose.yml` | Production template | `APP_ENV=production`, `BACKUP_ROLE=disabled` by default, `pull_policy: always`, Traefik network |
 
 ### CI Scripts
@@ -531,7 +514,7 @@ CREATE_SUPERUSER=0
 | Metric | Value |
 |--------|-------|
 | Repository revision | Use the current reviewed PR/release SHA; do not copy this living document as release identity |
-| Project migration files | 46 across core, dataops, and vaultops |
+| Project migration files | 47 across core, dataops, and vaultops |
 | Stage PDF rows/files | 242 / 242 |
 | Stage folders | 46 |
 | Stage users | 7 |

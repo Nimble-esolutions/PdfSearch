@@ -1,5 +1,7 @@
 flowchart TD
-  A["PDF upload or restored PDF"] --> B["Native text extraction"]
+  A["PDF upload or restored PDF"] --> Q["Durable queued processing job"]
+  Q --> W["Maintenance worker"]
+  W --> B["Native text extraction"]
   B -->|usable text| C["Chunk text"]
   B -->|blank page| D["Render only blank pages"]
   D --> E{"Bounds pass?<br/>language, pixels, page, time"}
@@ -9,5 +11,7 @@ flowchart TD
   H --> C
   C --> I["Embedding provider<br/>existing configured workflow"]
   I --> J["Chunk embeddings"]
-  J --> K["FAISS / search index"]
-  K --> L["processing_status=ready<br/>indexed=true"]
+  J --> K["Generation-scoped FAISS / Chroma artifacts"]
+  K --> V["Candidate integrity and search validation"]
+  V --> P["Signed activation / publication gate"]
+  P --> L["processing_status=ready<br/>indexed=true in active generation"]

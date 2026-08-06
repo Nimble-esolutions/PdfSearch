@@ -14,16 +14,17 @@ search page and it does not replace source review.
 
 The current composition is the **Operations Cockpit**: official header, dark
 console navigation, an observed operational posture, prioritized attention,
-Category Yard, Recent Intake, Active Work, and a compact Vault posture. It is
-the daily triage surface. **Documents & Search** is the ordinary maintenance
-destination; **Vault & Recovery** is the specialist control plane.
+Category Yard, Recent Intake, Active Work, and a compact data-protection
+posture. It is the daily triage surface. **Search maintenance** is the ordinary
+index-maintenance destination; **Data protection** is the guided backup,
+recovery-point, import, restore, and recovery-test surface.
 
 ## Sign in and navigation
 
 1. Open the organization-provided URL and choose Login.
 2. Sign in with the account issued by an administrator.
 3. Use Dashboard for the cockpit, Search for public document questions, and
-   Users/Operations/Vault/Settings only when your role exposes them.
+   Users/Operations/Settings only when your role exposes them.
 4. Use the language selector when available; do not rely on browser translation
    for legal or administrative wording.
 5. Log out on shared devices.
@@ -83,30 +84,22 @@ category sets are paginated; changing pages does not change document state.
 ## Operations and maintenance
 
 Use the Dashboard's **Active Work** projection for quick triage, then open
-**Documents & Search** for validation, repair, bounded reindexing, progress,
+**Search maintenance** for validation, repair, bounded reindexing, progress,
 cancellation, retry, checkpoints, and failures. Dashboard links never queue
 index mutations directly.
 
-Superadmins use **Vault & Recovery** under Operations for remote Vault
-and runtime custody. Its persistent summary deliberately shows remote
-authoritative generation, locally prepared workspace, runtime generation,
-Active Sync, writer lease, and critical job as independent evidence. Unknown
-or different values are warnings; the newest generation is never assumed to
-be authoritative.
+Superadmins use **Data protection** under Operations. DataOps v3 determines the
+route from the requested outcome and dataset provenance: backup writes a
+complete immutable recovery point, restore uses a same-dataset point, and
+import safely rebinds a foreign or legacy source before restore. Operators do
+not select internal source/destination profiles, clone modes, or same-dataset
+exceptions.
 
-Active Sync creates an immutable candidate without moving the authoritative
-pointer. Promotion and staging activation require a fresh, one-use typed
-confirmation bound to the observed state. Restore downloads into quarantine
-and prepares an immutable runtime workspace; it never activates automatically.
-Production activation and garbage collection remain hard-disabled.
-
-The signed rollback control is always visible in the Restore section. It is
-enabled only when the current signed runtime is a verified local-maintenance
-child of the exact signed previous runtime. A disabled control shows a typed
-reason, such as a missing or unverified pointer, stale runtime observation,
-invalid lineage, unavailable recovery login, or activation already in
-progress. Rollback schedules the same signed supervisor protocol as activation
-and does not change remote Vault authority.
+A restore always prepares an isolated candidate first. Activation is a
+separate signed action bound to the exact generation and manifest digest. If a
+rollback or activation action is unavailable, the page must show the unmet
+requirement and next safe action; operators must not call internal compatibility
+endpoints directly to bypass that decision.
 
 Warnings and disabled controls now lead with plain-language guidance: what the
 evidence means, what remains unavailable, and what to review next. Stable
@@ -114,18 +107,19 @@ support codes are not ordinary interface labels. Superadmins can expand
 **Technical details** when a support or audit workflow needs the exact,
 redacted code. Do not treat the code alone as remediation advice.
 
-All critical Workbench actions are ordinary server-rendered forms and remain
+All critical workbench actions are ordinary server-rendered forms and remain
 available without JavaScript. Refresh the page to update evidence when
 JavaScript is disabled. The browser receives only redacted profile and lease
 evidence—never credentials, raw owner tokens, or raw object-store errors.
 
-Vault, generation, settings, and data controls are superadmin-sensitive. Read
+Recovery-point, generation, settings, and data controls are
+superadmin-sensitive. Read
 the deployment and data-custody runbooks before any restore or promotion.
-Legacy Promote, Rollback, and Purge controls no longer relabel or delete data;
-use the guarded Workbench flow. Never run production cleanup from a local
-browser session.
+Legacy VaultOps URLs and controls are compatibility implementation only; use
+the guarded DataOps flow. Never run production cleanup from a local browser
+session.
 
-Under **Documents & Search**, the guided sequence is:
+Under **Search maintenance**, the guided sequence is:
 
 ```text
 choose operation → define scope → preview → confirm → monitor job
@@ -138,8 +132,8 @@ typed confirmation. The active runtime and remote Vault remain unchanged while
 maintenance runs. A successful reindex creates a derived candidate and makes
 the prior published generation stale.
 
-Documents & Search is local maintenance and does not require a remote Vault
-profile. If a control is disabled, read its adjacent guidance: local
+Search maintenance is local maintenance and does not require remote recovery
+storage. If a control is disabled, read its adjacent guidance: local
 maintenance policy, runtime read-only posture, external embedding policy, and
 force-reindex approval are independent gates.
 
@@ -171,24 +165,21 @@ index guidance opens Search maintenance. Older bookmarked `?section=...` links
 are translated to the same current task and retain any selected plan, job, or
 profile context.
 
-Advanced Vault and runtime evidence is collapsed on the Documents & Search
+Advanced recovery and runtime evidence is collapsed on the Search maintenance
 page. Expand it only when diagnosing publication or recovery; routine document
 care does not require interpreting generation, lease, or authority identifiers.
 
-Under **Vault & Recovery → Configuration → Vault profiles**, an
-**Environment Vault** profile is
-created automatically when the server has a complete `ARTIFACT_VAULT_*`
-configuration. A **Legacy application database** record is historical
-projection evidence, not an S3 connection; its probe and inventory controls
-are disabled. A read-only probe confirms endpoint and bucket reachability.
-Authoritative inventory verification additionally requires a published dataset
-registration, pointer, manifest, and objects. A configured but empty Vault is
-presented as a healthy first-run condition: storage access can be probed, while
-authoritative inventory becomes meaningful only after the first publication.
+Under **Data protection**, the owned recovery connection is the default for
+backup and same-dataset restore. A foreign read-only connection is used only
+for an explicit import. A read-only check proves endpoint, bucket, credentials,
+and required object-store capabilities before an operation is queued. A new,
+empty connection is valid after the probe; recovery-point inventory becomes
+meaningful only after the first successful backup or import.
 
-The profile form never accepts secret values. Correct highlighted fields using
-the server-approved endpoint, dataset identity, and credential alias supplied
-by the deployment operator.
+Connection forms store credential references, never secret values in browser
+responses or receipts. Correct highlighted fields using the server-approved
+endpoint, dataset identity, and credential reference supplied by the deployment
+operator.
 
 ## Destructive actions and support
 

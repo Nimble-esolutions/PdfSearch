@@ -1,10 +1,11 @@
 # Public Search Theme Engine Handoff
 
 **Updated:** 2026-08-06
-**Merged:** PRs #185, #186, and #187
-**Stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc`
-**In repair:** Classic long-answer continuity regression on branch
-`fix/classic-search-continuity`; merge and stage verification are pending
+**Status:** Historical delivery handoff; living state is in [`../HANDOFF.md`](../HANDOFF.md)
+**Merged:** PRs #185–#190
+**Last verified stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc`
+**Rollout boundary:** PRs #185–#186 were stage-canary verified on that artifact;
+the integrated PRs #187–#190 image still requires certification and stage canary
 
 ## Classic long-answer regression (2026-08-06)
 
@@ -39,9 +40,9 @@ and serious/critical accessibility findings across the browser viewport
 matrix. The required image smoke gate includes Classic search so this primary
 public journey cannot be skipped again.
 
-Do not claim this repair as deployed until its PR is green and merged, the
-resulting image is running on stage, and the long-answer plus second-query
-canary succeeds there.
+The repair merged in PR #189 and the living handoff was updated by PR #190. Do
+not claim it as deployed until the resulting image is running on stage and the
+long-answer plus second-query canary succeeds there.
 
 ## Delivered
 
@@ -60,9 +61,9 @@ canary succeeds there.
 - The shared backend resolves answer language from each question and both
   themes apply the returned `language` as accessible DOM metadata; changing the
   primary theme cannot change answer language.
-- PR #187 prepares public policy/information pages to use the active or
+- PR #187 added public policy/information pages using the active or
   explicitly previewed theme through a standalone visitor shell. They do not
-  inherit admin UI assets; deployment remains pending at this handoff point.
+  inherit admin UI assets; integrated stage deployment remains pending.
 
 ## Verification evidence
 
@@ -82,7 +83,7 @@ Completed locally in the isolated development Compose stack:
 
 ## Deployment and rollback
 
-PRs #185 and #186 are deployed on stage. Existing databases required no migration. Classic
+PRs #185 and #186 were verified on stage. Existing databases required no migration. Classic
 is the default unless a superadmin saves Workbench, and either view remains
 available through its request-only `?view=` override.
 
@@ -90,9 +91,10 @@ Rollback by selecting Workbench in Settings, or by reverting the feature PR.
 Neither action changes documents, indexes, search sources, backups, or runtime
 generations.
 
-PR #187 is locally verified and in review. Do not claim its public-information
-shell is deployed until the merged image revision is running on both stage web
-and maintenance and both theme variants of every public information route pass.
+PRs #187–#190 are merged but not proven on the last verified stage artifact. Do
+not claim their public-information shell, macOS docs-rendering fix, or Classic
+continuity behavior as deployed until one integrated image revision is running
+on both stage web and maintenance and the complete canary passes.
 
 ## Current evidence
 

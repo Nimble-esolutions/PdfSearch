@@ -1,7 +1,7 @@
 Status: Active
 Audience: Recovery
 Owner: FlowDocs maintainers
-Last verified: 2026-08-02
+Last verified: 2026-08-06
 Canonical source: docs/OPERATIONS_RUNBOOK.md
 Supersedes: None
 
@@ -9,19 +9,19 @@ Supersedes: None
 
 ## Current 2026 stage note
 
-The 2026 recovery rehearsal now has a verified RustFS v2 source and a
-quarantine-ready stage clone, but it is not an active runtime generation. The
-stage route is https://2026.ai-sahakar.net; a healthy root response does not
-replace /readyz evidence. Until signed activation and the first stage_2026
-backup succeed, a 503 readiness response is expected and should not be
-worked around by enabling startup restore or copying quarantine data over the
-active volume.
+The 2026 recovery rehearsal has a signed active 242-document runtime, indexing
+ratio `1.0`, a manual stage backup receipt, and an isolated restore rehearsal.
+The stage route is https://2026.ai-sahakar.net; a healthy root response still
+does not replace `/readyz` evidence. A future failed candidate or backup must
+not be worked around by enabling startup restore or copying quarantine data
+over the active volume.
 
 The stage Compose project name is
-sahakar-ai-sahakar-frontend-2026-prod-ruhj6z. Preserve it when operating from
-a timestamped Dokploy backup directory. Omitting it creates a different
-Compose namespace and can allocate blank volumes. See
-STATUS-2026-08-02.md for the exact evidence and safe command shape.
+sahakar-ai-sahakar-frontend-2026-prod-ruhj6z. Operate through that preserved
+Dokploy project; do not invent a Compose project-name variable or run the
+deployment from a timestamped checkout that could allocate blank volumes. See
+[`HANDOFF.md`](HANDOFF.md) for current evidence and
+`STATUS-2026-08-02.md` for dated migration evidence.
 
 This runbook is for a Dokploy Compose deployment of FlowDocs. It uses the
 repository Compose file, the web service on container port `8000`, the
@@ -30,11 +30,11 @@ Run evidence commands before recovery commands. Do not expose environment
 values, credentials, document contents, or copied production data in tickets or
 logs.
 
-Current canonical production domains are `https://ai-sahakar.net` and
-`https://www.ai-sahakar.net`; the verified preview was
-`https://2026.ai-sahakar.net` and must not be treated as the main production
-URL after cutover. Dokploy production evidence must show exact web/Redis
-digests and `pull_policy: always`.
+Legacy production remains `https://www.ai-sahakar.net` and is authoritative.
+`https://2026.ai-sahakar.net` is the current non-production stage. Future 2026
+production traffic changes require separate approval; Dokploy production
+evidence must show exact application/infrastructure digests and `pull_policy:
+always`.
 
 ## Safety Rules
 
@@ -250,7 +250,6 @@ an unexpected named volume.
 ```bash
 WEB="$(docker compose -f docker-compose.yml ps -q web)"
 docker inspect "$WEB" --format '{{range .Mounts}}{{println .Name .Source .Destination .RW}}{{end}}'
-docker volume ls --filter label=com.dokploy.backup=true
 docker volume inspect <candidate-volume>
 docker compose -f docker-compose.yml config --volumes
 ```
@@ -838,7 +837,7 @@ snapshots and checksums but is isolated from the application network.
 Direct legacy-to-active copying and silent merging are prohibited. The application
 now supports namespace-scoped S3 keys, conditional operations, immutable
 generation manifests, CAS-based writer fencing, staged restore with rehearsal,
-and atomic symlink-based activation with crash recovery.
+and signed JSON runtime-pointer activation with rollback evidence in staging.
 
 The active Workbench path now publishes a dataset-scoped generation, verifies
 authoritative inventory, prepares an isolated restore workspace, and schedules
@@ -941,10 +940,10 @@ For production certification, never exercise this path inside the live data
 volume. Use [`RECOVERY_CERTIFICATION.md`](RECOVERY_CERTIFICATION.md) and the
 paired disposable data/control volumes created by the checked-in wrapper.
 
-Full-pipeline workspaces are created under:
+Current DataOps restore candidates are created under:
 
 ```text
-/app/data/backups/restore-workspaces/
+/app/data/restore-quarantine/
 ```
 
 Monitor the process that actually invoked the pipeline and inspect workspace
@@ -954,8 +953,9 @@ job.
 
 ## Activation Operations
 
-Generation activation uses atomic symlink swap (`core/activate.py`) with
-heartbeat-based crash recovery (`core/activation_journal.py`).
+Generation activation uses signed intent/result records and compare-and-swap
+JSON runtime pointers under `/app/data-control`; the runtime supervisor verifies
+the exact generation and manifest before accepting readiness or rolling back.
 
 ### Verify active generation
 

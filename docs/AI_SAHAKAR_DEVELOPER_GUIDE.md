@@ -144,11 +144,12 @@ and do not translate immutable codes or identifiers.
 Keep the two operator journeys distinct even though they share the existing
 Django route and backend read model:
 
-- **Documents & Search** is the ordinary, local document-care journey:
+- **Search maintenance** is the ordinary, local document-care journey:
   validate, repair stored indexes, bounded reindex, and monitor maintenance.
-- **Vault & Recovery** is the advanced custody journey: publication,
-  authoritative inventory, generations, restore, activation, retention, and
-  recovery evidence.
+- **Data protection** is the supported DataOps v3 custody journey: recovery
+  points, backup, foreign-dataset import/rebind, isolated restore candidates,
+  activation evidence, and recovery history. The retained `vaultops` package is
+  an internal compatibility/activation bridge, not a second workbench.
 
 Dashboard document-readiness actions must deep-link to `?section=maintenance`.
 Do not force an administrator through remote authority or profile setup before
@@ -182,17 +183,21 @@ Never remove an old template, route, asset, or CSS block based only on a
 visual assumption. Prove references and record cleanup separately; see
 [`DEV_CLEANUP_SCOPE.md`](DEV_CLEANUP_SCOPE.md).
 
-## Local Vault and maintenance bootstrap
+## Local DataOps and compatibility-maintenance bootstrap
 
-`docker-compose.dev.yml` starts an isolated MinIO service, creates the
-`pdfsearch-dev` bucket, and supplies a complete locked environment profile:
+`docker-compose.dev.yml` starts an isolated RustFS service and creates the
+`pdfsearch-dev` bucket. DataOps v3 uses one owned recovery connection for local
+backup and same-dataset restore. Before a stored control-database connection
+exists, the `ARTIFACT_VAULT_*` values below are accepted only as a temporary,
+secret-free bootstrap description; the worker resolves credentials at execution
+time.
 
 ```text
-VAULT_DEFAULT_PROFILE=local-development
 ARTIFACT_VAULT_ENABLED=1
 ARTIFACT_VAULT_ENDPOINT=http://rustfs:9000
 ARTIFACT_VAULT_BUCKET=pdfsearch-dev
 ARTIFACT_VAULT_REGION=us-east-1
+ARTIFACT_VAULT_CREDENTIAL_REF=env://ARTIFACT_VAULT
 VAULT_ALLOWED_S3_ENDPOINTS=http://rustfs:9000
 VAULT_ALLOW_HTTP_S3_ENDPOINTS=1
 VAULT_BLOCK_PRIVATE_S3_ENDPOINTS=0
@@ -202,12 +207,11 @@ The development access and secret keys are disposable RustFS Compose defaults an
 must never be reused outside local development. Production secrets remain
 server-managed and must be inspected only as set/unset posture.
 
-Opening the Workbench materializes the locked environment profile only when
-`ARTIFACT_VAULT_ENABLED=1` and the complete `ARTIFACT_VAULT_*` contract
-validates. Migration-created legacy profiles stay visible as historical
-evidence but are not probeable. `environment_profile_defaults()` supplies
-secret-free form defaults; rejected submissions retain safe input for one
-redirect and identify exact fields with `aria-invalid`.
+Opening Data protection materializes or reads the owned v3 connection. The
+read-only connection check verifies endpoint, bucket, credentials, ownership,
+and conditional-write capability before publication. Migration-created legacy
+VaultOps profiles are compatibility evidence and must not be presented as the
+normal DataOps v3 connection path.
 
 Local development enables validation, stored-index repair, and sandboxed
 reindexing independently of remote Vault authority. The development Compose
@@ -314,7 +318,9 @@ middleware coalesces with the service scope, while no-op, failed, and
 rolled-back transitions do not advance the source epoch or make a sync job
 eligible.
 
-Vault sync retry requests use `VaultJobRetryRequest` as an exact-once control
+The remaining Vault Active Sync retry path is legacy compatibility behavior,
+not the DataOps v3 backup contract. When that disabled path is exercised by its
+focused tests, retry requests use `VaultJobRetryRequest` as an exact-once control
 receipt keyed by job and operator idempotency key. The locked job state version,
 resulting retry count, retry mode, and actor are stored in the same control
 transaction as the state transition and audit event. A finalized snapshot uses
@@ -333,7 +339,7 @@ services in `transaction.atomic()`; use their existing internal row-and-audit
 transaction so the independently durable control epoch can advance only after
 that transaction returns successfully.
 
-Active Sync may reconcile a stale FAISS index only inside its isolated
+The legacy Active Sync path may reconcile a stale FAISS index only inside its isolated
 incomplete snapshot. The derivation must use the frozen SQLite copy's retained
 embeddings in runtime search order, apply the configured vector and dimension
 bounds, and write via an atomic candidate-local replacement. It must not call

@@ -21,8 +21,9 @@ clone-legacy-20260802T085639Z-86288855. The clone contains 416 verified objects
 totalling 1,093,501,777 bytes. It was restored to quarantine and all 242 PDFs
 were ultimately ready and indexed after bounded OCR processing. The stage
 control plane now has a signature-verified active pointer for that 242-document
-runtime. Manual backup and isolated recovery rehearsal have succeeded; final
-acceptance waits for the immutable PR 176 image and corrected readiness proof.
+runtime. Manual backup and isolated recovery rehearsal succeeded, and corrected
+DataOps v3 readiness evidence was accepted. Repeat certification on a recovery
+contract change or before an approved production cutover.
 
 Do not record the full manifest digest, object keys, or document contents in
 this page. Use the receipt and the current status record for exact evidence:

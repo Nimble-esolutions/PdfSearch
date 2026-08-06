@@ -1,8 +1,8 @@
 # Data Operations rollout
 
-> Current evidence and exact pending gates are maintained in
-> [STATUS-2026-08-03.md](../STATUS-2026-08-03.md). This page is the
-> procedure; it is not evidence that every step below has completed.
+> Current evidence and exact pending decisions are maintained in
+> [HANDOFF.md](../HANDOFF.md). The dated status page linked below is historical
+> evidence. This page is the procedure, not live deployment state.
 
 ## As-of 2026-08-03
 
@@ -20,12 +20,10 @@ Completed:
   rehearsal; protected ownership/monitoring/rollback details remain in the
   deployment and audit records, not this repository.
 
-Still pending:
-
-- Make PR 176 green, certify its immutable image, and deploy the same digest to
-  stage web and maintenance.
-- Verify corrected `/readyz` projection for the existing signed runtime.
-- Repeat one manual backup and disposable restore from that final image.
+The PR #176 release, corrected readiness projection, stage backup, and
+disposable restore have completed. Repeat the recovery drill when storage,
+manifest, restore, activation, migration, or image/data compatibility changes;
+do not repeat it merely to satisfy this historical checklist.
 
 The replacement is intentionally additive until the restore and reindex gates
 are green. For the 2026 stage recovery rollout:

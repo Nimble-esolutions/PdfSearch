@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-07-25
+Last verified: 2026-08-06
 Canonical source: DEPLOYMENT_GUIDE.md
 Supersedes: None
 
@@ -53,11 +53,12 @@ container images, and current data-volume identity belong in the release record.
 must set every production image to an exact `repo@sha256:<digest>` value in
 Dokploy and use `pull_policy: always`. Do not accept a stale local tag cache.
 
-Current canonical production domains are `https://ai-sahakar.net` and
-`https://www.ai-sahakar.net`. The verified preview baseline was
-`https://2026.ai-sahakar.net`; retain it only as historical rollback evidence.
-See [`PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md) for the current
-custody counts and release boundary.
+Legacy production remains `https://www.ai-sahakar.net` and is unchanged.
+`https://2026.ai-sahakar.net` is the current non-production 2026 stage/rehearsal
+host. The future 2026 production project and traffic cutover are not yet
+deployed. Use [`docs/HANDOFF.md`](docs/HANDOFF.md) for current custody counts,
+artifact identity, and the release boundary; dated baseline documents are
+historical evidence.
 
 ## Dokploy UI Setup
 
@@ -108,9 +109,10 @@ digests with `pull_policy: always`; never rely on a local alias or cached
 
 ## Production Domain Cutover
 
-The canonical production host is `ai-sahakar.net`; `www.ai-sahakar.net` is its
-canonical alias. `2026.ai-sahakar.net` was the preview/verification host and
-must be retained only for rollback validation until the cutover is accepted.
+The intended future 2026 production host is `ai-sahakar.net` with
+`www.ai-sahakar.net` as its canonical alias. `2026.ai-sahakar.net` is the
+current stage/rehearsal host and must remain isolated from production traffic.
+This section is a future cutover procedure, not evidence that cutover occurred.
 
 1. Point DNS for both `ai-sahakar.net` and `www.ai-sahakar.net` to the Traefik ingress address.
 2. Configure both hostnames in the Dokploy application domain settings.
@@ -129,7 +131,6 @@ guessing its host name:
 docker compose -f docker-compose.yml ps
 docker inspect "$(docker compose -f docker-compose.yml ps -q web)" \
   --format '{{range .Mounts}}{{println .Name .Source .Destination .RW}}{{end}}'
-docker volume ls --filter label=com.dokploy.backup=true
 docker volume inspect <discovered-flowdocs-data-volume>
 ```
 
@@ -164,10 +165,10 @@ evidence and recovery work. It is not the ongoing application data store.
 
 ## Legacy and Active Data Promotion
 
-Legacy data must not be copied directly into active data. The pre-reconciliation
-sources were divergent; the current documented active baseline is 253 PDF rows,
-242 PDF files, 53 folders, 8 users, and 51 rebuilt FAISS indexes. Eleven
-target-only rows remain preserved but unrecovered. Use the procedure in
+Legacy data must not be copied directly into active data. Earlier
+pre-reconciliation sources were divergent; those July counts are preserved in
+dated evidence and are not current stage truth. The current signed stage
+inventory and lineage are recorded in [`docs/HANDOFF.md`](docs/HANDOFF.md). Use the procedure in
 [`DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md):
 
 1. Preserve both sources and take or verify timestamped snapshots/checksums.

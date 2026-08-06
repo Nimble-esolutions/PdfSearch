@@ -1,9 +1,16 @@
-# Vault Retention and GC Runbook
+Status: Historical compatibility runbook; no DataOps v3 retention UI
+Audience: Developer, recovery maintainer
+Owner: FlowDocs maintainers
+Last verified: 2026-08-06
+Canonical replacement: docs/dataops/V3_ARCHITECTURE.md
+
+# Historical Vault retention and GC runbook
 ## Current-state pointer
 
 Use the living [HANDOFF.md](HANDOFF.md) for current verified state.
-Earlier dated sections remain historical evidence and must be reconciled to
-the living handoff before use.
+The legacy authenticated API and models remain in code, but DataOps v3 has no
+supported operator retention/GC UI. Keep deletion disabled. This page is for
+compatibility analysis and incident evidence, not routine operation.
 
 
 ## Safety posture
@@ -18,9 +25,10 @@ generation `legacy-20260725T204411Z-v2c4d9e1` or objects referenced by it.
 
 ## Retiring and restoring a generation
 
-Use the Retention & GC section of the Vault Operations Workbench. Retirement
-requires a one-use typed confirmation bound to the operator, generation, and
-observed state.
+There is no supported DataOps v3 control for this legacy retirement flow. The
+internal compatibility API requires a one-use typed confirmation bound to the
+operator, generation, and observed state. Do not call it as a substitute for a
+reviewed DataOps retention design.
 
 Retirement fails closed when the generation is authoritative, runtime-active or
 previous, or referenced by a live job. Workspaces and retention holds continue

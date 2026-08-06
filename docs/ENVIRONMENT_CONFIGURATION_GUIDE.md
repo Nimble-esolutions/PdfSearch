@@ -1,30 +1,32 @@
 # Environment Configuration Guide
 
-## Current 2026 stage example
+## Current 2026 stage posture
 
-The applied stage posture is a private, reader-only recovery rehearsal:
+The stage moved beyond its earlier empty/private rehearsal posture. The latest
+verified state is a public, approved production-derived rehearsal with a signed
+active generation, 242/242 indexed PDFs, manual backup evidence, and an
+isolated restore receipt:
 
     APP_ENV=staging
-    DATA_MODE=empty
-    DATA_BOOTSTRAP_MODE=empty
+    DATA_MODE=local
+    DATA_BOOTSTRAP_MODE=strict
     DATASET_ID=ai-sahakar-stage-2026
-    DATAOPS_ENV_PROFILES=production_v2_source,stage_2026
-    DATAOPS_RESTORE_PROFILE=stage_2026
-    DATAOPS_BACKUP_PROFILE=stage_2026
+    DATAOPS_ENABLED=1
     BACKUP_ROLE=reader
     BACKUP_SYNC_MODE=manual
-    STAGING_INITIAL_ACTIVATION_ENABLED=0
-    STAGING_RUNTIME_ACTIVATION_ENABLED=0
+    STAGING_INITIAL_ACTIVATION_ENABLED=1
+    STAGING_RUNTIME_ACTIVATION_ENABLED=1
 
 This is a non-secret example only. Do not copy credential, API-key, signing-key,
 or recovery-password values into Git or support records. Environment changes
 must be applied through the preserved Dokploy Compose project and verified
 inside both web and maintenance containers. The current status and volume
-boundary are documented in STATUS-2026-08-02.md.
+boundary are documented in [`HANDOFF.md`](HANDOFF.md). The dated
+`STATUS-2026-08-02.md` page is historical evidence, not current configuration.
 
 **Status:** Active
 **Audience:** Developers, release operators, and reviewers
-**Last audited:** 2026-08-02
+**Last audited:** 2026-08-06
 **Canonical contract:** [`ENVIRONMENT_CONTRACT.md`](ENVIRONMENT_CONTRACT.md)
 
 This guide explains the runtime effect of the environment variables. It does
@@ -43,7 +45,7 @@ Traefik route, data generation, and environment values must agree.
 1. Protected Dokploy/Compose environment values.
 2. Django settings defaults where explicitly documented.
 3. Database-backed settings only for settings marked editable in the admin
-   configuration registry.
+configuration registry.
 
 Changing an environment value normally requires a container recreation. It
 does not change an existing SQLite row, uploaded PDF, FAISS index, or cached
@@ -62,9 +64,10 @@ release note and compatibility review.
 | `DATA_MODE` | Selects local, empty, seed, or restore data posture | `local` for current Compose production | `local` or controlled `s3-restore` | `empty` or `local` |
 | `BACKUP_ROLE` | Controls writer/reader/disabled custody behavior | `writer` only with vault and approvals | `disabled` or `reader` | `disabled` |
 | `BACKUP_SYNC_MODE` | Selects manual/scheduled/hybrid backup behavior | `manual` unless explicitly approved | `manual` | `manual` |
-| `EXTERNAL_SIDE_EFFECTS_MODE` | Gates email/OpenAI/payment/webhook behavior | `enabled` | `sandbox` or `disabled` | `sandbox` |
+| `EXTERNAL_SIDE_EFFECTS_MODE` | Gates non-AI email/payment/webhook behavior | `enabled` | `sandbox` or `disabled` | `sandbox` |
+| `EXTERNAL_AI_MODE` | Independently gates OpenAI/AI provider behavior; inherits the general mode only when absent | Explicit reviewed policy | Explicit reviewed policy | `sandbox` or `disabled` |
 | `PDFSEARCH_IMAGE` | Compose image reference | Immutable GHCR digest | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend:latest` | Image/build reference |
-| `APP_IMAGE_DIGEST` | Runtime image marker shown in admin/health evidence | Same immutable image digest | Same intentional `:latest` stage channel | Optional locally; record the stage container's resolved digest separately |
+| `APP_IMAGE_DIGEST` | Runtime image marker shown in admin/health evidence | Derived by Compose from `PDFSEARCH_IMAGE` | Derived by Compose from `PDFSEARCH_IMAGE` | Optional locally; record the resolved container digest separately |
 | `APP_RELEASE_VERSION` | Git SHA/release identifier | Approved SHA | Approved SHA | Local SHA or blank |
 
 Production with `BACKUP_ROLE=writer` additionally requires the artifact vault,
@@ -162,7 +165,7 @@ examples.
 
 ## Data custody and vault variables
 
-`ARTIFACT_VAULT_ENABLED`, `ARTIFACT_VAULT_ENDPOINT`, `ARTIFACT_VAULT_BUCKET`,
+`ARTIFACT_VAULT_ENDPOINT`, `ARTIFACT_VAULT_BUCKET`,
 `ARTIFACT_VAULT_REGION`, `ARTIFACT_VAULT_ACCESS_KEY`, and
 `ARTIFACT_VAULT_SECRET_KEY` control the RustFS/S3-compatible recovery vault.
 Use explicit manual publication for the current production path:
@@ -175,19 +178,22 @@ RESTORE_POLICY=disabled
 ```
 
 The worker that executes publication must receive the vault credentials,
-writer identity, `APP_IMAGE_DIGEST`, and `APP_RELEASE_VERSION`. Production
-Compose currently maps the complete vault set to `web` but not explicitly to
-`maintenance`; do not assume Dokploy interpolation values appear inside the
-worker unless the effective Compose environment proves it.
+writer identity, image marker, and `APP_RELEASE_VERSION`. Production Compose
+maps the connection and credential set to both `web` and `maintenance`; the
+effective Compose parity check must continue to prove that lifecycle-critical
+environment remains aligned.
 
 Restore identity uses `RESTORE_SOURCE_DATASET_ID`, `RESTORE_POLICY`, and, for
 `s3-pinned` or `startup-pinned`, `DATA_PINNED_GENERATION`. These values do not
 trigger either entrypoint to restore. Both entrypoints do consume `startup-*`
 as a fail-closed posture: an absent/zero-byte database stops before migration,
-while a non-empty database is preserved. The full restore pipeline is available
-through the active Vault Operations control plane and controlled tests.
+while a non-empty database is preserved. The supported operator restore path
+is DataOps v3: it chooses same-dataset restore or foreign-source import from
+provenance, prepares an isolated candidate, and keeps signed activation
+separate. Older `VAULT_*` restore switches are internal compatibility controls,
+not the standard operator configuration contract.
 
-`ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`,
+`MAINTENANCE_WORKER_POLL_SECONDS`, `ARTIFACT_VAULT_AUTO_SYNC`, `ARTIFACT_VAULT_AUTO_PULL_ON_EMPTY`,
 `ARTIFACT_VAULT_BOOTSTRAP_GENERATION`, `ARTIFACT_VAULT_RETENTION_COUNT`,
 `RESTORE_WORKSPACE_ROOT`, `RESTORE_STAGE_TIMEOUT_SECONDS`,
 `RESTORE_REHEARSAL_ENABLED`, `RESTORE_SANITIZE_ENABLED`, and

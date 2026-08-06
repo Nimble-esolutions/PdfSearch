@@ -1,9 +1,11 @@
 flowchart TD
-    source["Merged source f05e110"] --> ci["CI image build and smoke tests"]
-    ci --> digest["Immutable web and Redis digests"]
-    digest --> dokploy["Dokploy Compose"]
+    source["Reviewed merge to dev"] --> ci["Contract, package, browser, recovery, and Compose gates"]
+    ci --> digest["Immutable application image digest"]
+    infra["Separately resolved Redis / RustFS infrastructure images"] --> dokploy
+    digest --> dokploy["Dokploy Compose\nweb + maintenance use same app image"]
     dokploy --> pull["pull_policy always"]
-    pull --> health["/livez and /readyz"]
-    health --> data["PDF count, FAISS count, representative search"]
-    data --> promote["Explicit production promotion"]
+    pull --> health["worker heartbeat + /livez + /readyz"]
+    health --> data["signed generation, manifest, PDF/index counts, representative search"]
+    data --> stage["Stage canary and evidence"]
+    stage --> promote["Separately approved production promotion"]
     tag["latest or dev tag"] -. "not release identity" .-> dokploy
