@@ -43,7 +43,7 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains `1067c054edd6a21a7881371ca0670e428dc4cc81` | PRs #185 and #186 are merged; both themes and the typed, question-language response contract are integrated |
+| Repository integration baseline | `dev` contains merge `25a2bcb2cc7d2b964365ce396d81b644e3c156a6` | PRs #185–#187 are merged; both themes, typed question-language responses, and theme-consistent public information pages are integrated |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
@@ -133,7 +133,8 @@ and indexing remained `1.0`.
 | #184 | Established this enforced living project handoff |
 | #185 | Rebuilt the approved Classic public search as the primary view while preserving an isolated Knowledge Workbench secondary view |
 | #186 | Corrected search-intent false positives and enforced question-derived English/Marathi answer language across both themes |
-| #187 (in review) | Adds a standalone, theme-consistent shell for Terms, Privacy, Disclaimer, Data Policy, and Cookie Policy; locally verified but not yet stage evidence |
+| #187 | Added a standalone, theme-consistent shell for Terms, Privacy, Disclaimer, Data Policy, and Cookie Policy |
+| #188 (in review) | Makes local macOS documentation rendering honor an explicit Puppeteer browser and select Playwright's matching headless shell instead of launching the crashing GUI Chrome-for-Testing app |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -147,10 +148,9 @@ no ownership warning.
 There is no data-readiness or search-language blocker. Remaining operational
 work is decision-driven:
 
-1. **Public information rollout:** finish PR #187 checks/review, merge only when
-   green, certify the new image, deploy stage web and maintenance without
-   touching volumes, and canary all five routes in both themes plus both
-   mismatched-locale answer directions.
+1. **Public information rollout:** confirm the merged PR #187 image revision on
+   stage web and maintenance without touching volumes, then canary all five
+   routes in both themes plus both mismatched-locale answer directions.
 2. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
@@ -180,6 +180,10 @@ work is decision-driven:
 - Do not expose enabled UI controls whose real handler will reject the default
   request. Capability, default action, authored refusal, and retry behavior
   must be tested together.
+- On macOS, documentation and browser automation must use Playwright's matching
+  `chrome-headless-shell`; never pass the GUI Google Chrome for Testing app to
+  Mermaid/Puppeteer. Honor an explicit `PUPPETEER_EXECUTABLE_PATH`, reject a
+  missing path, and keep machine-specific browser-cache paths out of Git.
 - Never classify conversational intent with substring matching. A small-talk
   fast path must match the complete normalized query, and regression tests must
   include domain words containing short conversational tokens.
