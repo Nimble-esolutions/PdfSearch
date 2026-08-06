@@ -267,7 +267,7 @@ are not the supported Data protection workflow and remain disabled by default.
 | VAULT_RESTORE_ENABLED | Enables legacy restore API | 0 | Normal restore uses DataOps v3 |
 | STAGE_SAME_DATASET_RESTORE_ENABLED | Old stage restore exception | 0 | V3 treats same-dataset restore as the normal deterministic route |
 | VAULT_ADMIN_MUTATIONS_ENABLED | Allows legacy API mutations | 0 | UI visibility is not mutation authority |
-| VAULT_MUTATION_TRACKING_ENABLED | Tracks source mutations | 0 unless sync is enabled | Required before source publication |
+| VAULT_MUTATION_TRACKING_ENABLED | Tracks source mutations and supplies the durable epoch used by signed-runtime search caches | 0 for mutable local development; 1 for signed stage/production runtimes and source publication | When disabled, search remains correct but intentionally uses the conservative per-folder path; required before source publication |
 | VAULT_ALLOWED_S3_ENDPOINTS | Exact permitted origins | Approved HTTPS origins only | Prevents endpoint substitution |
 | VAULT_CREDENTIAL_ALIASES | Server-side credential alias map | Approved aliases only | Values name secret references, not secret contents |
 | VAULT_BLOCK_PRIVATE_S3_ENDPOINTS | Reject private endpoints | 1 | Protects against SSRF-like endpoint misuse |

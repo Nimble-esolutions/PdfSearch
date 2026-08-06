@@ -170,7 +170,7 @@ flowchart LR
   D --> Q["SQLite + media + FAISS + Chroma"]
   V --> X["flowdocs_control<br/>control DB + signed evidence"]
   W --> C["Redis<br/>cache + queue"]
-  D --> H["Signed-runtime search corpus<br/>one immutable matrix per worker"]
+  D --> H["Signed epoch search corpus<br/>one bounded matrix per worker"]
   H --> C
   M --> C
   T["scripts + browser_tests + integration_tests"] --> W
@@ -187,11 +187,15 @@ workbench.
 ### Search hot path
 
 Public search checks an exact, access-scoped result cache before paying for an
-embedding, vector retrieval, or answer-generation request. On an exact signed
-runtime, each web worker parses and normalizes the immutable embedding corpus
-once, then filters that matrix to the caller's authorized folder/PDF scope.
-Unsigned or mutable development data retains the conservative per-folder
-snapshot path. Query embeddings and generated answers are provider-scoped;
+embedding, vector retrieval, or answer-generation request. When signed
+activation and the existing durable mutation tracker agree, each web worker
+parses and normalizes one bounded corpus for the current mutation epoch, then
+filters that matrix to the caller's authorized folder/PDF scope. Unsigned,
+untracked, changing, oversized, or corrupt data retains the conservative
+per-folder snapshot path. Cached references are reauthorized; failures in the
+search-result/embedding/answer caches degrade speed, while the separate public
+rate limiter remains fail-closed. Query embeddings and generated answers are
+provider-scoped;
 cache keys also bind the models, language, runtime, answer-contract version,
 and authorization scope. See the
 [latency root-cause and impact record](docs/releases/2026-08-07-search-answer-latency.md).

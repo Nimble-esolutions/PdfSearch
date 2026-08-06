@@ -51,18 +51,22 @@ retaining separate Classic and Workbench presentation stacks:
 2. for an exact signed runtime and explicit public/admin access scope, consult
    the full-result cache before any provider or retrieval work;
 3. create or reuse a provider-scoped query embedding;
-4. search one process-local normalized corpus for the signed immutable runtime,
-   filtered to the authorized scope; unsigned/mutable data uses a coherent
-   per-folder snapshot and validates any persistent FAISS vectors against it;
+4. when signed activation and the durable mutation tracker agree, search one
+   bounded process-local normalized corpus for the exact mutation epoch,
+   filtered to the authorized scope; unsigned, untracked, active-write,
+   oversized, or corrupt data uses a coherent per-folder snapshot and validates
+   any persistent FAISS vectors against it;
 5. rank the same bounded candidates/references and create or reuse the
    provider-scoped, language-validated answer; and
 6. return typed JSON, which both public themes format immediately without
    interpreting provider HTML.
 
-Cache identity binds the signed generation/pointer, access scope, provider
-policy, models, language, ranking/context settings, and answer-contract
-version. Per-worker matrix byte/vector counts and phase timings are logged
-without query or document content. The complete RCA and rollout gate are in
+Cache identity binds the signed generation/pointer, durable mutation epoch,
+access scope, provider policy, models, language, ranking/context settings, and
+answer-contract version. Cached references are reauthorized before return;
+cache failures fall through to search. Per-worker matrix byte/vector counts,
+cache errors, and phase timings are logged without query or document content.
+The complete RCA and rollout gate are in
 [2026-08-07-search-answer-latency.md](releases/2026-08-07-search-answer-latency.md).
 
 ---
