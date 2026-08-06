@@ -6,10 +6,11 @@ Owner: Operations
 
 Last reviewed: 2026-07-27
 
-Vault generations are the canonical full-recovery artifact. Local recovery
-sets are bounded, same-volume, database-only emergency points created before
-pending migrations, activation, bulk index mutation, or a manual operator
-request. Their presence does not prove that media or indexes are restorable.
+DataOps v3 recovery points are the canonical complete recovery artifact. Local
+recovery sets are bounded, same-volume, database-only emergency points created
+before pending migrations, activation, bulk index mutation, or a manual
+operator request. Their presence does not prove that media or indexes are
+restorable.
 
 | Incident or objective | Use | Important boundary |
 |---|---|---|
@@ -20,9 +21,9 @@ request. Their presence does not prove that media or indexes are restorable.
 | Media file without a database row | `reconcile_media_pdfs` | Imports orphan media; it does not repair an existing dangling row |
 | Database row whose PDF media is missing | Explicit **Mark unavailable** action, then recover the exact verified file | Preserves identity and history; never remap or delete automatically |
 | Missing/corrupt FAISS with valid stored embeddings | Repair Stored Indexes | No external embedding calls |
-| Missing chunks or embeddings | Reindex Needed/Selected | Creates local derived change; publish a new Vault candidate |
-| Complete dataset recovery | Verified Vault restore and signed activation | Canonical route for database, media, indexes, and manifests |
-| Host or volume loss | Immutable image plus verified Vault generation | Local recovery sets are expected to be lost with the volume |
+| Missing chunks or embeddings | Reindex Needed/Selected | Creates local derived change; publish a new DataOps v3 recovery point after activation |
+| Complete dataset recovery | Verified DataOps restore candidate and signed activation | Canonical route for database, media, indexes, and manifests |
+| Host or volume loss | Immutable image plus verified DataOps recovery point | Local recovery sets are expected to be lost with the volume |
 
 ## Emergency database CLI
 

@@ -1,0 +1,33 @@
+flowchart LR
+  Q["Public or authorized search request"] --> I{"Complete small-talk intent?"}
+  I -->|Yes| S["Localized small-talk response"]
+  I -->|No| A["Resolve authorized folder scope"]
+
+  A --> R{"Exact result cache<br/>signed runtime + access scope"}
+  R -->|Hit| J["Typed JSON response"]
+  R -->|Miss| E{"Provider-scoped<br/>query embedding cache"}
+  E -->|Hit or create| V{"Verified signed<br/>runtime identity?"}
+
+  V -->|Yes| C{"Worker corpus cache"}
+  C -->|Cold| L["Load and normalize immutable<br/>runtime vectors once"]
+  L --> F["Filter authorized vectors<br/>and preserve folder bounds"]
+  C -->|Warm| F
+
+  V -->|No| M["Mutable fallback:<br/>one folder snapshot per request"]
+  M --> X["Validate FAISS vectors<br/>against snapshot"]
+  X --> F
+
+  F --> K["Rank bounded candidates<br/>and protected references"]
+  K --> G{"Provider-scoped<br/>answer cache"}
+  G -->|Miss| P["Generate and validate<br/>question-language answer"]
+  G -->|Hit| W["Store exact result cache"]
+  P --> W
+  W --> J
+
+  J --> D{"Selected public theme"}
+  D -->|Classic default| CL["Immediate safe formatting<br/>scroll-owned transcript + fixed composer"]
+  D -->|Workbench preview| WB["Immediate safe formatting<br/>concise live announcement"]
+
+  T["Secret-free diagnostics:<br/>phase ms · cache flags · corpus bytes"] -.-> E
+  T -.-> F
+  T -.-> G

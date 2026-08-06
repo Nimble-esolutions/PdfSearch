@@ -3,7 +3,7 @@
 **Status:** Active
 **Audience:** Developer, Operator
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-08-06
+**Last verified:** 2026-08-07
 **Canonical source:** docs/ARCHITECTURE_OVERVIEW.md
 
 Primary knowledge transfer artifact for the PdfSearch system. Read this first.
@@ -40,6 +40,30 @@ are historical evidence and do not define the current architecture.
 
 The runtime pointer is the authority. A RustFS object, quarantine workspace,
 database row, or container health status cannot activate a generation alone.
+
+### Public search hot path
+
+The public and authenticated search views share one backend contract while
+retaining separate Classic and Workbench presentation stacks:
+
+1. classify complete small-talk intents and resolve the caller's visible
+   folders/PDFs;
+2. for an exact signed runtime and explicit public/admin access scope, consult
+   the full-result cache before any provider or retrieval work;
+3. create or reuse a provider-scoped query embedding;
+4. search one process-local normalized corpus for the signed immutable runtime,
+   filtered to the authorized scope; unsigned/mutable data uses a coherent
+   per-folder snapshot and validates any persistent FAISS vectors against it;
+5. rank the same bounded candidates/references and create or reuse the
+   provider-scoped, language-validated answer; and
+6. return typed JSON, which both public themes format immediately without
+   interpreting provider HTML.
+
+Cache identity binds the signed generation/pointer, access scope, provider
+policy, models, language, ranking/context settings, and answer-contract
+version. Per-worker matrix byte/vector counts and phase timings are logged
+without query or document content. The complete RCA and rollout gate are in
+[2026-08-07-search-answer-latency.md](releases/2026-08-07-search-answer-latency.md).
 
 ---
 

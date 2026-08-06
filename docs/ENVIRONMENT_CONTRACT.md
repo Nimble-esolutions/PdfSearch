@@ -353,12 +353,13 @@ Registration is not controlled by the public-search flag: `/register/` always
 requires an authenticated `admin` or `superadmin`. Department-scoped admin
 roles are deliberately deferred to phase 2.
 
-## Maintenance Worker And Generations
+## Maintenance Worker And Recovery Points
 
 The web process only queues maintenance work. The Compose `maintenance` service
 runs `run_maintenance_jobs` and records per-document progress in SQLite. Keep a
-single worker active for the SQLite data root. Generation sync and restore remain
-fail-closed until their manifests pass staging validation.
+single worker active for the SQLite data root. DataOps backup, import, test
+recovery, and restore remain fail-closed until their plans and manifests pass
+the applicable validation gates.
 
 ```text
 MAINTENANCE_SCHEDULER_ENABLED=0

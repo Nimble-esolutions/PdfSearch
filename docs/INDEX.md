@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-06
+Last verified: 2026-08-07
 Canonical source: docs/INDEX.md
 Supersedes: None
 
@@ -87,6 +87,7 @@ maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
 ## Release Promotion
 
 - [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) — current workflow guarantees and future targets
+- [`releases/2026-08-07-search-answer-latency.md`](releases/2026-08-07-search-answer-latency.md) — measured search-latency RCA, signed-runtime/access-scoped cache design, UI continuity, impact, and stage rollout gate
 - [`releases/2026-08-03-operator-workbench-truth-and-scale.md`](releases/2026-08-03-operator-workbench-truth-and-scale.md) — single readiness authority, maintenance/PDF scale UX, browser evidence, and stage `:latest` policy
 - [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md) — Admin Operations Cockpit merge, image digest, and dev-release evidence
 - Data release pipeline merge evidence is maintained in [`BUILD_AND_RELEASE_ROADMAP.md`](BUILD_AND_RELEASE_ROADMAP.md) and the current data-custody/release records.
@@ -99,7 +100,7 @@ maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
 ## Data Recovery
 
 - [`DATA_CUSTODY_AND_PROMOTION.md`](DATA_CUSTODY_AND_PROMOTION.md) — quarantine, reconciliation, staging, and explicit promotion
-- [`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) — audited vault verdict, generation contents, intact/fresh/lost-volume behavior, restore limits, and completion gate
+- [`RUSTFS_RECOVERY_VAULT.md`](RUSTFS_RECOVERY_VAULT.md) — historical v2 rehearsal evidence and recovery-safety lessons; use DataOps v3 for current operations
 - [`RECOVERY_CERTIFICATION.md`](RECOVERY_CERTIFICATION.md) — isolated fresh-volume and accumulated-volume certification with paired data/control custody
 - [`INTERNAL_VAULT_MIGRATION.md`](INTERNAL_VAULT_MIGRATION.md) — dry-run-first legacy volume migration and candidate-generation publish tool
 - [`PERSISTENT_DATA_RELEASE.md`](PERSISTENT_DATA_RELEASE.md) — recovery-set contents and compatibility rules
@@ -176,6 +177,7 @@ Historical documents remain for context and are not deployment instructions:
 - [`ui-shell-and-evidence.mmd`](diagrams/ui-shell-and-evidence.mmd) / [`SVG`](diagrams/ui-shell-and-evidence.svg) — Classic, Workbench, public-information shell, and question-language backend boundaries
 - [`ui-change-control.mmd`](diagrams/ui-change-control.mmd) / [`SVG`](diagrams/ui-change-control.svg) — impact analysis, verification, PR, release, stage-canary, and audit flow
 - [`admin-operator-workflow.mmd`](diagrams/admin-operator-workflow.mmd) — admin document-to-search readiness flow
+- [`search-answer-hot-path.mmd`](diagrams/search-answer-hot-path.mmd) / [`SVG`](diagrams/search-answer-hot-path.svg) — signed-runtime search corpus, provider/result caches, authorization, and isolated frontend rendering paths
 
 ## Document Lifecycle
 

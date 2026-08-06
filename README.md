@@ -31,7 +31,7 @@ Use the route that matches the work:
 - Dokploy data persistence and safe redeploys: [`docs/DOKPLOY_DATA_PERSISTENCE.md`](docs/DOKPLOY_DATA_PERSISTENCE.md)
 - Release promotion: [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md)
 - Production baseline: [`docs/PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md)
-- Data custody and recovery: [`docs/DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md), [`docs/RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md), [`docs/INTERNAL_VAULT_MIGRATION.md`](docs/INTERNAL_VAULT_MIGRATION.md), and [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
+- Data custody and recovery: [`docs/dataops/V3_ARCHITECTURE.md`](docs/dataops/V3_ARCHITECTURE.md), [`docs/DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md), [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md), and the historical [`docs/RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md) rehearsal evidence
 - FAISS compatibility: [`docs/FAISS_COMPATIBILITY.md`](docs/FAISS_COMPATIBILITY.md)
 - Incident response: [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
 - Client usage: [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md)
@@ -129,7 +129,10 @@ The deployed system has four cooperating boundaries:
 Visual sources:
 [legacy-to-stage-2026.mmd](docs/diagrams/legacy-to-stage-2026.mmd),
 [stage-recovery-state.mmd](docs/diagrams/stage-recovery-state.mmd), and
-[ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd). Public UI and
+[ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd). The current
+search request/cache boundary is shown in
+[search-answer-hot-path.mmd](docs/diagrams/search-answer-hot-path.mmd) and its
+[rendered SVG](docs/diagrams/search-answer-hot-path.svg). Public UI and
 change-control views are available as editable Mermaid sources and rendered
 SVGs: [public shell source](docs/diagrams/ui-shell-and-evidence.mmd),
 [public shell visual](docs/diagrams/ui-shell-and-evidence.svg),
@@ -167,6 +170,8 @@ flowchart LR
   D --> Q["SQLite + media + FAISS + Chroma"]
   V --> X["flowdocs_control<br/>control DB + signed evidence"]
   W --> C["Redis<br/>cache + queue"]
+  D --> H["Signed-runtime search corpus<br/>one immutable matrix per worker"]
+  H --> C
   M --> C
   T["scripts + browser_tests + integration_tests"] --> W
 ```
@@ -178,6 +183,18 @@ installed and tested. They are implementation details and cleanup debt, not a
 second workbench or a configuration path that operators should assemble. The
 retired `/dashboard/operations/vault/` page redirects to the current DataOps
 workbench.
+
+### Search hot path
+
+Public search checks an exact, access-scoped result cache before paying for an
+embedding, vector retrieval, or answer-generation request. On an exact signed
+runtime, each web worker parses and normalizes the immutable embedding corpus
+once, then filters that matrix to the caller's authorized folder/PDF scope.
+Unsigned or mutable development data retains the conservative per-folder
+snapshot path. Query embeddings and generated answers are provider-scoped;
+cache keys also bind the models, language, runtime, answer-contract version,
+and authorization scope. See the
+[latency root-cause and impact record](docs/releases/2026-08-07-search-answer-latency.md).
 
 ### Project structure
 
@@ -318,19 +335,13 @@ Post-reconciliation (2026-07-22): 253 PDF rows, 242 recovered PDF files, 53 fold
 8 users, and 51 rebuilt FAISS indexes with 8,753 vectors at dimension 1536. Eleven
 target-only PDF rows remain preserved but unrecovered.
 
-RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` contains timestamped active
-and legacy snapshots and checksums. Application-level S3 integration is implemented
-through the artifact vault adapter, dataset registration, global writer fencing,
-namespace-scoped keys, object store capability probing, and a full restore pipeline
-(download→validate→sanitize→rehearse→activate).
-
-The 2026-07-26 audit verified those primitives against disposable MinIO, but
-also confirmed that the normal admin/worker path and startup entrypoints are
-not yet connected to one end-to-end restore orchestrator. Scheduled backup is
-not currently reliable, and a fresh volume does not auto-pull from RustFS.
-Treat the bucket as an explicit operator recovery component and read
-[`RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md) before depending on
-it for a deploy, restore, or disaster-recovery decision.
+The 2026-07-26 audit also verified the original Vault/RustFS primitives against
+disposable MinIO and exposed the orchestration gaps that motivated DataOps v3.
+Those v2 findings remain in
+[`RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md) as historical
+evidence, not current operating instructions. Current instances use one owned
+recovery connection and intent-driven DataOps v3 backup, import, restore, and
+test-recovery plans; activation remains a separate signed atomic operation.
 
 ## Verification Gates
 

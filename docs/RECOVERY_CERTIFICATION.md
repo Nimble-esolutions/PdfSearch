@@ -27,14 +27,14 @@ not a production cutover.
 
 ## Required authorization and evidence
 
-Record the immutable application image, selected Vault generation and manifest
+Record the immutable application image, selected DataOps recovery point and manifest
 digest, source backup references, recovery-point age, maintenance window, and
 the unique certification run ID. Never put credentials or document contents in
 the evidence directory.
 
 The drill requires an existing, dedicated Docker bridge network that reaches
-only the approved Vault and the disposable certification services. Do not mark
-this Vault bridge as Docker-internal: an internal-only network prevents Docker
+only the approved recovery storage and the disposable certification services.
+Do not mark this recovery-storage bridge as Docker-internal: an internal-only network prevents Docker
 from publishing the required loopback health port. The network must not provide
 public ingress. The application is exposed only on an unused `127.0.0.1` port;
 its other network remains Docker-internal.
@@ -42,7 +42,7 @@ its other network remains Docker-internal.
 ## Fresh-volume drill
 
 Set the approved environment through the deployment secret provider, including
-the Vault endpoint, bucket, region, credential alias material, dataset identity,
+the recovery endpoint, bucket, region, credential alias material, dataset identity,
 activation signing key and recovery-superadmin credentials. Generate unique,
 ephemeral values for this disposable target and inject them through the
 deployment secret provider as
@@ -149,9 +149,9 @@ certification evidence.
 
 Use the localhost Workbench as an authorized superadmin:
 
-1. probe the environment-backed Vault profile;
+1. probe the environment-backed recovery-storage profile;
 2. verify the authoritative inventory;
-3. select the recorded generation and confirm its manifest digest;
+3. select the recorded recovery point and confirm its manifest digest;
 4. prepare the restore through download, checksum validation, sanitization,
    compatibility checking, and migration rehearsal;
 5. after restore preparation and compatibility checks pass, enable activation
@@ -237,8 +237,9 @@ an incident, failed restore, activation journal, or unresolved discrepancy.
 
 Older deployments created a full
 `BACKUP_DIR/db_backup_YYYY-MM-DD_HHMMSS.sqlite3` copy on every web and
-maintenance startup. These flat files are not Vault generations and are not
-covered by recovery-set retention. Current entrypoints no longer create them.
+maintenance startup. These flat files are not DataOps recovery points and are
+not covered by recovery-set retention. Current entrypoints no longer create
+them.
 
 Inventory and plan one bounded cleanup batch:
 
@@ -247,9 +248,9 @@ python manage.py legacy_backup_cleanup plan
 ```
 
 The plan is read-only. It validates and retains the three newest SQLite copies,
-reports deferred debt, and limits one apply operation to 20 GiB. Only after the
-Vault generation and isolated restore have passed acceptance may an operator
-apply the exact unchanged plan:
+reports deferred debt, and limits one apply operation to 20 GiB. Only after a
+DataOps recovery point and isolated restore have passed acceptance may an
+operator apply the exact unchanged plan:
 
 ```bash
 python manage.py legacy_backup_cleanup apply --confirm '<plan-id>'
