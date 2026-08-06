@@ -92,6 +92,7 @@
       aria-label="{% trans 'AI Sahakar conversation' %}"
       aria-live="polite"
       aria-busy="false"
+      tabindex="0"
     >
       <article class="classic-message classic-message--assistant classic-message--welcome">
         <span>{{ welcome_message }}</span>
@@ -105,7 +106,7 @@
         id="searchComposer"
         method="post"
         action="{% url 'search_query' %}"
-        data-view-pdf-url="{% url 'view_pdf' 0 %}"
+        data-public-pdf-url="{% url 'public_view_pdf' 0 %}"
         novalidate
       >
         {% csrf_token %}
