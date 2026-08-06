@@ -210,7 +210,7 @@
 
   <div class="classic-cookie" id="cookieConsent" role="region" aria-label="{% trans 'Cookie notice' %}" hidden>
     <p><strong>{% trans "Essential cookies" %}</strong> {% trans "This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used." %}</p>
-    <div><a href="{% url 'cookie_policy' %}">{% trans "Cookie Policy" %}</a><button type="button" data-cookie-accept>{% trans "Accept" %}</button></div>
+    <div><a href="{% url 'cookie_policy' %}">{% trans "Cookie Policy" %}</a><button type="button" class="cookie-consent__accept" data-cookie-accept>{% trans "Accept" %}</button></div>
   </div>
 
   {{ search_loading_stages|json_script:"classic-search-loading-stages" }}

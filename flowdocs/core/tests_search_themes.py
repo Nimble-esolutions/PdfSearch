@@ -19,6 +19,7 @@ class SearchThemeResolutionTests(TestCase):
         self.assertEqual(response.context["search_view"], "classic")
         self.assertContains(response, "search-classic.css")
         self.assertContains(response, "search-classic.js")
+        self.assertContains(response, "cookie-consent__accept")
         self.assertNotContains(response, "civic-workbench.css")
         self.assertNotContains(response, 'main/js/search.js')
         self.assertNotContains(response, "bootstrap")
