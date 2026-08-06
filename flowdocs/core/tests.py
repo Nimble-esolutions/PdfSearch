@@ -2176,7 +2176,7 @@ class ArtifactInventoryTests(TestCase):
         self.assertEqual(pdf["size_bytes"], observed_legacy_size)
         self.assertEqual(pdf["sha256"], digest)
         verify.assert_called_once_with(
-            root / "media",
+            (root / "media").resolve(),
             "pdfs/document.pdf",
             maximum_bytes=settings.ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES,
         )
@@ -2192,7 +2192,7 @@ class ArtifactInventoryTests(TestCase):
             build_manifest(root)
 
         verify.assert_called_once_with(
-            root / "media",
+            (root / "media").resolve(),
             "pdfs/document.pdf",
             maximum_bytes=31_457_280,
         )
