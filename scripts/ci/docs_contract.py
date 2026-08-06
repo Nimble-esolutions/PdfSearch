@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -104,6 +105,73 @@ def fenced_blocks(text: str, language: str):
     yield from re.findall(pattern, text, flags=re.DOTALL | re.IGNORECASE)
 
 
+def resolve_mermaid_browser() -> tuple[str, str]:
+    """Resolve the browser used by Mermaid without forcing a GUI build."""
+    configured = os.environ.get("PUPPETEER_EXECUTABLE_PATH", "").strip()
+    if configured:
+        executable = Path(configured).expanduser()
+        if not executable.is_file():
+            return "", (
+                "PUPPETEER_EXECUTABLE_PATH does not reference a browser file: "
+                f"{executable}"
+            )
+        if (
+            sys.platform == "darwin"
+            and executable.name == "Google Chrome for Testing"
+            and any(part.endswith(".app") for part in executable.parts)
+        ):
+            return "", (
+                "refusing the macOS Google Chrome for Testing app for headless "
+                "documentation rendering; use the matching chrome-headless-shell"
+            )
+        return str(executable), ""
+
+    playwright_executable = subprocess.run(
+        [
+            "node",
+            "-e",
+            "process.stdout.write(require('playwright').chromium.executablePath())",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if (
+        playwright_executable.returncode == 0
+        and Path(playwright_executable.stdout).is_file()
+    ):
+        executable = Path(playwright_executable.stdout)
+        if sys.platform != "darwin":
+            return str(executable), ""
+
+        revision_directory = next(
+            (
+                parent
+                for parent in executable.parents
+                if re.fullmatch(r"chromium-\d+", parent.name)
+            ),
+            None,
+        )
+        if revision_directory is not None:
+            revision = revision_directory.name.removeprefix("chromium-")
+            shell_directory = (
+                revision_directory.parent / f"chromium_headless_shell-{revision}"
+            )
+            shells = sorted(
+                path
+                for path in shell_directory.rglob("chrome-headless-shell")
+                if path.is_file()
+            )
+            if shells:
+                return str(shells[0]), ""
+        return "", (
+            "Playwright's matching chrome-headless-shell is unavailable on "
+            "macOS; run `npx playwright install chromium` and retry"
+        )
+    return "", ""
+
+
 def compile_mermaid(
     *, label: str, source: str, failures: list[str], compiler=MERMAID_CLI
 ) -> None:
@@ -116,20 +184,10 @@ def compile_mermaid(
         output_path = directory / "diagram.svg"
         config_path = directory / "puppeteer.json"
         source_path.write_text(source, encoding="utf-8")
-        playwright_executable = subprocess.run(
-            [
-                "node",
-                "-e",
-                (
-                    "process.stdout.write("
-                    "require('playwright').chromium.executablePath())"
-                ),
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        browser_executable, browser_error = resolve_mermaid_browser()
+        if browser_error:
+            fail(f"{label}: {browser_error}", failures)
+            return
         command = [
             str(compiler),
             "--input",
@@ -138,13 +196,10 @@ def compile_mermaid(
             str(output_path),
             "--quiet",
         ]
-        if (
-            playwright_executable.returncode == 0
-            and Path(playwright_executable.stdout).is_file()
-        ):
+        if browser_executable:
             config_path.write_text(
                 json.dumps({
-                    "executablePath": playwright_executable.stdout,
+                    "executablePath": browser_executable,
                     "args": ["--no-sandbox"],
                 }),
                 encoding="utf-8",
@@ -221,20 +276,10 @@ def compile_mermaid_batch(
             + "\n",
             encoding="utf-8",
         )
-        playwright_executable = subprocess.run(
-            [
-                "node",
-                "-e",
-                (
-                    "process.stdout.write("
-                    "require('playwright').chromium.executablePath())"
-                ),
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        browser_executable, browser_error = resolve_mermaid_browser()
+        if browser_error:
+            fail(f"Mermaid batch compilation failed: {browser_error}", failures)
+            return
         command = [
             str(compiler),
             "--input",
@@ -243,13 +288,10 @@ def compile_mermaid_batch(
             str(output_path),
             "--quiet",
         ]
-        if (
-            playwright_executable.returncode == 0
-            and Path(playwright_executable.stdout).is_file()
-        ):
+        if browser_executable:
             config_path.write_text(
                 json.dumps({
-                    "executablePath": playwright_executable.stdout,
+                    "executablePath": browser_executable,
                     "args": ["--no-sandbox"],
                 }),
                 encoding="utf-8",

@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import tempfile
@@ -82,6 +83,151 @@ class DocumentationContractTests(unittest.TestCase):
 
         self.assertEqual(len(failures), 1)
         self.assertIn("compiler unavailable", failures[0])
+
+    def test_mermaid_compile_honors_explicit_browser_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            compiler = root / "mmdc"
+            compiler.write_text("", encoding="utf-8")
+            browser = root / "chrome-headless-shell"
+            browser.write_text("", encoding="utf-8")
+            failures = []
+            commands = []
+
+            def run_compiler(command, **_kwargs):
+                commands.append(command)
+                config_path = Path(
+                    command[command.index("--puppeteerConfigFile") + 1]
+                )
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+                self.assertEqual(config["executablePath"], str(browser))
+                output_path = Path(command[command.index("--output") + 1])
+                output_path.write_text("<svg></svg>", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {"PUPPETEER_EXECUTABLE_PATH": str(browser)},
+                ),
+                patch(
+                    "scripts.ci.docs_contract.subprocess.run",
+                    side_effect=run_compiler,
+                ),
+            ):
+                docs_contract.compile_mermaid(
+                    label="example",
+                    source="flowchart LR\nA --> B\n",
+                    failures=failures,
+                    compiler=compiler,
+                )
+
+        self.assertEqual(failures, [])
+        self.assertEqual(len(commands), 1)
+
+    def test_mermaid_compile_rejects_invalid_explicit_browser_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            compiler = Path(directory) / "mmdc"
+            compiler.write_text("", encoding="utf-8")
+            failures = []
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {"PUPPETEER_EXECUTABLE_PATH": "/definitely/missing/browser"},
+                ),
+                patch("scripts.ci.docs_contract.subprocess.run") as run,
+            ):
+                docs_contract.compile_mermaid(
+                    label="example",
+                    source="flowchart LR\nA --> B\n",
+                    failures=failures,
+                    compiler=compiler,
+                )
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("does not reference a browser file", failures[0])
+        run.assert_not_called()
+
+    def test_mermaid_browser_selects_matching_macos_headless_shell(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory)
+            browser = (
+                cache
+                / "chromium-1228"
+                / "chrome-mac-arm64"
+                / "Google Chrome for Testing.app"
+                / "Contents"
+                / "MacOS"
+                / "Google Chrome for Testing"
+            )
+            browser.parent.mkdir(parents=True)
+            browser.write_text("", encoding="utf-8")
+            shell = (
+                cache
+                / "chromium_headless_shell-1228"
+                / "chrome-headless-shell-mac-arm64"
+                / "chrome-headless-shell"
+            )
+            shell.parent.mkdir(parents=True)
+            shell.write_text("", encoding="utf-8")
+            playwright = subprocess.CompletedProcess([], 0, str(browser), "")
+
+            with (
+                patch.dict(os.environ, {}, clear=True),
+                patch("scripts.ci.docs_contract.sys.platform", "darwin"),
+                patch(
+                    "scripts.ci.docs_contract.subprocess.run",
+                    return_value=playwright,
+                ),
+            ):
+                executable, error = docs_contract.resolve_mermaid_browser()
+
+        self.assertEqual(executable, str(shell))
+        self.assertEqual(error, "")
+
+    def test_mermaid_browser_refuses_explicit_macos_gui_app(self):
+        with tempfile.TemporaryDirectory() as directory:
+            browser = (
+                Path(directory)
+                / "Google Chrome for Testing.app"
+                / "Contents"
+                / "MacOS"
+                / "Google Chrome for Testing"
+            )
+            browser.parent.mkdir(parents=True)
+            browser.write_text("", encoding="utf-8")
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {"PUPPETEER_EXECUTABLE_PATH": str(browser)},
+                ),
+                patch("scripts.ci.docs_contract.sys.platform", "darwin"),
+            ):
+                executable, error = docs_contract.resolve_mermaid_browser()
+
+        self.assertEqual(executable, "")
+        self.assertIn("refusing the macOS Google Chrome for Testing app", error)
+
+    def test_mermaid_browser_preserves_playwright_executable_on_linux(self):
+        with tempfile.TemporaryDirectory() as directory:
+            browser = Path(directory) / "chrome"
+            browser.write_text("", encoding="utf-8")
+            playwright = subprocess.CompletedProcess([], 0, str(browser), "")
+
+            with (
+                patch.dict(os.environ, {}, clear=True),
+                patch("scripts.ci.docs_contract.sys.platform", "linux"),
+                patch(
+                    "scripts.ci.docs_contract.subprocess.run",
+                    return_value=playwright,
+                ),
+            ):
+                executable, error = docs_contract.resolve_mermaid_browser()
+
+        self.assertEqual(executable, str(browser))
+        self.assertEqual(error, "")
 
     def test_mermaid_compile_timeout_is_reported(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -100,7 +100,6 @@ jobs:
         run: |
           npm ci --legacy-peer-deps
           npx playwright install --with-deps chromium
-          echo "PUPPETEER_EXECUTABLE_PATH=$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')" >> "$GITHUB_ENV"
 
       - name: Validate active operator documentation
         run: |
