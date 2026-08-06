@@ -1,14 +1,15 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from core import utils
 from core.models import Folder, PDFFile
-from core.utils import SearchDataIntegrityError, SearchHit
+from core.utils import SearchAnswerLanguageError, SearchDataIntegrityError, SearchHit
 
 
 class SmallTalkClassificationTests(SimpleTestCase):
@@ -46,6 +47,92 @@ class SmallTalkClassificationTests(SimpleTestCase):
             with self.subTest(query=query):
                 self.assertIsNone(utils.classify_small_talk_query(query))
                 self.assertFalse(utils.is_general_query(query))
+
+
+class AnswerLanguageResolutionTests(SimpleTestCase):
+    def test_question_language_overrides_page_language(self):
+        self.assertEqual(
+            utils.resolve_answer_language("सभासदाचे अधिकार काय आहेत?", "en"),
+            "mr",
+        )
+        self.assertEqual(
+            utils.resolve_answer_language("What are a member's rights?", "mr"),
+            "en",
+        )
+
+    def test_non_language_query_uses_page_language_as_fallback(self):
+        self.assertEqual(utils.resolve_answer_language("79?", "mr"), "mr")
+        self.assertEqual(utils.resolve_answer_language("79?", "en"), "en")
+
+
+class GeneratedAnswerLanguageContractTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = Mock()
+
+    @staticmethod
+    def _response(answer):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=answer))]
+        )
+
+    def test_marathi_question_builds_marathi_only_prompt(self):
+        self.client.chat.completions.create.return_value = self._response(
+            "सभासदाला संस्थेच्या नोंदी पाहण्याचा अधिकार आहे."
+        )
+        with patch("core.utils._get_client", return_value=self.client), patch(
+            "core.ai_guard.get_ai_cache_scope",
+            return_value="test-provider",
+        ):
+            answer = utils.generate_gpt_answer(
+                "सभासदाचे अधिकार काय आहेत?",
+                "Member rights context",
+                references=[{"title": "Society Act"}],
+                language="en",
+            )
+
+        self.assertIn("सभासदाला", answer)
+        messages = self.client.chat.completions.create.call_args.kwargs["messages"]
+        self.assertIn("उत्तर फक्त मराठीत", messages[0]["content"])
+        self.assertIn("स्रोत", messages[1]["content"])
+
+    def test_wrong_language_is_repaired_once_before_caching(self):
+        diagnostics = {}
+        self.client.chat.completions.create.side_effect = [
+            self._response("A member may inspect the society records."),
+            self._response("सभासद संस्थेच्या नोंदी पाहू शकतो."),
+        ]
+        with patch("core.utils._get_client", return_value=self.client), patch(
+            "core.ai_guard.get_ai_cache_scope",
+            return_value="test-provider-repair",
+        ), self.assertLogs("core.utils", level="WARNING"):
+            answer = utils.generate_gpt_answer(
+                "सभासदाचे अधिकार काय आहेत?",
+                "Member rights context",
+                language="en",
+                diagnostics=diagnostics,
+            )
+
+        self.assertEqual(answer, "सभासद संस्थेच्या नोंदी पाहू शकतो.")
+        self.assertEqual(self.client.chat.completions.create.call_count, 2)
+        self.assertEqual(diagnostics["chat_calls"], 2)
+
+    def test_repeated_wrong_language_fails_closed(self):
+        self.client.chat.completions.create.side_effect = [
+            self._response("First English answer."),
+            self._response("Second English answer."),
+        ]
+        with patch("core.utils._get_client", return_value=self.client), patch(
+            "core.ai_guard.get_ai_cache_scope",
+            return_value="test-provider-fail-closed",
+        ), self.assertLogs("core.utils", level="WARNING"), self.assertRaises(
+            SearchAnswerLanguageError
+        ):
+            utils.generate_gpt_answer(
+                "सभासदाचे अधिकार काय आहेत?",
+                "Member rights context",
+                language="en",
+            )
 
 
 class SearchFolderOrchestrationTests(SimpleTestCase):
@@ -303,6 +390,86 @@ class PublicSearchRoutingViewTests(TestCase):
         logs = "\n".join(captured.output)
         self.assertIn("search_completed route=small_talk outcome=greeting", logs)
         self.assertNotIn("Hello", logs)
+
+    def test_marathi_small_talk_uses_question_language_on_english_page(self):
+        with patch("core.views._public_search_rate_limited", return_value=False):
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "नमस्कार", "language": "en"},
+            )
+
+        payload = response.json()
+        self.assertEqual(payload["kind"], "small_talk")
+        self.assertEqual(payload["language"], "mr")
+        self.assertIn("नमस्कार", payload["answer"])
+
+    def test_marathi_document_query_overrides_english_page_language(self):
+        diagnostics = {
+            "folders_scanned": 2,
+            "integrity_failures": 0,
+            "candidates": 1,
+        }
+        reference = {
+            "title": "Act",
+            "pdf_id": 1,
+            "folder": self.first.name,
+            "uploaded_at": None,
+            "score": 0.9,
+        }
+        with patch("core.views._public_search_rate_limited", return_value=False), patch(
+            "core.views.detect_folder_by_keywords_multi",
+            return_value=[],
+        ), patch(
+            "core.views.search_pdf_folders",
+            return_value=("सभासदाला हा अधिकार आहे.", [reference], diagnostics),
+        ) as search_folders:
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "सभासदाचे अधिकार काय आहेत?", "language": "en"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["language"], "mr")
+        self.assertEqual(search_folders.call_args.kwargs["language"], "mr")
+
+    def test_marathi_no_evidence_guidance_is_localized(self):
+        diagnostics = {
+            "folders_scanned": 2,
+            "integrity_failures": 0,
+            "candidates": 0,
+        }
+        with patch("core.views._public_search_rate_limited", return_value=False), patch(
+            "core.views.detect_folder_by_keywords_multi",
+            return_value=[],
+        ), patch(
+            "core.views.search_pdf_folders",
+            return_value=("", [], diagnostics),
+        ):
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "सभासदाचे अधिकार काय आहेत?", "language": "en"},
+            )
+
+        payload = response.json()
+        self.assertEqual(payload["kind"], "no_evidence")
+        self.assertEqual(payload["language"], "mr")
+        self.assertIn("स्रोत आढळला नाही", payload["answer"])
+
+    def test_provider_language_mismatch_returns_explicit_error(self):
+        with patch("core.views._public_search_rate_limited", return_value=False), patch(
+            "core.views.detect_folder_by_keywords_multi",
+            return_value=[],
+        ), patch(
+            "core.views.search_pdf_folders",
+            side_effect=SearchAnswerLanguageError("wrong language"),
+        ):
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "सभासदाचे अधिकार काय आहेत?", "language": "en"},
+            )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["error"], "answer_language_mismatch")
 
     def test_updated_rules_query_reaches_document_search(self):
         diagnostics = {

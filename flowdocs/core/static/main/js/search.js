@@ -204,6 +204,7 @@ async function sendMessage(){
                 data.references || [],
                 query,
                 data.kind || "evidence_answer",
+                data.language || "",
             );
         } else if(data.error){
             appendErrorMessage(searchMessages.search_unavailable, searchMessages.try_later, query);
@@ -321,11 +322,12 @@ function appendErrorMessage(title, detail, retryQuery) {
 }
 
 
-function typeEffect(text, references = [], query = "", responseKind = "evidence_answer") {
+function typeEffect(text, references = [], query = "", responseKind = "evidence_answer", language = "") {
     const div = document.createElement('div');
     div.className = 'conversation-entry conversation-entry--assistant gpt-msg';
     const allowedKinds = new Set(["small_talk", "evidence_answer", "no_evidence", "validation"]);
     div.dataset.responseKind = allowedKinds.has(responseKind) ? responseKind : "evidence_answer";
+    if (["en", "mr"].includes(language)) div.lang = language;
     div.setAttribute("aria-live", "off");
     chatMain.appendChild(div);
     let answerFormatted = false;

@@ -83,10 +83,11 @@
     stageTimer = null;
   }
 
-  function appendAnswer(answer, references, kind = "evidence_answer") {
+  function appendAnswer(answer, references, kind = "evidence_answer", language = "") {
     const message = document.createElement("article");
     message.className = "classic-message classic-message--assistant";
     message.dataset.responseKind = responseKinds.has(kind) ? kind : "evidence_answer";
+    if (["en", "mr"].includes(language)) message.lang = language;
 
     const answerBody = document.createElement("div");
     answerBody.className = "classic-message__answer";
@@ -253,6 +254,7 @@
           payload.answer || "",
           payload.references || [],
           payload.kind || "evidence_answer",
+          payload.language || "",
         );
       }
     } catch (error) {

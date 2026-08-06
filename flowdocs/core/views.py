@@ -69,7 +69,7 @@ from django.db.models import Count, Max, Q
 from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST, require_GET
 from django.urls import reverse
-from django.utils.translation import gettext
+from django.utils.translation import gettext, override as override_language
 from django.utils import timezone
 
 DOCUMENT_PAGE_SIZE = 25
@@ -113,7 +113,7 @@ from .operator_presentation import present_reason
 from .operator_navigation import operator_section_url
 from datetime import datetime
 from .utils import (
-    detect_language,
+    resolve_answer_language,
     build_or_load_faiss_index_for_folder,
     search_pdf_folders,
     classify_small_talk_query,
@@ -121,6 +121,7 @@ from .utils import (
     semantic_folder_search,
     detect_folder_by_keywords_multi,
     SearchDataIntegrityError,
+    SearchAnswerLanguageError,
 )
 
 CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)
@@ -2052,9 +2053,10 @@ def search_query(request):
             )
         try:
             query = request.POST.get("query", "").strip()
-            language = request.POST.get("language", request.LANGUAGE_CODE).split("-", 1)[0]
-            if language not in {"en", "mr"}:
-                language = "en"
+            requested_language = request.POST.get("language", request.LANGUAGE_CODE).split("-", 1)[0]
+            if requested_language not in {"en", "mr"}:
+                requested_language = "en"
+            language = requested_language
 
             if len(query.split()) > settings.PUBLIC_SEARCH_MAX_WORDS:
                 _log_search_completed(
@@ -2103,26 +2105,29 @@ def search_query(request):
                 return JsonResponse({
                     "kind": "validation",
                     "answer": gettext("Please ask your question 🙏"),
+                    "language": requested_language,
                     "references": []
                 })
 
+            language = resolve_answer_language(query, requested_language)
             small_talk_intent = classify_small_talk_query(query)
             if small_talk_intent:
-                if small_talk_intent == "gratitude":
-                    small_talk_answer = gettext(
-                        "You're welcome. Ask me about co-operative Acts, Rules, circulars, or procedures."
-                    )
-                elif small_talk_intent == "identity":
-                    small_talk_answer = gettext(
-                        "I am Sahakar AI. I search the department's indexed co-operative documents and show the sources used."
-                    )
-                elif small_talk_intent == "live_information":
-                    small_talk_answer = gettext(
-                        "I search official co-operative documents and do not provide live date or time information. "
-                        "Ask me about an Act, Rule, circular, or procedure."
-                    )
-                else:
-                    small_talk_answer = gettext("Hello! How can I help you?")
+                with override_language(language):
+                    if small_talk_intent == "gratitude":
+                        small_talk_answer = gettext(
+                            "You're welcome. Ask me about co-operative Acts, Rules, circulars, or procedures."
+                        )
+                    elif small_talk_intent == "identity":
+                        small_talk_answer = gettext(
+                            "I am Sahakar AI. I search the department's indexed co-operative documents and show the sources used."
+                        )
+                    elif small_talk_intent == "live_information":
+                        small_talk_answer = gettext(
+                            "I search official co-operative documents and do not provide live date or time information. "
+                            "Ask me about an Act, Rule, circular, or procedure."
+                        )
+                    else:
+                        small_talk_answer = gettext("Hello! How can I help you?")
                 _log_search_completed(
                     route="small_talk",
                     outcome=small_talk_intent,
@@ -2133,6 +2138,7 @@ def search_query(request):
                 return JsonResponse({
                     "kind": "small_talk",
                     "answer": small_talk_answer,
+                    "language": language,
                     "references": []
                 })
 
@@ -2188,24 +2194,46 @@ def search_query(request):
                 references=len(refs),
                 integrity_failures=diagnostics["integrity_failures"],
                 embedding_calls=1 if folder_scopes else 0,
-                chat_calls=1 if refs else 0,
+                chat_calls=diagnostics.get("chat_calls", 0),
             )
             if refs:
                 return JsonResponse({
                     "kind": "evidence_answer",
                     "answer": answer,
+                    "language": language,
                     "references": _protected_references(refs, public=public_search),
                 })
 
-            return JsonResponse({
-                "kind": "no_evidence",
-                "answer": gettext(
+            with override_language(language):
+                no_evidence_answer = gettext(
                     "No supporting source was found in the searchable documents. "
                     "Try adding the Act, Rule, section number, society type, or topic."
-                ),
+                )
+            return JsonResponse({
+                "kind": "no_evidence",
+                "answer": no_evidence_answer,
+                "language": language,
                 "references": []
             })
 
+        except SearchAnswerLanguageError:
+            logger.exception("Search answer language contract failed")
+            _log_search_completed(
+                route="search",
+                outcome="answer_language_mismatch",
+                public=public_search,
+                language=locals().get("language", "en"),
+                started_at=request_started_at,
+            )
+            return JsonResponse(
+                {
+                    "kind": "error",
+                    "error": "answer_language_mismatch",
+                    "detail": "The answer provider did not return the requested language. Please try again.",
+                    "references": [],
+                },
+                status=502,
+            )
         except SearchDataIntegrityError:
             logger.exception("Search integrity error")
             _log_search_completed(
