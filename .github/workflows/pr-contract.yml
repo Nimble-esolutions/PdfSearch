@@ -52,9 +52,11 @@ jobs:
             scripts.ci.test_release_workflow_contract \
             scripts.ci.test_pr_contract_workflow \
             scripts.ci.test_docs_contract \
+            scripts.ci.test_handoff_contract \
             scripts.ci.test_operator_language \
             scripts.ci.test_recovery_certification_contract \
             scripts.ci.test_compose_env_parity
+          python3 scripts/ci/handoff_contract.py --base "$base_sha"
           python3 scripts/ci/validate_operator_language.py
 
       - name: Validate build and Compose contracts

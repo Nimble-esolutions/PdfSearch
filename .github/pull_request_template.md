@@ -37,6 +37,14 @@
 - [ ] Kilo/OpenCode/Codex adapter drift checked or follow-up documented
 - [ ] No stale production host, image, Docker, OS, data-boundary, or deployment-authority facts introduced
 
+## Living Handoff
+
+- [ ] `docs/HANDOFF.md` was read before operational work
+- [ ] Updated in this PR because runtime, release, deployment, data, recovery, security, workflow, environment, or agent-operation state changed
+- [ ] Not required because this is an isolated non-operational documentation change
+- [ ] Observed facts, pending decisions, blockers, validation, and exact next action remain clearly separated
+- [ ] No secret values, document contents, or raw environment values were added
+
 ## Data Safety
 
 - [ ] No named volume is mounted to a file path

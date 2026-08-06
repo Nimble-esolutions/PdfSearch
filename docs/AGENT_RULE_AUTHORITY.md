@@ -1,16 +1,15 @@
 Status: Active
 Audience: Agent operators and maintainers
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
+Last verified: 2026-08-05
 Canonical source: docs/AGENT_RULE_AUTHORITY.md
 Supersedes: ad hoc Kilo/OpenCode/Codex rule copies when they conflict
 
 # Agent Rule Authority
 ## Current-state pointer
 
-For the verified state as of 2026-08-02, use [STATUS-2026-08-02.md](STATUS-2026-08-02.md).
-Earlier dated sections in this page remain historical evidence and must not
-be used as current deployment state without reconciling them to that record.
+Use the living [HANDOFF.md](HANDOFF.md) for current verified state, blockers,
+and next actions. Dated `STATUS-*.md` pages remain historical evidence.
 
 
 This document defines how agent-facing instructions are maintained for
@@ -24,11 +23,12 @@ tracked application repository.
 2. Parent workspace `../AGENTS.md`, when this repository is inside the
    `sahakar-ind-01` operations workspace.
 3. Repository-local `AGENTS.md`.
-4. `docs/PRODUCTION_OPERATING_RULES.md`.
-5. `docs/CODEX_OPERATIONS_GUIDE.md`.
-6. `docs/OPERATIONS_RUNBOOK.md`, `docs/BUILD_AND_RELEASE_ROADMAP.md`, and
+4. `docs/HANDOFF.md` for current observed state and next actions.
+5. `docs/PRODUCTION_OPERATING_RULES.md`.
+6. `docs/CODEX_OPERATIONS_GUIDE.md`.
+7. `docs/OPERATIONS_RUNBOOK.md`, `docs/BUILD_AND_RELEASE_ROADMAP.md`, and
    release evidence records.
-7. `.kilo` and `.opencode` adapters, only as compatibility views.
+8. `.kilo` and `.opencode` adapters, only as compatibility views.
 
 When two sources disagree on server identity, production domain, deployment
 authority, image identity, data boundary, or rollback procedure, use the higher

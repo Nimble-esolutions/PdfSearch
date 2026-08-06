@@ -2,7 +2,7 @@
 Status: Active, living comparison
 Audience: Maintainer, Operator, Reviewer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
+Last verified: 2026-08-05
 Canonical source: docs/LEGACY_VS_CURRENT_STATE.md
 Update trigger: every verified migration, release, activation, backup, or rollback
 ---
@@ -11,7 +11,7 @@ Update trigger: every verified migration, release, activation, backup, or rollba
 
 This document is the short comparison for operators who need to understand
 what changed. It is intentionally maintained alongside
-STATUS-2026-08-03.md. The status page carries exact evidence; this page
+[HANDOFF.md](HANDOFF.md). The handoff carries exact current evidence; this page
 explains the transition.
 
 ## At a glance
@@ -152,7 +152,7 @@ decisions and keeps technical evidence available on demand.
 
 ## Living-document maintenance contract
 
-Update this page and STATUS-2026-08-02.md together when any of these changes:
+Update this page and `HANDOFF.md` together when any of these changes:
 
 - source volume, source generation, clone generation, dataset, bucket, or
   manifest evidence;
@@ -171,5 +171,5 @@ Every update must:
 6. update docs/INDEX.md if a new canonical page or diagram is introduced;
 7. run the documentation contract and link/path checks before publication.
 
-When the next dated record is created, rename this page's update trigger to
-point to that successor only after the successor is committed and indexed.
+Dated status records remain immutable evidence snapshots. Add one only when a
+milestone needs a preserved narrative; keep `HANDOFF.md` as current authority.

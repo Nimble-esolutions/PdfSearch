@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-04
+Last verified: 2026-08-05
 Canonical source: README.md
 Supersedes: None
 
@@ -17,11 +17,10 @@ is preferred, with bounded local Tesseract OCR for scanned pages, followed by
 the existing embedding and retrieval workflow.
 
 > **Current operational state:** stage serves the signed 242-document runtime,
-> real English/Marathi search is restored, and manual backup/recovery rehearsal
-> has succeeded. Final acceptance remains pending the immutable PR 176 image,
-> v3 readiness projection, and one final disposable restore. Read
-> [STATUS-2026-08-03.md](docs/STATUS-2026-08-03.md) before operating recovery
-> or deployment workflows.
+> all readiness checks pass, real English/Marathi search and manual
+> backup/recovery rehearsal are proven, and the legacy production service is
+> unchanged. Read the living [project handoff](docs/HANDOFF.md) before operating
+> recovery, deployment, or persistent-data workflows.
 
 ## Start Here
 
@@ -44,6 +43,7 @@ Use the route that matches the work:
 - Environment impact guide and reviewed examples: [`docs/ENVIRONMENT_CONFIGURATION_GUIDE.md`](docs/ENVIRONMENT_CONFIGURATION_GUIDE.md), [`docs/environments/`](docs/environments/)
 - Contribution and dev-to-release workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - Documentation map and historical context: [`docs/INDEX.md`](docs/INDEX.md)
+- Current project handoff: [`docs/HANDOFF.md`](docs/HANDOFF.md)
 
 ## Prerequisites
 
@@ -52,8 +52,9 @@ For the complete environment-variable reference, see
 
 Current operational references:
 
-- [2026-08-03 current status](docs/STATUS-2026-08-03.md)
-- [2026-08-02 migration status](docs/STATUS-2026-08-02.md)
+- [living current handoff](docs/HANDOFF.md)
+- [2026-08-03 status snapshot](docs/STATUS-2026-08-03.md)
+- [2026-08-02 migration snapshot](docs/STATUS-2026-08-02.md)
 - [dated operations changelog](docs/OPERATIONS_CHANGELOG-2026-08-02.md)
 - [legacy-versus-current state](docs/LEGACY_VS_CURRENT_STATE.md)
 
@@ -167,7 +168,8 @@ flowchart LR
       diagrams/       Mermaid architecture and lifecycle sources
       dataops/        Data Operations contracts and rollout procedures
       environments/   reviewed non-secret environment examples
-      STATUS-*.md     dated current operational evidence
+      HANDOFF.md      living current operational authority
+      STATUS-*.md     dated historical operational evidence
     init/             declared seed database and image-provided index assets
     Dockerfile        immutable application image definition
     docker-compose*.yml  local, CI, integration, recovery, and Dokploy contracts
@@ -265,14 +267,14 @@ clone is clone-legacy-20260802T085639Z-86288855 with 416 objects totaling
 signature-verified runtime pointer and serves 242/242 indexed documents.
 
 Stage is reachable at https://2026.ai-sahakar.net; healthy containers and a
-root response do not replace `/readyz`. The currently deployed older readiness
-code does not project the valid v3 pointer, so final acceptance waits for the
-immutable PR 176 image and exact generation/manifest evidence there. Manual
-stage backup and isolated rehearsal have already succeeded provisionally.
+root response do not replace `/readyz`. The deployed readiness code projects
+the valid v3 pointer, exact generation, manifest, and indexing ratio. Manual
+stage backup and isolated rehearsal have also succeeded. Use
+[docs/HANDOFF.md](docs/HANDOFF.md) for current evidence.
 
 The old July reconciliation numbers below are retained as historical baseline
 evidence, not as the current 2026 migration inventory. See
-docs/STATUS-2026-08-03.md and docs/LEGACY_VS_CURRENT_STATE.md.
+docs/HANDOFF.md and docs/LEGACY_VS_CURRENT_STATE.md.
 
 ## Historical reconciliation baseline
 

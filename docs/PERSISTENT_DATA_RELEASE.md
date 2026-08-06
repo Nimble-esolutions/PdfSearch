@@ -8,9 +8,9 @@ Supersedes: None
 # Persistent Data Release Contract
 ## Current-state pointer
 
-For the verified state as of 2026-08-03, use [STATUS-2026-08-03.md](STATUS-2026-08-03.md).
-Earlier dated sections in this page remain historical evidence and must not
-be used as current deployment state without reconciling them to that record.
+Use the living [HANDOFF.md](HANDOFF.md) for current verified state.
+Earlier dated sections remain historical evidence and must be reconciled to
+the living handoff before use.
 
 ## 2026 stage handoff
 
