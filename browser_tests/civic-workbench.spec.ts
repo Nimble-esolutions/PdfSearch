@@ -10,7 +10,9 @@ const references = [{
   pdf_id: 1,
 }];
 
-async function mockSearch(page: Page, payload: object = { answer, references }) {
+async function mockSearch(page: Page, payload: object = {
+  kind: 'evidence_answer', language: 'en', answer, references,
+}) {
   await page.route('**/search/**', async route => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
   });
@@ -48,10 +50,31 @@ test.describe('Civic Knowledge Workbench', () => {
     await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('What is the society audit procedure?');
     await page.locator('#sendBtn').click();
-    await expect(page.locator('.conversation-entry--assistant').last()).toContainText(answer);
+    const response = page.locator('.conversation-entry--assistant').last();
+    await expect(response).toHaveAttribute('data-response-kind', 'evidence_answer');
+    await expect(response).toHaveAttribute('lang', 'en');
+    await expect(response).toContainText(answer);
     await expect(page.locator('.answer-sources')).toContainText('Maharashtra Cooperative Societies Act');
     await expect(page.locator('.answer-sources .ref-card')).toContainText('Page 42');
     await expect(page.locator('[data-evidence-answer]')).not.toHaveAttribute('hidden');
+  });
+
+  test('renders a typed small-talk response without fabricating source evidence', async ({ page }) => {
+    await mockSearch(page, {
+      kind: 'small_talk',
+      language: 'mr',
+      answer: 'नमस्कार! मी तुम्हाला कशी मदत करू शकतो?',
+      references: [],
+    });
+    await page.goto('/?view=workbench');
+    await page.locator('#userQuery').fill('नमस्कार!');
+    await page.locator('#sendBtn').click();
+
+    const response = page.locator('.conversation-entry--assistant').last();
+    await expect(response).toHaveAttribute('data-response-kind', 'small_talk');
+    await expect(response).toHaveAttribute('lang', 'mr');
+    await expect(response).toContainText('नमस्कार! मी तुम्हाला कशी मदत करू शकतो?');
+    await expect(response.locator('.answer-sources .ref-card')).toHaveCount(0);
   });
 
   test('formats answer structure and shares the complete answer with source links', async ({ page }) => {

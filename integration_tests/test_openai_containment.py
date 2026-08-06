@@ -56,6 +56,28 @@ class OpenAIContainmentTests(unittest.TestCase):
             self.assertIn("SANDBOX", r1)
             self.assertEqual(r1, r2)
 
+    def test_sandbox_chat_honours_marathi_system_instruction(self):
+        messages = [
+            {
+                "role": "system",
+                "content": "उत्तर फक्त मराठीत आणि देवनागरी लिपीत द्या.",
+            },
+            {"role": "user", "content": "नियम 42 काय आहे?"},
+        ]
+        with patch("core.ai_guard._ai_policy_mode", return_value="sandbox"):
+            from core.ai_guard import get_chat_provider, get_openai_client
+
+            provider_answer = get_chat_provider()(messages)
+            repeated_answer = get_chat_provider()(messages)
+            client_answer = get_openai_client().chat.completions.create(
+                messages=messages
+            ).choices[0].message.content
+
+        self.assertEqual(provider_answer, client_answer)
+        self.assertEqual(provider_answer, repeated_answer)
+        self.assertRegex(provider_answer, r"[\u0900-\u097f]")
+        self.assertNotIn("SANDBOX", provider_answer)
+
     def test_enabled_without_key_fails_closed(self):
         with patch("core.ai_guard._ai_policy_mode", return_value="enabled"):
             os.environ.pop("OPENAI_API_KEY", None)
@@ -151,4 +173,4 @@ class OpenAIContainmentTests(unittest.TestCase):
                 "cached answer",
             )
             cache_key = cache_get.call_args.args[0]
-            self.assertRegex(cache_key, r"^gpt_ans:v2:[0-9a-f]{64}$")
+            self.assertRegex(cache_key, r"^gpt_ans:v3:[0-9a-f]{64}$")

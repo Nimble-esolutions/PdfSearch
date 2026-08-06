@@ -854,10 +854,10 @@ class SearchAndAuthenticationTests(TestCase):
 
     @patch("core.views.search_pdf_folders")
     @patch("core.views.detect_folder_by_keywords_multi")
-    @patch("core.views.is_general_query", return_value=False)
+    @patch("core.views.classify_small_talk_query", return_value=None)
     def test_search_references_use_protected_pdf_view_url(
         self,
-        _is_general_query,
+        _classify_small_talk_query,
         detect_folder,
         search_folders,
     ):
@@ -920,8 +920,8 @@ class SearchAndAuthenticationTests(TestCase):
             PUBLIC_SEARCH_ALL_FOLDERS=True,
             PUBLIC_SEARCH_FOLDER_IDS=frozenset(),
         ), patch(
-            "core.views.is_general_query",
-            return_value=False,
+            "core.views.classify_small_talk_query",
+            return_value=None,
         ), patch(
             "core.views.detect_folder_by_keywords_multi",
             return_value=[(folder, 0.9)],
@@ -982,7 +982,7 @@ class SearchAndAuthenticationTests(TestCase):
         self.client.force_login(self.user)
 
         with (
-            patch("core.views.is_general_query", return_value=False),
+            patch("core.views.classify_small_talk_query", return_value=None),
             patch(
                 "core.views.detect_folder_by_keywords_multi",
                 return_value=[(folder, 0.9)],
@@ -1043,8 +1043,8 @@ class SearchAndAuthenticationTests(TestCase):
         self.client.force_login(self.user)
 
         with patch(
-            "core.views.is_general_query",
-            return_value=False,
+            "core.views.classify_small_talk_query",
+            return_value=None,
         ), patch(
             "core.views.detect_folder_by_keywords_multi",
             return_value=[(folder, 0.9)],

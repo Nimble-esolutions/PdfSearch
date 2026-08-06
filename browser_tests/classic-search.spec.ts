@@ -10,7 +10,9 @@ const references = [{
   url: '/public/pdf/1/',
 }];
 
-async function mockSearch(page: Page, payload: object = { answer, references }) {
+async function mockSearch(page: Page, payload: object = {
+  kind: 'evidence_answer', language: 'en', answer, references,
+}) {
   await page.route('**/search/**', async route => {
     if (route.request().method() !== 'POST') return route.continue();
     await route.fulfill({
@@ -57,6 +59,8 @@ test.describe('Classic public search', () => {
 
   test('renders answers and protected source evidence without HTML injection', async ({ page }) => {
     await mockSearch(page, {
+      kind: 'evidence_answer',
+      language: 'en',
       answer: '<img src=x onerror=alert(1)>\n\nSafe Marathi: सहकारी संस्था',
       references,
     });
@@ -66,6 +70,8 @@ test.describe('Classic public search', () => {
     await page.locator('#sendBtn').click();
 
     const response = page.locator('.classic-message--assistant').last();
+    await expect(response).toHaveAttribute('data-response-kind', 'evidence_answer');
+    await expect(response).toHaveAttribute('lang', 'en');
     await expect(response).toContainText('<img src=x onerror=alert(1)>');
     await expect(response.locator('img')).toHaveCount(0);
     await expect(response).toContainText('सहकारी संस्था');
@@ -74,6 +80,24 @@ test.describe('Classic public search', () => {
       /\/public\/pdf\/1\/$/,
     );
     await expect(response).toContainText('Page 42');
+  });
+
+  test('renders a typed small-talk response without fabricating source evidence', async ({ page }) => {
+    await mockSearch(page, {
+      kind: 'small_talk',
+      language: 'mr',
+      answer: 'नमस्कार! मी तुम्हाला कशी मदत करू शकतो?',
+      references: [],
+    });
+    await page.goto('/');
+    await page.locator('#userQuery').fill('नमस्कार!');
+    await page.locator('#sendBtn').click();
+
+    const response = page.locator('.classic-message--assistant').last();
+    await expect(response).toHaveAttribute('data-response-kind', 'small_talk');
+    await expect(response).toHaveAttribute('lang', 'mr');
+    await expect(response).toContainText('नमस्कार! मी तुम्हाला कशी मदत करू शकतो?');
+    await expect(response.locator('.classic-references')).toHaveCount(0);
   });
 
   test('keeps the 30-word contract and authored error state', async ({ page }) => {
