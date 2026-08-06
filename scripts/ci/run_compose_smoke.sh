@@ -61,6 +61,7 @@ PLAYWRIGHT_BASE_URL="http://127.0.0.1:${web_port}" \
     npx playwright test \
     browser_tests/operations-cockpit.spec.ts \
     browser_tests/dataops-workbench.spec.ts \
+    browser_tests/classic-search.spec.ts \
     --project=desktop --project=mobile --workers=1
 "${compose[@]}" exec --no-TTY --user appuser web python -m pip check
 
@@ -68,7 +69,7 @@ test_log="$(mktemp)"
 # The retired Vault workbench contract is no longer the active UI surface. Its
 # lifecycle tests remain available for the migration stack, while this release
 # gate exercises the active core/Data Operations contracts instead.
-if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.test_public_search_routing core.test_startup_restore core.test_artifact_vault core.tests_recovery core.tests_candidate_cleanup core.test_custody_audit dataops --noinput --verbosity=2 >"$test_log" 2>&1; then
+if ! "${compose[@]}" exec --no-TTY --user appuser web python /app/flowdocs/manage.py test core.tests core.tests_search_themes core.test_public_search_routing core.test_startup_restore core.test_artifact_vault core.tests_recovery core.tests_candidate_cleanup core.test_custody_audit dataops --noinput --verbosity=2 >"$test_log" 2>&1; then
     cat "$test_log"
     rm -f "$test_log"
     exit 1

@@ -134,7 +134,8 @@ and indexing remained `1.0`.
 | #185 | Rebuilt the approved Classic public search as the primary view while preserving an isolated Knowledge Workbench secondary view |
 | #186 | Corrected search-intent false positives and enforced question-derived English/Marathi answer language across both themes |
 | #187 | Added a standalone, theme-consistent shell for Terms, Privacy, Disclaimer, Data Policy, and Cookie Policy |
-| #188 (in review) | Makes local macOS documentation rendering honor an explicit Puppeteer browser and select Playwright's matching headless shell instead of launching the crashing GUI Chrome-for-Testing app |
+| #188 | Makes local macOS documentation rendering honor an explicit Puppeteer browser and select Playwright's matching headless shell instead of launching the crashing GUI Chrome-for-Testing app |
+| #189 (in review) | Keeps the Classic composer reachable after long answers, safely formats structured responses, validates typed payloads and PDF references, and gates continuity across the viewport matrix |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -148,21 +149,27 @@ no ownership warning.
 There is no data-readiness or search-language blocker. Remaining operational
 work is decision-driven:
 
-1. **Public information rollout:** confirm the merged PR #187 image revision on
-   stage web and maintenance without touching volumes, then canary all five
-   routes in both themes plus both mismatched-locale answer directions.
-2. **Future production project:** create and validate the dedicated 2026
+1. **Classic search continuity repair:** merge
+   `fix/classic-search-continuity` only after its viewport matrix is green,
+   publish the resulting image, and canary one long structured answer plus a
+   second query on stage. Until then, stage can still expose literal Markdown
+   and lose the composer below a long answer.
+2. **Public information rollout:** certify the image containing merged PRs #187
+   and #189, deploy stage web and maintenance without touching volumes, and
+   canary all five public-information routes in both themes, both
+   mismatched-locale answer directions, and Classic long-answer continuity.
+3. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
-3. **Production rehearsal:** before traffic changes, select an immutable image,
+4. **Production rehearsal:** before traffic changes, select an immutable image,
    validate rendered Compose and key-only environment posture, restore into
    isolated production-candidate volumes, run search/PDF/auth smoke checks, and
    record rollback image and generation.
-4. **Production cutover:** remains out of scope until separately authorized.
+5. **Production cutover:** remains out of scope until separately authorized.
    Do not change legacy service routing or `prod_flowdocs` while preparing it.
-5. **Stage recovery retest:** run another manual backup and disposable restore
+6. **Stage recovery retest:** run another manual backup and disposable restore
    only when recovery/data contracts change or when explicitly requested.
-6. **Local development:** start the native development stack and rerun focused
+7. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
 
@@ -189,6 +196,13 @@ work is decision-driven:
   include domain words containing short conversational tokens.
 - Both public themes must preserve the backend response `kind`; a friendly
   answer without evidence must not be presented as a document-backed answer.
+- `overflow: auto` does not make a transcript scrollable unless every grid/flex
+  ancestor gives it a bounded height and `min-height: 0`. Long-answer tests must
+  prove transcript scroll ownership, a visible composer, protected sources,
+  and a successful second query on portrait and short-landscape viewports.
+- Public answer formatting must use allowlisted DOM nodes and text nodes. Never
+  fix literal Markdown with unsanitized `innerHTML`; hostile HTML must remain
+  inert text while headings, lists, and bold markers gain semantic structure.
 - The page/session locale is a presentation preference, not proof of question
   language. Derive answer language from the question, expose it in the API and
   DOM, and never cache a provider response that fails the script check.

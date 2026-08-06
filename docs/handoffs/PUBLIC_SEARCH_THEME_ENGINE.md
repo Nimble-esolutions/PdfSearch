@@ -1,9 +1,47 @@
 # Public Search Theme Engine Handoff
 
 **Updated:** 2026-08-06
-**Merged:** PRs #185 and #186; stage revision `1067c054edd6a21a7881371ca0670e428dc4cc81`
+**Merged:** PRs #185, #186, and #187
 **Stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc`
-**In review:** PR #187 adds the theme-consistent public information shell; it is not stage evidence until its release and canaries complete
+**In repair:** Classic long-answer continuity regression on branch
+`fix/classic-search-continuity`; merge and stage verification are pending
+
+## Classic long-answer regression (2026-08-06)
+
+The first real long structured response exposed two Classic-only frontend
+defects. The body grid had a minimum height but no definite viewport height, so
+the nominally scrollable transcript expanded with its content and pushed the
+composer below the viewport. Because that element also contained overscroll,
+wheel and touch input over the conversation could not reach the document
+scroll. Separately, Classic wrote the answer with `textContent` paragraphs,
+which correctly blocked HTML injection but displayed Markdown markers instead
+of headings, lists, and bold text.
+
+The repair keeps the approved visual composition and theme isolation while:
+
+- bounding the page to the dynamic viewport and assigning vertical scrolling
+  to the transcript;
+- keeping the composer and footer reachable after long and repeated answers;
+- rendering an allowlisted Markdown subset with DOM nodes and text nodes only;
+- preserving hostile HTML as inert visible text;
+- requiring the typed success envelope and allowing source cards only for
+  evidence answers;
+- accepting only same-origin protected PDF routes, with the correct anonymous
+  public-PDF fallback;
+- keeping retry controls synchronized with request state and presenting
+  malformed successful responses as authored retry errors; and
+- making the transcript keyboard-scrollable.
+
+Regression coverage now exercises a long structured answer, hostile markup,
+protected sources, transcript scroll ownership, a visible focused composer, a
+second search, malformed payload recovery, 320px portrait, short landscape,
+and serious/critical accessibility findings across the browser viewport
+matrix. The required image smoke gate includes Classic search so this primary
+public journey cannot be skipped again.
+
+Do not claim this repair as deployed until its PR is green and merged, the
+resulting image is running on stage, and the long-answer plus second-query
+canary succeeds there.
 
 ## Delivered
 
