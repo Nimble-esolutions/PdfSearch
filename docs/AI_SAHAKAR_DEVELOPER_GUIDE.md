@@ -2,32 +2,44 @@
 
 **Status:** Active
 **Audience:** Developers, reviewers, and coding agents
-**Last verified:** 2026-07-25
+**Last verified:** 2026-08-06
 **Canonical design:** [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md)
 
 ## Start with the contract
 
-AI Sahakar is a civic knowledge workbench, not a generic search landing page.
-Read the UI contract before touching the public or admin interface. A visual
-change is an enhancement only when it improves clarity, evidence access,
-accessibility, or performance without changing the protected direction.
+AI Sahakar has isolated Classic and Knowledge Workbench public frontends over
+one secured search backend. Read the UI contract before touching either public
+view or the admin interface. Do not solve presentation drift by sharing CSS,
+JavaScript, or template fragments across the two public themes.
 
 ## File map
 
 | Area | Files |
 | --- | --- |
-| Public template | `flowdocs/core/templates/search.html` |
-| Public shell and tokens | `flowdocs/core/static/main/css/civic-workbench.css` |
-| Search cascade | `flowdocs/core/static/main/css/search.css` |
-| Public behavior | `flowdocs/core/static/main/js/search.js` |
-| Public backend boundary | `flowdocs/core/views.py`, existing search URL and JSON contract |
+| Theme selector | `flowdocs/core/search_ui.py`, allowlisted `SiteSetting` and request-only override |
+| Classic frontend | `search_classic.html`, `search-classic.css`, `search-classic.js` |
+| Workbench frontend | `search.html`, `civic-workbench.css`, `search.css`, `search.js` |
+| Shared public backend | `flowdocs/core/views.py`, existing search URL and JSON/PDF contract |
 | Admin shell | `flowdocs/core/templates/base.html`, `dashboard.html` |
 | Admin styling | `flowdocs/core/static/main/css/style.css` |
 | Locale catalogs | `flowdocs/locale/en/LC_MESSAGES/django.po`, `flowdocs/locale/mr/LC_MESSAGES/django.po` |
-| Browser coverage | `tests/browser/civic-workbench.spec.ts`, `tests/browser/search-motion.spec.ts`, `tests/browser/full-suite.spec.ts` |
+| Browser coverage | `browser_tests/classic-search.spec.ts`, `browser_tests/civic-workbench.spec.ts`, `browser_tests/search-motion.spec.ts` |
 
 Use existing Django partials, translation tags, `json_script`, and CSS tokens.
 Do not copy production data or secrets into fixtures.
+
+### Public theme boundary
+
+The persisted key is `PUBLIC_SEARCH_PRIMARY_VIEW` with only `classic` or
+`workbench` accepted. It is managed through the superadmin settings form, not
+an environment variable. Missing/invalid values resolve to Classic. A valid
+`?view=` query overrides one response and is never stored.
+
+Shared behavior stops at server contracts: search request/response fields,
+protected PDF URLs, CSRF, authentication, locale session, and approved public
+links. Each frontend owns its markup, state rendering, accessibility behavior,
+responsive layout, CSS selectors, and JavaScript lifecycle. A change to one
+theme must not require loading the other's static files.
 
 ## Operator presentation API
 
@@ -129,7 +141,8 @@ generation or weaken inventory verification to manufacture a healthy state.
 2. Identify the component contract, responsive range, states, locale strings,
    and backend data fields involved.
 3. Make a small patch. Keep search routes, CSRF, auth, PDF access, feedback,
-   WhatsApp, and response fields unchanged.
+   WhatsApp, and response fields unchanged. Verify the untouched public theme
+   does not gain the changed theme's template, stylesheet, or script.
 4. Add or update English/Marathi copy in catalogs; never concatenate translated
    fragments in JavaScript or mutate user-entered questions. Remove fuzzy flags
    only after reviewing the complete Marathi sentence in context; a successful
@@ -218,6 +231,7 @@ msgattrib --only-fuzzy flowdocs/locale/mr/LC_MESSAGES/django.po
 python3 -m unittest scripts.ci.test_operator_language
 python3 scripts/ci/validate_operator_language.py
 node --check flowdocs/core/static/main/js/search.js
+node --check flowdocs/core/static/main/js/search-classic.js
 ```
 
 For UI changes, run the repository browser suite with the disposable local

@@ -1,6 +1,6 @@
 ---
 name: ai-sahakar-ui-contract
-description: Preserve and extend the locked AI Sahakar Civic Knowledge Workbench public search and admin UI.
+description: Preserve the isolated AI Sahakar Classic and Knowledge Workbench public search views and the admin UI.
 ---
 
 # AI Sahakar UI Contract Skill
@@ -68,12 +68,19 @@ documentation.
 
 ## Non-negotiable guardrails
 
-- Workbench macrostructure and Civic Knowledge Workbench theme remain the
-  default.
+- Classic search remains the safe default. Knowledge Workbench remains the
+  isolated secondary presentation unless a superadmin changes the allowlisted
+  database setting.
+- Classic and Workbench may share backend contracts only. Never share or
+  cross-load their templates, presentation CSS, or application JavaScript.
+- A `?view=classic|workbench` override is non-persistent and must survive the
+  English/Marathi session switch.
 - Official identity, readable hierarchy, source evidence, Marathi parity,
   accessible labels, and immediate composer access are protected.
 - Never add robot branding, purple gradients, decorative tricolour styling,
   fake metrics, fabricated citations, excessive pills, or generic AI hero copy.
+  The optimized Classic identity/assistant assets are the approved exception;
+  they must not leak into Workbench or admin surfaces.
 - Never change backend search, authentication, CSRF, PDF authorization,
   OpenAI policy, data lifecycle, RustFS, writer, or scheduler behavior for a UI
   task.
@@ -105,6 +112,7 @@ msgfmt --check flowdocs/locale/mr/LC_MESSAGES/django.po -o /tmp/django-mr.mo
 msgattrib --only-fuzzy flowdocs/locale/mr/LC_MESSAGES/django.po
 python3 scripts/ci/validate_operator_language.py
 node --check flowdocs/core/static/main/js/search.js
+node --check flowdocs/core/static/main/js/search-classic.js
 ```
 
 Use the repository's Docker/Playwright/Compose gates when those surfaces are

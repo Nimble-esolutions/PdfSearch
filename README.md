@@ -80,18 +80,24 @@ needs to be retained.
 
 ## Product surfaces and design lock
 
-The public `/` route is the AI Sahakar **Civic Knowledge Workbench**: a
-three-region evidence-led workspace on widescreens that collapses into a
-single-column conversation with accessible source drawers on smaller screens.
-The authenticated surface is the **Operations Cockpit** admin UI. These are
-protected product directions. Enhancements are welcome when they improve
-clarity, evidence access, accessibility, or performance while preserving the
-contract; a change of visual direction requires an explicit human request.
+The public `/` route defaults to **Classic search**, the approved
+`training.ai-sahakar.net` service composition rebuilt without CDN Bootstrap,
+inline application JavaScript, unsafe HTML insertion, or heavy bitmap assets.
+The **Knowledge Workbench** remains an isolated secondary frontend and can be
+previewed with `/?view=workbench`. A superadmin can choose the primary view in
+Settings; URL previews never persist. Both views share the same secured Django
+search/PDF backend and complete English/Marathi session behavior, but not
+templates, presentation CSS, or frontend JavaScript.
+
+The authenticated surface remains the **Operations Cockpit** admin UI.
+Public-theme selection is the only admin change in this feature.
 
 Read the [active UI contract](docs/design/AI_SAHAKAR_UI_CONTRACT.md) before
 changing templates, CSS, JavaScript, translations, browser tests, or visual
 documentation. The tracked agent skill is
 [`skills/ai-sahakar-ui-contract/SKILL.md`](skills/ai-sahakar-ui-contract/SKILL.md).
+The isolation and selection boundary is documented in
+[`docs/design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md`](docs/design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md).
 
 ## Architecture
 

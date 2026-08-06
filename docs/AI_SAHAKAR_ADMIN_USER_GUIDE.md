@@ -2,7 +2,7 @@
 
 **Status:** Active
 **Audience:** Authorized administrators and superadmins
-**Last verified:** 2026-07-28
+**Last verified:** 2026-08-06
 **Related:** [`CLIENT_USER_MANUAL.md`](CLIENT_USER_MANUAL.md), [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md)
 
 ## What the console is for
@@ -31,6 +31,25 @@ destination; **Vault & Recovery** is the specialist control plane.
 Admin, superadmin, and ordinary authenticated-user actions remain controlled by
 the existing Django permissions. A missing link is normally a permission
 boundary, not a broken visual control.
+
+## Choose the primary public search view
+
+Superadmins can open **Settings → Public search presentation** and choose:
+
+| Choice | Public result | Best use |
+| --- | --- | --- |
+| Classic search | Approved AI Enabled Search layout | Default citizen-facing experience |
+| Knowledge workbench | Evidence-led topic and source workspace | Research-oriented experience |
+
+Select a choice and press **Set primary view**. The change is immediate
+and does not require deployment or an environment-variable update. Preview
+either view safely with `/?view=classic` or `/?view=workbench`; a preview link
+affects only that URL and does not change the saved primary view. Invalid or
+missing configuration safely resolves to Classic.
+
+Both choices use the same documents, search service, PDF authorization,
+feedback destination, and English/Marathi session. Changing the presentation
+does not reindex documents, alter data, start a backup, or change admin pages.
 
 ## Daily document workflow
 
