@@ -10,7 +10,7 @@ const references = [{
   url: '/public/pdf/1/',
 }];
 
-async function mockSearch(page: Page, payload: object = { answer, references }) {
+async function mockSearch(page: Page, payload: object = { kind: 'evidence_answer', answer, references }) {
   await page.route('**/search/**', async route => {
     if (route.request().method() !== 'POST') return route.continue();
     await route.fulfill({
@@ -66,6 +66,7 @@ test.describe('Classic public search', () => {
     await page.locator('#sendBtn').click();
 
     const response = page.locator('.classic-message--assistant').last();
+    await expect(response).toHaveAttribute('data-response-kind', 'evidence_answer');
     await expect(response).toContainText('<img src=x onerror=alert(1)>');
     await expect(response.locator('img')).toHaveCount(0);
     await expect(response).toContainText('सहकारी संस्था');
@@ -74,6 +75,22 @@ test.describe('Classic public search', () => {
       /\/public\/pdf\/1\/$/,
     );
     await expect(response).toContainText('Page 42');
+  });
+
+  test('renders a typed small-talk response without fabricating source evidence', async ({ page }) => {
+    await mockSearch(page, {
+      kind: 'small_talk',
+      answer: 'Hello! How can I help you?',
+      references: [],
+    });
+    await page.goto('/');
+    await page.locator('#userQuery').fill('Hello!');
+    await page.locator('#sendBtn').click();
+
+    const response = page.locator('.classic-message--assistant').last();
+    await expect(response).toHaveAttribute('data-response-kind', 'small_talk');
+    await expect(response).toContainText('Hello! How can I help you?');
+    await expect(response.locator('.classic-references')).toHaveCount(0);
   });
 
   test('keeps the 30-word contract and authored error state', async ({ page }) => {

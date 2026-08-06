@@ -1774,6 +1774,15 @@ msgstr "कृपया आपला प्रश्न विचारा 🙏"
 msgid "Hello! How can I help you?"
 msgstr "नमस्कार! मी तुम्हाला कशी मदत करू शकतो?"
 
+msgid "You're welcome. Ask me about co-operative Acts, Rules, circulars, or procedures."
+msgstr "आपले स्वागत आहे. सहकारी कायदे, नियम, परिपत्रके किंवा कार्यपद्धतींबद्दल मला विचारा."
+
+msgid "I am Sahakar AI. I search the department's indexed co-operative documents and show the sources used."
+msgstr "मी सहकार AI आहे. मी विभागाच्या अनुक्रमित सहकारी दस्तऐवजांमध्ये शोध घेतो आणि वापरलेले स्रोत दाखवतो."
+
+msgid "I search official co-operative documents and do not provide live date or time information. Ask me about an Act, Rule, circular, or procedure."
+msgstr "मी अधिकृत सहकारी दस्तऐवजांमध्ये शोध घेतो आणि थेट दिनांक किंवा वेळ माहिती देत नाही. मला कायदा, नियम, परिपत्रक किंवा कार्यपद्धतीबद्दल विचारा."
+
 #: core/search_ui.py
 msgid "Classic search"
 msgstr "पारंपरिक शोध"

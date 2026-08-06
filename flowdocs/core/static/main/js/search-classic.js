@@ -19,6 +19,7 @@
   const language = form.querySelector("input[name='language']")?.value || "en";
   let activeController = null;
   let stageTimer = null;
+  const responseKinds = new Set(["small_talk", "evidence_answer", "no_evidence", "validation"]);
 
   function readJson(id, fallback) {
     const element = document.getElementById(id);
@@ -82,9 +83,10 @@
     stageTimer = null;
   }
 
-  function appendAnswer(answer, references) {
+  function appendAnswer(answer, references, kind = "evidence_answer") {
     const message = document.createElement("article");
     message.className = "classic-message classic-message--assistant";
+    message.dataset.responseKind = responseKinds.has(kind) ? kind : "evidence_answer";
 
     const answerBody = document.createElement("div");
     answerBody.className = "classic-message__answer";
@@ -201,6 +203,7 @@
 
   async function submitSearch(event) {
     event.preventDefault();
+    if (activeController) return;
     const query = userQuery.value.trim();
     const count = wordsIn(query);
     if (!query) {
@@ -240,9 +243,17 @@
       }
       if (!response.ok || payload.error) {
         const [title, detail] = errorCopy(response.status, payload);
-        appendError(title, detail, response.status >= 500 || response.status === 429 ? query : "");
+        appendError(
+          title,
+          payload.detail || detail,
+          response.status >= 500 || response.status === 429 ? query : "",
+        );
       } else {
-        appendAnswer(payload.answer || "", payload.references || []);
+        appendAnswer(
+          payload.answer || "",
+          payload.references || [],
+          payload.kind || "evidence_answer",
+        );
       }
     } catch (error) {
       const timedOut = error?.name === "AbortError";

@@ -116,7 +116,7 @@ from .utils import (
     detect_language,
     build_or_load_faiss_index_for_folder,
     search_pdf_folders,
-    is_general_query,
+    classify_small_talk_query,
     detect_folder_by_keywords,
     semantic_folder_search,
     detect_folder_by_keywords_multi,
@@ -469,6 +469,39 @@ def _public_search_rate_limited(request):
         return cache.incr(key) > settings.PUBLIC_SEARCH_RATE_LIMIT
     except Exception:
         return True
+
+
+def _log_search_completed(
+    *,
+    route,
+    outcome,
+    public,
+    language,
+    started_at,
+    visible_folders=0,
+    folders_scanned=0,
+    references=0,
+    integrity_failures=0,
+    embedding_calls=0,
+    chat_calls=0,
+):
+    """Record bounded search diagnostics without query or document content."""
+    logger.info(
+        "search_completed route=%s outcome=%s public=%s language=%s "
+        "visible_folders=%s folders_scanned=%s references=%s "
+        "integrity_failures=%s embedding_calls=%s chat_calls=%s duration_ms=%s",
+        route,
+        outcome,
+        public,
+        language,
+        visible_folders,
+        folders_scanned,
+        references,
+        integrity_failures,
+        embedding_calls,
+        chat_calls,
+        round((time.monotonic() - started_at) * 1000),
+    )
 
 
 def _protected_references(references, *, public=False):
@@ -1998,10 +2031,19 @@ def search_query(request):
         )
 
     if request.method == "POST":
+        request_started_at = time.monotonic()
         public_search = not request.user.is_authenticated
         if public_search and not settings.PUBLIC_SEARCH_ENABLED:
+            _log_search_completed(
+                route="policy",
+                outcome="authentication_required",
+                public=True,
+                language="en",
+                started_at=request_started_at,
+            )
             return JsonResponse(
                 {
+                    "kind": "error",
                     "error": "authentication_required",
                     "detail": "Authentication is required to execute document search.",
                     "references": [],
@@ -2015,8 +2057,16 @@ def search_query(request):
                 language = "en"
 
             if len(query.split()) > settings.PUBLIC_SEARCH_MAX_WORDS:
+                _log_search_completed(
+                    route="validation",
+                    outcome="query_too_long",
+                    public=public_search,
+                    language=language,
+                    started_at=request_started_at,
+                )
                 return JsonResponse(
                     {
+                        "kind": "error",
                         "error": "query_too_long",
                         "detail": f"Queries are limited to {settings.PUBLIC_SEARCH_MAX_WORDS} words.",
                         "references": [],
@@ -2025,8 +2075,16 @@ def search_query(request):
                 )
 
             if public_search and _public_search_rate_limited(request):
+                _log_search_completed(
+                    route="rate_limit",
+                    outcome="rate_limited",
+                    public=True,
+                    language=language,
+                    started_at=request_started_at,
+                )
                 return JsonResponse(
                     {
+                        "kind": "error",
                         "error": "rate_limited",
                         "detail": "Please wait before submitting another public search.",
                         "references": [],
@@ -2035,17 +2093,46 @@ def search_query(request):
                 )
 
             if not query:
+                _log_search_completed(
+                    route="validation",
+                    outcome="empty_query",
+                    public=public_search,
+                    language=language,
+                    started_at=request_started_at,
+                )
                 return JsonResponse({
+                    "kind": "validation",
                     "answer": gettext("Please ask your question 🙏"),
                     "references": []
                 })
 
-            # --------------------------------------------------
-            # 1️⃣ GENERAL QUESTIONS (NO REFERENCES)
-            # --------------------------------------------------
-            if is_general_query(query):
+            small_talk_intent = classify_small_talk_query(query)
+            if small_talk_intent:
+                if small_talk_intent == "gratitude":
+                    small_talk_answer = gettext(
+                        "You're welcome. Ask me about co-operative Acts, Rules, circulars, or procedures."
+                    )
+                elif small_talk_intent == "identity":
+                    small_talk_answer = gettext(
+                        "I am Sahakar AI. I search the department's indexed co-operative documents and show the sources used."
+                    )
+                elif small_talk_intent == "live_information":
+                    small_talk_answer = gettext(
+                        "I search official co-operative documents and do not provide live date or time information. "
+                        "Ask me about an Act, Rule, circular, or procedure."
+                    )
+                else:
+                    small_talk_answer = gettext("Hello! How can I help you?")
+                _log_search_completed(
+                    route="small_talk",
+                    outcome=small_talk_intent,
+                    public=public_search,
+                    language=language,
+                    started_at=request_started_at,
+                )
                 return JsonResponse({
-                    "answer": gettext("Hello! How can I help you?"),
+                    "kind": "small_talk",
+                    "answer": small_talk_answer,
                     "references": []
                 })
 
@@ -2083,7 +2170,6 @@ def search_query(request):
                     ).filter(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
                 folder_scopes.append((folder, scoped_pdfs))
 
-            started_at = time.monotonic()
             answer, refs, diagnostics = search_pdf_folders(
                 folder_scopes,
                 query,
@@ -2091,29 +2177,28 @@ def search_query(request):
                 top_n_pdfs=3,
                 language=language,
             )
-            logger.info(
-                "search_completed route=%s outcome=%s public=%s language=%s "
-                "visible_folders=%s folders_scanned=%s references=%s "
-                "integrity_failures=%s embedding_calls=%s chat_calls=%s duration_ms=%s",
-                "keyword_ranked" if detected else "global",
-                "answered" if refs else "no_evidence",
-                public_search,
-                language,
-                len(visible_folders),
-                diagnostics["folders_scanned"],
-                len(refs),
-                diagnostics["integrity_failures"],
-                1 if folder_scopes else 0,
-                1 if refs else 0,
-                round((time.monotonic() - started_at) * 1000),
+            _log_search_completed(
+                route="keyword_ranked" if detected else "global",
+                outcome="answered" if refs else "no_evidence",
+                public=public_search,
+                language=language,
+                started_at=request_started_at,
+                visible_folders=len(visible_folders),
+                folders_scanned=diagnostics["folders_scanned"],
+                references=len(refs),
+                integrity_failures=diagnostics["integrity_failures"],
+                embedding_calls=1 if folder_scopes else 0,
+                chat_calls=1 if refs else 0,
             )
             if refs:
                 return JsonResponse({
+                    "kind": "evidence_answer",
                     "answer": answer,
                     "references": _protected_references(refs, public=public_search),
                 })
 
             return JsonResponse({
+                "kind": "no_evidence",
                 "answer": gettext(
                     "No supporting source was found in the searchable documents. "
                     "Try adding the Act, Rule, section number, society type, or topic."
@@ -2123,8 +2208,16 @@ def search_query(request):
 
         except SearchDataIntegrityError:
             logger.exception("Search integrity error")
+            _log_search_completed(
+                route="search",
+                outcome="integrity_error",
+                public=public_search,
+                language=locals().get("language", "en"),
+                started_at=request_started_at,
+            )
             return JsonResponse(
                 {
+                    "kind": "error",
                     "error": "search_unavailable",
                     "detail": "Document search is temporarily unavailable. Please try again later.",
                     "references": [],
@@ -2133,7 +2226,15 @@ def search_query(request):
             )
         except Exception:
             logger.exception("Unhandled search error")
+            _log_search_completed(
+                route="search",
+                outcome="unhandled_error",
+                public=public_search,
+                language=locals().get("language", "en"),
+                started_at=request_started_at,
+            )
             return JsonResponse({
+                "kind": "error",
                 "error": "search_failed",
                 "detail": "The search request could not be completed. Please try again later.",
                 "references": []

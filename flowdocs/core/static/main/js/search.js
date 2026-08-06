@@ -167,7 +167,7 @@ async function sendMessage(){
     formData.append('query', query);
     formData.append('language', document.documentElement.lang === 'mr' ? 'mr' : 'en');
     activeController = new AbortController();
-    requestTimeout = setTimeout(() => activeController.abort(), 30000);
+    requestTimeout = setTimeout(() => activeController.abort(), 60000);
 
     try {
         const response = await fetch(window.PdfSearch.searchQueryUrl, {
@@ -199,7 +199,12 @@ async function sendMessage(){
         typingDiv.setAttribute("aria-label", stages[stages.length - 1]);
         typingDiv.remove();
         if(data.answer){
-            typeEffect(data.answer, data.references || [], query);
+            typeEffect(
+                data.answer,
+                data.references || [],
+                query,
+                data.kind || "evidence_answer",
+            );
         } else if(data.error){
             appendErrorMessage(searchMessages.search_unavailable, searchMessages.try_later, query);
         }
@@ -316,9 +321,11 @@ function appendErrorMessage(title, detail, retryQuery) {
 }
 
 
-function typeEffect(text, references = [], query = "") {
+function typeEffect(text, references = [], query = "", responseKind = "evidence_answer") {
     const div = document.createElement('div');
     div.className = 'conversation-entry conversation-entry--assistant gpt-msg';
+    const allowedKinds = new Set(["small_talk", "evidence_answer", "no_evidence", "validation"]);
+    div.dataset.responseKind = allowedKinds.has(responseKind) ? responseKind : "evidence_answer";
     div.setAttribute("aria-live", "off");
     chatMain.appendChild(div);
     let answerFormatted = false;

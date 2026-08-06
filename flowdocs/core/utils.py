@@ -14,6 +14,7 @@ import traceback
 import logging
 import tempfile
 import time
+import unicodedata
 from dataclasses import dataclass
 from typing import List, Tuple, Optional, Dict, Any
 
@@ -1203,30 +1204,54 @@ def detect_folder_by_keywords_multi(query, min_score_threshold=0.50, folders=Non
     return scored
 
 
-#----------------for general queries ----------------
-def is_general_query(query):
-    q = query.lower().strip()
+# ---------------- Conversational public-search intents ----------------
+_SMALL_TALK_INTENTS = {
+    "good morning": "greeting",
+    "good afternoon": "greeting",
+    "good evening": "greeting",
+    "good day": "greeting",
+    "hello": "greeting",
+    "hi": "greeting",
+    "how are you": "greeting",
+    "thanks": "gratitude",
+    "thank you": "gratitude",
+    "who are you": "identity",
+    "today": "live_information",
+    "date": "live_information",
+    "day today": "live_information",
+    "what is today": "live_information",
+    "time": "live_information",
+    "नमस्कार": "greeting",
+    "नमस्ते": "greeting",
+    "धन्यवाद": "gratitude",
+    "आभार": "gratitude",
+    "तुम्ही कोण आहात": "identity",
+    "आप कौन हैं": "identity",
+}
 
-    general_keywords = [
-        "good morning",
-        "good afternoon",
-        "good evening",
-        "good day",
-        "hello",
-        "hi",
-        "how are you",
-        "thanks",
-        "thank you",
-        "who are you",
-        "today",
-        "date",
-        "day today",
-        "what is today",
-        "time",
-    ]
 
-    # if query fully contains any general phrase → treat as general
-    return any(g in q for g in general_keywords)
+def _normalize_small_talk_query(query: str) -> str:
+    """Normalize a complete conversational query without losing Indic marks."""
+    normalized = unicodedata.normalize("NFKC", str(query or "")).casefold()
+    characters = []
+    for character in normalized:
+        category = unicodedata.category(character)
+        characters.append(
+            character
+            if character.isspace() or category[:1] in {"L", "M", "N"}
+            else " "
+        )
+    return " ".join("".join(characters).split())
+
+
+def classify_small_talk_query(query: str) -> str | None:
+    """Return an intent only when the entire normalized query is conversational."""
+    return _SMALL_TALK_INTENTS.get(_normalize_small_talk_query(query))
+
+
+def is_general_query(query: str) -> bool:
+    """Compatibility predicate for callers that only need a yes/no decision."""
+    return classify_small_talk_query(query) is not None
 
 #--------------- Best folder selection (semantic + keyword hybrid) ----------------
 #--------------- Best folder selection (semantic + keyword hybrid) ----------------

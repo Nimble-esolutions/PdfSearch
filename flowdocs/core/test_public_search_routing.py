@@ -11,6 +11,43 @@ from core.models import Folder, PDFFile
 from core.utils import SearchDataIntegrityError, SearchHit
 
 
+class SmallTalkClassificationTests(SimpleTestCase):
+    def test_complete_conversational_queries_are_classified(self):
+        cases = {
+            "Hello!": "greeting",
+            "  THANK YOU  ": "gratitude",
+            "Who are you?": "identity",
+            "What is today?": "live_information",
+            "नमस्कार!": "greeting",
+            "धन्यवाद": "gratitude",
+            "तुम्ही कोण आहात?": "identity",
+            "आप कौन हैं?": "identity",
+        }
+
+        for query, expected in cases.items():
+            with self.subTest(query=query):
+                self.assertEqual(utils.classify_small_talk_query(query), expected)
+                self.assertTrue(utils.is_general_query(query))
+
+    def test_domain_queries_never_match_conversational_substrings(self):
+        queries = [
+            "give me most updated rules about societies",
+            "what is this rule",
+            "membership rules",
+            "historical society rules",
+            "candidate eligibility under the Act",
+            "mandate for society elections",
+            "timeline for registration",
+            "Hi, what is Rule 79?",
+            "Thank you for explaining Rule 79",
+        ]
+
+        for query in queries:
+            with self.subTest(query=query):
+                self.assertIsNone(utils.classify_small_talk_query(query))
+                self.assertFalse(utils.is_general_query(query))
+
+
 class SearchFolderOrchestrationTests(SimpleTestCase):
     def setUp(self):
         self.first = SimpleNamespace(pk=1)
@@ -202,7 +239,7 @@ class PublicSearchRoutingViewTests(TestCase):
             "integrity_failures": 0,
             "candidates": len(references),
         }
-        with patch("core.views.is_general_query", return_value=False), patch(
+        with patch("core.views.classify_small_talk_query", return_value=None), patch(
             "core.views._public_search_rate_limited",
             return_value=False,
         ), patch(
@@ -229,6 +266,7 @@ class PublicSearchRoutingViewTests(TestCase):
         scopes = search_folders.call_args.args[0]
         self.assertEqual([folder.pk for folder, _pdfs in scopes], [self.first.pk, self.second.pk])
         self.assertTrue(all(pdfs is None for _folder, pdfs in scopes))
+        self.assertEqual(response.json()["kind"], "evidence_answer")
 
     def test_keyword_match_ranks_first_but_does_not_exclude_other_folders(self):
         response, search_folders = self._search(
@@ -244,8 +282,52 @@ class PublicSearchRoutingViewTests(TestCase):
         response, _search_folders = self._search(detected=[], references=[])
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["kind"], "no_evidence")
         self.assertEqual(response.json()["references"], [])
         self.assertIn("No supporting source", response.json()["answer"])
+
+    def test_exact_small_talk_skips_retrieval_and_records_typed_outcome(self):
+        with patch(
+            "core.views._public_search_rate_limited",
+            return_value=False,
+        ), patch("core.views.detect_folder_by_keywords_multi") as detect_folders, patch(
+            "core.views.search_pdf_folders"
+        ) as search_folders, self.assertLogs("core.views", level="INFO") as captured:
+            response = self.client.post(reverse("search_query"), {"query": "Hello!"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["kind"], "small_talk")
+        self.assertEqual(response.json()["references"], [])
+        detect_folders.assert_not_called()
+        search_folders.assert_not_called()
+        logs = "\n".join(captured.output)
+        self.assertIn("search_completed route=small_talk outcome=greeting", logs)
+        self.assertNotIn("Hello", logs)
+
+    def test_updated_rules_query_reaches_document_search(self):
+        diagnostics = {
+            "folders_scanned": 2,
+            "integrity_failures": 0,
+            "candidates": 0,
+        }
+        with patch(
+            "core.views._public_search_rate_limited",
+            return_value=False,
+        ), patch(
+            "core.views.detect_folder_by_keywords_multi",
+            return_value=[],
+        ), patch(
+            "core.views.search_pdf_folders",
+            return_value=("", [], diagnostics),
+        ) as search_folders:
+            response = self.client.post(
+                reverse("search_query"),
+                {"query": "give me most updated rules about societies"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["kind"], "no_evidence")
+        search_folders.assert_called_once()
 
     def test_search_telemetry_never_records_query_content(self):
         with self.assertLogs("core.views", level="INFO") as captured:
@@ -288,7 +370,7 @@ class PublicSearchRoutingViewTests(TestCase):
         with override_settings(
             PUBLIC_SEARCH_ALL_FOLDERS=False,
             PUBLIC_SEARCH_FOLDER_IDS=frozenset({self.second.pk}),
-        ), patch("core.views.is_general_query", return_value=False), patch(
+        ), patch("core.views.classify_small_talk_query", return_value=None), patch(
             "core.views._public_search_rate_limited",
             return_value=False,
         ), patch(
