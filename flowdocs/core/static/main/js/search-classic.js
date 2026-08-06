@@ -41,6 +41,9 @@
     wordCounter.textContent = `${count}/30 ${wordCounter.dataset.label || "words"}`;
     wordCounter.classList.toggle("is-over-limit", count > 30);
     sendBtn.disabled = count === 0 || count > 30 || Boolean(activeController);
+    document.querySelectorAll(".classic-retry").forEach(retry => {
+      retry.disabled = Boolean(activeController);
+    });
   }
 
   wordCounter.dataset.label = wordCounter.textContent.replace(/^0\/30\s*/u, "").trim();
@@ -51,7 +54,7 @@
     message.className = `classic-message classic-message--${kind}`;
     message.textContent = text;
     chatMain.appendChild(message);
-    chatMain.scrollTop = chatMain.scrollHeight;
+    revealMessage(message);
     return message;
   }
 
@@ -74,7 +77,7 @@
     };
     updateStage();
     stageTimer = window.setInterval(updateStage, 2200);
-    chatMain.scrollTop = chatMain.scrollHeight;
+    revealMessage(message);
     return message;
   }
 
@@ -91,18 +94,12 @@
 
     const answerBody = document.createElement("div");
     answerBody.className = "classic-message__answer";
-    const paragraphs = String(answer || "")
-      .split(/\n{2,}/u)
-      .map(value => value.trim())
-      .filter(Boolean);
-    for (const paragraphText of paragraphs.length ? paragraphs : [String(answer || "")]) {
-      const paragraph = document.createElement("p");
-      paragraph.textContent = paragraphText;
-      answerBody.appendChild(paragraph);
-    }
+    appendFormattedAnswer(answerBody, String(answer || ""));
     message.appendChild(answerBody);
 
-    const safeReferences = Array.isArray(references) ? references : [];
+    const safeReferences = kind === "evidence_answer" && Array.isArray(references)
+      ? references
+      : [];
     if (safeReferences.length) {
       const referencesRegion = document.createElement("section");
       referencesRegion.className = "classic-references";
@@ -117,7 +114,92 @@
     }
 
     chatMain.appendChild(message);
-    chatMain.scrollTop = chatMain.scrollHeight;
+    revealMessage(message, true);
+  }
+
+  function revealMessage(message, alignStart = false) {
+    if (!alignStart) {
+      chatMain.scrollTop = chatMain.scrollHeight;
+      return;
+    }
+    const transcriptRect = chatMain.getBoundingClientRect();
+    const messageRect = message.getBoundingClientRect();
+    chatMain.scrollTop += messageRect.top - transcriptRect.top;
+  }
+
+  function appendFormattedAnswer(parent, value) {
+    const lines = value.replace(/\r\n?/gu, "\n").split("\n");
+    let paragraphLines = [];
+    let list = null;
+
+    const flushParagraph = () => {
+      if (!paragraphLines.length) return;
+      const paragraph = document.createElement("p");
+      paragraphLines.forEach((line, index) => {
+        if (index) paragraph.appendChild(document.createElement("br"));
+        appendInlineFormatting(paragraph, line);
+      });
+      parent.appendChild(paragraph);
+      paragraphLines = [];
+    };
+
+    const closeList = () => {
+      list = null;
+    };
+
+    lines.forEach(rawLine => {
+      const line = rawLine.trim();
+      if (!line) {
+        flushParagraph();
+        closeList();
+        return;
+      }
+
+      const headingMatch = line.match(/^(#{1,3})\s+(.+)$/u);
+      if (headingMatch) {
+        flushParagraph();
+        closeList();
+        const heading = document.createElement("h3");
+        appendInlineFormatting(heading, headingMatch[2]);
+        parent.appendChild(heading);
+        return;
+      }
+
+      const orderedMatch = line.match(/^\d+[.)]\s+(.+)$/u);
+      const unorderedMatch = line.match(/^[-*]\s+(.+)$/u);
+      const listMatch = orderedMatch || unorderedMatch;
+      if (listMatch) {
+        flushParagraph();
+        const listTag = orderedMatch ? "ol" : "ul";
+        if (!list || list.tagName.toLowerCase() !== listTag) {
+          list = document.createElement(listTag);
+          parent.appendChild(list);
+        }
+        const item = document.createElement("li");
+        appendInlineFormatting(item, listMatch[1]);
+        list.appendChild(item);
+        return;
+      }
+
+      closeList();
+      paragraphLines.push(line);
+    });
+
+    flushParagraph();
+    if (!parent.childElementCount) parent.appendChild(document.createElement("p"));
+  }
+
+  function appendInlineFormatting(parent, value) {
+    const tokens = value.split(/(\*\*[^*]+\*\*)/gu);
+    tokens.forEach(token => {
+      if (token.startsWith("**") && token.endsWith("**") && token.length > 4) {
+        const strong = document.createElement("strong");
+        strong.textContent = token.slice(2, -2);
+        parent.appendChild(strong);
+        return;
+      }
+      parent.appendChild(document.createTextNode(token));
+    });
   }
 
   function createReferenceCard(reference) {
@@ -153,13 +235,20 @@
 
   function safeReferenceUrl(reference) {
     let candidate = reference?.url || "";
-    if (!candidate && reference?.pdf_id) {
-      candidate = form.dataset.viewPdfUrl.replace(/\/0\/?$/u, `/${reference.pdf_id}/`);
+    const pdfId = Number(reference?.pdf_id);
+    if (!candidate && Number.isSafeInteger(pdfId) && pdfId > 0) {
+      candidate = (form.dataset.publicPdfUrl || "").replace(
+        /\/pdf\/0\/public\/?$/u,
+        `/pdf/${pdfId}/public/`,
+      );
     }
     if (!candidate) return "";
     try {
       const parsed = new URL(candidate, window.location.origin);
-      return parsed.origin === window.location.origin ? parsed.href : "";
+      const protectedPdf = /^\/pdf\/[1-9]\d*\/(?:public|view)\/$/u.test(parsed.pathname);
+      return parsed.origin === window.location.origin && protectedPdf
+        ? parsed.href
+        : "";
     } catch (_error) {
       return "";
     }
@@ -168,6 +257,7 @@
   function appendError(title, detail, retryQuery) {
     const message = document.createElement("article");
     message.className = "classic-message classic-message--assistant classic-message--error";
+    message.setAttribute("role", "alert");
     const heading = document.createElement("strong");
     heading.textContent = title;
     const explanation = document.createElement("p");
@@ -178,7 +268,9 @@
       retry.className = "classic-retry";
       retry.type = "button";
       retry.textContent = retryLabel;
+      retry.disabled = Boolean(activeController);
       retry.addEventListener("click", () => {
+        if (activeController) return;
         userQuery.value = retryQuery;
         updateComposerState();
         form.requestSubmit();
@@ -186,7 +278,7 @@
       message.appendChild(retry);
     }
     chatMain.appendChild(message);
-    chatMain.scrollTop = chatMain.scrollHeight;
+    revealMessage(message);
   }
 
   function errorCopy(status, payload) {
@@ -199,7 +291,23 @@
     if (status === 503 || payload?.error === "search_unavailable") {
       return [messages.search_unavailable || "Search unavailable", messages.unavailable || messages.try_later || "Please try again later."];
     }
+    if (status === 401) {
+      return [messages.search_unavailable || "Search unavailable", messages.sign_in || "Please sign in to search."];
+    }
+    if (status === 403) {
+      return [messages.search_unavailable || "Search unavailable", messages.security || "Refresh the page and try again."];
+    }
     return [messages.unexpected || "Something went wrong", messages.request_failed || messages.try_again || "Please try again."];
+  }
+
+  function isValidSuccessPayload(payload) {
+    return Boolean(
+      payload
+      && typeof payload === "object"
+      && responseKinds.has(payload.kind)
+      && typeof payload.answer === "string"
+      && payload.answer.trim(),
+    );
   }
 
   async function submitSearch(event) {
@@ -236,24 +344,27 @@
         credentials: "same-origin",
         signal: activeController.signal,
       });
-      let payload = {};
+      let payload = null;
       try {
         payload = await response.json();
       } catch (_error) {
-        payload = {};
+        payload = null;
       }
-      if (!response.ok || payload.error) {
+      if (!response.ok || payload?.error) {
         const [title, detail] = errorCopy(response.status, payload);
         appendError(
           title,
-          payload.detail || detail,
+          detail,
           response.status >= 500 || response.status === 429 ? query : "",
         );
+      } else if (!isValidSuccessPayload(payload)) {
+        const [title, detail] = errorCopy(502, null);
+        appendError(title, detail, query);
       } else {
         appendAnswer(
-          payload.answer || "",
-          payload.references || [],
-          payload.kind || "evidence_answer",
+          payload.answer,
+          payload.kind === "evidence_answer" ? (payload.references || []) : [],
+          payload.kind,
           payload.language || "",
         );
       }
@@ -271,7 +382,11 @@
       activeController = null;
       chatMain.setAttribute("aria-busy", "false");
       updateComposerState();
-      userQuery.focus();
+      try {
+        userQuery.focus({preventScroll: true});
+      } catch (_error) {
+        userQuery.focus();
+      }
     }
   }
 

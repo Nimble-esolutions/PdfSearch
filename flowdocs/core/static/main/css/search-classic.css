@@ -28,11 +28,12 @@ html {
 
 body.classic-search {
   display: grid;
-  min-height: 100%;
-  min-height: 100svh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   margin: 0;
-  grid-template-rows: auto auto minmax(360px, 1fr) auto;
-  overflow-x: clip;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
   color: var(--classic-ink);
   background: var(--classic-canvas);
   font-family: "Noto Sans Devanagari", Mangal, "Kohinoor Devanagari",
@@ -52,7 +53,8 @@ body.classic-search {
 .classic-search a:focus-visible,
 .classic-search button:focus-visible,
 .classic-search input:focus-visible,
-.classic-search summary:focus-visible {
+.classic-search summary:focus-visible,
+.classic-chat__messages:focus-visible {
   outline: 3px solid var(--classic-focus);
   outline-offset: 3px;
 }
@@ -162,19 +164,21 @@ body.classic-search {
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  padding: 26px 25px 16px;
+  overflow: hidden;
+  padding: 26px 25px max(16px, env(safe-area-inset-bottom));
   background: var(--classic-canvas);
 }
 
 .classic-chat__messages {
   display: flex;
   min-width: 0;
-  min-height: 120px;
+  min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 12px;
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 2px 1px 20px;
   scroll-behavior: smooth;
 }
@@ -246,8 +250,20 @@ body.classic-search {
 }
 
 .classic-message__answer { white-space: normal; }
+.classic-message__answer h3 {
+  margin: 0 0 8px;
+  font-size: 1.05em;
+  line-height: 1.35;
+}
 .classic-message__answer p { margin: 0 0 10px; }
 .classic-message__answer p:last-child { margin-bottom: 0; }
+.classic-message__answer ol,
+.classic-message__answer ul {
+  margin: 0 0 10px;
+  padding-inline-start: 1.55em;
+}
+.classic-message__answer li { margin-block: 5px; }
+.classic-message__answer > :last-child { margin-bottom: 0; }
 
 .classic-retry {
   min-height: 40px;
@@ -395,7 +411,7 @@ body.classic-search {
 
 .classic-footer {
   min-height: 70px;
-  padding: 9px 15px;
+  padding: 9px 15px max(9px, env(safe-area-inset-bottom));
   background: #f8f9fa;
   border-top: 1px solid #d7dadd;
 }
@@ -425,7 +441,7 @@ body.classic-search {
 .classic-cookie {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
   z-index: 50;
   width: min(420px, calc(100% - 32px));
   padding: 14px;
@@ -449,7 +465,7 @@ body.classic-search {
 }
 
 @media (max-width: 768px) {
-  body.classic-search { grid-template-rows: auto auto minmax(330px, 1fr) auto; font-size: 15px; }
+  body.classic-search { font-size: 15px; }
   .classic-utility { font-size: 13px; }
   .classic-utility__inner { width: calc(100% - 16px); gap: 7px; }
   .classic-utility__inner > span { color: rgba(255, 255, 255, .48); }
@@ -457,7 +473,7 @@ body.classic-search {
   .classic-banner__title { padding-inline: 25%; }
   .classic-banner__title h1 { font-size: clamp(18px, 5.5vw, 25px); }
   .classic-banner__title p { font-size: clamp(11px, 3.3vw, 15px); }
-  .classic-chat { padding: 18px 16px 10px; }
+  .classic-chat { padding: 18px 16px max(10px, env(safe-area-inset-bottom)); }
   .classic-message--welcome { max-width: 92%; font-size: 16px; }
   .classic-message--user { max-width: 90%; }
   .classic-composer { grid-template-columns: minmax(0, 1fr) auto 42px 42px; gap: 5px; }
@@ -469,7 +485,10 @@ body.classic-search {
   .classic-icon-link img { width: 38px; height: 38px; }
   .classic-composer__status { grid-template-columns: 75px minmax(0, 1fr); font-size: 11px; }
   .classic-composer__status::after { content: ""; }
-  .classic-footer { min-height: 58px; padding-block: 6px; }
+  .classic-footer {
+    min-height: 58px;
+    padding: 6px 15px max(6px, env(safe-area-inset-bottom));
+  }
   .classic-footer__inner { min-height: 44px; }
   .classic-footer p { font-size: 12px; }
   .classic-footer nav { gap: 7px; font-size: 10px; }
