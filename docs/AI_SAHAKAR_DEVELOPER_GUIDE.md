@@ -10,7 +10,9 @@
 AI Sahakar has isolated Classic and Knowledge Workbench public frontends over
 one secured search backend. Read the UI contract before touching either public
 view or the admin interface. Do not solve presentation drift by sharing CSS,
-JavaScript, or template fragments across the two public themes.
+JavaScript, or template fragments *between* the two themes. A theme-specific
+header partial may be reused by that same theme's search and public-information
+shell so identity and navigation cannot drift.
 
 ## File map
 
@@ -19,11 +21,14 @@ JavaScript, or template fragments across the two public themes.
 | Theme selector | `flowdocs/core/search_ui.py`, allowlisted `SiteSetting` and request-only override |
 | Classic frontend | `search_classic.html`, `search-classic.css`, `search-classic.js` |
 | Workbench frontend | `search.html`, `civic-workbench.css`, `search.css`, `search.js` |
+| Theme-specific public headers | `components/public/classic_header.html`, `components/public/workbench_header.html` |
+| Public information shell | `legal_base.html`, `terms.html`, `privacy.html`, `disclaimer.html`, `data_policy.html`, `cookie_policy.html` |
+| Public information assets | `public-legal.css`, `public-legal.js` |
 | Shared public backend | `flowdocs/core/views.py`, existing search URL and JSON/PDF contract |
 | Admin shell | `flowdocs/core/templates/base.html`, `dashboard.html` |
 | Admin styling | `flowdocs/core/static/main/css/style.css` |
 | Locale catalogs | `flowdocs/locale/en/LC_MESSAGES/django.po`, `flowdocs/locale/mr/LC_MESSAGES/django.po` |
-| Browser coverage | `browser_tests/classic-search.spec.ts`, `browser_tests/civic-workbench.spec.ts`, `browser_tests/search-motion.spec.ts` |
+| Browser coverage | `browser_tests/classic-search.spec.ts`, `browser_tests/civic-workbench.spec.ts`, `browser_tests/search-motion.spec.ts`, `browser_tests/public-legal.spec.ts` |
 
 Use existing Django partials, translation tags, `json_script`, and CSS tokens.
 Do not copy production data or secrets into fixtures.
@@ -40,6 +45,27 @@ protected PDF URLs, CSRF, authentication, locale session, and approved public
 links. Each frontend owns its markup, state rendering, accessibility behavior,
 responsive layout, CSS selectors, and JavaScript lifecycle. A change to one
 theme must not require loading the other's static files.
+
+Public information routes use `_public_view_context()` and
+`_render_legal_page()` in `core.views`. They may reuse the matching theme's
+header partial, but use only `legal_base.html`, `public-legal.css`, and
+`public-legal.js` for document layout and behavior. Preserve only a valid
+`?view=classic|workbench` across return, policy-navigation, and locale URLs;
+discard unknown values and keep canonical URLs query-free.
+
+### Search intent and answer language
+
+Both themes consume one backward-compatible JSON contract with `answer` and
+`references` plus typed `kind` and backend-resolved `language`. Never classify
+intent or infer answer language in frontend code. Exact whole-query small-talk
+matching prevents domain words such as `updated` or `membership` from
+colliding with short greeting/date tokens.
+
+Derive answer language from the question. Use the page/client locale only when
+the query has no language-bearing letters. Validate the dominant script before
+caching a provider answer, allow one bounded repair attempt, and return the
+explicit `answer_language_mismatch` error if repair still fails. Both themes
+must apply the returned `language` to the rendered answer's `lang` attribute.
 
 ## Operator presentation API
 
@@ -232,6 +258,7 @@ python3 -m unittest scripts.ci.test_operator_language
 python3 scripts/ci/validate_operator_language.py
 node --check flowdocs/core/static/main/js/search.js
 node --check flowdocs/core/static/main/js/search-classic.js
+node --check flowdocs/core/static/main/js/public-legal.js
 ```
 
 For UI changes, run the repository browser suite with the disposable local

@@ -1,17 +1,17 @@
 {% extends "legal_base.html" %}
 {% block content %}
-<article class="legal-document container mt-4 mb-5">
-  <h1>Data Policy</h1>
+<article class="legal-document" lang="en">
   <p class="text-muted">Last updated: {{ legal_last_updated }}</p>
 
   <h2>1. Purpose and Scope</h2>
-  <p>This Data Policy explains how data within the Sahakar AI platform is classified, stored, retained, backed up, and deleted. It supplements our <a href="{% url 'privacy' %}">Privacy Policy</a> and is published in alignment with the data protection obligations under the Digital Personal Data Protection Act, 2023 (DPDA) and the Information Technology Act, 2000.</p>
+  <p>This Data Policy explains how data within the Sahakar AI platform is classified, stored, retained, backed up, and deleted. It supplements our <a href="{% url 'privacy' %}{{ public_view_query }}">Privacy Policy</a> and is published in alignment with the data protection obligations under the Digital Personal Data Protection Act, 2023 (DPDA) and the Information Technology Act, 2000.</p>
 
   <h2>2. Data Classification</h2>
   <p>Data within the Platform is classified into the following categories:</p>
-  <table class="table table-bordered">
+  <table class="table table-bordered" tabindex="0">
+    <caption>Service data classifications</caption>
     <thead>
-      <tr><th>Category</th><th>Description</th><th>Examples</th></tr>
+      <tr><th scope="col">Category</th><th scope="col">Description</th><th scope="col">Examples</th></tr>
     </thead>
     <tbody>
       <tr>
@@ -39,9 +39,10 @@
 
   <h2>3. Data Retention Periods</h2>
   <p>In accordance with the principle of storage limitation under the DPDA 2023, data is retained only for as long as necessary for the specified purpose:</p>
-  <table class="table table-bordered">
+  <table class="table table-bordered" tabindex="0">
+    <caption>Service data retention schedule</caption>
     <thead>
-      <tr><th>Data Type</th><th>Retention Period</th><th>Notes</th></tr>
+      <tr><th scope="col">Data Type</th><th scope="col">Retention Period</th><th scope="col">Notes</th></tr>
     </thead>
     <tbody>
       <tr>

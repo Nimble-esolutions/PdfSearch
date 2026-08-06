@@ -43,12 +43,12 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains `690ed888b30c0b61ce2ac3bc5824457469b83cf0` | PR #185 is merged; Classic and Workbench are both part of the integration baseline |
+| Repository integration baseline | `dev` contains `1067c054edd6a21a7881371ca0670e428dc4cc81` | PRs #185 and #186 are merged; both themes and the typed, question-language response contract are integrated |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
-| Stage application artifact | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:b38d887f784a141fe5c3d2d2ca68e721b96d92b76a50e71129d7dcbac120323c` | Running OCI revision is `690ed888b30c0b61ce2ac3bc5824457469b83cf0` (PR #185) |
-| Repository versus stage | Stage and `dev` both run revision `690ed888b30c0b61ce2ac3bc5824457469b83cf0` | The search-intent correction described below is locally verified but not yet merged or deployed |
+| Stage application artifact | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc` | Web and maintenance are healthy on the same image ID and OCI revision `1067c054edd6a21a7881371ca0670e428dc4cc81` |
+| Repository versus stage | Stage and `dev` both run revision `1067c054edd6a21a7881371ca0670e428dc4cc81` | Stage canaries passed for both themes and both language directions |
 | Stage readiness | `status=ready`; database, cache, migrations, data, backup, and DataOps checks are `ok` | Backup, restore, and import actions report `ready` |
 | Stage inventory | 242 PDF rows, 242 indexed PDFs, 46 folders, 7 users | Indexing ratio is `1.0` |
 | Signed runtime | Generation `dataops-import-legacy-20260802-86288855-stage-2026` | Signature verifies; runtime pointer is authoritative |
@@ -103,23 +103,20 @@ backup remains off unless the operator explicitly changes that policy.
 | Public search presentation | Classic search is the fail-closed primary view; Knowledge Workbench remains isolated and can be selected by a superadmin or previewed with `?view=workbench` |
 | Public search response contract | Exact standalone greetings/thanks/identity prompts are `small_talk`; document questions are `evidence_answer` or `no_evidence`; `language` follows the question (`en`/`mr`), not the selected UI; both themes consume the same typed JSON contract |
 
-The last controlled evidence search confirmed that `Society election rules`
-returned a real answer with three protected references. The exact stage query
-`give me most updated rules about societies` instead returned the generic
-greeting because the legacy small-talk predicate used substring matching:
-`updated` contains `date`, while ordinary words such as `this`, `membership`,
-and `historical` contain `hi`. This predates the theme engine and is a shared
-backend defect, not a Classic- or Workbench-specific failure.
+PR #186 corrected the legacy substring small-talk predicate that caused words
+such as `updated` and `membership` to collide with `date` or `hi`. Matching is
+now normalized and whole-query, responses are typed, and the backward-compatible
+`answer` and `references` fields remain stable. Answer language is derived from
+the question, validated against the returned script before caching, and repaired
+once before failing explicitly.
 
-The current correction uses normalized whole-query intent matching, adds typed
-response outcomes, and retains the existing `answer` and `references` fields
-for compatibility. It also derives answer language from the question instead
-of the page locale, validates the model's output script before caching, and
-performs one bounded repair attempt before failing explicitly. Its packaged
-image verification covers 52 Django tests, 60 Playwright checks across both
-themes and four viewports, and real endpoint probes in both language directions.
-Do not call it deployed until its merged OCI revision and stage canaries are
-recorded here.
+The certified release passed the disposable runtime, activation, RustFS, MinIO,
+browser, and package gates. Stage canaries then proved Classic and Workbench
+rendering plus both mismatched-locale directions: Marathi input posted as English
+returned Marathi/Devanagari evidence with three references, and English input
+posted as Marathi returned English/Latin evidence with three references. The
+active generation remained `dataops-import-legacy-20260802-86288855-stage-2026`
+and indexing remained `1.0`.
 
 ## Recently completed work
 
@@ -135,6 +132,8 @@ recorded here.
 | #183 | Corrected Compose volume-ownership recovery guidance |
 | #184 | Established this enforced living project handoff |
 | #185 | Rebuilt the approved Classic public search as the primary view while preserving an isolated Knowledge Workbench secondary view |
+| #186 | Corrected search-intent false positives and enforced question-derived English/Marathi answer language across both themes |
+| #187 (in review) | Adds a standalone, theme-consistent shell for Terms, Privacy, Disclaimer, Data Policy, and Cookie Policy; locally verified but not yet stage evidence |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -145,31 +144,27 @@ no ownership warning.
 
 ## Open decisions and next actions
 
-There is no data-readiness blocker. The active search-intent candidate must be
-merged and deployed before the reported greeting misclassification is resolved
-on stage. Remaining work is decision-driven:
+There is no data-readiness or search-language blocker. Remaining operational
+work is decision-driven:
 
-1. **Future production project:** create and validate the dedicated 2026
+1. **Public information rollout:** finish PR #187 checks/review, merge only when
+   green, certify the new image, deploy stage web and maintenance without
+   touching volumes, and canary all five routes in both themes plus both
+   mismatched-locale answer directions.
+2. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
-2. **Production rehearsal:** before traffic changes, select an immutable image,
+3. **Production rehearsal:** before traffic changes, select an immutable image,
    validate rendered Compose and key-only environment posture, restore into
    isolated production-candidate volumes, run search/PDF/auth smoke checks, and
    record rollback image and generation.
-3. **Production cutover:** remains out of scope until separately authorized.
+4. **Production cutover:** remains out of scope until separately authorized.
    Do not change legacy service routing or `prod_flowdocs` while preparing it.
-4. **Stage recovery retest:** run another manual backup and disposable restore
+5. **Stage recovery retest:** run another manual backup and disposable restore
    only when recovery/data contracts change or when explicitly requested.
-5. **Local development:** start the native development stack and rerun focused
+6. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
-6. **Search-intent release:** publish the verified candidate through the normal
-   image pipeline, deploy it to stage, and canary `/` plus
-   `/?view=workbench`. Prove exact greetings remain `small_talk`, the reported
-   rules query enters evidence search, source links render safely, and the
-   signed runtime/readiness evidence remains unchanged. Ask a Marathi question
-   from the English UI and an English question from the Marathi UI; each answer
-   must follow the question language. No ENV or database migration is required.
 
 ## Known traps that must not recur
 

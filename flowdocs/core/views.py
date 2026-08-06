@@ -1433,29 +1433,100 @@ def _folder_index_operation_state():
     }
 
 # ---------------- DPDA / Legal Pages ----------------
-LEGAL_NAVIGATION = (
-    ("privacy", gettext("Privacy Policy")),
-    ("terms", gettext("Terms of Service")),
-    ("data_policy", gettext("Data Policy")),
-    ("cookie_policy", gettext("Cookie Policy")),
-    ("disclaimer", gettext("Disclaimer")),
-)
+LEGAL_PAGE_DEFINITIONS = {
+    "privacy": {
+        "title": "Privacy Policy",
+        "navigation_label": "Privacy",
+        "description": "How Sahakar AI collects, uses, protects, and retains personal data.",
+        "template_name": "privacy.html",
+    },
+    "terms": {
+        "title": "Terms of Service",
+        "navigation_label": "Terms",
+        "description": "The terms that govern public and authorized use of Sahakar AI.",
+        "template_name": "terms.html",
+    },
+    "data_policy": {
+        "title": "Data Policy",
+        "navigation_label": "Data Policy",
+        "description": "How Sahakar AI classifies, stores, retains, and deletes service data.",
+        "template_name": "data_policy.html",
+    },
+    "cookie_policy": {
+        "title": "Cookie Policy",
+        "navigation_label": "Cookies",
+        "description": "The essential cookies used by Sahakar AI and how to control them.",
+        "template_name": "cookie_policy.html",
+    },
+    "disclaimer": {
+        "title": "Disclaimer",
+        "navigation_label": "Disclaimer",
+        "description": "Important limits on AI-generated information and official-source precedence.",
+        "template_name": "disclaimer.html",
+    },
+}
+
+
+def _public_view_context(request):
+    """Resolve one allowlisted public presentation and preserve valid previews."""
+    requested_view = supported_search_view(request.GET.get("view"))
+    search_view = resolve_search_view(request.GET.get("view"))
+    view_query = f"?view={requested_view}" if requested_view else ""
+    return {
+        "search_view": search_view,
+        "public_view_query": view_query,
+        "public_home_url": f"{reverse('home')}{view_query}",
+        "public_current_url": f"{request.path}{view_query}",
+    }
+
+
+def _render_legal_page(request, page_key):
+    page = LEGAL_PAGE_DEFINITIONS[page_key]
+    public_view = _public_view_context(request)
+    view_query = public_view["public_view_query"]
+    legal_navigation = [
+        {
+            "route": route,
+            "label": gettext(definition["navigation_label"]),
+            "url": f"{reverse(route)}{view_query}",
+        }
+        for route, definition in LEGAL_PAGE_DEFINITIONS.items()
+    ]
+    return render(
+        request,
+        page["template_name"],
+        {
+            **public_view,
+            "title": gettext(page["title"]),
+            "legal_description": gettext(page["description"]),
+            "canonical_url": f"https://ai-sahakar.net{reverse(page_key)}",
+            "legal_navigation": legal_navigation,
+            "privacy_url": f"{reverse('privacy')}{view_query}",
+            "cookie_policy_url": f"{reverse('cookie_policy')}{view_query}",
+            "locate_us_url": PUBLIC_LOCATE_US_URL,
+            "public_policy_page": True,
+        },
+    )
 
 
 def privacy_view(request):
-    return render(request, "privacy.html", {"title": "Privacy Policy", "legal_navigation": LEGAL_NAVIGATION})
+    return _render_legal_page(request, "privacy")
+
 
 def terms_view(request):
-    return render(request, "terms.html", {"title": "Terms of Service", "legal_navigation": LEGAL_NAVIGATION})
+    return _render_legal_page(request, "terms")
+
 
 def data_policy_view(request):
-    return render(request, "data_policy.html", {"title": "Data Policy", "legal_navigation": LEGAL_NAVIGATION})
+    return _render_legal_page(request, "data_policy")
+
 
 def cookie_policy_view(request):
-    return render(request, "cookie_policy.html", {"title": "Cookie Policy", "legal_navigation": LEGAL_NAVIGATION})
+    return _render_legal_page(request, "cookie_policy")
+
 
 def disclaimer_view(request):
-    return render(request, "disclaimer.html", {"title": "Disclaimer", "legal_navigation": LEGAL_NAVIGATION})
+    return _render_legal_page(request, "disclaimer")
 
 
 # -------------- Dashboard upload: queue durable processing --------------
@@ -1926,6 +1997,7 @@ def search_query(request):
                 redirect_target = f"{redirect_target}?view={requested_view}"
             return redirect(redirect_target, permanent=True)
         search_view = resolve_search_view(request.GET.get("view"))
+        public_view = _public_view_context(request)
         searchable_scope = visible_pdfs(
             request.user,
             public=not request.user.is_authenticated,
@@ -2024,7 +2096,7 @@ def search_query(request):
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
                 "locate_us_url": PUBLIC_LOCATE_US_URL,
                 "feedback_url": PUBLIC_FEEDBACK_URL,
-                "search_view": search_view,
+                **public_view,
                 "primary_search_view": get_primary_search_view(),
                 "indexed_count": searchable_scope.filter(indexed=True).count(),
                 "total_count": searchable_scope.count(),

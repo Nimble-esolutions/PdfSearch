@@ -1,0 +1,45 @@
+{% load static i18n %}
+<nav class="classic-utility" aria-label="{% trans 'Public service links' %}">
+  <div class="classic-utility__inner">
+    {% if user.is_authenticated %}
+      <a href="{% url 'dashboard' %}">{% trans "Dashboard" %}</a>
+    {% else %}
+      <a href="{% url 'login' %}">{% trans "Admin Login" %}</a>
+    {% endif %}
+    <span aria-hidden="true">|</span>
+    {% if public_policy_page %}
+      <a href="{{ public_home_url }}">{% trans "Return to search" %}</a>
+    {% else %}
+      <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" target="_blank" rel="noopener noreferrer">{% trans "Home" %}</a>
+    {% endif %}
+    <span aria-hidden="true">|</span>
+    <a href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">{% trans "Locate Us" %}</a>
+    <span aria-hidden="true">|</span>
+    <form action="{% url 'set_language' %}" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ public_current_url }}">
+      {% if request.LANGUAGE_CODE == 'en' %}
+        <input type="hidden" name="language" value="mr">
+        <button type="submit">मराठी</button>
+      {% else %}
+        <input type="hidden" name="language" value="en">
+        <button type="submit">English</button>
+      {% endif %}
+    </form>
+    {% if user.is_authenticated %}
+      <span aria-hidden="true">|</span>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">{% trans "Logout" %}</button></form>
+    {% endif %}
+  </div>
+</nav>
+
+<header class="classic-banner" aria-labelledby="classicServiceTitle">
+  <picture aria-hidden="true">
+    <source media="(max-width: 768px)" srcset="{% static 'main/images/search-classic-banner-mobile.webp' %}">
+    <img src="{% static 'main/images/search-classic-banner.webp' %}" width="1920" height="120" alt="">
+  </picture>
+  <div class="classic-banner__title">
+    {% if public_policy_page %}<p class="classic-banner__heading" id="classicServiceTitle">{% trans "AI Enabled Search" %}</p>{% else %}<h1 id="classicServiceTitle">{% trans "AI Enabled Search" %}</h1>{% endif %}
+    <p>{% trans "Registrar Co-operative Societies" %}</p>
+  </div>
+</header>

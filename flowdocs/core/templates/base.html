@@ -141,11 +141,11 @@
       <strong>{% trans "Registrar Co-operative Societies, Maharashtra" %}</strong>
       <small>{% trans "All rights reserved." %}</small>
       <nav aria-label="{% trans 'Legal links' %}">
-          <a href="{% url 'privacy' %}">{% trans "Privacy" %}</a> |
-          <a href="{% url 'terms' %}">{% trans "Terms" %}</a> |
-          <a href="{% url 'data_policy' %}">{% trans "Data Policy" %}</a> |
-          <a href="{% url 'cookie_policy' %}">{% trans "Cookies" %}</a> |
-          <a href="{% url 'disclaimer' %}">{% trans "Disclaimer" %}</a>
+          <a href="{% url 'privacy' %}{{ public_view_query }}">{% trans "Privacy" %}</a> |
+          <a href="{% url 'terms' %}{{ public_view_query }}">{% trans "Terms" %}</a> |
+          <a href="{% url 'data_policy' %}{{ public_view_query }}">{% trans "Data Policy" %}</a> |
+          <a href="{% url 'cookie_policy' %}{{ public_view_query }}">{% trans "Cookies" %}</a> |
+          <a href="{% url 'disclaimer' %}{{ public_view_query }}">{% trans "Disclaimer" %}</a>
       </nav>
     </div>
     <div class="admin-footer__credit">
@@ -165,8 +165,8 @@
       <p>{% trans "This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used." %}</p>
     </div>
     <div class="cookie-consent__actions">
-      <a href="{% url 'cookie_policy' %}">{% trans "Cookie Policy" %}</a>
-      <a href="{% url 'privacy' %}">{% trans "Privacy Policy" %}</a>
+      <a href="{% url 'cookie_policy' %}{{ public_view_query }}">{% trans "Cookie Policy" %}</a>
+      <a href="{% url 'privacy' %}{{ public_view_query }}">{% trans "Privacy Policy" %}</a>
       <button type="button" class="cookie-consent__accept" onclick="document.getElementById('cookieConsent').classList.add('d-none');localStorage.setItem('cookieConsent','accepted')">{% trans "Accept" %}</button>
     </div>
   </div>

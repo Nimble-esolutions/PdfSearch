@@ -1200,35 +1200,6 @@ body {
     padding: 0.55rem 0;
   }
 
-  .legal-header__inner,
-  .legal-nav__inner {
-    width: min(100% - 1rem, 1180px);
-  }
-
-  .legal-header__return {
-    font-size: 0.78rem;
-  }
-
-  .legal-nav__inner {
-    flex-wrap: wrap;
-    gap: 0.25rem 0.6rem;
-    padding: 0.45rem 0;
-  }
-
-  .legal-nav__label {
-    width: 100%;
-  }
-
-  .legal-nav__links {
-    order: 2;
-    width: 100%;
-  }
-
-  .legal-nav form {
-    order: 1;
-    margin-left: auto;
-  }
-
   .admin-panel {
     padding: 0.875rem;
   }
@@ -1490,194 +1461,6 @@ body {
   }
 }
 
-.legal-header {
-  width: 100%;
-  background: var(--admin-surface);
-  border-bottom: 3px solid var(--admin-gold);
-}
-
-.legal-header__inner,
-.legal-nav__inner {
-  width: min(1180px, calc(100% - 2rem));
-  margin: 0 auto;
-}
-
-.legal-header__inner {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.8rem 0;
-}
-
-.legal-header__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
-  border: 2px solid var(--admin-gold);
-  border-radius: 50%;
-  background: var(--admin-primary-strong);
-  color: var(--admin-surface);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.legal-header__identity {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.legal-header__identity p {
-  margin: 0;
-  color: var(--admin-primary);
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-
-.legal-header__identity span {
-  display: block;
-  margin-top: 0.1rem;
-  color: var(--admin-muted);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.legal-header__return {
-  color: var(--admin-primary);
-  font-size: 0.84rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.legal-header__return:hover,
-.legal-header__return:focus-visible {
-  color: var(--admin-primary-strong);
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-.legal-nav {
-  background: var(--admin-primary-strong);
-  color: var(--admin-surface);
-}
-
-.legal-nav__inner {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-height: 42px;
-}
-
-.legal-nav__label {
-  flex: 0 0 auto;
-  color: #f3d9a2;
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.legal-nav__links {
-  display: flex;
-  align-items: center;
-  gap: 0.15rem;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-}
-
-.legal-nav a,
-.legal-nav button {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0.3rem 0.55rem;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: #f4ede3;
-  font: inherit;
-  font-size: 0.82rem;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.legal-nav a:hover,
-.legal-nav a:focus-visible,
-.legal-nav a[aria-current="page"],
-.legal-nav button:hover,
-.legal-nav button:focus-visible {
-  border-color: rgba(199, 145, 59, 0.6);
-  background: rgba(199, 145, 59, 0.18);
-  color: #fffdf7;
-}
-
-.legal-nav form {
-  flex: 0 0 auto;
-  margin: 0;
-}
-
-.legal-shell .admin-main {
-  width: 100%;
-  margin: 0;
-}
-
-.legal-shell .admin-footer {
-  background: var(--admin-surface);
-}
-
-.legal-document {
-  max-width: 920px;
-  padding: clamp(1.25rem, 3vw, 2.5rem);
-  border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
-  background: var(--admin-surface);
-  box-shadow: var(--admin-shadow);
-  color: var(--admin-text);
-}
-
-.legal-document h1 {
-  margin-bottom: 0.35rem;
-  color: var(--admin-primary);
-  font-size: clamp(1.7rem, 3vw, 2.25rem);
-}
-
-.legal-document h2 {
-  margin-top: 2rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--admin-border);
-  color: var(--admin-primary-strong);
-  font-size: 1.3rem;
-}
-
-.legal-document h3 {
-  margin-top: 1.35rem;
-  color: var(--admin-text);
-  font-size: 1.05rem;
-}
-
-.legal-document p,
-.legal-document li {
-  line-height: 1.65;
-}
-
-.legal-document .table {
-  margin: 1rem 0 1.4rem;
-  font-size: 0.92rem;
-}
-
-.legal-document .table th {
-  white-space: normal;
-}
-
-.legal-document a {
-  color: var(--admin-primary);
-}
-
 /* Bootstrap's default link blue misses AA contrast on the cockpit paper tone. */
 .admin-button--quiet {
   color: #0756b3;
@@ -1689,20 +1472,11 @@ body {
 }
 
 @media print {
-  .legal-header,
-  .legal-nav,
   .admin-footer,
   .admin-flash,
   .job-drawer-toggle,
   .job-drawer {
     display: none !important;
-  }
-
-  .legal-document {
-    max-width: none;
-    padding: 0;
-    border: 0;
-    box-shadow: none;
   }
 }
 

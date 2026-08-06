@@ -3,7 +3,7 @@
 **Status:** Active
 **Audience:** Developer, Operator
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-08-04
+**Last verified:** 2026-08-06
 **Canonical source:** docs/ARCHITECTURE_OVERVIEW.md
 
 Primary knowledge transfer artifact for the PdfSearch system. Read this first.
@@ -70,6 +70,21 @@ with role-based access control.
 **Public surface:** Anonymous search is enabled by default for the public corpus
 (`PUBLIC_SEARCH_ENABLED=1`). `/register/` always requires authenticated `admin`
 or `superadmin`.
+
+The public presentation resolver accepts only `classic` and `workbench`. A
+request-only `?view=` preview wins for that response; otherwise the allowlisted
+`PUBLIC_SEARCH_PRIMARY_VIEW` site setting applies, with Classic as the
+fail-closed default. Search pages keep isolated template/CSS/JavaScript stacks.
+The `/terms/`, `/privacy/`, `/disclaimer/`, `/data-policy/`, and `/cookies/`
+routes reuse only the selected theme's header partial inside a standalone
+public document shell; they never inherit the authenticated admin shell.
+
+Both search themes call the same typed backend response contract. `kind`
+identifies small talk, evidence, no-evidence, validation, or error outcomes;
+`language` is derived from the question. The page locale is only a fallback
+when the question contains no language-bearing letters. Provider output is
+script-validated before caching, repaired once when necessary, and otherwise
+fails closed with an explicit mismatch error.
 
 ---
 
@@ -446,6 +461,7 @@ is rejected.
 | `scripts/ci/seed_admin_ui_demo.py` | Seed demo data for admin UI |
 | `scripts/ci/data_release_gate.py` | Data release validation: build manifest, check FAISS compatibility, validate release, verify read-only |
 | `scripts/ci/validate_public_html.py` | Public HTML validation |
+| `browser_tests/public-legal.spec.ts` | Both-theme public information routes, canonical/asset isolation, responsive overflow, and Axe checks |
 | `scripts/ci/seed_smoke.py` | Seed data smoke test |
 | `scripts/ci/run_compose_smoke.sh` | Compose smoke test runner |
 
@@ -537,8 +553,8 @@ CREATE_SUPERUSER=0
 
 ### What's Planned / In Progress
 
-- Merge and deploy the operator-workbench correction to the stage `:latest`
-  channel, then record the resolved running digest.
+- Keep exact merge, release, and stage rollout state in `HANDOFF.md`; do not use
+  this architectural overview as transient deployment evidence.
 - Keep automatic stage backup disabled unless the operator explicitly enables
   it after a bounded scheduling review.
 - Certify an immutable image digest separately before any future production

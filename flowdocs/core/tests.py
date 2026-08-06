@@ -4483,7 +4483,7 @@ class LegalPageTests(TestCase):
         self.assertContains(response, 'aria-label="Cookie notice"')
         self.assertContains(response, "cookie-consent__accept")
 
-    def test_legal_pages_extend_base_template(self):
+    def test_legal_pages_use_public_identity(self):
         for name, _ in self.LEGAL_ROUTES:
             with self.subTest(page=name):
                 response = self.client.get(reverse(name))
@@ -4493,10 +4493,14 @@ class LegalPageTests(TestCase):
         for name, _ in self.LEGAL_ROUTES:
             with self.subTest(page=name):
                 response = self.client.get(reverse(name))
-                self.assertContains(response, 'class="legal-header"')
+                self.assertContains(response, 'class="public-legal public-legal--classic"')
                 self.assertContains(response, 'aria-label="Legal navigation"')
+                self.assertContains(response, 'href="#legalContent"')
+                self.assertContains(response, "public-legal.css")
                 self.assertNotContains(response, "Admin console")
                 self.assertNotContains(response, 'class="admin-nav"')
+                self.assertNotContains(response, "bootstrap")
+                self.assertNotContains(response, "main/css/style.css")
 
     def test_footer_has_compact_legal_line(self):
         response = self.client.get(reverse("home"))

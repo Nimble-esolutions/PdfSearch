@@ -3,7 +3,7 @@
 **Status:** Active
 **Owner:** FlowDocs maintainers
 **Last verified:** 2026-08-06
-**Scope:** Public search presentation only
+**Scope:** Public search and public information presentation
 
 ## Outcome
 
@@ -32,17 +32,39 @@ that persists the allowlisted primary value.
 | Boundary | Classic | Knowledge Workbench | Shared |
 | --- | --- | --- | --- |
 | Django template | `search_classic.html` | `search.html` | View context contract |
+| Public header | `components/public/classic_header.html` | `components/public/workbench_header.html` | None; each partial stays inside its theme |
 | Presentation CSS | `search-classic.css` | `civic-workbench.css`, `search.css` | None |
 | Application JS | `search-classic.js` | `search.js` | None |
 | Layout | Legacy service composition | Three-region evidence workspace | None |
+| Public information pages | Classic header in `legal_base.html` | Workbench header in `legal_base.html` | Policy articles, `public-legal.css`, `public-legal.js` |
 | Search POST | Existing form/JSON request | Existing form/JSON request | `search_query` backend |
 | Sources/PDFs | Safe DOM records | Safe DOM records/drawer | Protected backend URLs |
-| Language | Django locale session | Django locale session | English/Marathi catalog |
+| Interface language | Django locale session | Django locale session | English/Marathi catalog |
+| Answer language | Render backend `language` | Render backend `language` | Derived from question and script-validated |
 | Security | CSRF, escaping, URL allowlist | CSRF, escaping, URL allowlist | Django policy |
 
 Selectors in one theme must not target the other theme. Static files from one
 theme must not be loaded by the other. New behavior may be theme-specific; it
 is shared only when it belongs to the backend contract.
+
+## Public information pages
+
+`/privacy/`, `/terms/`, `/data-policy/`, `/cookies/`, and `/disclaimer/` use the
+same allowlisted resolver as `/`. They render a standalone legal-document shell
+with the selected Classic or Workbench header, shared policy navigation, and an
+isolated `public-legal.css`; they do not inherit the admin base template,
+Bootstrap, admin navigation, or either search workspace's application script.
+
+The saved primary view applies when no valid preview is supplied. A valid
+`?view=classic|workbench` remains on return-to-search, policy, cookie/privacy,
+and locale-switch URLs. Unknown values select no template and are not reflected
+or propagated. Canonical URLs never include the preview query.
+
+Policy article text is currently authored in English and is explicitly marked
+`lang="en"` even when the interface language is Marathi. This prevents assistive
+technology from mispronouncing untranslated legal copy. Responsive policy
+tables retain captions and scoped column headers and are keyboard-scrollable on
+narrow screens.
 
 ## Shared response contract
 
@@ -86,6 +108,8 @@ as a successful answer.
 | `/?view=classic` | Classic for that request; no persistence |
 | Unknown query value | Saved primary, otherwise Classic |
 | English/Marathi switch | Locale changes and valid explicit `view` remains |
+| Policy/information route | Saved or valid preview theme; standalone public document shell |
+| Unknown policy-page query value | Saved primary or Classic; value is discarded from links and locale redirect |
 
 ## Impact and rollback
 
@@ -105,6 +129,16 @@ saved primary selection.
 - Playwright proves both themes, safe answer/source rendering, 30-word limits,
   typed small-talk/evidence outcomes, Marathi query preservation, 320px
   overflow, accessibility, and Workbench motion behavior.
+- Public-page browser checks cover every policy route in both themes at desktop,
+  laptop, tablet, and mobile sizes, including canonical URLs, isolated assets,
+  overflow, allowlisted preview propagation, and serious/critical Axe findings.
 - Visual review covers 1920×1080 Classic parity and responsive Classic and
   Workbench layouts.
 - Translation catalogs compile with no fuzzy entries in the affected copy.
+
+## Diagrams
+
+- [Public shell and answer-language flow](../diagrams/ui-shell-and-evidence.mmd)
+  ([rendered SVG](../diagrams/ui-shell-and-evidence.svg))
+- [UI impact, PR, release, and stage change control](../diagrams/ui-change-control.mmd)
+  ([rendered SVG](../diagrams/ui-change-control.svg))

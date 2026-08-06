@@ -1,8 +1,9 @@
 # Public Search Theme Engine Handoff
 
 **Updated:** 2026-08-06
-**Merged:** PR #185 at `690ed888b30c0b61ce2ac3bc5824457469b83cf0`
-**Stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:b38d887f784a141fe5c3d2d2ca68e721b96d92b76a50e71129d7dcbac120323c`
+**Merged:** PRs #185 and #186; stage revision `1067c054edd6a21a7881371ca0670e428dc4cc81`
+**Stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc`
+**In review:** PR #187 adds the theme-consistent public information shell; it is not stage evidence until its release and canaries complete
 
 ## Delivered
 
@@ -21,22 +22,29 @@
 - The shared backend resolves answer language from each question and both
   themes apply the returned `language` as accessible DOM metadata; changing the
   primary theme cannot change answer language.
+- PR #187 prepares public policy/information pages to use the active or
+  explicitly previewed theme through a standalone visitor shell. They do not
+  inherit admin UI assets; deployment remains pending at this handoff point.
 
 ## Verification evidence
 
 Completed locally in the isolated development Compose stack:
 
 - Django system check: pass.
-- Targeted Django theme/SEO/search/language/auth tests: 38 pass.
+- Targeted Django theme/SEO/search/language/auth tests: 39 pass for PR #187.
 - Migration drift: none.
 - Marathi catalog compile/fuzzy check and operator-language validation: pass.
 - Classic/Workbench/motion Playwright matrix: 72 pass across desktop, laptop,
   tablet, and mobile.
+- Public information Playwright matrix: 16 pass across five routes, both
+  themes, four viewport classes, canonical/asset isolation, responsive
+  overflow, allowlisted preview propagation, and zero serious/critical Axe
+  findings.
 - Visual review: Classic 1920×1080, Classic 390×844, Workbench 1440×900.
 
 ## Deployment and rollback
 
-PR #185 is deployed on stage. Existing databases required no migration. Classic
+PRs #185 and #186 are deployed on stage. Existing databases required no migration. Classic
 is the default unless a superadmin saves Workbench, and either view remains
 available through its request-only `?view=` override.
 
@@ -44,13 +52,17 @@ Rollback by selecting Workbench in Settings, or by reverting the feature PR.
 Neither action changes documents, indexes, search sources, backups, or runtime
 generations.
 
-## Current follow-up
+PR #187 is locally verified and in review. Do not claim its public-information
+shell is deployed until the merged image revision is running on both stage web
+and maintenance and both theme variants of every public information route pass.
 
-The shared backend currently deployed on stage can misclassify document queries
-as greetings because its legacy conversational fast path uses substring
-matching. The verified follow-up replaces that behavior with normalized exact
-intent matching, question-derived answer language, provider-output validation,
-and the typed contract above. After rollout, canary both themes and prove that
-the reported `updated rules` query reaches document search, exact English and
-Marathi greetings remain source-free, and answer language follows the question
-even when it differs from the selected UI language.
+## Current evidence
+
+PR #186 replaced substring conversational matching with normalized exact intent,
+question-derived answer language, provider-output validation, and one bounded
+repair attempt. On stage, both themes returned HTTP 200. A Marathi document
+question submitted with an English client locale returned a Marathi/Devanagari
+`evidence_answer` with three references; the inverse English question submitted
+with a Marathi client locale returned an English/Latin `evidence_answer` with
+three references. The signed active generation and indexing ratio remained
+unchanged.

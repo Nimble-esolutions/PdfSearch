@@ -42,6 +42,13 @@ English is the default and Marathi is a complete supported interface. Existing
 backend routes, CSRF, authentication, search response shape, PDF permissions,
 feedback, WhatsApp, and locale boundaries remain unchanged.
 
+The response extension is backward compatible: `answer` and `references`
+remain stable while `kind` identifies the backend outcome and `language`
+identifies the resolved answer language. Answer language follows the question,
+not the current page locale. Provider output is dominant-script validated
+before caching, repaired once when needed, and fails explicitly after a second
+mismatch.
+
 ## Public search selection
 
 `PUBLIC_SEARCH_PRIMARY_VIEW` is an allowlisted `SiteSetting`, not an environment
@@ -71,8 +78,10 @@ all utility actions, a usable single-row composer, no horizontal overflow, and
 approximately 44px controls. The optimized WebP identity and assistant images
 are approved exceptions to the Workbench's image restrictions.
 
-Classic uses only `search_classic.html`, `search-classic.css`, and
-`search-classic.js`. It must not load Bootstrap/CDN resources, inline
+Classic search uses `search_classic.html`, `search-classic.css`,
+`search-classic.js`, and its own `components/public/classic_header.html`.
+The header partial may also be used by Classic public-information pages; it is
+never loaded by Workbench. Classic must not load Bootstrap/CDN resources, inline
 application JavaScript, Workbench styles/scripts, or unsafe HTML rendering.
 
 ## Knowledge Workbench composition
@@ -94,6 +103,27 @@ An answer is a document-oriented response: user question, AI explanation,
 source summary, contextual disclaimer, and functional actions. Source records
 display only backend-provided metadata. Never invent page numbers, titles,
 counts, verification labels, or excerpts.
+
+Workbench search owns `search.html`, `civic-workbench.css`, `search.css`,
+`search.js`, and `components/public/workbench_header.html`. Its header partial
+may also be used by Workbench public-information pages; it is never loaded by
+Classic.
+
+## Public information composition
+
+`/terms/`, `/privacy/`, `/disclaimer/`, `/data-policy/`, and `/cookies/` use the
+same allowlisted primary/preview resolver as `/`. They render the selected
+theme's own header partial inside `legal_base.html`, with shared policy
+navigation and isolated `public-legal.css`/`public-legal.js`. They must not
+inherit the authenticated admin base, Bootstrap, admin navigation, or either
+search workspace's application JavaScript.
+
+Valid explicit view previews remain on return-to-search, policy-navigation, and
+locale-switch links. Invalid values are discarded and never reflected.
+Canonical URLs omit preview queries. Policy article text remains explicitly
+`lang="en"` until reviewed translations exist; a Marathi shell must not falsely
+label English legal copy as Marathi. Tables keep captions, scoped headings, and
+a keyboard-focusable horizontal scroll region on narrow screens.
 
 ## Admin console composition
 
@@ -152,6 +182,8 @@ Every interactive component must retain understandable static states:
 | Loading status | visible stage label, polite live region, no fake progress or counts |
 | Answer | complete accessible text, source summary, disclaimer, functional actions |
 | Source card/drawer | missing metadata handled, long/Devanagari names wrap, Escape close, focus restore |
+| Public information navigation | current page, valid theme preview preserved, invalid preview discarded, keyboard-visible focus, return to matching search view |
+| Public information table | caption, scoped column headers, narrow-screen horizontal scroll, keyboard focus, print-safe layout |
 | Error/no-result | plain-language cause, retry or next action, no raw exception |
 | Admin action | permission-aware; explicit empty-scope behavior; confirmation for destructive work; success/error feedback; retry hidden or disabled while its prerequisite remains unmet |
 

@@ -1,7 +1,6 @@
 {% extends "legal_base.html" %}
 {% block content %}
-<article class="legal-document container mt-4 mb-5">
-  <h1>Cookie Policy</h1>
+<article class="legal-document" lang="en">
   <p class="text-muted">Last updated: {{ legal_last_updated }}</p>
 
   <h2>1. What Are Cookies</h2>
@@ -19,14 +18,15 @@
 
   <h2>3. Cookies We Set</h2>
 
-  <table class="table table-bordered">
+  <table class="table table-bordered" tabindex="0">
+    <caption>Cookies used by Sahakar AI</caption>
     <thead>
       <tr>
-        <th>Cookie Name</th>
-        <th>Purpose</th>
-        <th>Duration</th>
-        <th>Essential</th>
-        <th>Contains Personal Data?</th>
+        <th scope="col">Cookie Name</th>
+        <th scope="col">Purpose</th>
+        <th scope="col">Duration</th>
+        <th scope="col">Essential</th>
+        <th scope="col">Contains Personal Data?</th>
       </tr>
     </thead>
     <tbody>
@@ -100,7 +100,7 @@
     <strong>Grievance Officer</strong><br>
     Email: grievance@ai-sahakar.net
   </p>
-  <p>For full details on how we handle personal data, see our <a href="{% url 'privacy' %}">Privacy Policy</a>.</p>
+  <p>For full details on how we handle personal data, see our <a href="{% url 'privacy' %}{{ public_view_query }}">Privacy Policy</a>.</p>
 
 </article>
 {% endblock %}
