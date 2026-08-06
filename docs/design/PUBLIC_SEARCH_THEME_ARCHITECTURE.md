@@ -48,7 +48,9 @@ is shared only when it belongs to the backend contract.
 
 Both themes POST the same question and render the same backward-compatible JSON
 shape. `answer` and `references` remain stable; `kind` makes the backend's
-decision observable instead of forcing either frontend to infer it.
+decision observable instead of forcing either frontend to infer it. `language`
+is the backend-resolved answer language (`en` or `mr`) and is applied to the
+rendered answer's HTML `lang` attribute.
 
 | `kind` | Meaning | Source behavior |
 | --- | --- | --- |
@@ -63,6 +65,14 @@ letter case may vary, but a domain question containing `hi`, `date`, `time`, or
 another short token must continue through document retrieval. Examples such as
 `updated rules`, `membership rules`, and `Hi, what is Rule 79?` are required
 negative regression cases.
+
+Answer language follows the question, not the page. The client-provided locale
+is only a fallback for a query with no letters. A Marathi question on an English
+page must produce Marathi; an English question on a Marathi page must produce
+English. Before caching, the backend validates the answer's dominant script. A
+single repair request is allowed after a mismatch; a second mismatch returns an
+explicit `answer_language_mismatch` error instead of exposing the wrong language
+as a successful answer.
 
 ## Admin and URL behavior
 

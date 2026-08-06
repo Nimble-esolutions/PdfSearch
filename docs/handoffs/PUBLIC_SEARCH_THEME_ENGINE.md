@@ -18,6 +18,9 @@
 - Shared search responses are typed as `small_talk`, `evidence_answer`,
   `no_evidence`, `validation`, or `error`; themes render the outcome but do not
   classify user intent themselves.
+- The shared backend resolves answer language from each question and both
+  themes apply the returned `language` as accessible DOM metadata; changing the
+  primary theme cannot change answer language.
 
 ## Verification evidence
 
@@ -46,6 +49,8 @@ generations.
 The shared backend currently deployed on stage can misclassify document queries
 as greetings because its legacy conversational fast path uses substring
 matching. The verified follow-up replaces that behavior with normalized exact
-intent matching and adds the typed contract above. After rollout, canary both
-themes and prove that the reported `updated rules` query reaches document
-search while exact English and Marathi greetings remain source-free.
+intent matching, question-derived answer language, provider-output validation,
+and the typed contract above. After rollout, canary both themes and prove that
+the reported `updated rules` query reaches document search, exact English and
+Marathi greetings remain source-free, and answer language follows the question
+even when it differs from the selected UI language.

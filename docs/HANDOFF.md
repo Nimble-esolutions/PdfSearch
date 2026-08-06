@@ -101,7 +101,7 @@ backup remains off unless the operator explicitly changes that policy.
 | Backup cadence | Stage backup is manual; a successful receipt is recovery evidence, not a readiness prerequisite |
 | Activation | Signed runtime pointer plus exact manifest digest is required; quarantine presence and HTTP 200 are insufficient |
 | Public search presentation | Classic search is the fail-closed primary view; Knowledge Workbench remains isolated and can be selected by a superadmin or previewed with `?view=workbench` |
-| Public search response contract | Exact standalone greetings/thanks/identity prompts are `small_talk`; document questions are `evidence_answer` or `no_evidence`; both themes consume the same typed JSON contract |
+| Public search response contract | Exact standalone greetings/thanks/identity prompts are `small_talk`; document questions are `evidence_answer` or `no_evidence`; `language` follows the question (`en`/`mr`), not the selected UI; both themes consume the same typed JSON contract |
 
 The last controlled evidence search confirmed that `Society election rules`
 returned a real answer with three protected references. The exact stage query
@@ -113,9 +113,13 @@ backend defect, not a Classic- or Workbench-specific failure.
 
 The current correction uses normalized whole-query intent matching, adds typed
 response outcomes, and retains the existing `answer` and `references` fields
-for compatibility. Its packaged-image verification covers 44 Django tests and
-60 Playwright checks across both themes and four viewports. Do not call it
-deployed until its merged OCI revision and stage canaries are recorded here.
+for compatibility. It also derives answer language from the question instead
+of the page locale, validates the model's output script before caching, and
+performs one bounded repair attempt before failing explicitly. Its packaged
+image verification covers 52 Django tests, 60 Playwright checks across both
+themes and four viewports, and real endpoint probes in both language directions.
+Do not call it deployed until its merged OCI revision and stage canaries are
+recorded here.
 
 ## Recently completed work
 
@@ -163,8 +167,9 @@ on stage. Remaining work is decision-driven:
    image pipeline, deploy it to stage, and canary `/` plus
    `/?view=workbench`. Prove exact greetings remain `small_talk`, the reported
    rules query enters evidence search, source links render safely, and the
-   signed runtime/readiness evidence remains unchanged. No ENV or database
-   migration is required.
+   signed runtime/readiness evidence remains unchanged. Ask a Marathi question
+   from the English UI and an English question from the Marathi UI; each answer
+   must follow the question language. No ENV or database migration is required.
 
 ## Known traps that must not recur
 
@@ -185,6 +190,9 @@ on stage. Remaining work is decision-driven:
   include domain words containing short conversational tokens.
 - Both public themes must preserve the backend response `kind`; a friendly
   answer without evidence must not be presented as a document-backed answer.
+- The page/session locale is a presentation preference, not proof of question
+  language. Derive answer language from the question, expose it in the API and
+  DOM, and never cache a provider response that fails the script check.
 - Do not deploy a migration to an activated SQLite runtime unless the safe
   runtime migration classifier accepts it as recovery-backed and additive.
 - Do not resurrect VaultOps as a parallel product surface. DataOps v3 replaced
