@@ -44,6 +44,25 @@ Selectors in one theme must not target the other theme. Static files from one
 theme must not be loaded by the other. New behavior may be theme-specific; it
 is shared only when it belongs to the backend contract.
 
+## Public information pages
+
+`/privacy/`, `/terms/`, `/data-policy/`, `/cookies/`, and `/disclaimer/` use the
+same allowlisted resolver as `/`. They render a standalone legal-document shell
+with the selected Classic or Workbench header, shared policy navigation, and an
+isolated `public-legal.css`; they do not inherit the admin base template,
+Bootstrap, admin navigation, or either search workspace's application script.
+
+The saved primary view applies when no valid preview is supplied. A valid
+`?view=classic|workbench` remains on return-to-search, policy, cookie/privacy,
+and locale-switch URLs. Unknown values select no template and are not reflected
+or propagated. Canonical URLs never include the preview query.
+
+Policy article text is currently authored in English and is explicitly marked
+`lang="en"` even when the interface language is Marathi. This prevents assistive
+technology from mispronouncing untranslated legal copy. Responsive policy
+tables retain captions and scoped column headers and are keyboard-scrollable on
+narrow screens.
+
 ## Shared response contract
 
 Both themes POST the same question and render the same backward-compatible JSON
@@ -86,6 +105,8 @@ as a successful answer.
 | `/?view=classic` | Classic for that request; no persistence |
 | Unknown query value | Saved primary, otherwise Classic |
 | English/Marathi switch | Locale changes and valid explicit `view` remains |
+| Policy/information route | Saved or valid preview theme; standalone public document shell |
+| Unknown policy-page query value | Saved primary or Classic; value is discarded from links and locale redirect |
 
 ## Impact and rollback
 
@@ -105,6 +126,9 @@ saved primary selection.
 - Playwright proves both themes, safe answer/source rendering, 30-word limits,
   typed small-talk/evidence outcomes, Marathi query preservation, 320px
   overflow, accessibility, and Workbench motion behavior.
+- Public-page browser checks cover every policy route in both themes at desktop,
+  laptop, tablet, and mobile sizes, including canonical URLs, isolated assets,
+  overflow, allowlisted preview propagation, and serious/critical Axe findings.
 - Visual review covers 1920×1080 Classic parity and responsive Classic and
   Workbench layouts.
 - Translation catalogs compile with no fuzzy entries in the affected copy.

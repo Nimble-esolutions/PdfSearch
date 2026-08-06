@@ -1,8 +1,8 @@
 # Public Search Theme Engine Handoff
 
 **Updated:** 2026-08-06
-**Merged:** PR #185 at `690ed888b30c0b61ce2ac3bc5824457469b83cf0`
-**Stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:b38d887f784a141fe5c3d2d2ca68e721b96d92b76a50e71129d7dcbac120323c`
+**Merged:** PRs #185 and #186; stage revision `1067c054edd6a21a7881371ca0670e428dc4cc81`
+**Stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc`
 
 ## Delivered
 
@@ -21,6 +21,8 @@
 - The shared backend resolves answer language from each question and both
   themes apply the returned `language` as accessible DOM metadata; changing the
   primary theme cannot change answer language.
+- Public policy/information pages use the active or explicitly previewed theme
+  through a standalone visitor shell. They do not inherit admin UI assets.
 
 ## Verification evidence
 
@@ -44,13 +46,13 @@ Rollback by selecting Workbench in Settings, or by reverting the feature PR.
 Neither action changes documents, indexes, search sources, backups, or runtime
 generations.
 
-## Current follow-up
+## Current evidence
 
-The shared backend currently deployed on stage can misclassify document queries
-as greetings because its legacy conversational fast path uses substring
-matching. The verified follow-up replaces that behavior with normalized exact
-intent matching, question-derived answer language, provider-output validation,
-and the typed contract above. After rollout, canary both themes and prove that
-the reported `updated rules` query reaches document search, exact English and
-Marathi greetings remain source-free, and answer language follows the question
-even when it differs from the selected UI language.
+PR #186 replaced substring conversational matching with normalized exact intent,
+question-derived answer language, provider-output validation, and one bounded
+repair attempt. On stage, both themes returned HTTP 200. A Marathi document
+question submitted with an English client locale returned a Marathi/Devanagari
+`evidence_answer` with three references; the inverse English question submitted
+with a Marathi client locale returned an English/Latin `evidence_answer` with
+three references. The signed active generation and indexing ratio remained
+unchanged.

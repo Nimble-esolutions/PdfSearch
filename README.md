@@ -90,6 +90,12 @@ Settings; URL previews never persist. Both views share the same secured Django
 search/PDF backend and complete English/Marathi session behavior, but not
 templates, presentation CSS, or frontend JavaScript.
 
+The public information pages at `/privacy/`, `/terms/`, `/data-policy/`,
+`/cookies/`, and `/disclaimer/` follow the same saved or explicitly previewed
+theme. They use a standalone public document shell—never the authenticated
+admin layout—and preserve only allowlisted `?view=classic|workbench` previews
+across policy navigation and language switching.
+
 The authenticated surface remains the **Operations Cockpit** admin UI.
 Public-theme selection is the only admin change in this feature.
 
