@@ -1,7 +1,7 @@
 Status: Active, living handoff
 Audience: Maintainer, Operator, Developer, AI agent, Reviewer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-05
+Last verified: 2026-08-06
 Canonical source: docs/HANDOFF.md
 Supersedes: docs/STATUS-2026-08-03.md for current operational state
 Update trigger: Every merged runtime/release/data/operations change, deployment, incident, rollback, or material blocker decision
@@ -43,12 +43,12 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contained `0f95a69b513db85cdced2d08883b5b2191ea67a7` before this handoff change | PR #183 was the latest merged PR; there were no pre-existing open PRs |
+| Repository integration baseline | `dev` contains `4badc118f3d00eef7d15a4c11a3f415d69cf191b` | PR #184 established this living handoff; PR #185 is the independently reviewed public-search theme candidate |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
 | Stage application artifact | `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:1611a6ae7678b01cada362686a2c8cb35325665dfb04ab7f96a3f2db290bebb5` | Running OCI revision is `e0d0858da542cb14ab6f496e002a5b233cd4dec4` (PR #181) |
-| Repository versus stage | Commits after `e0d0858` were documentation-only before this handoff | No known application-runtime drift is waiting to deploy |
+| Repository versus stage | Stage still runs OCI revision `e0d0858da542cb14ab6f496e002a5b233cd4dec4` | PR #185 changes only the public search presentation and its superadmin selector; it has not been deployed to stage or production |
 | Stage readiness | `status=ready`; database, cache, migrations, data, backup, and DataOps checks are `ok` | Backup, restore, and import actions report `ready` |
 | Stage inventory | 242 PDF rows, 242 indexed PDFs, 46 folders, 7 users | Indexing ratio is `1.0` |
 | Signed runtime | Generation `dataops-import-legacy-20260802-86288855-stage-2026` | Signature verifies; runtime pointer is authoritative |
@@ -100,6 +100,7 @@ backup remains off unless the operator explicitly changes that policy.
 | Embeddings | Extracted text may reach the configured external embedding provider under the existing side-effect policy |
 | Backup cadence | Stage backup is manual; a successful receipt is recovery evidence, not a readiness prerequisite |
 | Activation | Signed runtime pointer plus exact manifest digest is required; quarantine presence and HTTP 200 are insufficient |
+| Public search presentation | Classic search is the fail-closed primary view; Knowledge Workbench remains isolated and can be selected by a superadmin or previewed with `?view=workbench` |
 
 The last controlled public-search evidence (2026-08-03) returned real
 English and Marathi answers with protected references and no sandbox marker.
@@ -119,6 +120,8 @@ production promotion.
 | #181 | Safely applies recovery-backed additive migrations to an activated runtime |
 | #182 | Recorded and closed the activated-runtime migration incident |
 | #183 | Corrected Compose volume-ownership recovery guidance |
+| #184 | Established this enforced living project handoff |
+| #185 | Rebuilt the approved Classic public search as the primary view while preserving an isolated Knowledge Workbench secondary view |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -129,8 +132,10 @@ no ownership warning.
 
 ## Open decisions and next actions
 
-There is no current stage-readiness blocker and no pre-existing open PR at the
-time this handoff was prepared. Remaining work is decision-driven:
+There is no current stage-readiness blocker. PR #185 passed local theme,
+language, security, accessibility, and responsive browser gates before this
+handoff refresh; fresh hosted certification against the PR #184 contract is
+required before merge. Remaining work is decision-driven:
 
 1. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
@@ -146,6 +151,10 @@ time this handoff was prepared. Remaining work is decision-driven:
 5. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
+6. **Public theme release:** after PR #185 merges, deploy it only through the
+   normal image pipeline when requested. No environment variable or database
+   migration is required; stage and legacy production remain unchanged until
+   an explicit deployment.
 
 ## Known traps that must not recur
 

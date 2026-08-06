@@ -1,0 +1,222 @@
+{% load static i18n %}
+<!doctype html>
+<html lang="{{ request.LANGUAGE_CODE|default:'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% trans "Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search" %}</title>
+  <meta name="description" content="{% trans 'Search the Maharashtra Cooperative Societies Act, 1960, Rules, 1961, bylaws, amendments, and related official documents in English or Marathi.' %}">
+  <link rel="canonical" href="https://ai-sahakar.net/">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{% trans 'Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search' %}">
+  <meta property="og:description" content="{% trans 'Search Maharashtra cooperative society laws, rules, bylaws, amendments, and related official documents in English or Marathi.' %}">
+  <meta property="og:url" content="https://ai-sahakar.net/">
+  <meta property="og:site_name" content="Sahakar AI">
+  <meta property="og:locale" content="{{ request.LANGUAGE_CODE|default:'en' }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{% trans 'Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search' %}">
+  <meta name="twitter:description" content="{% trans 'Search Maharashtra cooperative society laws, rules, bylaws, amendments, and related official documents in English or Marathi.' %}">
+  <link rel="icon" href="{% static 'main/images/favicon.ico' %}">
+  <link rel="stylesheet" href="{% static 'main/css/search-classic.css' %}">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": "https://ai-sahakar.net/#website",
+    "name": "Sahakar AI",
+    "url": "https://ai-sahakar.net/",
+    "description": "Search the Maharashtra Cooperative Societies Act, 1960, Rules, 1961, bylaws, amendments, and related official documents in English and Marathi.",
+    "inLanguage": ["en", "mr"],
+    "publisher": {
+      "@type": "Organization",
+      "name": "Registrar Co-operative Societies, Maharashtra",
+      "url": "https://sahakarayukta.maharashtra.gov.in/"
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": "https://ai-sahakar.net/#webpage",
+    "url": "https://ai-sahakar.net/",
+    "name": "Sahakar AI Search",
+    "description": "Search Maharashtra cooperative society acts, rules, and official documents in English and Marathi.",
+    "isPartOf": {"@id": "https://ai-sahakar.net/#website"},
+    "inLanguage": "{{ request.LANGUAGE_CODE|default:'en' }}"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What documents can I search on Sahakar AI?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The available collection includes Maharashtra cooperative society acts, rules, bylaws, amendments, and related government documents."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Are the answers from Sahakar AI official legal advice?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Sahakar AI provides informational assistance, not legal advice. Review the cited source documents before making an official decision."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Sahakar AI support Marathi?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. You can ask questions in English or Marathi using the language switch."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="classic-search">
+  <a class="classic-skip-link" href="#classicConversation">{% trans "Skip to search" %}</a>
+
+  <nav class="classic-utility" aria-label="{% trans 'Public service links' %}">
+    <div class="classic-utility__inner">
+      {% if user.is_authenticated %}
+        <a href="{% url 'dashboard' %}">{% trans "Dashboard" %}</a>
+      {% else %}
+        <a href="{% url 'login' %}">{% trans "Admin Login" %}</a>
+      {% endif %}
+      <span aria-hidden="true">|</span>
+      <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" target="_blank" rel="noopener noreferrer">{% trans "Home" %}</a>
+      <span aria-hidden="true">|</span>
+      <a href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">{% trans "Locate Us" %}</a>
+      <span aria-hidden="true">|</span>
+      <form action="{% url 'set_language' %}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        {% if request.LANGUAGE_CODE == 'en' %}
+          <input type="hidden" name="language" value="mr">
+          <button type="submit">मराठी</button>
+        {% else %}
+          <input type="hidden" name="language" value="en">
+          <button type="submit">English</button>
+        {% endif %}
+      </form>
+      {% if user.is_authenticated %}
+        <span aria-hidden="true">|</span>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">{% trans "Logout" %}</button></form>
+      {% endif %}
+    </div>
+  </nav>
+
+  <header class="classic-banner" aria-labelledby="classicServiceTitle">
+    <picture aria-hidden="true">
+      <source media="(max-width: 768px)" srcset="{% static 'main/images/search-classic-banner-mobile.webp' %}">
+      <img src="{% static 'main/images/search-classic-banner.webp' %}" width="1920" height="120" alt="">
+    </picture>
+    <div class="classic-banner__title">
+      <h1 id="classicServiceTitle">{% trans "AI Enabled Search" %}</h1>
+      <p>{% trans "Registrar Co-operative Societies" %}</p>
+    </div>
+  </header>
+
+  <main class="classic-chat" id="classicConversation">
+    <section
+      class="classic-chat__messages"
+      id="chatMain"
+      aria-label="{% trans 'AI Sahakar conversation' %}"
+      aria-live="polite"
+      aria-busy="false"
+    >
+      <article class="classic-message classic-message--assistant classic-message--welcome">
+        <span>{{ welcome_message }}</span>
+        <a href="{{ welcome_help_url }}" target="_blank" rel="noopener noreferrer">{{ welcome_help_label }}</a>
+      </article>
+    </section>
+
+    <section class="classic-composer-region" aria-label="{% trans 'Ask AI Sahakar' %}">
+      <form
+        class="classic-composer"
+        id="searchComposer"
+        method="post"
+        action="{% url 'search_query' %}"
+        data-view-pdf-url="{% url 'view_pdf' 0 %}"
+        novalidate
+      >
+        {% csrf_token %}
+        <input type="hidden" name="language" value="{{ request.LANGUAGE_CODE|default:'en' }}">
+        <img class="classic-composer__assistant" src="{% static 'main/images/search-classic-bot.webp' %}" width="48" height="56" alt="">
+        <div class="classic-composer__field">
+          <label class="classic-visually-hidden" for="userQuery">{% trans "Ask your question" %}</label>
+          <span class="classic-composer__prompt" aria-hidden="true">💬</span>
+          <input id="userQuery" name="query" type="text" maxlength="240" autocomplete="off" enterkeyhint="search" placeholder="{% trans 'Ask your question...' %}">
+        </div>
+        <button class="classic-composer__submit" id="sendBtn" type="submit" disabled>{% trans "Search" %}</button>
+        <a class="classic-icon-link classic-icon-link--whatsapp" href="https://wa.me/{{ whatsapp_number|default:'919421200000' }}" target="_blank" rel="noopener noreferrer" aria-label="{% trans 'Contact on WhatsApp' %}">
+          <picture>
+            <source media="(max-width: 768px)" srcset="{% static 'main/images/wh-btn-mobile.jpg' %}">
+            <img src="{% static 'main/images/wh-btn.jpg' %}" width="44" height="40" alt="">
+          </picture>
+        </a>
+        <a class="classic-icon-link classic-icon-link--feedback" href="{{ feedback_url }}" target="_blank" rel="noopener noreferrer" aria-label="{% trans 'Send feedback' %}">
+          <picture>
+            <source media="(max-width: 768px)" srcset="{% static 'main/images/fd-btn-mobile.jpg' %}">
+            <img src="{% static 'main/images/fd-btn.jpg' %}" width="44" height="40" alt="">
+          </picture>
+        </a>
+      </form>
+      <div class="classic-composer__status">
+        <small id="wordCounter" aria-live="polite">0/30 {% trans "words" %}</small>
+        <p>{% trans "⚠️ AI-generated answers should not be used for legal purposes. The AI may provide incomplete or incorrect responses. Please contact the main office for further information." %}</p>
+      </div>
+    </section>
+  </main>
+
+  <section class="classic-visually-hidden seo-static-content" aria-label="{% trans 'About this service' %}">
+    <div class="seo-support">
+      <h2>{% trans "What is Sahakar AI?" %}</h2>
+      <p>{% trans "Sahakar AI helps society members, office-bearers, auditors, researchers, and public officials find information in Maharashtra cooperative-society laws and related documents. Ask in English or Marathi and review the cited source document with every answer." %}</p>
+      <h3>{% trans "Common questions" %}</h3>
+      <p>{% trans "Answers are informational. Check the cited document before making an important decision." %}</p>
+      {% if display_service_footer %}
+        <h3>{% trans "How to ask better questions" %}</h3>
+        <p>{% trans "Include the Act, Rule, section number, society type, or subject when you know it." %}</p>
+        <h3>{% trans "Important disclaimer" %}</h3>
+        <p>{% trans "Answers are AI-generated informational assistance, not legal advice. They may be incomplete or incorrect. Verify the source document and contact the Registrar's office for official guidance." %}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <footer class="classic-footer">
+    <div class="classic-footer__inner">
+      <div>
+        <p>{% trans "All rights reserved© Registrar Co-operative Societies." %}</p>
+        <nav aria-label="{% trans 'Legal links' %}">
+          <a href="{% url 'privacy' %}">{% trans "Privacy" %}</a>
+          <a href="{% url 'terms' %}">{% trans "Terms" %}</a>
+          <a href="{% url 'data_policy' %}">{% trans "Data Policy" %}</a>
+          <a href="{% url 'disclaimer' %}">{% trans "Disclaimer" %}</a>
+        </nav>
+      </div>
+      <a href="https://nimble-esolutions.com/" target="_blank" rel="noopener noreferrer">
+        <img src="{% static 'main/images/footer-logo-nimble.jpg' %}" width="95" height="40" alt="{% trans 'Nimble eSolutions' %}">
+      </a>
+    </div>
+  </footer>
+
+  <div class="classic-cookie" id="cookieConsent" role="region" aria-label="{% trans 'Cookie notice' %}" hidden>
+    <p><strong>{% trans "Essential cookies" %}</strong> {% trans "This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used." %}</p>
+    <div><a href="{% url 'cookie_policy' %}">{% trans "Cookie Policy" %}</a><button type="button" class="cookie-consent__accept" data-cookie-accept>{% trans "Accept" %}</button></div>
+  </div>
+
+  {{ search_loading_stages|json_script:"classic-search-loading-stages" }}
+  {{ search_messages|json_script:"classic-search-messages" }}
+  {{ source_documents_label|json_script:"classic-source-documents-label" }}
+  {{ retry_label|json_script:"classic-retry-label" }}
+  <script src="{% static 'main/js/search-classic.js' %}"></script>
+</body>
+</html>

@@ -23,6 +23,7 @@ urlpatterns = [
     path("dashboard/operations/vault/", views.s3_operations_view, name="vault_operations"),
     path('dashboard/settings/', views.settings_view, name='settings'),
     path('dashboard/settings/save/', views.save_settings, name='save_settings'),
+    path('dashboard/settings/search-ui/', views.save_search_ui, name='save_search_ui'),
     path('robots.txt', views.robots_txt, name='robots_txt'),
     path('sitemap.xml', views.sitemap_xml, name='sitemap_xml'),
 

@@ -1774,6 +1774,67 @@ msgstr "कृपया आपला प्रश्न विचारा 🙏"
 msgid "Hello! How can I help you?"
 msgstr "नमस्कार! मी तुम्हाला कशी मदत करू शकतो?"
 
+#: core/search_ui.py
+msgid "Classic search"
+msgstr "पारंपरिक शोध"
+
+#: core/search_ui.py
+msgid "Original AI Sahakar public search layout."
+msgstr "AI सहकारची मूळ सार्वजनिक शोध मांडणी."
+
+#: core/search_ui.py
+msgid "Knowledge workbench"
+msgstr "ज्ञान कार्यपटल"
+
+#: core/search_ui.py
+msgid "Evidence-first research layout with persistent topic and source panels."
+msgstr "विषय आणि स्रोत फलक कायम दिसणारी, पुराव्याला प्राधान्य देणारी संशोधन मांडणी."
+
+#: core/templates/dashboard_settings.html
+msgid "Public search presentation"
+msgstr "सार्वजनिक शोध मांडणी"
+
+#: core/templates/dashboard_settings.html
+msgid "Primary search view"
+msgstr "मुख्य शोध दृश्य"
+
+#: core/templates/dashboard_settings.html
+msgid "Choose which public search layout opens by default. This changes presentation only; search, documents, permissions, and language behavior stay the same."
+msgstr "सार्वजनिक शोध उघडल्यावर कोणती मांडणी प्रथम दिसावी ते निवडा. यामुळे फक्त सादरीकरण बदलते; शोध, दस्तऐवज, परवानग्या आणि भाषेचे कार्य तसेच राहते."
+
+#: core/templates/dashboard_settings.html
+msgid "Preview this view"
+msgstr "हे दृश्य पाहा"
+
+#: core/templates/dashboard_settings.html
+msgid "Set primary view"
+msgstr "मुख्य दृश्य निश्चित करा"
+
+#: core/templates/dashboard_settings.html
+msgid "Shareable previews use ?view=classic or ?view=workbench and do not change this setting."
+msgstr "शेअर करता येणाऱ्या पूर्वदृश्यांसाठी ?view=classic किंवा ?view=workbench वापरा; त्यामुळे ही निवड बदलत नाही."
+
+#: core/templates/search_classic.html
+msgid "Skip to search"
+msgstr "शोधाकडे जा"
+
+#: core/templates/search_classic.html
+msgid "Ask your question"
+msgstr "तुमचा प्रश्न विचारा"
+
+#: core/templates/search_classic.html
+msgid "words"
+msgstr "शब्द"
+
+#: core/views.py
+msgid "Choose Classic search or Knowledge workbench."
+msgstr "पारंपरिक शोध किंवा ज्ञान कार्यपटल निवडा."
+
+#: core/views.py
+#, python-format
+msgid "Primary public search view changed to %(view)s."
+msgstr "मुख्य सार्वजनिक शोध दृश्य %(view)s असे बदलले."
+
 #: core/views.py:1442
 msgid ""
 "Sorry, information related to this topic is not available in this section."

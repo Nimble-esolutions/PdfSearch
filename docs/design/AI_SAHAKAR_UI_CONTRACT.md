@@ -3,16 +3,25 @@
 **Status:** Active and protected
 **Audience:** Product, design, frontend, QA, and coding agents
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-07-25
+**Last verified:** 2026-08-06
 **Canonical source:** This document
 **Supersedes:** Untracked visual proposals and active-looking historical UI plans
 
 ## Decision
 
-AI Sahakar uses the **Civic Knowledge Workbench** theme and the Hallmark
-**Workbench** macrostructure. The public search page and the authenticated
-admin console are official, calm, evidence-first workspaces. They are not
-generic AI landing pages, consumer chat bubbles, or marketing surfaces.
+AI Sahakar has two deliberately isolated public-search presentations:
+
+- **Classic search** is the safe default and reproduces the approved
+  `training.ai-sahakar.net` / `24june2026` service composition with modern,
+  safe implementation patterns.
+- **Knowledge workbench** is the secondary evidence-led research interface and
+  remains available through a superadmin-selected default or the non-persistent
+  `?view=workbench` URL override.
+
+The authenticated admin console remains the Hallmark **Operations Cockpit**.
+The Classic and Workbench public frontends share Django search, source, locale,
+CSRF, authentication, and PDF-authorization contracts only. They do not share
+templates, presentation CSS, or application JavaScript.
 
 This contract is a design lock. A future change must either preserve the
 principles below as an enhancement, or carry an explicit human request that
@@ -33,7 +42,40 @@ English is the default and Marathi is a complete supported interface. Existing
 backend routes, CSRF, authentication, search response shape, PDF permissions,
 feedback, WhatsApp, and locale boundaries remain unchanged.
 
-## Public search composition
+## Public search selection
+
+`PUBLIC_SEARCH_PRIMARY_VIEW` is an allowlisted `SiteSetting`, not an environment
+variable. A superadmin selects Classic or Workbench under **Settings → Public
+search presentation**. Missing or invalid values fail closed to Classic.
+
+`?view=classic` and `?view=workbench` are shareable, request-only previews. They
+must not write a cookie, session value, database value, or deployment setting.
+Unknown values fall back to the configured primary view. Language switching
+preserves a valid explicit view query.
+
+## Classic public search composition
+
+The Classic presentation preserves the approved service identity and layout:
+
+- dark utility navigation with Admin Login/Dashboard, Home, Locate Us, and the
+  English/Marathi session switch;
+- Maharashtra and national identity marks framing “AI Enabled Search” and
+  “Registrar Co-operative Societies”;
+- a quiet grey conversation canvas with the exact approved Sahakar AI help
+  message and link;
+- a bottom question composer, 30-word count, Search, WhatsApp, Feedback,
+  legal-use warning, and department/partner footer.
+
+Desktop composition follows the supplied 1920×1080 reference. Mobile retains
+all utility actions, a usable single-row composer, no horizontal overflow, and
+approximately 44px controls. The optimized WebP identity and assistant images
+are approved exceptions to the Workbench's image restrictions.
+
+Classic uses only `search_classic.html`, `search-classic.css`, and
+`search-classic.js`. It must not load Bootstrap/CDN resources, inline
+application JavaScript, Workbench styles/scripts, or unsafe HTML rendering.
+
+## Knowledge Workbench composition
 
 | Viewport | Required composition |
 | --- | --- |
@@ -90,9 +132,11 @@ Typography uses:
 Inter, "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif
 ```
 
-Do not add arbitrary colours, decorative tricolour styling, government emblems,
-robot imagery, gradients, glass surfaces, fake browser frames, or large visual
-assets. Prefer grid, dividers, and typography over a stack of floating cards.
+These tokens and restrictions apply to the Workbench and admin surfaces. Do not
+add arbitrary colours, decorative tricolour styling, government emblems, robot
+imagery, gradients, glass surfaces, fake browser frames, or large visual assets
+there. Classic uses only its approved optimized legacy identity assets. Prefer
+grid, dividers, and typography over a stack of floating cards.
 Marathi must not be uppercased, letter-spaced aggressively, clipped, or mixed
 with English through concatenated fragments.
 
@@ -102,7 +146,7 @@ Every interactive component must retain understandable static states:
 
 | Component | Required states and behavior |
 | --- | --- |
-| Header/nav | default, focus-visible, current route, compact/mobile, role-aware |
+| Header/nav | default, focus-visible, current route, compact/mobile, role-aware; Classic never hides the language action |
 | Prompt starter | hover, focus-visible, active, disabled; keyboard activation and clean wrapping |
 | Composer | default, hover, focus-visible, active, disabled, loading, error, success; 30-word limit |
 | Loading status | visible stage label, polite live region, no fake progress or counts |
@@ -139,7 +183,7 @@ Technical codes use English language and left-to-right direction even on a
 Marathi page. Generation IDs, hashes, timestamps, workspace IDs, and
 correlation IDs may remain visible when they are necessary evidence.
 
-All Dashboard and Workbench presentation resolves through
+All Dashboard and operational Workbench presentation resolves through
 `core.operator_presentation`. Unknown tokens use neutral review guidance and
 retain the exact token only inside Technical details; replacing underscores
 with spaces is never an acceptable explanation.
@@ -237,15 +281,17 @@ preserving the contract. Before implementation, record the affected component,
 state, breakpoint, locale impact, and backend boundary. After implementation,
 update the relevant guide/tests and run the narrowest browser and Django gates.
 
-The following are prohibited without explicit human direction: replacing the
-Workbench with a centred hero, adding a frontend SPA framework, changing the
-official identity hierarchy, weakening source visibility, hiding the composer,
-introducing decorative motion/assets, changing search/auth/CSRF/PDF contracts,
-or making Marathi secondary.
+The following are prohibited without explicit human direction: merging Classic
+and Workbench frontend assets, removing either presentation, adding a frontend
+SPA framework, changing the approved identity hierarchy of either view,
+weakening source visibility, hiding the composer, introducing decorative
+motion/assets beyond the approved Classic imagery, changing
+search/auth/CSRF/PDF contracts, or making Marathi secondary.
 
 ## References
 
 - [Implementation design record](shakar2-civic-workbench.md)
+- [Public-search theme architecture](PUBLIC_SEARCH_THEME_ARCHITECTURE.md)
 - [Developer guide](../AI_SAHAKAR_DEVELOPER_GUIDE.md)
 - [Admin user guide](../AI_SAHAKAR_ADMIN_USER_GUIDE.md)
 - [Public shell and evidence diagram](../diagrams/ui-shell-and-evidence.mmd)

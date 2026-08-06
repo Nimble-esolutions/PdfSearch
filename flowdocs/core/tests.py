@@ -177,7 +177,7 @@ class LanguageAndPublicUiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.context["welcome_message"],
-            "I am Sahakar AI. Learn how to ask better questions and get more useful answers.",
+            "I am Sahakar AI. Click here to learn how to questions to get correct answers.",
         )
         self.assertEqual(response.context["welcome_help_label"], "Click Here")
         self.assertEqual(response.context["welcome_prompt_label"], "Try asking")
@@ -192,11 +192,11 @@ class LanguageAndPublicUiTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'class="workbench"')
+        self.assertContains(response, 'class="classic-chat"')
         self.assertContains(response, 'id="searchComposer"')
-        self.assertContains(response, 'id="aboutDialog"')
-        self.assertContains(response, 'data-about-open')
-        self.assertContains(response, 'id="source-documents-label"')
+        self.assertContains(response, 'class="classic-banner"')
+        self.assertContains(response, "search-classic.css")
+        self.assertNotContains(response, "civic-workbench.css")
 
     def test_language_switch_renders_marathi_greeting_and_english_return(self):
         response = self.client.post(
@@ -1013,7 +1013,7 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_public_search_uses_hallmark_accessible_shell(self):
-        response = self.client.get(reverse("home"))
+        response = self.client.get(reverse("home") + "?view=workbench")
         self.assertContains(response, 'class="workbench-header"')
         self.assertContains(response, 'class="workbench-brand__department"')
         self.assertContains(response, 'aria-label="Public service links"')
@@ -1122,7 +1122,7 @@ class SearchAndAuthenticationTests(TestCase):
         self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
 
     def test_search_template_uses_text_rendering_and_resets_request_state(self):
-        response = self.client.get(reverse("search_query"), follow=True)
+        response = self.client.get(f'{reverse("home")}?view=workbench')
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "search.js")
