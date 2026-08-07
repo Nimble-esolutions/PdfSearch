@@ -124,9 +124,13 @@
   const dnt = String(navigator.doNotTrack || window.doNotTrack || "").toLowerCase();
   const dntEnabled = ["1", "yes"].includes(dnt);
   const gpcEnabled = navigator.globalPrivacyControl === true;
-  const domainAllowed = Array.isArray(config.allowed_domains)
-    && config.allowed_domains.length === 1
-    && config.allowed_domains[0] === window.location.hostname;
+  const currentHost = String(window.location.hostname || "").toLowerCase();
+  const allowedDomains = Array.isArray(config.allowed_domains)
+    ? config.allowed_domains
+      .map(item => String(item || "").trim().toLowerCase())
+      .filter((value, index, values) => value && values.indexOf(value) === index)
+    : [];
+  const domainAllowed = allowedDomains.includes(currentHost);
   const consentGranted = config.consent_status === "granted";
   const identityReady = config.identity_ready === true && identityAlias(config.identity_alias);
   const configurationValid = umamiWebsiteId(config.website_id)
