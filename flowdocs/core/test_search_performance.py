@@ -559,6 +559,27 @@ class SignedSearchPerformanceTests(TestCase):
         self.assertEqual(create_embedding.call_count, 2)
         self.assertEqual(generate_answer.call_count, 2)
 
+    @patch("core.ai_guard.get_ai_cache_scope", return_value="provider-scope")
+    def test_chat_failure_logs_only_the_exception_class(self, _cache_scope):
+        client = Mock()
+        client.chat.completions.create.side_effect = RuntimeError(
+            "provider-detail-sentinel"
+        )
+
+        with (
+            patch("core.utils._get_client", return_value=client),
+            self.assertLogs("core.utils", level="WARNING") as captured,
+        ):
+            answer = utils.generate_gpt_answer(
+                "member rights",
+                "trusted source context",
+            )
+
+        log_output = "\n".join(captured.output)
+        self.assertIn("search_chat_failed reason=RuntimeError", log_output)
+        self.assertNotIn("provider-detail-sentinel", log_output)
+        self.assertIn("Couldn't generate answer", answer)
+
 
 class QueryEmbeddingCacheTests(TestCase):
     def setUp(self):

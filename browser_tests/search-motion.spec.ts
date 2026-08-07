@@ -49,7 +49,7 @@ async function mockAnswer(page: Page, answer = 'A concise answer from the offici
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        kind: 'evidence_answer', language: 'en', answer, references: [],
+        kind: 'no_evidence', language: 'en', answer, references: [],
       }),
     });
   });

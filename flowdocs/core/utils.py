@@ -11,7 +11,6 @@ import pathlib
 import re
 import shutil
 import subprocess
-import traceback
 import logging
 import tempfile
 import threading
@@ -1716,10 +1715,10 @@ def generate_gpt_answer(
                 except Exception:
                     ans = str(resp)
             ans = ans.strip()
-        except Exception:
+        except Exception as exc:
             if diagnostics is not None:
                 diagnostics["chat_failed"] = 1
-            traceback.print_exc()
+            logger.warning("search_chat_failed reason=%s", type(exc).__name__)
             return (
                 "⚠️ सध्या उत्तर तयार करता आले नाही. कृपया थोड्या वेळाने पुन्हा प्रयत्न करा."
                 if language == "mr"

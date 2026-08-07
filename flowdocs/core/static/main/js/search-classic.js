@@ -301,12 +301,30 @@
   }
 
   function isValidSuccessPayload(payload) {
-    return Boolean(
+    if (!Boolean(
       payload
       && typeof payload === "object"
       && responseKinds.has(payload.kind)
       && typeof payload.answer === "string"
-      && payload.answer.trim(),
+      && payload.answer.trim()
+      && Array.isArray(payload.references)
+      && ["en", "mr"].includes(payload.language)
+    )) return false;
+    if (payload.kind === "evidence_answer") {
+      return payload.references.length > 0 && payload.references.every(isValidReference);
+    }
+    return payload.references.length === 0;
+  }
+
+  function isValidReference(reference) {
+    const pdfId = Number(reference?.pdf_id);
+    return Boolean(
+      reference
+      && typeof reference === "object"
+      && !Array.isArray(reference)
+      && typeof reference.title === "string"
+      && reference.title.trim()
+      && ((Number.isSafeInteger(pdfId) && pdfId > 0) || safeReferenceUrl(reference))
     );
   }
 

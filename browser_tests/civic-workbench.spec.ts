@@ -120,6 +120,35 @@ test.describe('Civic Knowledge Workbench', () => {
     await expect(page.locator('#userQuery')).toBeEditable();
   });
 
+  test('rejects impossible response-kind, language, and reference combinations', async ({ page }) => {
+    const invalidPayloads = [
+      { kind: 'evidence_answer', language: 'en', answer, references: [] },
+      { kind: 'small_talk', language: 'en', answer: 'Hello', references },
+      { kind: 'evidence_answer', language: 'hi', answer, references },
+      { kind: 'evidence_answer', language: 'en', answer, references: [null] },
+      { kind: 'evidence_answer', language: 'en', answer, references: [{ title: 'Missing identity' }] },
+    ];
+    let currentPayload = invalidPayloads[0];
+    await page.route('**/search/**', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(currentPayload),
+      });
+    });
+    await page.goto('/?view=workbench');
+
+    for (const [index, payload] of invalidPayloads.entries()) {
+      currentPayload = payload;
+      await page.locator('#userQuery').fill(`Invalid contract ${index + 1}`);
+      await page.locator('#sendBtn').click();
+      await expect(page.locator('.search-error')).toHaveCount(index + 1);
+      await expect(page.locator('.conversation-entry--assistant[data-response-kind]')).toHaveCount(0);
+      await expect(page.locator('#userQuery')).toBeEditable();
+    }
+  });
+
   test('new question cancels an in-flight response and keeps the reset conversation empty', async ({ page }) => {
     await page.route('**/search/**', async route => {
       if (route.request().method() !== 'POST') return route.continue();
@@ -205,7 +234,7 @@ test.describe('Civic Knowledge Workbench', () => {
       });
     });
     await mockSearch(page, {
-      kind: 'evidence_answer', language: 'en', answer, references: [{ title: 'Unavailable source' }],
+      kind: 'evidence_answer', language: 'en', answer, references,
     });
     await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('What is the society audit procedure?');
