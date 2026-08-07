@@ -82,6 +82,12 @@
     });
   }
 
+  function syncTranscriptOverflowState() {
+    if (!chatMain || !document.body) return;
+    const needsRoom = chatMain.scrollHeight > (chatMain.clientHeight + 2);
+    document.body.style.setProperty("--classic-overflow-room", needsRoom ? "2px" : "0px");
+  }
+
   wordCounter.dataset.label = wordCounter.textContent.replace(/^0\/30\s*/u, "").trim();
   userQuery.addEventListener("input", updateComposerState);
 
@@ -91,6 +97,7 @@
     message.textContent = text;
     chatMain.appendChild(message);
     revealMessage(message);
+    syncTranscriptOverflowState();
     return message;
   }
 
@@ -114,6 +121,7 @@
     updateStage();
     stageTimer = window.setInterval(updateStage, 2200);
     revealMessage(message);
+    syncTranscriptOverflowState();
     return message;
   }
 
@@ -151,6 +159,7 @@
 
     chatMain.appendChild(message);
     revealMessage(message, true);
+    syncTranscriptOverflowState();
   }
 
   function revealMessage(message, alignStart = false) {
@@ -328,6 +337,7 @@
     }
     chatMain.appendChild(message);
     revealMessage(message);
+    syncTranscriptOverflowState();
   }
 
   function errorCopy(status, payload) {
@@ -495,6 +505,7 @@
       window.clearTimeout(timeout);
       clearLoadingTimer();
       loading.remove();
+      syncTranscriptOverflowState();
       activeController = null;
       chatMain.setAttribute("aria-busy", "false");
       updateComposerState();
@@ -508,6 +519,7 @@
 
   form.addEventListener("submit", submitSearch);
   updateComposerState();
+  syncTranscriptOverflowState();
 
   document.querySelector(".classic-message--welcome a")?.addEventListener("click", () => {
     track("search_help_opened", {view: analyticsView});

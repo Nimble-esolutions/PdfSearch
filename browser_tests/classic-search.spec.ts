@@ -238,18 +238,45 @@ test.describe('Classic public search', () => {
       if (!transcript || !composer) throw new Error('Classic search shell is incomplete');
       const composerRect = composer.getBoundingClientRect();
       return {
+        overflowClass: document.body.className,
+        overflowY: getComputedStyle(document.documentElement).overflowY,
+        bodyPaddingBottom: getComputedStyle(document.body).paddingBottom,
+        overflowRoomVar: getComputedStyle(document.body).getPropertyValue('--classic-overflow-room'),
+        classicSheetHref: document.querySelector('link[href*="search-classic.css"]')?.getAttribute('href') ?? '',
         documentScrollHeight: document.documentElement.scrollHeight,
         viewportHeight: window.innerHeight,
+        documentClientHeight: document.documentElement.clientHeight,
         transcriptClientHeight: transcript.clientHeight,
         transcriptScrollHeight: transcript.scrollHeight,
+        transcriptOffsetHeight: (transcript as HTMLElement).offsetHeight,
+        transcriptScrollTop: transcript.scrollTop,
+        transcriptMaxHeight: getComputedStyle(transcript).maxHeight,
+        transcriptBoxSizing: getComputedStyle(transcript).boxSizing,
+        transcriptDisplay: getComputedStyle(transcript).display,
+        classicRules: (() => {
+          const rules = [];
+          for (const sheet of Array.from(document.styleSheets)) {
+            const styleSheet = sheet as CSSStyleSheet;
+            try {
+              for (const rule of Array.from(styleSheet.cssRules)) {
+                if (rule.cssText.includes('.classic-chat__messages')) {
+                  rules.push(rule.cssText);
+                }
+              }
+            } catch (_error) {
+              // Cross-origin stylesheet access can fail in browser tests.
+            }
+          }
+          return rules.slice(0, 6);
+        })(),
         composerTop: composerRect.top,
         composerBottom: composerRect.bottom,
-        overflowY: getComputedStyle(transcript).overflowY,
+        transcriptOverflowY: getComputedStyle(transcript).overflowY,
       };
     });
     expect(layout.documentScrollHeight).toBeGreaterThan(layout.viewportHeight);
     expect(layout.transcriptScrollHeight).toBeGreaterThan(0);
-    expect(layout.overflowY).toBe('auto');
+    expect(layout.transcriptOverflowY).toBe('auto');
     expect(layout.composerTop).toBeGreaterThanOrEqual(0);
     await expect(page.locator('#userQuery')).toBeVisible();
     await expect(page.locator('#userQuery')).toBeFocused();
