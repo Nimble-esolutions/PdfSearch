@@ -268,8 +268,15 @@ body.classic-search {
 .classic-message__answer p:last-child { margin-bottom: 0; }
 .classic-message__answer ol,
 .classic-message__answer ul {
+  list-style-position: outside;
   margin: 0 0 10px;
   padding-inline-start: 1.55em;
+}
+.classic-message__answer ol {
+  list-style-type: decimal !important;
+}
+.classic-message__answer ul {
+  list-style-type: disc !important;
 }
 .classic-message__answer li { margin-block: 5px; }
 .classic-message__answer > :last-child { margin-bottom: 0; }

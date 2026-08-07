@@ -141,9 +141,10 @@ test.describe('Classic public search', () => {
   });
 
   test('formats long answers, keeps the transcript scrollable, and supports another search', async ({ page }) => {
-    const longSection = Array.from({ length: 18 }, (_, index) => (
-      `${index + 1}. **Rule ${index + 1}**: Review the cited document before relying on this guidance.`
-    )).join('\n');
+    const longSection = Array.from({ length: 18 }, (_, index) => {
+      const marker = index % 2 === 0 ? `${index + 1})` : `${index + 1}.`;
+      return `${marker} **Rule ${index + 1}**: Review the cited document before relying on this guidance.`;
+    }).join('\n');
     let requestCount = 0;
     await page.route('**/search/**', async route => {
       if (route.request().method() !== 'POST') return route.continue();
@@ -155,7 +156,7 @@ test.describe('Classic public search', () => {
           kind: 'evidence_answer',
           language: 'en',
           answer: requestCount === 1
-            ? `## Rental agreements\n\n${longSection}\n\n- Verify the source\n- Contact the registrar when needed`
+            ? `## Rental agreements\n\n${longSection}\n\n- Verify the source\n• Contact the registrar when needed`
             : '**Second answer** remains available.',
           references,
         }),
@@ -172,6 +173,11 @@ test.describe('Classic public search', () => {
     await expect(firstResponse.locator('ul > li')).toHaveCount(2);
     await expect(firstResponse.locator('strong').first()).toHaveText('Rule 1');
     await expect(firstResponse).not.toContainText('**Rule 1**');
+
+    const orderedListStyle = await firstResponse.locator('ol').first().evaluate((node: Element) => (
+      getComputedStyle(node).listStyleType
+    ));
+    expect(orderedListStyle).toBe('decimal');
 
     const layout = await page.evaluate(() => {
       const transcript = document.getElementById('chatMain');
