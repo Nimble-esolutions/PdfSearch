@@ -193,48 +193,64 @@
     </div>
   </section>
 
-  <section class="mb-4" aria-labelledby="feature-flags-heading">
-    <h3 id="feature-flags-heading" class="border-bottom pb-2 mb-3">{% trans "Feature Flags" %}</h3>
+  <section class="settings-control-center mb-4" aria-labelledby="runtime-controls-heading">
+    <div class="settings-section-heading">
+      <div>
+        <p class="admin-kicker mb-1">{% trans "Safe runtime controls" %}</p>
+        <h3 id="runtime-controls-heading" class="mb-1">{% trans "Runtime controls" %}</h3>
+        <p class="text-muted mb-0">{% trans "Only controls that the running request path reads live are editable here. Deployment identity, data lineage, backup role, and provider credentials remain read-only below." %}</p>
+      </div>
+      <span class="settings-status-chip settings-status-chip--neutral">{% trans "Superadmin only" %}</span>
+    </div>
 
     {% if not settings_edit_enabled %}
-    <div class="alert alert-info">
-      {% trans "Settings edit is disabled. Set SETTINGS_EDIT_ENABLED=1 to modify." %}
+    <div class="alert alert-info settings-notice" role="status">
+      <strong>{% trans "Editing is locked" %}</strong>
+      <span>{% trans "Set SETTINGS_EDIT_ENABLED=1 in the deployment environment before using these controls." %}</span>
     </div>
     {% endif %}
 
-    <section class="admin-panel p-0" aria-labelledby="feature-flags-heading">
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-          <thead>
-            <tr>
-              <th scope="col">{% trans "Flag Name" %}</th>
-              <th scope="col">{% trans "Current Value" %}</th>
-              <th scope="col">{% trans "Source" %}</th>
-              {% if settings_edit_enabled %}<th scope="col">{% trans "Action" %}</th>{% endif %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for key, info in feature_flags.items %}
-            <tr>
-              <td class="font-monospace small">{{ key }}</td>
-              <td><code>{{ info.current|default:"(empty)" }}</code></td>
-              <td><span class="badge {% if info.source == 'database' %}bg-primary{% else %}bg-secondary{% endif %}">{{ info.source }}</span></td>
+    <form method="post" action="{% url 'save_settings' %}" class="settings-form" id="runtime-settings-form">
+      {% csrf_token %}
+      <div class="settings-grid">
+        {% for group in runtime_setting_groups %}
+        <fieldset class="settings-card">
+          <legend class="settings-card__title">{{ group.name }}</legend>
+          <div class="settings-card__body">
+            {% for row in group.rows %}
+            <div class="settings-control{% if row.high_impact %} settings-control--high-impact{% endif %}">
+              <div class="settings-control__copy">
+                <label class="settings-control__label" for="runtime-{{ row.key }}">{{ row.label }}</label>
+                <p class="settings-control__description">{{ row.description }}</p>
+                <span class="settings-value-meta">{% trans "Current" %}: <code>{{ row.current }}</code> · {% trans "Source" %}: {{ row.source }}</span>
+              </div>
               {% if settings_edit_enabled %}
-              <td>
-                <form method="post" action="{% url 'save_settings' %}" class="d-flex gap-2 align-items-center">
-                  {% csrf_token %}
-                  <label class="visually-hidden" for="setting-value-{{ forloop.counter }}">{% trans "New value" %}: {{ key }}</label>
-                  <input id="setting-value-{{ forloop.counter }}" type="text" name="{{ key }}" value="{{ info.current }}" class="form-control form-control-sm" style="max-width: 140px;">
-                  <button type="submit" class="btn btn-primary btn-sm">{% trans "Save" %}</button>
-                </form>
-              </td>
+                {% if row.input_type == 'select' %}
+                <select id="runtime-{{ row.key }}" name="{{ row.key }}" class="form-select settings-control__input">
+                  {% for option in row.choices %}<option value="{{ option.0 }}"{% if row.current == option.0 %} selected{% endif %}>{{ option.1 }}</option>{% endfor %}
+                </select>
+                {% else %}
+                <input id="runtime-{{ row.key }}" name="{{ row.key }}" class="form-control settings-control__input" type="{{ row.input_type }}" value="{{ row.current }}"{% if row.minimum is not None %} min="{{ row.minimum }}"{% endif %}{% if row.maximum is not None %} max="{{ row.maximum }}"{% endif %} inputmode="numeric">
+                {% endif %}
+              {% else %}
+                <span class="settings-readonly-value"><code>{{ row.current }}</code></span>
               {% endif %}
-            </tr>
+            </div>
             {% endfor %}
-          </tbody>
-        </table>
+          </div>
+        </fieldset>
+        {% endfor %}
       </div>
-    </section>
+      {% if settings_edit_enabled %}
+      <div class="settings-form__footer">
+        <label class="settings-confirmation" for="confirm-settings-changes">
+          <input id="confirm-settings-changes" type="checkbox" name="confirm_changes" value="yes" required>
+          <span>{% trans "I reviewed these values and understand that high-impact changes can affect public availability or request load." %}</span>
+        </label>
+        <button type="submit" class="btn btn-primary">{% trans "Save runtime changes" %}</button>
+      </div>
+      {% endif %}
+    </form>
   </section>
 
   <section class="mb-4" aria-labelledby="configuration-inventory-heading">

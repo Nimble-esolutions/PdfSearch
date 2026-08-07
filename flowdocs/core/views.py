@@ -75,7 +75,11 @@ from django.utils import timezone
 DOCUMENT_PAGE_SIZE = 25
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceJobItem, MaintenanceAuditEvent, SEARCHABLE_PDF_LIFECYCLES, SiteSetting
-from .configuration_registry import build_configuration_groups
+from .configuration_registry import (
+    RUNTIME_SETTING_DEFINITIONS,
+    build_configuration_groups,
+    build_runtime_setting_groups,
+)
 from .search_ui import (
     SEARCH_VIEW_DEFINITIONS,
     get_primary_search_view,
@@ -469,12 +473,14 @@ def _public_search_rate_limited(request):
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
     client_address = forwarded_for.split(",", 1)[0].strip() or request.META.get("REMOTE_ADDR", "unknown")
     client_hash = hashlib.sha256(client_address.encode("utf-8")).hexdigest()[:16]
-    bucket = int(time.time()) // settings.PUBLIC_SEARCH_RATE_WINDOW
+    window = max(10, _runtime_int("PUBLIC_SEARCH_RATE_WINDOW", settings.PUBLIC_SEARCH_RATE_WINDOW))
+    limit = max(1, _runtime_int("PUBLIC_SEARCH_RATE_LIMIT", settings.PUBLIC_SEARCH_RATE_LIMIT))
+    bucket = int(time.time()) // window
     key = f"public-search:{client_hash}:{bucket}"
     try:
-        if cache.add(key, 1, timeout=settings.PUBLIC_SEARCH_RATE_WINDOW + 1):
+        if cache.add(key, 1, timeout=window + 1):
             return False
-        return cache.incr(key) > settings.PUBLIC_SEARCH_RATE_LIMIT
+        return cache.incr(key) > limit
     except Exception:
         return True
 
@@ -707,7 +713,7 @@ def view_pdf(request, pdf_id):
 
 
 def public_view_pdf(request, pdf_id):
-    if not settings.PUBLIC_SEARCH_ENABLED:
+    if not _runtime_bool("PUBLIC_SEARCH_ENABLED", settings.PUBLIC_SEARCH_ENABLED):
         raise Http404("PDF file is unavailable")
 
     pdf = get_object_or_404(
@@ -2137,7 +2143,9 @@ def search_query(request):
                     "answer_ready": gettext("Answer ready"),
                     "feedback": gettext("Send feedback"),
                 },
-                "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
+                "display_service_footer": _runtime_bool(
+                    "DISPLAY_SERVICE_FOOTER", getattr(settings, "DISPLAY_SERVICE_FOOTER", False)
+                ),
                 "whatsapp_number": os.environ.get("PUBLIC_WHATSAPP_NUMBER", ""),
                 "locate_us_url": PUBLIC_LOCATE_US_URL,
                 "feedback_url": PUBLIC_FEEDBACK_URL,
@@ -2151,7 +2159,8 @@ def search_query(request):
     if request.method == "POST":
         request_started_at = time.monotonic()
         public_search = not request.user.is_authenticated
-        if public_search and not settings.PUBLIC_SEARCH_ENABLED:
+        public_search_enabled = _runtime_bool("PUBLIC_SEARCH_ENABLED", settings.PUBLIC_SEARCH_ENABLED)
+        if public_search and not public_search_enabled:
             _log_search_completed(
                 route="policy",
                 outcome="authentication_required",
@@ -2175,7 +2184,8 @@ def search_query(request):
                 requested_language = "en"
             language = requested_language
 
-            if len(query.split()) > settings.PUBLIC_SEARCH_MAX_WORDS:
+            max_words = max(1, _runtime_int("PUBLIC_SEARCH_MAX_WORDS", settings.PUBLIC_SEARCH_MAX_WORDS))
+            if len(query.split()) > max_words:
                 _log_search_completed(
                     route="validation",
                     outcome="query_too_long",
@@ -2187,7 +2197,7 @@ def search_query(request):
                     {
                         "kind": "error",
                         "error": "query_too_long",
-                        "detail": f"Queries are limited to {settings.PUBLIC_SEARCH_MAX_WORDS} words.",
+                        "detail": f"Queries are limited to {max_words} words.",
                         "references": [],
                     },
                     status=400,
@@ -2470,12 +2480,8 @@ def s3_operations_view(request):
     return redirect(f"{reverse('operations_panel')}?section=maintenance")
 
 
-ALLOWED_SETTING_KEYS = {
-    "PUBLIC_SEARCH_ENABLED", "DISPLAY_SERVICE_FOOTER",
-    "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
-    "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
-    "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE", "EXTERNAL_AI_MODE",
-}
+ALLOWED_SETTING_KEYS = tuple(definition.key for definition in RUNTIME_SETTING_DEFINITIONS)
+RUNTIME_SETTING_BY_KEY = {definition.key: definition for definition in RUNTIME_SETTING_DEFINITIONS}
 
 
 def get_setting(key: str, default: str = "") -> str:
@@ -2494,20 +2500,26 @@ def get_setting(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
 
 
+def _runtime_bool(key: str, default: bool) -> bool:
+    return get_setting(key, "1" if default else "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _runtime_int(key: str, default: int) -> int:
+    try:
+        return int(get_setting(key, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
 @superadmin_required
 def settings_view(request):
-    """Superadmin settings page — read-only env identity + editable feature flags."""
+    """Superadmin settings page with safe runtime controls and read-only posture."""
 
     SETTINGS_EDIT_ENABLED = os.environ.get("SETTINGS_EDIT_ENABLED", "0") == "1"
 
     feature_flags = {}
     setting_values = {}
-    for key in (
-        "PUBLIC_SEARCH_ENABLED", "DISPLAY_SERVICE_FOOTER",
-        "PUBLIC_SEARCH_RATE_LIMIT", "PUBLIC_SEARCH_RATE_WINDOW",
-        "PUBLIC_SEARCH_MAX_WORDS", "MAINTENANCE_SCHEDULER_ENABLED",
-        "BACKUP_SYNC_MODE", "DATA_MODE", "EXTERNAL_SIDE_EFFECTS_MODE", "EXTERNAL_AI_MODE",
-    ):
+    for key in ALLOWED_SETTING_KEYS:
         db_value = SiteSetting.objects.filter(key=key).values_list("value", flat=True).first()
         env_value = os.environ.get(key, "")
         current_value = db_value if db_value not in (None, "") else env_value
@@ -2562,6 +2574,7 @@ def settings_view(request):
         "settings_edit_enabled": SETTINGS_EDIT_ENABLED,
         "feature_flags": feature_flags,
         "configuration_groups": build_configuration_groups(settings, setting_values),
+        "runtime_setting_groups": build_runtime_setting_groups(settings, setting_values),
         "vault_status": vault_status,
         "env_fields": env_fields,
         "primary_search_view": get_primary_search_view(),
@@ -2583,23 +2596,55 @@ def settings_view(request):
 @superadmin_required
 @require_POST
 def save_settings(request):
-    """Save feature flag values to SiteSetting table."""
+    """Validate and save only settings that are read live by request paths."""
     if os.environ.get("SETTINGS_EDIT_ENABLED", "0") != "1":
         messages.error(request, "Settings editing is not enabled.")
         return redirect("settings")
 
-    saved = 0
-    for key in ALLOWED_SETTING_KEYS:
+    errors = []
+    changes = []
+    for key, definition in RUNTIME_SETTING_BY_KEY.items():
+        if key not in request.POST:
+            continue
         value = request.POST.get(key, "").strip()
-        if value:
-            SiteSetting.objects.update_or_create(
-                key=key,
-                defaults={"value": value, "updated_by": request.user}
-            )
-            cache.delete(f"sitesetting:{key}")
-            saved += 1
+        if value == "":
+            errors.append(f"{definition.label} cannot be empty.")
+            continue
+        if definition.choices and value not in {choice[0] for choice in definition.choices}:
+            errors.append(f"Choose a valid value for {definition.label}.")
+            continue
+        if definition.input_type == "number":
+            try:
+                numeric_value = int(value)
+            except ValueError:
+                errors.append(f"{definition.label} must be a whole number.")
+                continue
+            if definition.minimum is not None and numeric_value < definition.minimum:
+                errors.append(f"{definition.label} must be at least {definition.minimum}.")
+                continue
+            if definition.maximum is not None and numeric_value > definition.maximum:
+                errors.append(f"{definition.label} must be no more than {definition.maximum}.")
+                continue
+        current = get_setting(key, str(getattr(settings, key, "")))
+        if value != current:
+            changes.append((key, value, definition))
 
-    messages.success(request, f"Saved {saved} settings. Changes take effect immediately.")
+    if errors:
+        for error in errors:
+            messages.error(request, error)
+        return redirect("settings")
+    if any(definition.high_impact for _, _, definition in changes) and request.POST.get("confirm_changes") != "yes":
+        messages.error(request, "Confirm the marked high-impact changes before saving.")
+        return redirect("settings")
+
+    for key, value, _definition in changes:
+        SiteSetting.objects.update_or_create(
+            key=key,
+            defaults={"value": value, "updated_by": request.user},
+        )
+        cache.delete(f"sitesetting:{key}")
+
+    messages.success(request, f"Saved {len(changes)} runtime setting(s). Changes apply to new requests immediately.")
     return redirect("settings")
 
 

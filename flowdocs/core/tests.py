@@ -4516,7 +4516,7 @@ class LegalPageTests(TestCase):
         user = User.objects.create_superuser("settingstable", "settings@t.com", "Test@123", role="superadmin")
         self.client.force_login(user)
         response = self.client.get(reverse("settings"))
-        self.assertContains(response, "Feature Flags")
+        self.assertContains(response, "Runtime controls")
         self.assertNotContains(response, "PUBLIC_UI_THEME")
 
     def test_settings_page_shows_safe_configuration_inventory(self):
@@ -4533,6 +4533,30 @@ class LegalPageTests(TestCase):
     def test_settings_form_persists_named_runtime_setting(self):
         user = get_user_model().objects.create_superuser("settingswriter", "writer@t.com", "Test@123", role="superadmin")
         self.client.force_login(user)
-        response = self.client.post(reverse("save_settings"), {"PUBLIC_SEARCH_ENABLED": "0"})
+        response = self.client.post(reverse("save_settings"), {"PUBLIC_SEARCH_ENABLED": "0", "confirm_changes": "yes"})
         self.assertRedirects(response, reverse("settings"))
         self.assertEqual(SiteSetting.objects.get(key="PUBLIC_SEARCH_ENABLED").value, "0")
+
+    @patch.dict(os.environ, {"SETTINGS_EDIT_ENABLED": "1"})
+    def test_settings_rejects_high_impact_change_without_confirmation(self):
+        user = get_user_model().objects.create_superuser("settingsconfirm", "confirm@t.com", "Test@123", role="superadmin")
+        self.client.force_login(user)
+        response = self.client.post(reverse("save_settings"), {"PUBLIC_SEARCH_ENABLED": "0"})
+        self.assertRedirects(response, reverse("settings"))
+        self.assertFalse(SiteSetting.objects.filter(key="PUBLIC_SEARCH_ENABLED").exists())
+
+    @patch.dict(os.environ, {"SETTINGS_EDIT_ENABLED": "1"})
+    def test_settings_rejects_invalid_runtime_limits(self):
+        user = get_user_model().objects.create_superuser("settingslimits", "limits@t.com", "Test@123", role="superadmin")
+        self.client.force_login(user)
+        response = self.client.post(reverse("save_settings"), {"PUBLIC_SEARCH_MAX_WORDS": "0", "confirm_changes": "yes"})
+        self.assertRedirects(response, reverse("settings"))
+        self.assertFalse(SiteSetting.objects.filter(key="PUBLIC_SEARCH_MAX_WORDS").exists())
+
+    def test_settings_marks_deployment_controls_read_only(self):
+        user = get_user_model().objects.create_superuser("settingsreadonly", "readonly@t.com", "Test@123", role="superadmin")
+        self.client.force_login(user)
+        response = self.client.get(reverse("settings"))
+        self.assertContains(response, "Only controls that the running request path reads live are editable here.")
+        self.assertContains(response, "DATA_MODE")
+        self.assertNotContains(response, 'name="DATA_MODE"')
