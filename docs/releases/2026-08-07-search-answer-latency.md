@@ -44,6 +44,8 @@ the canary and compare phase telemetry.
 | Cache backend errors were on the request path | A Redis read/write/delete exception could fail an otherwise valid search | Cache degradation became search downtime | Search caches now fail open with secret-free `cache_errors` telemetry; provider and authoritative retrieval remain available |
 | Corpus admission was unbounded | Every worker could retain any signed runtime size and briefly hold a list of all vectors plus the final matrix | A large generation or concurrent worker warm-up could exhaust the 2 GiB service budget | The optimization streams two validation passes into one preallocated matrix, caps each PDF at 1,000 vectors/32 MiB embedding JSON/8 MiB chunk JSON, and admits at most 12,000 vectors and 96 MiB of retained vector-plus-text payload per worker; larger or partially corrupt corpora use the conservative path |
 | Workbench simulated streaming after completion | Completed JSON answers were revealed one grapheme every 8 ms, up to about 7.2 seconds for 900 characters | The server had finished, but the answer still looked slow | Completed answers render synchronously with safe structural formatting |
+| Workbench reset did not own the active request | “New question” cleared the DOM while the previous request could still complete, and the only reset control disappeared with the desktop rail below 901 px | A late answer could repopulate a cleared conversation and mobile users could not start over explicitly | Reset now aborts the active request, advances a request-generation guard, ignores stale completion, and exposes one visible reset control at every supported viewport |
+| Workbench trusted malformed HTTP 200 payloads | Missing or unknown response kinds could be treated as document evidence | Contract drift could present an untyped answer as verified evidence | Successful payloads now require an allowlisted kind, non-empty answer, and references array before rendering |
 | No phase evidence | Logs reported only total request duration and call counts | Operators could not separate embedding, retrieval, model, cache, or UI delay | Secret-free phase timing and cache/corpus diagnostics are logged |
 
 ## Safety boundaries
@@ -92,7 +94,7 @@ the canary and compare phase telemetry.
 | Future production | The same signed-runtime behavior is available when production activation is implemented | No production deployment or traffic change is part of this PR; certify an immutable image and memory/latency canaries before cutover |
 | Redis | Adds hashed query-embedding and exact-result entries using the existing search TTL | Ten-minute default expiry controls pressure; utility-cache outage degrades speed, while anonymous rate-limit outage still fails closed by policy; no document text or raw query appears in cache keys |
 | Search quality | Ranking and top-N rules are preserved; stale same-shape FAISS indexes are rejected | Regression tests cover authorization, cache partitioning, corpus reuse, and vector integrity |
-| UI/UX | Workbench answers appear as soon as the completed response arrives; errors are announced; composer remains usable for another query | Browser tests cover immediate rendering, sequential questions, failures, and both public themes |
+| UI/UX | Workbench answers appear as soon as the completed response arrives; errors are announced; composer remains usable for another query; reset cancels stale work and is reachable on mobile | Source-backed browser tests cover immediate rendering, sequential questions, malformed success, reset during an active request, mobile reachability, failures, and both public themes |
 
 The seed benchmark contains 1,580 vectors at the configured embedding
 dimension; the normalized float32 matrix is about 9.3 MiB. Historical runtime
@@ -149,6 +151,10 @@ Before merge:
 3. Run Python compilation, JavaScript syntax, locale, migration/test-isolation,
    operator-language, documentation, Compose, and repository whitespace gates.
 4. Render and validate the updated Mermaid source.
+
+The focused source-backed browser gate ran on an isolated local Django service,
+not the stale container previously occupying port 8000: 72 Workbench/motion and
+36 Classic tests passed across desktop, laptop, tablet, and mobile projects.
 
 After a green merge and stage image rollout:
 

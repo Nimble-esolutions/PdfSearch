@@ -18,16 +18,16 @@ const evidenceRail = document.getElementById("evidenceRail");
 const evidenceAnswer = document.querySelector("[data-evidence-answer]");
 const evidenceContent = document.querySelector("[data-evidence-content]");
 const evidenceClose = document.querySelector("[data-evidence-close]");
-const newQuestion = document.querySelector("[data-new-question]");
+const newQuestionButtons = document.querySelectorAll("[data-new-question]");
 let aboutReturnFocus = null;
 let evidenceReturnFocus = null;
 let shareMenuReturnFocus = null;
 let requestPending = false;
 let activeController = null;
-let requestTimeout = null;
-let stageTimer = null;
+let requestGeneration = 0;
 let answerSequence = 0;
 const answerStore = new Map();
+const responseKinds = new Set(["small_talk", "evidence_answer", "no_evidence", "validation"]);
 
 function detectPerformanceProfile() {
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -79,7 +79,13 @@ searchComposer.addEventListener("submit", event => {
     sendMessage();
 });
 
-newQuestion?.addEventListener("click", () => {
+function resetConversation() {
+    requestGeneration += 1;
+    activeController?.abort();
+    activeController = null;
+    requestPending = false;
+    sendBtn.removeAttribute("aria-busy");
+    chatMain.setAttribute("aria-busy", "false");
     chatMain.replaceChildren();
     answerStore.clear();
     answerSequence = 0;
@@ -88,7 +94,9 @@ newQuestion?.addEventListener("click", () => {
     userQuery.dispatchEvent(new Event("input", {bubbles: true}));
     userQuery.focus();
     resetEvidenceRail();
-});
+}
+
+newQuestionButtons.forEach(button => button.addEventListener("click", resetConversation));
 
 function closeAbout() {
     if (!aboutDialog) return;
@@ -141,6 +149,7 @@ async function sendMessage(){
 
     const stages = searchLoadingStages;
     let stageIndex = 0;
+    let loadingTimer = null;
 
     function showStage() {
         typingDiv.replaceChildren();
@@ -157,7 +166,7 @@ async function sendMessage(){
         typingDiv.prepend(stage);
         stageIndex++;
         if(stageIndex < stages.length) {
-            stageTimer = setTimeout(showStage, 2000);
+            loadingTimer = setTimeout(showStage, 2000);
         }
     }
     showStage();
@@ -165,8 +174,10 @@ async function sendMessage(){
     const formData = new FormData();
     formData.append('query', query);
     formData.append('language', document.documentElement.lang === 'mr' ? 'mr' : 'en');
-    activeController = new AbortController();
-    requestTimeout = setTimeout(() => activeController.abort(), 60000);
+    const generation = ++requestGeneration;
+    const controller = new AbortController();
+    activeController = controller;
+    const timeout = setTimeout(() => controller.abort(), 60000);
 
     try {
         const response = await fetch(window.PdfSearch.searchQueryUrl, {
@@ -174,9 +185,10 @@ async function sendMessage(){
             headers: {'X-CSRFToken': window.PdfSearch.csrfToken},
             body: formData,
             credentials: "same-origin",
-            signal: activeController.signal,
+            signal: controller.signal,
         });
         const data = await response.json().catch(() => ({}));
+        if (generation !== requestGeneration) return;
         if (!response.ok) {
             typingDiv.remove();
             const errorMessages = {
@@ -194,22 +206,28 @@ async function sendMessage(){
             );
             return;
         }
+        if (!isValidSuccessPayload(data)) {
+            typingDiv.remove();
+            appendErrorMessage(
+                searchMessages.unexpected,
+                searchMessages.request_failed,
+                query,
+            );
+            return;
+        }
         typingDiv.classList.add("search-loading--complete");
         typingDiv.setAttribute("aria-label", stages[stages.length - 1]);
         typingDiv.remove();
-        if(data.answer){
-            typeEffect(
-                data.answer,
-                data.references || [],
-                query,
-                data.kind || "evidence_answer",
-                data.language || "",
-            );
-        } else if(data.error){
-            appendErrorMessage(searchMessages.search_unavailable, searchMessages.try_later, query);
-        }
+        typeEffect(
+            data.answer,
+            data.references,
+            query,
+            data.kind,
+            data.language || "",
+        );
     } catch(err) {
         typingDiv.remove();
+        if (generation !== requestGeneration) return;
         if (err.name === "AbortError") {
             appendErrorMessage(searchMessages.timeout, searchMessages.try_again, query);
         } else {
@@ -217,16 +235,27 @@ async function sendMessage(){
             console.error(err);
         }
     } finally {
-        clearTimeout(requestTimeout);
-        clearTimeout(stageTimer);
-        requestTimeout = null;
-        stageTimer = null;
-        activeController = null;
-        requestPending = false;
-        sendBtn.removeAttribute("aria-busy");
-        chatMain.setAttribute("aria-busy", "false");
-        updateSendButton();
+        clearTimeout(timeout);
+        clearTimeout(loadingTimer);
+        if (generation === requestGeneration) {
+            activeController = null;
+            requestPending = false;
+            sendBtn.removeAttribute("aria-busy");
+            chatMain.setAttribute("aria-busy", "false");
+            updateSendButton();
+        }
     }
+}
+
+function isValidSuccessPayload(payload) {
+    return Boolean(
+        payload
+        && typeof payload === "object"
+        && responseKinds.has(payload.kind)
+        && typeof payload.answer === "string"
+        && payload.answer.trim()
+        && Array.isArray(payload.references)
+    );
 }
 
 function appendMessage(text, sender, isLoading=false){

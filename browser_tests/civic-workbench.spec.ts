@@ -108,6 +108,42 @@ test.describe('Civic Knowledge Workbench', () => {
     await expect(page.locator('#userQuery')).toBeEditable();
   });
 
+  test('rejects malformed successful responses without presenting false evidence', async ({ page }) => {
+    await mockSearch(page, { language: 'en', answer, references });
+    await page.goto('/?view=workbench');
+    await page.locator('#userQuery').fill('Malformed response contract');
+    await page.locator('#sendBtn').click();
+
+    await expect(page.locator('.search-error').last()).toHaveAttribute('role', 'alert');
+    await expect(page.locator('.conversation-entry--assistant[data-response-kind]')).toHaveCount(0);
+    await expect(page.locator('#userQuery')).toBeVisible();
+    await expect(page.locator('#userQuery')).toBeEditable();
+  });
+
+  test('new question cancels an in-flight response and keeps the reset conversation empty', async ({ page }) => {
+    await page.route('**/search/**', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      await new Promise(resolve => setTimeout(resolve, 250));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ kind: 'evidence_answer', language: 'en', answer, references }),
+      }).catch(() => undefined);
+    });
+    await page.goto('/?view=workbench');
+    await page.locator('#userQuery').fill('Question that will be reset');
+    await page.locator('#sendBtn').click();
+    await expect(page.locator('.search-loading')).toBeVisible();
+    await page.locator('[data-new-question]:visible').click();
+
+    await page.waitForTimeout(350);
+    await expect(page.locator('.empty-state h2')).toHaveText('Ask AI Sahakar');
+    await expect(page.locator('.conversation-entry--user')).toHaveCount(0);
+    await expect(page.locator('.conversation-entry--assistant[data-response-kind]')).toHaveCount(0);
+    await page.locator('#userQuery').fill('Fresh question');
+    await expect(page.locator('#sendBtn')).toBeEnabled();
+  });
+
   test('renders a typed small-talk response without fabricating source evidence', async ({ page }) => {
     await mockSearch(page, {
       kind: 'small_talk',
@@ -139,7 +175,9 @@ test.describe('Civic Knowledge Workbench', () => {
       });
       Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
     });
-    await mockSearch(page, { answer: richAnswer, references });
+    await mockSearch(page, {
+      kind: 'evidence_answer', language: 'en', answer: richAnswer, references,
+    });
     await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('What documents are required?');
     await page.locator('#sendBtn').click();
@@ -166,7 +204,9 @@ test.describe('Civic Knowledge Workbench', () => {
         value: { writeText: async (value: string) => { (window as unknown as { copied: string }).copied = value; } },
       });
     });
-    await mockSearch(page, { answer, references: [{ title: 'Unavailable source' }] });
+    await mockSearch(page, {
+      kind: 'evidence_answer', language: 'en', answer, references: [{ title: 'Unavailable source' }],
+    });
     await page.goto('/?view=workbench');
     await page.locator('#userQuery').fill('What is the society audit procedure?');
     await page.locator('#sendBtn').click();

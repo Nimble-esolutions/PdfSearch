@@ -48,7 +48,9 @@ async function mockAnswer(page: Page, answer = 'A concise answer from the offici
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ answer, references: [] }),
+      body: JSON.stringify({
+        kind: 'evidence_answer', language: 'en', answer, references: [],
+      }),
     });
   });
 }
