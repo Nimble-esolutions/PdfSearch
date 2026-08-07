@@ -1,3 +1,5 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import skipUnless
 from unittest.mock import Mock, patch
@@ -33,6 +35,13 @@ class SignedSearchPerformanceTests(TestCase):
     databases = {"default", "control"}
 
     def setUp(self):
+        self.faiss_directory = TemporaryDirectory()
+        self.addCleanup(self.faiss_directory.cleanup)
+        faiss_settings = override_settings(
+            FAISS_INDEX_DIR=self.faiss_directory.name,
+        )
+        faiss_settings.enable()
+        self.addCleanup(faiss_settings.disable)
         cache.clear()
         utils._runtime_search_corpus = None
         utils._runtime_search_corpus_disabled_identity = ""
@@ -66,6 +75,16 @@ class SignedSearchPerformanceTests(TestCase):
             page_chunks=["hidden source text"],
             chunk_embeddings=[[0.0, 1.0]],
         )
+        if utils._HAS_FAISS:
+            utils.build_or_load_faiss_index_for_folder(
+                self.public_folder,
+                force_rebuild=True,
+            )
+            utils.build_or_load_faiss_index_for_folder(
+                self.hidden_folder,
+                force_rebuild=True,
+            )
+            self.mutation_state.refresh_from_db()
 
     def tearDown(self):
         utils._runtime_search_corpus = None
@@ -316,6 +335,12 @@ class SignedSearchPerformanceTests(TestCase):
         )
         self.assertEqual(diagnostics["runtime_corpus_hit"], 0)
         self.assertTrue(utils._runtime_search_corpus_disabled_identity)
+        if utils._HAS_FAISS:
+            index_path = Path(
+                utils.faiss_index_path_for_folder(self.public_folder)
+            )
+            self.assertEqual(index_path.parent, Path(self.faiss_directory.name))
+            self.assertTrue(index_path.is_file())
 
     @patch(
         "core.utils.create_query_embedding",
