@@ -1,9 +1,13 @@
-# Plan 032: Pilot privacy-first product analytics on stage
+# Plan 032: Historical cookieless stage-pilot analytics record
 
-> **Executor instructions**: Read
-> `docs/PRODUCT_ANALYTICS_RECOMMENDATION.md` first. Self-hosted Umami is selected
-> and the application integration is implemented in PR #192. The operator will
-> deploy the independent service manually. Do not enable stage collection until
+> **Status: superseded for execution.** This plan preserves the original
+> provider-selection and cookieless-pilot rationale. The consent-led persistent
+> analytics candidate and Plan 038 now define the current implementation path.
+> Do not use this historical plan to configure a tracker or approve collection.
+
+> **Historical executor instructions**: The sequence below is retained as a
+> record. For current work, read Plan 038 and the current analytics operations
+> contract first. Do not enable stage collection until
 > retention, backup/restore, deletion authority, TLS, and dashboard access are
 > verified; production remains a separate decision.
 >
@@ -45,15 +49,16 @@ that Umami cannot satisfy.
    port, TLS, healthcheck, resource limits, tested backup/restore, and a tested
    retention/deletion runbook. Create separate stage and production website
    records, but leave production collection disabled.
-3. **Done in PR #192:** implement a disabled-by-default adapter with a compile-time event/property
-   allowlist and a final `beforeSend` rejection gate. Analytics must load
+3. **Candidate implementation:** provide a disabled-by-default adapter with a
+   compile-time event/property allowlist and a final `beforeSend` rejection
+   gate. Analytics must load
    asynchronously and fail open. Application code supplies a transport-neutral
    event; only the adapter knows Umami/PostHog APIs.
-4. **Public search done in PR #192:** instrument submitted/completed/retry,
+4. **Candidate public-search scope:** instrument submitted/completed/retry,
    evidence, feedback, help, share, and theme-view outcomes in Classic and
    Workbench. Intake and maintenance remain separate follow-up slices with the
    same adapter; no theme controller code is shared.
-5. **Public search done in PR #192:** add unit and browser leakage tests with sentinel questions, answers,
+5. **Candidate public-search verification:** add unit and browser leakage tests with sentinel questions, answers,
    filenames, source URLs, users, and recovery identifiers. Block every unknown
    property and prove adapter failure never changes UI event handling. The
    deployed, enabled Classic/Workbench outage rehearsal remains an operator gate.
