@@ -37,6 +37,9 @@ Supersedes: None
   deployment evidence.
 - [dataops/V3_IMPACT_ANALYSIS.md](dataops/V3_IMPACT_ANALYSIS.md) — completed
   cutover impact plus the remaining VaultOps dependency-removal backlog.
+- [PRODUCT_ANALYTICS_RECOMMENDATION.md](PRODUCT_ANALYTICS_RECOMMENDATION.md) —
+  privacy-first PostHog/OSS comparison, event allowlist, forbidden data, and
+  stage-pilot release gate; proposed, not enabled.
 
 This index routes readers by task. The metadata at the top of each maintained
 document identifies its status, audience, owner, verification date, canonical
