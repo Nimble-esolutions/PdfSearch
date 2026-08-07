@@ -57,11 +57,13 @@ class AnalyticsProfile:
     hostname: str
     deployment_tier: str
     default_website_id: str = ""
+    aliases: tuple[str, ...] = ()
 
 
-# Do not add localhost, preview, legacy www, or wildcard domains here.  The
-# profile map is the hard collection boundary; a running app on any other host
-# cannot emit a configuration or issue analytics identity cookies.
+# The profile map is the hard collection boundary; a running app on any other host
+# cannot emit a configuration or issue analytics identity cookies.  Canonical
+# production aliases are represented explicitly as aliases and do not create
+# additional boundary hosts by themselves.
 ANALYTICS_PROFILES = {
     "2026.ai-sahakar.net": AnalyticsProfile(
         hostname="2026.ai-sahakar.net",
@@ -71,6 +73,7 @@ ANALYTICS_PROFILES = {
     "ai-sahakar.net": AnalyticsProfile(
         hostname="ai-sahakar.net",
         deployment_tier="production",
+        aliases=("www.ai-sahakar.net",),
     ),
 }
 UMAMI_ALLOWED_HOSTS = tuple(ANALYTICS_PROFILES)
@@ -83,7 +86,11 @@ def _hostname(request) -> str:
 def analytics_profile_for_request(request) -> AnalyticsProfile | None:
     """Return an exact collection profile; all other hosts fail closed."""
 
-    return ANALYTICS_PROFILES.get(_hostname(request))
+    hostname = _hostname(request)
+    for profile in ANALYTICS_PROFILES.values():
+        if profile.hostname == hostname or hostname in profile.aliases:
+            return profile
+    return None
 
 
 def _setting_key(base_key: str, profile: AnalyticsProfile) -> str:
@@ -394,10 +401,14 @@ def build_public_analytics_config(
     if not _SAFE_RELEASE.fullmatch(release):
         release = ""
 
+    allowed_domains = tuple(
+        {profile.hostname, *profile.aliases}
+    )
+
     return {
         "script_url": UMAMI_SCRIPT_URL,
         "website_id": website_id,
-        "allowed_domains": [profile.hostname],
+        "allowed_domains": sorted(allowed_domains),
         "deployment_tier": profile.deployment_tier,
         "surface": search_view,
         "primary_surface": primary_view,

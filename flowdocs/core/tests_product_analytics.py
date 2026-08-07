@@ -20,6 +20,7 @@ from core.product_analytics import (
     PRODUCT_ANALYTICS_WEBSITE_ID_SETTING,
     STAGE_UMAMI_WEBSITE_ID,
     UMAMI_SCRIPT_URL,
+    build_public_analytics_config,
     analytics_profile_for_request,
     consent_state,
     set_product_analytics_mode,
@@ -112,6 +113,25 @@ class ProductAnalyticsRenderingTests(TestCase):
 
         self.assertContains(stage_response, "product-analytics-config")
         self.assertNotContains(production_response, "product-analytics-config")
+
+    def test_www_host_maps_to_production_profile_for_aliases(self):
+        self.enable(PRODUCTION_HOST, PRODUCTION_WEBSITE_ID)
+
+        request = self.factory.get("/", HTTP_HOST=WWW_HOST)
+        profile = analytics_profile_for_request(request)
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.hostname, PRODUCTION_HOST)
+        config = build_public_analytics_config(
+            request,
+            search_view="classic",
+            primary_view="classic",
+            override_used=False,
+        )
+        self.assertIsNotNone(config)
+        self.assertEqual(config["website_id"], PRODUCTION_WEBSITE_ID)
+        self.assertEqual(config["deployment_tier"], "production")
+        self.assertIn("ai-sahakar.net", config["allowed_domains"])
+        self.assertIn("www.ai-sahakar.net", config["allowed_domains"])
 
     def test_www_is_redirected_to_the_canonical_production_identity_host(self):
         self.enable(PRODUCTION_HOST, PRODUCTION_WEBSITE_ID)
