@@ -59,6 +59,15 @@ body.classic-search {
   outline-offset: 3px;
 }
 
+/* The composer owns focus styling on its container, not the native input ring.
+   Keep the control's own focus signal consistent even on browsers that ignore
+   :focus-within alone (e.g., Chrome + macOS focus heuristics). */
+.classic-search .classic-composer__field,
+.classic-search .classic-composer__field:focus-within {
+  outline: 0;
+  box-shadow: none;
+}
+
 .classic-visually-hidden,
 .classic-skip-link:not(:focus) {
   position: absolute !important;
@@ -356,9 +365,14 @@ body.classic-search {
 }
 
 /* The field is a compound control: its parent owns the single focus ring. */
-.classic-composer__field input:focus-visible {
-  outline: 0;
-  outline-offset: 0;
+.classic-search .classic-composer__field input:focus,
+.classic-search .classic-composer__field input:focus-visible,
+.classic-search .classic-composer__field input:active,
+.classic-search .classic-composer__field input:-webkit-autofill {
+  outline: 0 !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
 }
 
 .classic-composer__field input::placeholder { color: #85878a; opacity: 1; }
