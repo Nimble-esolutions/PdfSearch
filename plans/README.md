@@ -1,6 +1,7 @@
 # PdfSearch implementation roadmap
 
-Reviewed against commit `273e5a5` on 2026-07-30. These files are handoff
+Roadmap index last reconciled against commit `f090650` on 2026-08-07. Individual
+plans retain their own planned-at commit for drift checks. These files are handoff
 contracts for future developers and AI agents. Read the selected plan fully,
 run its drift check, and stop when a stated assumption is false.
 
@@ -43,6 +44,11 @@ they do not override the living handoff's observed state.
 | 022 | Reconcile roadmap and stacked-PR readiness | P2 | S | 018, 019, 020, 021 | DONE |
 | 023 | Separate Documents & Search from advanced Vault & Recovery | P1 | M | 013–022 | DONE |
 | 024 | Establish RustFS-backed deployment parity and native development images | P1 | L | 006 gate | RECONCILE |
+| 025 | Bound provider latency and return truthful search failures | P1 | M | — | TODO |
+| 026 | Remove restricted-search query and matrix amplification | P1 | M | — | TODO |
+| 027 | Complete secret-free search phase telemetry | P1 | S | — | TODO |
+| 028 | Coalesce identical concurrent search work across workers | P1 | M | 025, 027 | TODO |
+| 029 | Harden mobile search against dynamic viewport changes | P2 | S/M | — | TODO |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -82,6 +88,11 @@ they do not override the living handoff's observed state.
 018 + 019 + 020 ─> 021 enforcement ─> 022 stack reconciliation
 022 ─> 023 Documents & Search / Vault & Recovery journey boundary
 006 recurring verification gate ─> 024 RustFS/deployment parity
+
+025 provider deadline ───────┐
+                             ├─> 028 distributed single-flight
+027 phase telemetry ─────────┘
+026 restricted scoring and 029 mobile viewport resilience are independent.
 ```
 
 Plan 011 comes before database replacement because recovery must not depend on
@@ -94,6 +105,12 @@ Plan 024 is independent of Plans 008–012's database/retrieval decisions. It
 preserves the current S3-compatible DataOps API while making RustFS the
 canonical development and CI provider, retaining MinIO only as a compatibility
 target, and enforcing environment-specific application image policy.
+
+Plans 025–029 are the measured follow-up to the signed-runtime search latency
+and UI-continuity work reviewed on 2026-08-07. Execute 025 and 027 before 028:
+distributed waiting must consume the same request deadline and use the same
+telemetry contract. Plan 026 is authorization-sensitive and must preserve
+visibility before optimizing. Plan 029 keeps Classic and Workbench isolated.
 
 ## Universal execution contract
 
@@ -163,6 +180,13 @@ changes.
   civic queries require a measured lexical/semantic hybrid benchmark first.
 - Replacing the server-rendered UI with a SPA: no demonstrated user or
   operational benefit; preserve small, progressively enhanced JavaScript.
+- Sharing the signed corpus across Gunicorn workers immediately: deferred until
+  post-rollout RSS and warm-up telemetry prove that process-local duplication is
+  the next material limit. A generation-bound read-only mmap remains an option,
+  but it is not worth its activation and cleanup complexity without evidence.
+- Adding new environment variables for provider deadlines, single-flight, or
+  UI performance: rejected for this scale. Plans 025–029 use bounded code-level
+  defaults and measured release gates.
 
 ## 2026-07-28 local visual audit findings
 
