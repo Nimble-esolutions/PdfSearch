@@ -1,6 +1,6 @@
 # PdfSearch implementation roadmap
 
-Roadmap index last reconciled against commit `f090650` on 2026-08-07. Individual
+Roadmap index last reconciled against commit `d13e415` on 2026-08-07. Individual
 plans retain their own planned-at commit for drift checks. These files are handoff
 contracts for future developers and AI agents. Read the selected plan fully,
 run its drift check, and stop when a stated assumption is false.
@@ -49,6 +49,8 @@ they do not override the living handoff's observed state.
 | 027 | Complete secret-free search phase telemetry | P1 | S | — | TODO |
 | 028 | Coalesce identical concurrent search work across workers | P1 | M | 025, 027 | TODO |
 | 029 | Harden mobile search against dynamic viewport changes | P2 | S/M | — | TODO |
+| 030 | Make browser tests own a source-backed runtime | P1 | S/M | — | TODO |
+| 031 | Treat retrieved documents as untrusted model evidence | P1 | S | 025 | TODO |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -92,7 +94,9 @@ they do not override the living handoff's observed state.
 025 provider deadline ───────┐
                              ├─> 028 distributed single-flight
 027 phase telemetry ─────────┘
-026 restricted scoring and 029 mobile viewport resilience are independent.
+026 restricted scoring, 029 mobile viewport resilience, and 030 source-backed
+test ownership are independent. Plan 031 follows 025 so timeout/failure and
+prompt-contract changes are certified together without another cache rotation.
 ```
 
 Plan 011 comes before database replacement because recovery must not depend on
@@ -106,11 +110,13 @@ preserves the current S3-compatible DataOps API while making RustFS the
 canonical development and CI provider, retaining MinIO only as a compatibility
 target, and enforcing environment-specific application image policy.
 
-Plans 025–029 are the measured follow-up to the signed-runtime search latency
+Plans 025–031 are the measured follow-up to the signed-runtime search latency
 and UI-continuity work reviewed on 2026-08-07. Execute 025 and 027 before 028:
 distributed waiting must consume the same request deadline and use the same
 telemetry contract. Plan 026 is authorization-sensitive and must preserve
-visibility before optimizing. Plan 029 keeps Classic and Workbench isolated.
+visibility before optimizing. Plan 029 keeps Classic and Workbench isolated;
+Plan 030 makes that browser contract source-verifiable; Plan 031 hardens the
+model boundary after provider-failure semantics are truthful.
 
 ## Universal execution contract
 
@@ -185,7 +191,7 @@ changes.
   the next material limit. A generation-bound read-only mmap remains an option,
   but it is not worth its activation and cleanup complexity without evidence.
 - Adding new environment variables for provider deadlines, single-flight, or
-  UI performance: rejected for this scale. Plans 025–029 use bounded code-level
+  UI performance: rejected for this scale. Plans 025–031 use bounded code-level
   defaults and measured release gates.
 
 ## 2026-07-28 local visual audit findings
