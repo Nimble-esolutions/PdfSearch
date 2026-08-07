@@ -1,6 +1,6 @@
 # PdfSearch implementation roadmap
 
-Roadmap index last reconciled against commit `d13e415` on 2026-08-07. Individual
+Roadmap index last reconciled against commit `3591956` on 2026-08-07. Individual
 plans retain their own planned-at commit for drift checks. These files are handoff
 contracts for future developers and AI agents. Read the selected plan fully,
 run its drift check, and stop when a stated assumption is false.
@@ -51,8 +51,12 @@ they do not override the living handoff's observed state.
 | 029 | Harden mobile search against dynamic viewport changes | P2 | S/M | — | TODO |
 | 030 | Make browser tests own a source-backed runtime | P1 | S/M | — | TODO |
 | 031 | Treat retrieved documents as untrusted model evidence | P1 | S | 025 | TODO |
-| 032 | Pilot privacy-first product analytics on stage | P2 | M | operator Umami deployment | IN PROGRESS |
+| 032 | Historical cookieless stage-pilot analytics record | P2 | M | — | DONE (historical) |
 | 033 | Prewarm and measure the signed search corpus | P1 | M | 027 | TODO |
+| 035 | Make public home rendering proportional to the selected theme | P1 | M | 006 gate | TODO |
+| 036 | Make release static assets immutable and cacheable | P1 | M | 006 gate | TODO |
+| 037 | Replace the Classic composite banner with a responsive CSS masthead | P2 | M | 006 gate; validate 036 if landed | TODO |
+| 038 | Extend consent-led Umami measurement without expanding identity scope | P1 | L | analytics candidate, Settings baseline, 006 gate; performance stage requires 035, 036 | TODO / policy-gated |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
 | 010 | Evolve the modular platform after the preceding decisions | P2 | L | 008, 009, 011, 012 | TODO |
@@ -101,9 +105,10 @@ they do not override the living handoff's observed state.
 test ownership are independent. Plan 031 follows 025 so timeout/failure and
 prompt-contract changes are certified together without another cache rotation.
 Plan 033 follows 027 so prewarm and any optional memory-map spike are driven by
-measured cold latency and RSS. Plan 032 remains outside the search hot path;
-its disabled-by-default public-search adapter is in PR #192, while independent
-Umami deployment, retention, and restore proof remain operator work.
+measured cold latency and RSS. Plan 032 is historical provider-selection
+evidence. The consent-led analytics candidate and Plan 038 remain outside the
+search hot path; independent Umami deployment, retention, and restore proof
+remain operator work.
 ```
 
 Plan 011 comes before database replacement because recovery must not depend on
@@ -124,8 +129,19 @@ telemetry contract. Plan 026 is authorization-sensitive and must preserve
 visibility before optimizing. Plan 029 keeps Classic and Workbench isolated;
 Plan 030 makes that browser contract source-verifiable; Plan 031 hardens the
 model boundary after provider-failure semantics are truthful; Plan 033 gates
-corpus prewarm by evidence. Plan 032 is a separate product-analytics decision,
-not part of the search hot path.
+corpus prewarm by evidence. Plan 032 is historical selection evidence; Plan 038
+is the current, separately gated product-analytics decision and is not part of
+the search hot path.
+
+Plans 035–038 form one deliberately sequenced public-experience and observability
+track. Plan 035 removes avoidable server-side work on the selected public theme;
+Plan 036 makes the remaining release assets immutable and cacheable; Plan 037
+uses that stable asset contract to replace the Classic composite banner with a
+responsive semantic masthead. Plan 038 is separate from the search hot path and
+must reconcile the consent-led analytics candidate with `dev` before any
+capability is enabled. Its performance stage waits for the measured rendering
+and static baselines from Plans 035 and 036. Heatmaps are policy-gated rather
+than an automatic follow-up.
 
 ## Universal execution contract
 
