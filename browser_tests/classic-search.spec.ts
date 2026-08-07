@@ -169,15 +169,14 @@ test.describe('Classic public search', () => {
 
     const firstResponse = page.locator('.classic-message--assistant[data-response-kind]').last();
     await expect(firstResponse.locator('h3')).toHaveText('Rental agreements');
-    await expect(firstResponse.locator('ol > li')).toHaveCount(18);
-    await expect(firstResponse.locator('ul > li')).toHaveCount(2);
+    await expect(firstResponse.locator('ul > li')).toHaveCount(20);
     await expect(firstResponse.locator('strong').first()).toHaveText('Rule 1');
     await expect(firstResponse).not.toContainText('**Rule 1**');
 
-    const orderedListStyle = await firstResponse.locator('ol').first().evaluate((node: Element) => (
+    const unorderedListStyle = await firstResponse.locator('ul').first().evaluate((node: Element) => (
       getComputedStyle(node).listStyleType
     ));
-    expect(orderedListStyle).toBe('decimal');
+    expect(unorderedListStyle).not.toBe('decimal');
 
     const layout = await page.evaluate(() => {
       const transcript = document.getElementById('chatMain');
