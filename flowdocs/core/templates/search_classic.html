@@ -19,6 +19,7 @@
   <meta name="twitter:description" content="{% trans 'Search Maharashtra cooperative society laws, rules, bylaws, amendments, and related official documents in English or Marathi.' %}">
   <link rel="icon" href="{% static 'main/images/favicon.ico' %}">
   <link rel="stylesheet" href="{% static 'main/css/search-classic.css' %}">
+  <link rel="stylesheet" href="{% static 'main/css/product-analytics.css' %}">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -153,34 +154,13 @@
     </div>
   </section>
 
-  <footer class="classic-footer">
-    <div class="classic-footer__inner">
-      <div>
-        <p>{% trans "All rights reserved© Registrar Co-operative Societies." %}</p>
-        <nav aria-label="{% trans 'Legal links' %}">
-          <a href="{% url 'privacy' %}{{ public_view_query }}">{% trans "Privacy" %}</a>
-          <a href="{% url 'terms' %}{{ public_view_query }}">{% trans "Terms" %}</a>
-          <a href="{% url 'data_policy' %}{{ public_view_query }}">{% trans "Data Policy" %}</a>
-          <a href="{% url 'cookie_policy' %}{{ public_view_query }}">{% trans "Cookies" %}</a>
-          <a href="{% url 'disclaimer' %}{{ public_view_query }}">{% trans "Disclaimer" %}</a>
-        </nav>
-      </div>
-      <a href="https://nimble-esolutions.com/" target="_blank" rel="noopener noreferrer">
-        <img src="{% static 'main/images/footer-logo-nimble.jpg' %}" width="95" height="40" alt="{% trans 'Nimble eSolutions' %}">
-      </a>
-    </div>
-  </footer>
-
-  <div class="classic-cookie" id="cookieConsent" role="region" aria-label="{% trans 'Cookie notice' %}" hidden>
-    <p><strong>{% trans "Essential cookies" %}</strong> {% trans "This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used." %}</p>
-    <div><a href="{% url 'cookie_policy' %}{{ public_view_query }}">{% trans "Cookie Policy" %}</a><button type="button" class="cookie-consent__accept" data-cookie-accept>{% trans "Accept" %}</button></div>
-  </div>
+  {% include "components/public/classic_footer.html" %}
 
   {{ search_loading_stages|json_script:"classic-search-loading-stages" }}
   {{ search_messages|json_script:"classic-search-messages" }}
   {{ source_documents_label|json_script:"classic-source-documents-label" }}
   {{ retry_label|json_script:"classic-retry-label" }}
   {% include "components/product_analytics.html" %}
-  <script src="{% static 'main/js/search-classic.js' %}"></script>
+  <script defer src="{% static 'main/js/search-classic.js' %}"></script>
 </body>
 </html>

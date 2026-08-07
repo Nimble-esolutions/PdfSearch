@@ -4400,10 +4400,11 @@ class LegalPageTests(TestCase):
                 response = self.client.get(reverse(name))
                 self.assertContains(response, "Last updated:")
 
-    def test_privacy_policy_contains_dpda_references(self):
+    def test_privacy_policy_contains_dpdp_references(self):
         response = self.client.get(reverse("privacy"))
         self.assertContains(response, "Data Fiduciary")
         self.assertContains(response, "Digital Personal Data Protection Act, 2023")
+        self.assertContains(response, "DPDP Act")
         self.assertContains(response, "Data Protection Board of India")
         self.assertContains(response, "Grievance Officer")
         self.assertContains(response, "openai.com/policies")
@@ -4431,10 +4432,15 @@ class LegalPageTests(TestCase):
         self.assertContains(response, "csrftoken")
         self.assertContains(response, "support.google.com/chrome")
 
-    def test_cookie_policy_declares_no_tracking(self):
+    def test_cookie_policy_explains_consent_led_analytics_without_content_tracking(self):
         response = self.client.get(reverse("cookie_policy"))
-        self.assertContains(response, "do not use</strong>")
-        self.assertContains(response, "tracking cookies")
+        self.assertContains(response, "__Host-sahakar-analytics-consent")
+        self.assertContains(response, "__Host-sahakar-analytics-id")
+        self.assertContains(response, "Allow analytics")
+        self.assertContains(response, "Global Privacy Control")
+        self.assertNotContains(response, "cookieConsent")
+        self.assertNotContains(response, "localStorage")
+        self.assertNotContains(response, "Cookieless Stage Analytics")
 
     def test_disclaimer_has_ai_warning(self):
         response = self.client.get(reverse("disclaimer"))
@@ -4471,17 +4477,11 @@ class LegalPageTests(TestCase):
             with self.subTest(slug=slug):
                 self.assertIn(f"https://ai-sahakar.net/{slug}/", content)
 
-    def test_cookie_banner_has_proper_links(self):
+    def test_public_shell_never_uses_the_retired_local_storage_cookie_notice(self):
         response = self.client.get(reverse("home"))
-        self.assertContains(response, "essential cookies")
+        self.assertNotContains(response, "cookieConsent")
+        self.assertNotContains(response, "localStorage")
         self.assertContains(response, reverse("cookie_policy"))
-        self.assertContains(response, reverse("privacy"))
-
-    def test_cookie_banner_uses_accessible_hallmark_region(self):
-        response = self.client.get(reverse("home"))
-        self.assertContains(response, 'role="region"')
-        self.assertContains(response, 'aria-label="Cookie notice"')
-        self.assertContains(response, "cookie-consent__accept")
 
     def test_legal_pages_use_public_identity(self):
         for name, _ in self.LEGAL_ROUTES:

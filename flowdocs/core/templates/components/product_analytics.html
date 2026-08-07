@@ -1,5 +1,67 @@
-{% load static %}
+{% load i18n static %}
 {% if product_analytics_config %}
   {{ product_analytics_config|json_script:"product-analytics-config" }}
-  <script src="{% static 'main/js/product-analytics.js' %}"></script>
+  {% if product_analytics_config.gpc_blocked %}
+    <aside class="product-analytics-preference" aria-labelledby="analytics-preference-title" role="status">
+      <div class="product-analytics-preference__copy">
+        <h2 id="analytics-preference-title">{% trans "Analytics is off for this browser" %}</h2>
+        <p>{% trans "Your browser's Global Privacy Control preference prevents optional analytics. Search remains fully available." %}</p>
+      </div>
+      <a class="product-analytics-preference__link" href="{% url 'cookie_policy' %}{{ public_view_query }}">{% trans "Read the cookie policy" %}</a>
+    </aside>
+  {% elif product_analytics_config.consent_status == "unset" %}
+    <aside class="product-analytics-preference" aria-labelledby="analytics-preference-title" role="region">
+      <div class="product-analytics-preference__copy">
+        <h2 id="analytics-preference-title">{% trans "Help improve Sahakar AI" %}</h2>
+        <p>{% trans "With your permission, we collect a small set of content-free service-use events. We never send your question, answer, source document, or account details." %}</p>
+        <p class="product-analytics-preference__note">{% trans "An HTTPS-only pseudonymous browser ID helps count returning visitors for up to 90 days. It is created only after you allow analytics. Global Privacy Control always prevents collection." %}</p>
+      </div>
+      <div class="product-analytics-preference__actions">
+        <form method="post" action="{% url 'analytics_preference' %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ public_current_url }}">
+          <input type="hidden" name="action" value="decline">
+          <button class="product-analytics-preference__button product-analytics-preference__button--secondary" type="submit">{% trans "No thanks" %}</button>
+        </form>
+        <form method="post" action="{% url 'analytics_preference' %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ public_current_url }}">
+          <input type="hidden" name="action" value="accept">
+          <button class="product-analytics-preference__button product-analytics-preference__button--primary" type="submit">{% trans "Allow analytics" %}</button>
+        </form>
+      </div>
+      <a class="product-analytics-preference__link" href="{% url 'cookie_policy' %}{{ public_view_query }}">{% trans "Read the cookie policy" %}</a>
+    </aside>
+  {% elif product_analytics_config.consent_status == "granted" %}
+    <details class="product-analytics-preference product-analytics-preference--compact">
+      <summary>{% trans "Analytics preference" %}</summary>
+      <p>{% trans "Analytics is enabled with a pseudonymous browser ID. You can reset that ID or turn analytics off at any time." %}</p>
+      <div class="product-analytics-preference__actions">
+        <form method="post" action="{% url 'analytics_preference' %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ public_current_url }}">
+          <input type="hidden" name="action" value="reset">
+          <button class="product-analytics-preference__button product-analytics-preference__button--secondary" type="submit">{% trans "Reset ID" %}</button>
+        </form>
+        <form method="post" action="{% url 'analytics_preference' %}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ public_current_url }}">
+          <input type="hidden" name="action" value="revoke">
+          <button class="product-analytics-preference__button product-analytics-preference__button--secondary" type="submit">{% trans "Turn off" %}</button>
+        </form>
+      </div>
+    </details>
+  {% else %}
+    <details class="product-analytics-preference product-analytics-preference--compact">
+      <summary>{% trans "Analytics preference" %}</summary>
+      <p>{% trans "Analytics is off for this browser." %}</p>
+      <form method="post" action="{% url 'analytics_preference' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ public_current_url }}">
+        <input type="hidden" name="action" value="accept">
+        <button class="product-analytics-preference__button product-analytics-preference__button--primary" type="submit">{% trans "Allow analytics" %}</button>
+      </form>
+    </details>
+  {% endif %}
+  <script defer src="{% static 'main/js/product-analytics.js' %}"></script>
 {% endif %}

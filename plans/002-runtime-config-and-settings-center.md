@@ -14,6 +14,15 @@
 - **Planned at**: commit `f742b59`, 2026-07-26
 - **Roadmap status**: RECONCILE
 
+## Relationship to Plan 034
+
+This plan remains the technical reconciliation contract for the typed registry,
+source precedence, redaction, and runtime-setting safety. The dedicated
+operator-experience redesign, including scoped errors, change review,
+optimistic concurrency, information architecture, and visual refinement, is
+now tracked in [Plan 034](034-settings-control-desk.md). Do not duplicate its
+UI work here or use it to create a parallel settings abstraction.
+
 ## Drift check
 
 Run:

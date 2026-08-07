@@ -1,0 +1,8 @@
+{% load i18n %}
+<nav{% if legal_links_class %} class="{{ legal_links_class }}"{% endif %} aria-label="{% trans 'Legal links' %}">
+  <a href="{{ public_privacy_url }}">{% trans "Privacy" %}</a>{% if legal_link_separators %}<span aria-hidden="true"> | </span>{% endif %}
+  <a href="{{ public_terms_url }}">{% trans "Terms" %}</a>{% if legal_link_separators %}<span aria-hidden="true"> | </span>{% endif %}
+  <a href="{{ public_data_policy_url }}">{% trans "Data Policy" %}</a>{% if legal_link_separators %}<span aria-hidden="true"> | </span>{% endif %}
+  <a href="{{ public_cookie_policy_url }}">{% trans "Cookies" %}</a>{% if legal_link_separators %}<span aria-hidden="true"> | </span>{% endif %}
+  <a href="{{ public_disclaimer_url }}">{% trans "Disclaimer" %}</a>
+</nav>

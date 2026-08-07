@@ -304,13 +304,6 @@ body.public-search {
 .public-search .admin-footer__partners-menu a,
 .public-search .admin-footer__partners-menu span { padding: .35rem 0; color: var(--civic-maroon); font-size: .72rem; text-decoration: none; }
 .public-search .admin-footer__partners-menu span { color: var(--civic-muted); }
-.public-search .cookie-consent { position: static; width: 100%; margin: 0; padding: .65rem clamp(1rem, 3vw, 3rem); color: var(--civic-ink); background: #eee6da; border: 0; border-top: 1px solid var(--civic-line); border-radius: 0; box-shadow: none; }
-.public-search .cookie-consent__inner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; }
-.public-search .cookie-consent__copy strong { font-size: .75rem; }
-.public-search .cookie-consent__copy p { display: inline; margin: 0 0 0 .4rem; color: var(--civic-muted); font-size: .68rem; }
-.public-search .cookie-consent__actions { display: flex; flex: 0 0 auto; align-items: center; gap: .75rem; margin: 0; font-size: .68rem; }
-.public-search .cookie-consent__accept { min-height: 32px; padding: .35rem .65rem; color: var(--civic-paper); background: var(--civic-maroon); border: 0; cursor: pointer; }
-
 .about-dialog { width: min(720px, calc(100% - 2rem)); max-width: 720px; max-height: calc(100dvh - 2rem); padding: 0; color: var(--civic-ink); background: transparent; border: 0; }
 .about-dialog::backdrop { background: rgba(33, 29, 29, .58); }
 .about-dialog__surface { max-height: calc(100dvh - 2rem); overflow-y: auto; background: var(--civic-paper); border: 1px solid var(--civic-line); border-top: 4px solid var(--civic-maroon); border-radius: 0; box-shadow: 0 18px 50px rgba(33,29,29,.22); }
@@ -378,9 +371,6 @@ body.public-search {
     .public-search .admin-footer__inner { display: block; }
     .public-search .admin-footer__legal { gap: .45rem; }
     .public-search .admin-footer__legal nav { gap: .5rem; }
-    .public-search .cookie-consent__inner { display: block; }
-    .public-search .cookie-consent__copy p { display: block; margin: .25rem 0 0; }
-    .public-search .cookie-consent__actions { justify-content: flex-start; margin-top: .5rem; }
 }
 
 @media (max-width: 430px) {

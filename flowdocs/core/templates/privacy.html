@@ -5,11 +5,11 @@
 
   <h2>1. Introduction</h2>
   <p>This Privacy Policy explains how the Office of the Commissioner for Cooperation and Registrar, Cooperative Societies, Maharashtra State, Pune ("<strong>Registrar, Cooperative Societies</strong>", "<strong>we</strong>", "<strong>our</strong>", or "<strong>us</strong>"), as the Data Fiduciary, collects, uses, discloses, and protects personal data when you access or use the Sahakar AI platform at <strong>ai-sahakar.net</strong> (the "<strong>Platform</strong>").</p>
-  <p>This Policy is published in compliance with the <strong>Digital Personal Data Protection Act, 2023</strong> (DPDA), the <strong>Information Technology Act, 2000</strong>, and the <strong>Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011</strong> (SPDI Rules), to the extent applicable.</p>
+  <p>This Policy is published in reference to the <strong>Digital Personal Data Protection Act, 2023</strong> (DPDP Act), the <strong>Information Technology Act, 2000</strong>, and the <strong>Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011</strong> (SPDI Rules), to the extent applicable.</p>
   <p>By using the Platform, you acknowledge that you have read and understood this Privacy Policy. If you do not agree with any part of this Policy, please discontinue use of the Platform.</p>
 
   <h2>2. Who We Are (Data Fiduciary)</h2>
-  <p>For the purposes of the DPDA 2023, the Data Fiduciary responsible for your personal data is:</p>
+  <p>For the purposes of the DPDP Act, the Data Fiduciary responsible for your personal data is:</p>
   <p>
     <strong>Registrar, Cooperative Societies, Maharashtra State</strong><br>
     Pune, Maharashtra, India<br>
@@ -25,7 +25,7 @@
   <table class="table table-bordered" tabindex="0">
     <caption>Personal data processed for public visitors</caption>
     <thead>
-      <tr><th scope="col">Data Category</th><th scope="col">What We Collect</th><th scope="col">Legal Basis (DPDA)</th></tr>
+      <tr><th scope="col">Data Category</th><th scope="col">What We Collect</th><th scope="col">Purpose and basis</th></tr>
     </thead>
     <tbody>
       <tr>
@@ -36,7 +36,7 @@
       <tr>
         <td>Technical Data</td>
         <td>IP address (hashed for rate limiting), browser type, device type, access timestamps.</td>
-        <td>Legitimate Use — security and abuse prevention under Section 7(g) DPDA</td>
+        <td>Security and abuse prevention, subject to applicable law</td>
       </tr>
       <tr>
         <td>Language Preference</td>
@@ -44,9 +44,9 @@
         <td>Consent (via cookie notice)</td>
       </tr>
       <tr>
-        <td>Anonymous Product Events (stage pilot only)</td>
-        <td>When the stage pilot is enabled, bounded events such as search submitted, outcome, latency bucket, source opened, and interface view. Questions, answers, document names, source URLs, account data, and explicit stable visitor identifiers are never included. The self-hosted analytics service derives a cookieless pseudonymous session hash from the request IP address, browser user agent, and stage website ID, and may classify browser, operating system, device type, and country.</td>
-        <td>Legitimate Use — aggregate service improvement; the tracker honours browser Do Not Track and Global Privacy Control</td>
+        <td>Optional consent-led product analytics</td>
+        <td>Only after an explicit Allow analytics choice on an approved host: content-free events such as interface presentation, language, result outcome, source-opening outcome, and coarse latency range. A signed consent cookie lasts 180 days and an HTTPS-only, HttpOnly opaque browser token lasts 90 days. The token is never exposed to JavaScript or sent to Umami; the application sends only a one-way pseudonymous alias. Questions, answers, document names, source URLs, account data, raw page URLs, query strings, referrers, session replay, and performance traces are excluded.</td>
+        <td>Optional service improvement after explicit consent; Global Privacy Control blocks collection</td>
       </tr>
     </tbody>
   </table>
@@ -57,13 +57,13 @@
   <table class="table table-bordered" tabindex="0">
     <caption>Personal data processed for authorized officials</caption>
     <thead>
-      <tr><th scope="col">Data Category</th><th scope="col">What We Collect</th><th scope="col">Legal Basis (DPDA)</th></tr>
+      <tr><th scope="col">Data Category</th><th scope="col">What We Collect</th><th scope="col">Purpose and basis</th></tr>
     </thead>
     <tbody>
       <tr>
         <td>Account Information</td>
         <td>Username, email address, role (admin/superadmin), and department name.</td>
-        <td>Consent (at registration); Legitimate Use — employment/government function under Section 7(i) DPDA</td>
+        <td>Authorized official account administration and government-function delivery, subject to applicable law</td>
       </tr>
       <tr>
         <td>Login Credentials</td>
@@ -96,15 +96,15 @@
   <p>We do not use personal data for any purpose other than those stated above without providing additional notice and, where required by law, obtaining your consent.</p>
 
   <h2>5. Notice and Consent</h2>
-  <p>In accordance with Section 5 of the DPDA 2023, this Privacy Policy serves as the notice provided to Data Principals (users) at or before the time of collection of personal data. It specifies:</p>
+  <p>This Privacy Policy explains the information processed, the purposes of processing, available choices, and how users can raise a grievance. It is intended to support the notice requirements of the DPDP Act to the extent applicable.</p>
   <ul>
     <li>The personal data to be collected (Section 3 above).</li>
     <li>The purposes for which it is processed (Section 4 above).</li>
     <li>The manner in which Data Principals may exercise their rights (Section 10 below).</li>
     <li>The procedure for filing grievances (Section 11 below).</li>
   </ul>
-  <p>For admin users, consent is obtained at the time of account creation by the registering administrator. For public users, by using the Platform's search function, you provide your consent to the processing of your search queries and technical data as described in this Policy.</p>
-  <p>You may withdraw your consent at any time by discontinuing use of the Platform. For admin users, withdrawal of consent may result in termination of account access.</p>
+  <p>Public search works without optional analytics. Where optional analytics is available, it begins only after the separate Allow analytics action and can be reset from the public search page. Search queries and technical data are processed as necessary to provide and protect the requested service, subject to applicable law.</p>
+  <p>You may withdraw consent for optional analytics at any time through that control or browser settings. For admin users, withdrawal of consent may affect account access where processing is required for authorized account administration.</p>
 
   <h2>6. Disclosure and Transfer of Personal Data</h2>
 
@@ -136,26 +136,28 @@
       <tr><td>Uploaded government documents</td><td>Until explicit removal, deprecation, or archival by an authorized administrator</td></tr>
       <tr><td>Session cookies (admin)</td><td>Until logout or session expiry (2 weeks of inactivity)</td></tr>
       <tr><td>Language preference cookie</td><td>Until cleared by the user via browser settings</td></tr>
-      <tr><td>Anonymous stage product events</td><td>Not collected by default; when the approved pilot is enabled, retained for no more than 30 days and then deleted</td></tr>
+      <tr><td>Optional analytics consent record</td><td>180 days in the browser, unless cleared or reset earlier</td></tr>
+      <tr><td>Optional analytics opaque browser token</td><td>90 days in the browser, unless cleared, reset, or blocked by Global Privacy Control</td></tr>
+      <tr><td>Optional self-hosted analytics events</td><td>According to the separately approved Umami retention and deletion policy; the application does not claim or enforce a fixed event-retention period</td></tr>
     </tbody>
   </table>
   <p>For detailed retention and deletion procedures, see our <a href="{% url 'data_policy' %}{{ public_view_query }}">Data Policy</a>.</p>
 
   <h2>8. Cookies and Tracking Technologies</h2>
-  <p>The Platform uses only essential cookies necessary for its operation:</p>
+  <p>The Platform uses essential cookies necessary for its operation and may use optional product-analytics cookies only after an explicit choice:</p>
   <ul>
     <li><strong>Session Cookie:</strong> Used to maintain authenticated sessions for admin users. This cookie is HttpOnly and transmitted over secure channels. It does not track public users.</li>
     <li><strong>CSRF Token Cookie:</strong> Used as a security measure to prevent cross-site request forgery attacks. This cookie does not contain personal data.</li>
     <li><strong>Language Preference Cookie:</strong> Stores your preferred interface language (English or Marathi).</li>
+    <li><strong>Optional analytics consent and identity cookies:</strong> Only after Allow analytics on an approved host, the Platform stores a signed consent record and a random HTTPS-only, HttpOnly browser token. The token is converted server-side to a one-way alias for allowed self-hosted analytics events; it is not a PdfSearch account identity.</li>
   </ul>
-  <p>We <strong>do not use</strong> third-party tracking cookies, analytics cookies, advertising cookies, or any cookies for behavioural tracking or profiling. For full details, see our <a href="{% url 'cookie_policy' %}{{ public_view_query }}">Cookie Policy</a>.</p>
-  <p>The optional stage analytics pilot is self-hosted at <strong>analytics.ai-sahakar.net</strong> and is cookieless. It uses only manually authored, aggregate events from a strict allowlist. Automatic page views, query strings, page titles, referrers, performance collection, session replay, identity calls, search text, answer text, and document details are disabled. For each direct browser request, Umami observes the IP address and user agent to derive a pseudonymous session hash with the stage website ID; it may also classify browser, operating system, device type, and country. No PdfSearch account identity or explicit distinct ID is sent. The search service continues normally if analytics is disabled or unavailable.</p>
+  <p>We <strong>do not use</strong> advertising, social-media, or third-party tracking cookies, and we do not use optional analytics for behavioural profiling. Automatic page views, raw URLs, query strings, referrers, page titles, session replay, performance traces, search text, answer text, and document details are disabled. The direct connection to the self-hosted analytics service can expose ordinary connection metadata such as IP address and user agent to that service. Global Privacy Control blocks optional collection; the search service continues normally if analytics is disabled or unavailable. For full details, see our <a href="{% url 'cookie_policy' %}{{ public_view_query }}">Cookie Policy</a>.</p>
 
   <h2>9. Children's Data</h2>
-  <p>In compliance with Section 9 of the DPDA 2023, the Platform is not directed at children (individuals below the age of 18 years). We do not knowingly collect personal data from children. The Platform's content pertains to cooperative society laws and government regulations and is intended for use by adults. If we become aware that a child has provided personal data through the Platform, we will take steps to delete such data promptly.</p>
+  <p>In compliance with Section 9 of the DPDP Act, the Platform is not directed at children (individuals below the age of 18 years). We do not knowingly collect personal data from children. The Platform's content pertains to cooperative society laws and government regulations and is intended for use by adults. If we become aware that a child has provided personal data through the Platform, we will take steps to delete such data promptly.</p>
 
-  <h2>10. Your Rights under the DPDA 2023</h2>
-  <p>As a Data Principal under the DPDA 2023, you have the following rights:</p>
+  <h2>10. Your Rights under the DPDP Act</h2>
+  <p>Data Principals may have the following rights under the DPDP Act, subject to applicable law:</p>
 
   <h3>10.1 Right to Access Information (Section 11)</h3>
   <p>You have the right to request: (a) confirmation of whether we are processing your personal data; (b) a summary of the personal data being processed; (c) the processing activities undertaken; and (d) the identities of all Data Fiduciaries and Data Processors with whom your data has been shared.</p>
@@ -167,7 +169,7 @@
   <p>You have the right to file a grievance with our Grievance Officer (see Section 11) regarding any matter related to the processing of your personal data.</p>
 
   <h3>10.4 Right to Nominate (Section 14)</h3>
-  <p>You have the right to nominate another individual to exercise your rights under the DPDA in the event of your death or incapacity.</p>
+  <p>You may have the right to nominate another individual to exercise your rights under the DPDP Act in the event of death or incapacity.</p>
 
   <h3>10.5 Right to Withdraw Consent</h3>
   <p>Where processing is based on your consent, you have the right to withdraw consent at any time. Withdrawal does not affect the lawfulness of processing carried out before withdrawal.</p>
@@ -176,7 +178,7 @@
   <p>To exercise any of these rights, please contact our Grievance Officer at the details provided in Section 11. We will respond to your request within the timeframes prescribed under applicable law. We may need to verify your identity before processing your request.</p>
 
   <h2>11. Grievance Officer</h2>
-  <p>In accordance with Section 13 of the DPDA 2023 and the Information Technology Act, 2000, we have appointed a Grievance Officer to address your privacy concerns and data-related grievances:</p>
+  <p>In accordance with applicable law, including the DPDP Act and the Information Technology Act, 2000, we provide a Grievance Officer contact for privacy concerns and data-related grievances:</p>
   <p>
     <strong>Grievance Officer</strong><br>
     Sahakar AI Platform<br>
@@ -184,10 +186,10 @@
     Email: grievance@ai-sahakar.net
   </p>
   <p>The Grievance Officer will acknowledge your complaint within the timeframe prescribed under applicable law and endeavor to resolve it expeditiously.</p>
-  <p>If you are not satisfied with the resolution provided by our Grievance Officer, you may escalate your complaint to the <strong>Data Protection Board of India</strong> established under the DPDA 2023, once the Board is constituted and operational.</p>
+  <p>If you are not satisfied with the resolution provided by our Grievance Officer, you may use the applicable grievance or regulatory process, including the <strong>Data Protection Board of India</strong> where available.</p>
 
   <h2>12. Data Security</h2>
-  <p>We implement reasonable security practices and procedures, in compliance with Section 8(5) of the DPDA 2023 and the SPDI Rules, to protect personal data from unauthorized access, disclosure, alteration, or destruction. These measures include:</p>
+  <p>We implement reasonable security practices and procedures, taking account of the DPDP Act and the SPDI Rules where applicable, to protect personal data from unauthorized access, disclosure, alteration, or destruction. These measures include:</p>
   <ul>
     <li>Encryption of data in transit using TLS/HTTPS.</li>
     <li>Cryptographic hashing of passwords (never stored in plaintext).</li>
@@ -199,7 +201,7 @@
   <p>While we strive to protect personal data, no method of electronic storage or transmission is 100% secure. We cannot guarantee absolute security.</p>
 
   <h2>13. Personal Data Breach</h2>
-  <p>In the event of a personal data breach, we will take all reasonable steps to contain and mitigate the breach. In accordance with Section 16 of the DPDA 2023, we will notify the Data Protection Board of India and, where required, affected Data Principals, of any breach that is likely to result in harm to the Data Principal.</p>
+  <p>In the event of a personal data breach, we will take reasonable steps to contain and mitigate it and will make notifications required by applicable law.</p>
 
   <h2>14. Cross-Border Transfer of Data</h2>
   <p>Search queries submitted to the Platform are processed by OpenAI, whose servers may be located outside India. By using the Platform, you consent to the transfer of your search queries to OpenAI's servers for the purpose of generating AI responses. We do not transfer any personal data of admin users outside India, except as described above for search queries.</p>

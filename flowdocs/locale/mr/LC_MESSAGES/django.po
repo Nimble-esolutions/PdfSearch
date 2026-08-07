@@ -5511,3 +5511,177 @@ msgstr "प्रथम सध्याची आवश्यकता पूर
 #, python-format
 msgid "Next: %(action)s"
 msgstr "पुढील पाऊल: %(action)s"
+
+#: core/templates/public_error.html
+msgid "Skip to page message"
+msgstr "पृष्ठावरील संदेशाकडे जा"
+
+#: core/templates/public_error.html
+msgid "Service notice"
+msgstr "सेवा सूचना"
+
+#: core/templates/public_error.html
+msgid "Return to document search"
+msgstr "दस्तऐवज शोधाकडे परत जा"
+
+#: core/templates/public_error.html
+msgid "Visit the official website"
+msgstr "अधिकृत संकेतस्थळाला भेट द्या"
+
+#: core/templates/public_error.html
+msgid "Public information service"
+msgstr "सार्वजनिक माहिती सेवा"
+
+#: core/templates/public_error.html
+msgid "Registrar Co-operative Societies, Maharashtra"
+msgstr "सहकारी संस्था निबंधक, महाराष्ट्र"
+
+#: core/views.py
+#, python-format
+msgid "Error %(status)s"
+msgstr "त्रुटी %(status)s"
+
+#: core/views.py
+msgid "We could not understand that request"
+msgstr "ही विनंती समजली नाही"
+
+#: core/views.py
+msgid "The link or form may be incomplete. Return to document search and try again."
+msgstr "दुवा किंवा फॉर्म अपूर्ण असू शकतो. दस्तऐवज शोधाकडे परत जा आणि पुन्हा प्रयत्न करा."
+
+#: core/views.py
+msgid "Your search and account information have not been changed."
+msgstr "तुमचा शोध आणि खाते माहिती बदललेली नाही."
+
+#: core/views.py
+msgid "This page is not available"
+msgstr "हे पृष्ठ उपलब्ध नाही"
+
+#: core/views.py
+msgid "You do not have access to this page from here. Sign in with an authorized account if you need the administration console."
+msgstr "येथून तुम्हाला या पृष्ठाचा प्रवेश नाही. प्रशासन कन्सोल आवश्यक असल्यास अधिकृत खात्याने साइन इन करा."
+
+#: core/views.py
+msgid "Public document search remains available without signing in."
+msgstr "साइन इन न करताही सार्वजनिक दस्तऐवज शोध उपलब्ध आहे."
+
+#: core/views.py
+msgid "The address may be outdated, incomplete, or no longer in service. Your search and account information have not been changed."
+msgstr "हा पत्ता कालबाह्य, अपूर्ण किंवा सेवेत नसू शकतो. तुमचा शोध आणि खाते माहिती बदललेली नाही."
+
+#: core/views.py
+msgid "If you followed a saved link, return to search and look for the relevant Act, Rule, circular, or procedure."
+msgstr "तुम्ही जतन केलेला दुवा वापरला असल्यास शोधाकडे परत जा आणि संबंधित अधिनियम, नियम, परिपत्रक किंवा प्रक्रिया शोधा."
+
+#: core/views.py
+msgid "Service is temporarily unavailable"
+msgstr "सेवा तात्पुरती उपलब्ध नाही"
+
+#: core/views.py
+msgid "The service could not complete this request. Return to document search and try again shortly."
+msgstr "सेवा ही विनंती पूर्ण करू शकली नाही. दस्तऐवज शोधाकडे परत जा आणि थोड्या वेळाने पुन्हा प्रयत्न करा."
+
+#: core/templates/components/product_analytics.html
+msgid "Analytics is off for this browser"
+msgstr "या ब्राउझरसाठी विश्लेषण बंद आहे"
+
+#: core/templates/components/product_analytics.html
+msgid "Your browser's Global Privacy Control preference prevents optional analytics. Search remains fully available."
+msgstr "तुमच्या ब्राउझरच्या ग्लोबल प्रायव्हसी कंट्रोल पसंतीमुळे पर्यायी विश्लेषण रोखले आहे. शोध पूर्णपणे उपलब्ध राहील."
+
+#: core/templates/components/product_analytics.html
+msgid "Read the cookie policy"
+msgstr "कुकी धोरण वाचा"
+
+#: core/templates/components/product_analytics.html
+msgid "Help improve Sahakar AI"
+msgstr "सहकार AI सुधारण्यासाठी मदत करा"
+
+#: core/templates/components/product_analytics.html
+msgid "With your permission, we collect a small set of content-free service-use events. We never send your question, answer, source document, or account details."
+msgstr "तुमच्या परवानगीने आम्ही मजकूरविरहित सेवा-वापर घटनांचा लहान संच गोळा करतो. तुमचा प्रश्न, उत्तर, स्रोत दस्तऐवज किंवा खाते तपशील कधीही पाठवले जात नाहीत."
+
+#: core/templates/components/product_analytics.html
+msgid "An HTTPS-only pseudonymous browser ID helps count returning visitors for up to 90 days. It is created only after you allow analytics. Global Privacy Control always prevents collection."
+msgstr "HTTPS-पुरता छद्मनामी ब्राउझर आयडी 90 दिवसांपर्यंत परत येणाऱ्या अभ्यागतांची संख्या मोजण्यास मदत करतो. तुम्ही विश्लेषणाला परवानगी दिल्यानंतरच तो तयार होतो. ग्लोबल प्रायव्हसी कंट्रोल नेहमी संकलन रोखतो."
+
+#: core/templates/components/product_analytics.html
+msgid "No thanks"
+msgstr "नको, धन्यवाद"
+
+#: core/templates/components/product_analytics.html
+msgid "Allow analytics"
+msgstr "विश्लेषणास अनुमती द्या"
+
+#: core/templates/components/product_analytics.html
+msgid "Analytics preference"
+msgstr "विश्लेषणाची पसंती"
+
+#: core/templates/components/product_analytics.html
+msgid "Analytics is enabled with a pseudonymous browser ID. You can reset that ID or turn analytics off at any time."
+msgstr "छद्मनामी ब्राउझर आयडीसह विश्लेषण सुरू आहे. तुम्ही हा आयडी रीसेट करू शकता किंवा कधीही विश्लेषण बंद करू शकता."
+
+#: core/templates/components/product_analytics.html
+msgid "Reset ID"
+msgstr "आयडी रीसेट करा"
+
+#: core/templates/components/product_analytics.html
+msgid "Turn off"
+msgstr "बंद करा"
+
+#: core/templates/components/product_analytics.html
+msgid "Analytics is off for this browser."
+msgstr "या ब्राउझरसाठी विश्लेषण बंद आहे."
+
+#: core/templates/dashboard_settings.html
+msgid "Consent-led product analytics"
+msgstr "संमतीवर आधारित उत्पादन विश्लेषण"
+
+#: core/templates/dashboard_settings.html
+msgid "Analytics collection for this host"
+msgstr "या होस्टसाठी विश्लेषण संकलन"
+
+#: core/templates/dashboard_settings.html
+msgid "Website ID source"
+msgstr "वेबसाइट आयडीचा स्रोत"
+
+#: core/templates/dashboard_settings.html
+msgid "Saved for this host"
+msgstr "या होस्टसाठी जतन केलेले"
+
+#: core/templates/dashboard_settings.html
+msgid "Approved stage default"
+msgstr "मंजूर स्टेज डीफॉल्ट"
+
+#: core/templates/dashboard_settings.html
+msgid "Enabled for new page requests"
+msgstr "नवीन पृष्ठ विनंत्यांसाठी सुरू आहे"
+
+#: core/templates/dashboard_settings.html
+msgid "Disabled by this host's setting"
+msgstr "या होस्टच्या सेटिंगमुळे बंद आहे"
+
+#: core/templates/dashboard_settings.html
+msgid "Website ID needed"
+msgstr "वेबसाइट आयडी आवश्यक आहे"
+
+#: core/templates/dashboard_settings.html
+msgid "Umami Website ID for this host"
+msgstr "या होस्टसाठी Umami वेबसाइट आयडी"
+
+#: core/templates/dashboard_settings.html
+msgid "Save analytics mode"
+msgstr "विश्लेषण मोड जतन करा"
+
+#: core/templates/dashboard_settings.html
+msgid "Hard-disabled on this host."
+msgstr "या होस्टवर पूर्णपणे बंद आहे."
+
+#: core/views.py
+msgid "Confirm persistent analytics before enabling it."
+msgstr "सतत विश्लेषण सुरू करण्यापूर्वी त्याची पुष्टी करा."
+
+#: core/views.py
+#, python-format
+msgid "Product analytics for %(host)s changed to %(mode)s. The new posture applies to new public-page requests."
+msgstr "%(host)s साठी उत्पादन विश्लेषण %(mode)s असे बदलले आहे. नवीन स्थिती नवीन सार्वजनिक-पृष्ठ विनंत्यांना लागू होईल."

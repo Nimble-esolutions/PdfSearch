@@ -13,6 +13,9 @@
 
   const enumOf = values => value => values.includes(value);
   const boundedInteger = value => Number.isInteger(value) && value >= 1 && value <= 10;
+  const identityAlias = value => typeof value === "string" && /^v1_[A-Za-z0-9_-]{43}$/u.test(value);
+  const umamiWebsiteId = value => typeof value === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
   const schemas = Object.freeze({
     search_viewed: {
       view: enumOf(["classic", "workbench"]),
@@ -117,16 +120,45 @@
 
   const queue = [];
   const MAX_QUEUE = 32;
+  const MAX_LOAD_ATTEMPTS = 2;
   const dnt = String(navigator.doNotTrack || window.doNotTrack || "").toLowerCase();
-  const privacyControlEnabled = ["1", "yes"].includes(dnt) || navigator.globalPrivacyControl === true;
+  const dntEnabled = ["1", "yes"].includes(dnt);
+  const gpcEnabled = navigator.globalPrivacyControl === true;
   const domainAllowed = Array.isArray(config.allowed_domains)
-    && config.allowed_domains.includes(window.location.hostname);
-  const collectionAllowed = !privacyControlEnabled && domainAllowed;
+    && config.allowed_domains.length === 1
+    && config.allowed_domains[0] === window.location.hostname;
+  const consentGranted = config.consent_status === "granted";
+  const identityReady = config.identity_ready === true && identityAlias(config.identity_alias);
+  const configurationValid = umamiWebsiteId(config.website_id)
+    && typeof config.script_url === "string"
+    && config.script_url === "https://analytics.ai-sahakar.net/script.js";
+  const collectionAllowed = configurationValid && domainAllowed && consentGranted && identityReady && !gpcEnabled;
+  let trackerState = collectionAllowed ? "pending" : "blocked";
+  let loadAttempts = 0;
+
+  function collectionStatus() {
+    if (!configurationValid) return "configuration_invalid";
+    if (!domainAllowed) return "host_unapproved";
+    if (!consentGranted) return "awaiting_consent";
+    if (!identityReady) return "identity_unavailable";
+    if (gpcEnabled) return "blocked_gpc";
+    return trackerState;
+  }
 
   function send(name, data) {
     try {
       if (typeof window.umami?.track !== "function") return false;
       window.umami.track(name, data);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function identify() {
+    try {
+      if (typeof window.umami?.identify !== "function") return false;
+      window.umami.identify(config.identity_alias);
       return true;
     } catch (_error) {
       return false;
@@ -151,7 +183,16 @@
   }
 
   function beforeSend(type, payload) {
-    if (!collectionAllowed || type !== "event" || !payload || payload.website !== config.website_id) return false;
+    if (!collectionAllowed || !payload || payload.website !== config.website_id) return false;
+    if (type === "identify") {
+      if (payload.id !== config.identity_alias) return false;
+      return {
+        website: config.website_id,
+        hostname: window.location.hostname,
+        id: config.identity_alias,
+      };
+    }
+    if (type !== "event") return false;
     const clean = sanitizeTransportEvent(payload.name, payload.data);
     if (!clean) return false;
     return {
@@ -206,6 +247,11 @@
   window.PdfSearchAnalytics = Object.freeze({
     track,
     beforeSend,
+    getStatus: () => Object.freeze({
+      state: collectionStatus(),
+      consent: config.consent_status || "unset",
+      dnt_overridden_by_consent: Boolean(dntEnabled && consentGranted && !gpcEnabled),
+    }),
     wordCountBucket,
     durationBucket,
     countBucket,
@@ -223,20 +269,42 @@
 
   if (!collectionAllowed) return;
 
+  function retryOrFail(script) {
+    script.remove();
+    if (loadAttempts < MAX_LOAD_ATTEMPTS) {
+      trackerState = "retrying";
+      window.setTimeout(loadTracker, 500 * loadAttempts);
+      return;
+    }
+    trackerState = "unavailable";
+    queue.length = 0;
+  }
+
   function loadTracker() {
+    if (trackerState === "ready" || trackerState === "loading") return;
+    loadAttempts += 1;
+    trackerState = "loading";
     const script = document.createElement("script");
     script.async = true;
     script.src = config.script_url;
     script.dataset.websiteId = config.website_id;
     script.dataset.autoTrack = "false";
-    script.dataset.doNotTrack = "true";
+    // Consent is explicit; Global Privacy Control is still enforced above.
+    script.dataset.doNotTrack = "false";
     script.dataset.domains = config.allowed_domains.join(",");
     script.dataset.beforeSend = "aiSahakarAnalyticsBeforeSend";
     script.dataset.excludeSearch = "true";
     script.dataset.excludeHash = "true";
     script.dataset.performance = "false";
-    script.addEventListener("load", flush, {once: true});
-    script.addEventListener("error", () => { queue.length = 0; }, {once: true});
+    script.addEventListener("load", () => {
+      if (!identify()) {
+        retryOrFail(script);
+        return;
+      }
+      trackerState = "ready";
+      flush();
+    }, {once: true});
+    script.addEventListener("error", () => retryOrFail(script), {once: true});
     document.head.appendChild(script);
   }
 

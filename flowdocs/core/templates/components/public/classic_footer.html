@@ -1,0 +1,12 @@
+{% load static i18n %}
+<footer class="classic-footer{% if footer_class %} {{ footer_class }}{% endif %}">
+  <div class="classic-footer__inner">
+    <div>
+      <p>{% trans "All rights reserved© Registrar Co-operative Societies." %}</p>
+      {% include "components/public/legal_links.html" %}
+    </div>
+    <a href="https://nimble-esolutions.com/" target="_blank" rel="noopener noreferrer">
+      <img src="{% static 'main/images/footer-logo-nimble.jpg' %}" width="95" height="40" alt="{% trans 'Nimble eSolutions' %}">
+    </a>
+  </div>
+</footer>

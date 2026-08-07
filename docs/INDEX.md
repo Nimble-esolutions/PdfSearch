@@ -37,11 +37,13 @@ Supersedes: None
   deployment evidence.
 - [dataops/V3_IMPACT_ANALYSIS.md](dataops/V3_IMPACT_ANALYSIS.md) — completed
   cutover impact plus the remaining VaultOps dependency-removal backlog.
+- [PERSISTENT_ANALYTICS_OPERATIONS.md](PERSISTENT_ANALYTICS_OPERATIONS.md) —
+  current consent-led persistent analytics contract, host/tenant separation,
+  canonical apex/`www` treatment, browser canaries, independent Umami gate,
+  and theme-consistent public error behaviour.
 - [PRODUCT_ANALYTICS_RECOMMENDATION.md](PRODUCT_ANALYTICS_RECOMMENDATION.md) —
-  ranked Umami/Tianji/Aptabase/Plausible/OpenPanel/Rybbit/PostHog comparison,
-  Parseable/DataLens category boundary, event allowlist, forbidden data, and
-  stage-pilot release gate; the disabled-by-default public-search adapter is in
-  PR #192 while the independent service deployment remains operator-managed.
+  historical Umami/Tianji/Aptabase/Plausible/OpenPanel/Rybbit/PostHog comparison
+  and selection rationale; it is not the current operating contract.
 - [SETTINGS_OPERATIONS.md](SETTINGS_OPERATIONS.md) — grouped runtime controls,
   read-only deployment posture, validation, confirmation, and rollback notes.
 

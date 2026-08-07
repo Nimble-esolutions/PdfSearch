@@ -4,7 +4,7 @@
   <p class="text-muted">Last updated: {{ legal_last_updated }}</p>
 
   <h2>1. Purpose and Scope</h2>
-  <p>This Data Policy explains how data within the Sahakar AI platform is classified, stored, retained, backed up, and deleted. It supplements our <a href="{% url 'privacy' %}{{ public_view_query }}">Privacy Policy</a> and is published in alignment with the data protection obligations under the Digital Personal Data Protection Act, 2023 (DPDA) and the Information Technology Act, 2000.</p>
+  <p>This Data Policy explains how data within the Sahakar AI platform is classified, stored, retained, backed up, and deleted. It supplements our <a href="{% url 'privacy' %}{{ public_view_query }}">Privacy Policy</a> and is published in alignment with the data protection obligations under the Digital Personal Data Protection Act, 2023 (DPDP Act) and the Information Technology Act, 2000.</p>
 
   <h2>2. Data Classification</h2>
   <p>Data within the Platform is classified into the following categories:</p>
@@ -25,6 +25,11 @@
         <td>Admin user accounts (username, email, role, department), system settings, rate-limit counters.</td>
       </tr>
       <tr>
+        <td><strong>Optional Analytics Data</strong></td>
+        <td>Consent state and pseudonymous, content-free product-analytics information only when the visitor explicitly allows it on an approved host.</td>
+        <td>Signed consent state, opaque browser token, one-way analytics alias, allowed event name and bounded event properties. Search questions, answers, documents, and source URLs are excluded.</td>
+      </tr>
+      <tr>
         <td><strong>Derived Data</strong></td>
         <td>Data generated through the processing of uploaded documents for search functionality.</td>
         <td>FAISS vector indexes, text embeddings, chunked document representations, OCR output.</td>
@@ -38,7 +43,7 @@
   </table>
 
   <h2>3. Data Retention Periods</h2>
-  <p>In accordance with the principle of storage limitation under the DPDA 2023, data is retained only for as long as necessary for the specified purpose:</p>
+  <p>In accordance with the storage-limitation principle under the DPDP Act, data is retained only for as long as necessary for the specified purpose:</p>
   <table class="table table-bordered" tabindex="0">
     <caption>Service data retention schedule</caption>
     <thead>
@@ -59,6 +64,11 @@
         <td>Hashed IP addresses</td>
         <td>60 seconds (rate-limit window only)</td>
         <td>Used exclusively for rate-limit enforcement. Hashed inline and discarded when the window expires.</td>
+      </tr>
+      <tr>
+        <td>Optional analytics browser records</td>
+        <td>Consent record: 180 days; opaque browser token: 90 days; both can be cleared or reset earlier.</td>
+        <td>Self-hosted analytics event retention is governed by its separately approved operating policy.</td>
       </tr>
       <tr>
         <td>Uploaded PDF documents</td>
@@ -106,8 +116,8 @@
     <li><strong>Search Query Data:</strong> Public search queries are transient and never persisted. No deletion action is required.</li>
   </ol>
 
-  <h2>6. Data Subject Rights under DPDA 2023</h2>
-  <p>Data Principals (users) have the following rights under the DPDA 2023:</p>
+  <h2>6. Data Subject Rights under the DPDP Act</h2>
+  <p>Data Principals (users) may have the following rights under the DPDP Act, subject to applicable law:</p>
   <ul>
     <li><strong>Right to Access (Section 11):</strong> Request confirmation of processing and a summary of personal data held.</li>
     <li><strong>Right to Correction and Erasure (Section 12):</strong> Request correction of inaccurate data or erasure of personal data, subject to legal retention obligations.</li>
@@ -117,7 +127,7 @@
   <p>To exercise any of these rights, contact: <strong>grievance@ai-sahakar.net</strong>.</p>
 
   <h2>7. Data Security Measures</h2>
-  <p>In compliance with Section 8(5) of the DPDA 2023 and the SPDI Rules, we maintain reasonable security safeguards including:</p>
+  <p>Taking account of the DPDP Act and the SPDI Rules where applicable, we maintain reasonable security safeguards including:</p>
   <ul>
     <li>Encryption of data in transit using HTTPS/TLS.</li>
     <li>Password storage using salted cryptographic hashing algorithms.</li>

@@ -18,6 +18,8 @@ they do not override the living handoff's observed state.
 - `ACTIVE GATE`: recurring verification contract applied to every relevant PR.
 - `BLOCKED`: a named prerequisite or operator decision is missing.
 - `REJECTED`: explicitly considered and not worth implementing now.
+- `SUPERSEDED`: retained historical context; follow the linked current contract
+  instead of executing it.
 
 ## Execution order and status
 
@@ -51,8 +53,9 @@ they do not override the living handoff's observed state.
 | 029 | Harden mobile search against dynamic viewport changes | P2 | S/M | — | TODO |
 | 030 | Make browser tests own a source-backed runtime | P1 | S/M | — | TODO |
 | 031 | Treat retrieved documents as untrusted model evidence | P1 | S | 025 | TODO |
-| 032 | Historical cookieless stage-pilot analytics record | P2 | M | — | DONE (historical) |
+| 032 | Historical cookieless stage-pilot analytics record | P2 | M | — | SUPERSEDED — use `docs/PERSISTENT_ANALYTICS_OPERATIONS.md` |
 | 033 | Prewarm and measure the signed search corpus | P1 | M | 027 | TODO |
+| 034 | Make Settings & Configuration a safe operator control desk | P1 | M | 002, 006 | TODO |
 | 035 | Make public home rendering proportional to the selected theme | P1 | M | 006 gate | TODO |
 | 036 | Make release static assets immutable and cacheable | P1 | M | 006 gate | TODO |
 | 037 | Replace the Classic composite banner with a responsive CSS masthead | P2 | M | 006 gate; validate 036 if landed | TODO |
@@ -105,10 +108,9 @@ they do not override the living handoff's observed state.
 test ownership are independent. Plan 031 follows 025 so timeout/failure and
 prompt-contract changes are certified together without another cache rotation.
 Plan 033 follows 027 so prewarm and any optional memory-map spike are driven by
-measured cold latency and RSS. Plan 032 is historical provider-selection
-evidence. The consent-led analytics candidate and Plan 038 remain outside the
-search hot path; independent Umami deployment, retention, and restore proof
-remain operator work.
+measured cold latency and RSS. Historical Plan 032 remains outside the search
+hot path; use `docs/PERSISTENT_ANALYTICS_OPERATIONS.md` for the current
+consent-led analytics contract and independent Umami deployment proof.
 ```
 
 Plan 011 comes before database replacement because recovery must not depend on
@@ -142,6 +144,10 @@ must reconcile the consent-led analytics candidate with `dev` before any
 capability is enabled. Its performance stage waits for the measured rendering
 and static baselines from Plans 035 and 036. Heatmaps are policy-gated rather
 than an automatic follow-up.
+
+Plan 034 is the operator-experience reconciliation of the existing settings
+registry. It follows Plan 002's safety contract and must not create a second
+configuration plane or expose recovery/secret controls as browser settings.
 
 ## Universal execution contract
 

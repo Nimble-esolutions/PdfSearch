@@ -19,6 +19,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+
+handler400 = "core.views.public_bad_request"
+handler403 = "core.views.public_permission_denied"
+handler404 = "core.views.public_page_not_found"
+handler500 = "core.views.public_server_error"
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('core.urls')),  # ✅ Include your app's URLs

@@ -75,14 +75,5 @@
     </div>
   </footer>
 
-  <div class="public-legal__cookie" id="cookieConsent" role="region" aria-label="{% trans 'Cookie notice' %}" hidden>
-    <p><strong>{% trans "Essential cookies" %}</strong> {% trans "This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used." %}</p>
-    <div>
-      <a href="{{ cookie_policy_url }}">{% trans "Cookie Policy" %}</a>
-      <a href="{{ privacy_url }}">{% trans "Privacy Policy" %}</a>
-      <button type="button" class="cookie-consent__accept" data-cookie-accept>{% trans "Accept" %}</button>
-    </div>
-  </div>
-  <script src="{% static 'main/js/public-legal.js' %}"></script>
 </body>
 </html>

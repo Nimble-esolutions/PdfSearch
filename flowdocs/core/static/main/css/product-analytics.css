@@ -1,0 +1,88 @@
+/* Consent-led product analytics is intentionally a small, standalone public UI.
+ * It has no dependency on Bootstrap and works in both public search themes. */
+.product-analytics-preference {
+  position: fixed;
+  z-index: 70;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  width: min(26rem, calc(100% - 2rem));
+  padding: 1rem;
+  color: #2b2522;
+  background: #fffdf9;
+  border: 1px solid #cfc3b4;
+  border-top: 4px solid #6b1320;
+  border-radius: .55rem;
+  box-shadow: 0 16px 38px rgba(35, 29, 29, .2);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: .875rem;
+  line-height: 1.45;
+}
+
+.product-analytics-preference h2 {
+  margin: 0 0 .4rem;
+  color: #5a101b;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.product-analytics-preference p { margin: .35rem 0; }
+.product-analytics-preference__note { color: #625952; font-size: .78rem; }
+.product-analytics-preference__actions { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: .85rem; }
+.product-analytics-preference__actions form { margin: 0; }
+
+.product-analytics-preference__button {
+  min-height: 2.35rem;
+  padding: .45rem .7rem;
+  border: 1px solid #6b1320;
+  border-radius: .3rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.product-analytics-preference__button--primary { color: #fff; background: #6b1320; }
+.product-analytics-preference__button--primary:hover { background: #4e0d16; }
+.product-analytics-preference__button--secondary { color: #5a101b; background: #fffdf9; }
+.product-analytics-preference__button--secondary:hover { background: #f3ece3; }
+.product-analytics-preference__link { display: inline-block; margin-top: .8rem; color: #4c3a25; font-size: .78rem; }
+
+.product-analytics-preference--compact {
+  width: auto;
+  max-width: min(22rem, calc(100% - 2rem));
+  padding: .6rem .75rem;
+  border-top-width: 2px;
+  box-shadow: 0 8px 22px rgba(35, 29, 29, .16);
+}
+
+.product-analytics-preference--compact summary {
+  color: #5a101b;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.product-analytics-preference--compact[open] { width: min(22rem, calc(100% - 2rem)); }
+.product-analytics-preference--compact[open] summary { margin-bottom: .45rem; }
+
+.classic-search .product-analytics-preference { bottom: max(5.5rem, env(safe-area-inset-bottom)); }
+.public-search .product-analytics-preference { bottom: max(1rem, env(safe-area-inset-bottom)); }
+
+.product-analytics-preference :focus-visible {
+  outline: 3px solid #075e96;
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .product-analytics-preference {
+    right: .5rem;
+    bottom: .5rem;
+    width: calc(100% - 1rem);
+    padding: .8rem;
+    font-size: .82rem;
+  }
+
+  .classic-search .product-analytics-preference { bottom: 4.2rem; }
+}
+
+@media print {
+  .product-analytics-preference { display: none !important; }
+}

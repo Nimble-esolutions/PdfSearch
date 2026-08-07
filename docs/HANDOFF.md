@@ -45,7 +45,8 @@ can change after that time, so repeat the read-only checks in
 | --- | --- | --- |
 | Repository integration baseline | `dev` contains `df9085c` (PR #194) | PRs #185–#194 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, search-latency hardening, Umami integration, the repository-truth audit, the Classic focus-ring fix, and the Settings control center are integrated |
 | Classic focus-ring fix | PR #193 is merged into `dev`; not yet deployed to stage | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
-| Product analytics decision | PR #192 merged a disabled-by-default, stage-only Umami browser adapter; the independent service remains operator-managed | The supplied `analytics.ai-sahakar.net` endpoint and public website ID are restricted to `2026.ai-sahakar.net`. A superadmin kill switch uses `SiteSetting`, not a new environment variable. Manual allowlisted events, DNT/GPC, hostname rejection, question-language bucketing, final payload rejection, and adapter-level fail-open behavior are browser-tested. Production remains disabled. |
+| Persistent analytics candidate | Branch `feat/persistent-stage-analytics` is under review; the independent service remains operator-managed | It replaces the earlier stage-only/cookieless adapter with explicit-consent, host-scoped stage/production tenants, an HTTPS-only persistent pseudonymous browser ID, Global Privacy Control blocking, local hard-disablement, and a per-host superadmin control. The focused Django suite (70), analytics browser suite (6), and 20-run error-page browser matrix pass against an isolated local service; this is not yet deployment proof. Read [`PERSISTENT_ANALYTICS_OPERATIONS.md`](PERSISTENT_ANALYTICS_OPERATIONS.md). |
+| Public recovery-page candidate | Branch `feat/persistent-stage-analytics` is under review | Standard 400/403/404/500 responses use the active Classic/Workbench public visual language, no tracker/search scripts, no failed-URL reflection, and a static header/footer fallback that avoids both session-user lookup and named-route recursion. The focused suite (70) includes a real unhandled-500 dispatch under a deliberately partial URL configuration; the isolated local browser check confirms responsive width and no serious/critical axe violations. No stage deployment claim is implied. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
@@ -104,6 +105,7 @@ backup remains off unless the operator explicitly changes that policy.
 | Activation | Signed runtime pointer plus exact manifest digest is required; quarantine presence and HTTP 200 are insufficient |
 | Public search presentation | Classic search is the fail-closed primary view; Knowledge Workbench remains isolated and can be selected by a superadmin or previewed with `?view=workbench` |
 | Public search response contract | Exact standalone greetings/thanks/identity prompts are `small_talk`; document questions are `evidence_answer` or `no_evidence`; `language` follows the question (`en`/`mr`), not the selected UI; both themes consume the same typed JSON contract |
+| Product analytics production posture | Collection is allowed for the future 2026 production app only after its dedicated Umami Website ID, canonical apex routing, independent-stack proof, and normal production canary; it is not enabled on the legacy service by this repository |
 
 PR #186 corrected the legacy substring small-talk predicate that caused words
 such as `updated` and `membership` to collide with `date` or `hi`. Matching is
@@ -183,12 +185,15 @@ and canaried. Remaining work is:
 9. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
-10. **Stage product analytics:** deploy the independent pinned Umami/PostgreSQL
-   stack manually, verify `https://analytics.ai-sahakar.net/script.js`, TLS,
-   dashboard authentication, 30-day maximum retention, deletion, and database
-   restore, then enable **Stage Umami collection** from superadmin Settings.
-   Confirm only bounded events arrive and rehearse an analytics outage. Never
-   add analytics to application readiness or enable production before review.
+10. **Consent-led analytics candidate:** after this branch is reviewed and
+   deployed, verify the independent pinned Umami/PostgreSQL stack, reviewed
+   tracker version/source, TLS, dashboard authentication, retention/deletion
+   authority, and database restore. Then use the per-host Settings control and
+   run the exact browser canary in
+   [`PERSISTENT_ANALYTICS_OPERATIONS.md`](PERSISTENT_ANALYTICS_OPERATIONS.md).
+   Production collection is authorized in principle, but only for the future
+   canonical 2026 app with a separate production tenant and normal cutover
+   evidence; never add analytics to application readiness.
 
 ## Known traps that must not recur
 
@@ -245,6 +250,11 @@ and canaried. Remaining work is:
   affect the running request path safely, it must be read-only and explain the
   reviewed deployment path. High-impact runtime changes require explicit
   acknowledgement and server-side validation.
+- Do not describe the historic cookieless stage pilot as current behaviour.
+  Current analytics documentation must distinguish code under review from live
+  service evidence, use one exact host per tenant, and state that Website IDs
+  are public configuration while tracker integrity, retention, and deletion
+  remain independent operational controls.
 - Do not resurrect VaultOps as a parallel product surface. DataOps v3 replaced
   its operator workbench to reduce operator and code complexity. Do not claim
   that the package was deleted: its internal compatibility API, control schema,

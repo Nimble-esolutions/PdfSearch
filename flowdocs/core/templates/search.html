@@ -22,6 +22,7 @@
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'main/css/search.css' %}">
   <link rel="stylesheet" href="{% static 'main/css/civic-workbench.css' %}">
+  <link rel="stylesheet" href="{% static 'main/css/product-analytics.css' %}">
 {% endblock %}
 
 {% block seo %}
@@ -266,5 +267,5 @@ window.PdfSearch = {
   feedbackUrl: "{{ feedback_url|escapejs }}"
 };
 </script>
-<script src="{% static 'main/js/search.js' %}"></script>
+<script defer src="{% static 'main/js/search.js' %}"></script>
 {% endblock %}

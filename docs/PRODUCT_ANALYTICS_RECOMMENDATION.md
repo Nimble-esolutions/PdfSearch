@@ -1,13 +1,35 @@
-Status: Implementation candidate in PR #192; self-hosted service deployment pending
+Status: Historical selection record — do not use for current implementation or operating behaviour
 Audience: Product owner, privacy owner, developer, operator
 Owner: FlowDocs maintainers
 Last verified: 2026-08-07
-Canonical source: docs/PRODUCT_ANALYTICS_RECOMMENDATION.md
-Supersedes: None
+Canonical source: docs/PERSISTENT_ANALYTICS_OPERATIONS.md
+Supersedes: None; retained as the product-selection evidence
 
-# Privacy-first product analytics recommendation
+# Historical privacy-first product analytics recommendation
 
-## Decision summary
+> **Current implementation:** Read
+> [`PERSISTENT_ANALYTICS_OPERATIONS.md`](PERSISTENT_ANALYTICS_OPERATIONS.md).
+> The current application is consent-led and persistent after opt-in, uses
+> host-scoped stage/production tenants, hard-disables local collection, and
+> protects a derived pseudonymous alias. This historical document describes the
+> earlier cookieless stage-pilot decision and comparison, not the deployed
+> runtime contract.
+
+## Current boundary at a glance
+
+- Stage (`2026.ai-sahakar.net`) and future canonical production
+  (`ai-sahakar.net`) have separate Umami Website IDs and independent enablement.
+- Local, preview, test, and `www` hosts cannot receive analytics configuration.
+- A visitor must explicitly allow collection; Global Privacy Control always
+  blocks it. The browser-held raw token is HTTPS-only and HttpOnly; Umami sees
+  only its versioned HMAC alias and allowlisted content-free events.
+- Production collection is supported once the future 2026 production service,
+  canonical apex routing, and a dedicated production tenant are proven. This is
+  not evidence that the legacy production site has changed.
+
+## Archived selection record (2026-08-07)
+
+### Decision summary
 
 Product analytics must remain separate from operational search telemetry. Keep
 search latency, provider timing, corpus state, cache behavior, and readiness in
@@ -28,7 +50,7 @@ stack on the same server. Stage collection must remain disabled until that
 service, its 30-day maximum pilot retention, dashboard access, backup/restore,
 and deletion authority are verified. Production capture remains unapproved.
 
-## Implemented application boundary
+### Historical implementation boundary
 
 The integration deliberately adds no environment variables and no backend call:
 

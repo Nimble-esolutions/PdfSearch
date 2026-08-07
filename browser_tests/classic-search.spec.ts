@@ -32,10 +32,6 @@ async function installThrowingAnalyticsAdapter(page: Page) {
 }
 
 test.describe('Classic public search', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem('cookieConsent', 'accepted'));
-  });
-
   test('is the isolated default and preserves the training layout contract', async ({ page }) => {
     await page.goto('/');
 
