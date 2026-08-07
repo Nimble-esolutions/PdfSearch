@@ -92,6 +92,41 @@ Rollback by selecting Workbench in Settings, or by reverting the feature PR.
 Neither action changes documents, indexes, search sources, backups, or runtime
 generations.
 
+### 2026-08-07 local re-check (requested)
+
+Current local state has reverted to the classic layout intentionally:
+
+- Branch: `feat/persistent-stage-analytics`
+- Working tree: clean (`git status --short` empty)
+- Running service: `pdfsearch-web-1` on `127.0.0.1:8000`
+- Homepage marker checks confirm:
+  - body class is `classic-search`
+  - `/static/main/css/search-classic.css` is linked from root route
+- Served static hashes currently match repo hashes after rebuild:
+  - `flowdocs/core/static/main/css/search-classic.css` -> `ff87998a5507136be6d4107a4f56f49406133c39`
+  - `flowdocs/core/static/main/js/search-classic.js` -> `65ac3772ae4c3a7151d57d2d9da1e61988d916c4`
+
+If this “old UI” is observed again, use this decision path:
+
+1. **Quick recovery (no UX behavior change):**
+   - restart/rebuild web to flush stale container cache:
+     - `docker compose -f docker-compose.dev.yml build --no-cache web`
+     - `docker compose -f docker-compose.dev.yml up -d --force-recreate --no-deps web`
+     - hard-refresh browser cache.
+2. **Reapply the compact/viewport UX improvement bundle:**
+   - `git revert 76c1e39` (replays `df2552e`)
+   - run the same rebuild + recreate steps above
+3. **Force-revert to reverted baseline:**
+   - `git reset --hard 76c1e39`
+   - rebuild/recreate + hard-refresh browser cache
+
+Notes:
+- The reverted baseline currently includes `components/public/classic_header.html`
+  and `components/public/classic_footer.html`.
+- The commit sequence that introduced/stabilized the reverted viewport fixes is:
+  `a346a11` → `31d2692` → `d5afb79` → `df2552e`.
+- The explicit revert is commit `76c1e39`, which is why the old UI returned.
+
 ## Historical language evidence
 
 The delivery replaced substring conversational matching with normalized exact
