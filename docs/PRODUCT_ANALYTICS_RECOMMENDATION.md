@@ -20,6 +20,34 @@ restore, activation, or readiness. The no-external-cloud fallback is Umami with
 an explicit retention/deletion policy; it adds a PostgreSQL service and should
 not be deployed merely to avoid making the privacy decision.
 
+## Recommended self-hosted topology
+
+If analytics data must remain under operator custody, deploy Umami v3 as an
+independent Dokploy/Compose project with a pinned Umami image, a dedicated
+PostgreSQL database/volume, and its own backup/restore and retention policy.
+Use separate Umami website records for stage and production. Protect the
+dashboard with its own authentication and expose only the documented tracker
+and event-ingestion surface required by browsers.
+
+```text
+PdfSearch browser
+  -> HTTPS manual allowlisted event
+     -> independent Umami application
+        -> dedicated PostgreSQL volume
+```
+
+PdfSearch must not join the analytics Docker network, mount its volumes, query
+its database, or make analytics a backend/readiness dependency. The shared
+vendor-neutral adapter changes transport only (`disabled`, `umami`, or approved
+`posthog_eu`); event names and property schemas remain identical. Analytics
+failure stays invisible and fail-open.
+
+OpenPanel is the nearest self-hosted PostHog-style alternative, but its basic
+stack requires PostgreSQL, Redis, ClickHouse, API/dashboard services, and
+workers. Adopt it only if measured product needs require cohorts, experiments,
+or richer funnels that Umami cannot supply. See the official
+[OpenPanel self-hosting requirements](https://openpanel.dev/docs/self-hosting/environment-variables).
+
 ## Options
 
 | Option | Fit | Operational/privacy cost | Recommendation |
@@ -107,7 +135,8 @@ disable low-value sampled events at 90%; never drop authored failure events.
 Before stage capture:
 
 1. Privacy owner approves cloud region, notice/consent posture, and one-year
-   provider retention or selects the no-cloud fallback.
+   provider retention or selects the independent Umami no-cloud stack with an
+   explicit database backup and deletion schedule.
 2. Unit tests reject every forbidden property and unknown event.
 3. Browser tests inspect emitted payloads for both themes and admin journeys;
    sentinel questions, answers, filenames, URLs, and identities must be absent.

@@ -2,8 +2,9 @@
 
 > **Executor instructions**: Read
 > `docs/PRODUCT_ANALYTICS_RECOMMENDATION.md` first. This plan is blocked until a
-> privacy owner chooses the recommended PostHog EU Cloud stage pilot or rejects
-> external analytics. Do not infer approval from the presence of a package.
+> privacy owner chooses the recommended PostHog EU Cloud stage pilot, the
+> independent Umami self-hosted transport, or no analytics. Do not infer
+> approval from the presence of a package.
 >
 > **Drift check (run first)**:
 > `git diff --stat 796bdd5..HEAD -- flowdocs/core/templates flowdocs/core/static/main/js flowdocs/core/views.py flowdocs/core/metrics.py requirements-web.lock docs/PRODUCT_ANALYTICS_RECOMMENDATION.md`
@@ -30,9 +31,9 @@ production enablement, and self-hosted PostHog.
 
 ## Steps
 
-1. Record the privacy decision: EU Cloud pilot, no-cloud/Umami follow-up, or no
-   analytics. Record region, consent posture, retention acceptance, owner, and
-   disable authority without storing credentials.
+1. Record the privacy decision: EU Cloud pilot, independent Umami stack, or no
+   analytics. Record region/custody, consent posture, retention, owner, backup
+   owner, and disable authority without storing credentials.
 2. Implement a disabled-by-default adapter with a compile-time event/property
    allowlist and a final `before_send` rejection gate. Analytics must load
    asynchronously and fail open.
@@ -45,6 +46,12 @@ production enablement, and self-hosted PostHog.
 5. Run a two-week stage pilot. Review funnels, quota, event usefulness, notice
    compliance, and payload samples. Delete unused events before requesting a
    separate production approval.
+
+If Umami is selected, deploy it in a separate project with a pinned application
+image, dedicated PostgreSQL volume, authenticated dashboard, separate stage and
+production website records, and tested backup/restore/deletion procedures.
+PdfSearch connects only through HTTPS event ingestion and never through a
+shared network, database, or volume.
 
 ## Done criteria
 
