@@ -42,6 +42,8 @@ Supersedes: None
   Parseable/DataLens category boundary, event allowlist, forbidden data, and
   stage-pilot release gate; the disabled-by-default public-search adapter is in
   PR #192 while the independent service deployment remains operator-managed.
+- [SETTINGS_OPERATIONS.md](SETTINGS_OPERATIONS.md) — grouped runtime controls,
+  read-only deployment posture, validation, confirmation, and rollback notes.
 
 This index routes readers by task. The metadata at the top of each maintained
 document identifies its status, audience, owner, verification date, canonical

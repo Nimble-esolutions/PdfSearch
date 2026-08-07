@@ -39,6 +39,7 @@ Use the route that matches the work:
 - Public/admin design lock: [`docs/design/AI_SAHAKAR_UI_CONTRACT.md`](docs/design/AI_SAHAKAR_UI_CONTRACT.md)
 - Developer UI guide: [`docs/AI_SAHAKAR_DEVELOPER_GUIDE.md`](docs/AI_SAHAKAR_DEVELOPER_GUIDE.md)
 - Admin user guide: [`docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md`](docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md)
+- Settings operations: [`docs/SETTINGS_OPERATIONS.md`](docs/SETTINGS_OPERATIONS.md)
 - Multi-file intake and document lifecycle: [`docs/DOCUMENT_INTAKE_WORKBENCH.md`](docs/DOCUMENT_INTAKE_WORKBENCH.md)
 - Privacy-bounded product analytics and self-hosted Umami boundary: [`docs/PRODUCT_ANALYTICS_RECOMMENDATION.md`](docs/PRODUCT_ANALYTICS_RECOMMENDATION.md), [`plans/032-pilot-privacy-first-product-analytics.md`](plans/032-pilot-privacy-first-product-analytics.md)
 - `dev` cleanup scope: [`docs/DEV_CLEANUP_SCOPE.md`](docs/DEV_CLEANUP_SCOPE.md)
