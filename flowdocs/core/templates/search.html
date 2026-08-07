@@ -255,6 +255,7 @@
 {{ about_close_label|json_script:"about-close-label" }}
 {{ source_documents_label|json_script:"source-documents-label" }}
 {{ search_messages|json_script:"search-messages" }}
+{% include "components/product_analytics.html" %}
 <script>
 window.PdfSearch = {
   viewPdfUrlTemplate: "{% url 'view_pdf' 0 %}",

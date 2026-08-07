@@ -131,6 +131,38 @@
     </div>
   </section>
 
+  <section class="mb-4" aria-labelledby="product-analytics-heading">
+    <h3 id="product-analytics-heading" class="border-bottom pb-2 mb-3">{% trans "Privacy-bounded product analytics" %}</h3>
+    <div class="row">
+      <div class="col-lg-8">
+        <section class="admin-panel" aria-labelledby="product-analytics-mode-heading">
+          <div class="border-bottom pb-2 mb-3">
+            <h4 id="product-analytics-mode-heading" class="h6 mb-1">{% trans "Stage Umami collection" %}</h4>
+            <p class="text-muted small mb-0">{% trans "Enable manual, content-free search events only after the independent analytics service is healthy. This never changes search readiness and does not require a deployment restart." %}</p>
+          </div>
+          <form method="post" action="{% url 'save_product_analytics' %}">
+            {% csrf_token %}
+            <fieldset>
+              <legend class="visually-hidden">{% trans "Product analytics mode" %}</legend>
+              <div class="d-flex flex-column gap-2">
+                {% for value, label in product_analytics_options %}
+                  <label class="d-flex gap-2 align-items-center" for="product-analytics-{{ value }}">
+                    <input id="product-analytics-{{ value }}" class="form-check-input" type="radio" name="product_analytics_mode" value="{{ value }}"{% if product_analytics_mode == value %} checked{% endif %}>
+                    <span>{{ label }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </fieldset>
+            <div class="d-flex align-items-center gap-3 mt-3">
+              <button type="submit" class="btn btn-primary">{% trans "Save analytics mode" %}</button>
+              <span class="text-muted small">{% trans "The tracker is restricted to 2026.ai-sahakar.net and remains absent from local development and production." %}</span>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
+  </section>
+
   <section class="mb-4" aria-labelledby="vault-status-heading">
     <h3 id="vault-status-heading" class="border-bottom pb-2 mb-3">{% trans "Data recovery status" %}</h3>
     <div class="row">

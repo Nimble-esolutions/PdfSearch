@@ -43,6 +43,11 @@
         <td>Your choice of interface language (English or Marathi), stored via a cookie.</td>
         <td>Consent (via cookie notice)</td>
       </tr>
+      <tr>
+        <td>Anonymous Product Events (stage pilot only)</td>
+        <td>When the stage pilot is enabled, bounded events such as search submitted, outcome, latency bucket, source opened, and interface view. Questions, answers, document names, source URLs, account data, and explicit stable visitor identifiers are never included. The self-hosted analytics service derives a cookieless pseudonymous session hash from the request IP address, browser user agent, and stage website ID, and may classify browser, operating system, device type, and country.</td>
+        <td>Legitimate Use — aggregate service improvement; the tracker honours browser Do Not Track and Global Privacy Control</td>
+      </tr>
     </tbody>
   </table>
   <p><strong>We do not collect</strong> names, email addresses, phone numbers, or any other identifiers from public users. The Platform is designed for anonymous, registration-free access to government document search.</p>
@@ -131,6 +136,7 @@
       <tr><td>Uploaded government documents</td><td>Until explicit removal, deprecation, or archival by an authorized administrator</td></tr>
       <tr><td>Session cookies (admin)</td><td>Until logout or session expiry (2 weeks of inactivity)</td></tr>
       <tr><td>Language preference cookie</td><td>Until cleared by the user via browser settings</td></tr>
+      <tr><td>Anonymous stage product events</td><td>Not collected by default; when the approved pilot is enabled, retained for no more than 30 days and then deleted</td></tr>
     </tbody>
   </table>
   <p>For detailed retention and deletion procedures, see our <a href="{% url 'data_policy' %}{{ public_view_query }}">Data Policy</a>.</p>
@@ -143,6 +149,7 @@
     <li><strong>Language Preference Cookie:</strong> Stores your preferred interface language (English or Marathi).</li>
   </ul>
   <p>We <strong>do not use</strong> third-party tracking cookies, analytics cookies, advertising cookies, or any cookies for behavioural tracking or profiling. For full details, see our <a href="{% url 'cookie_policy' %}{{ public_view_query }}">Cookie Policy</a>.</p>
+  <p>The optional stage analytics pilot is self-hosted at <strong>analytics.ai-sahakar.net</strong> and is cookieless. It uses only manually authored, aggregate events from a strict allowlist. Automatic page views, query strings, page titles, referrers, performance collection, session replay, identity calls, search text, answer text, and document details are disabled. For each direct browser request, Umami observes the IP address and user agent to derive a pseudonymous session hash with the stage website ID; it may also classify browser, operating system, device type, and country. No PdfSearch account identity or explicit distinct ID is sent. The search service continues normally if analytics is disabled or unavailable.</p>
 
   <h2>9. Children's Data</h2>
   <p>In compliance with Section 9 of the DPDA 2023, the Platform is not directed at children (individuals below the age of 18 years). We do not knowingly collect personal data from children. The Platform's content pertains to cooperative society laws and government regulations and is intended for use by adults. If we become aware that a child has provided personal data through the Platform, we will take steps to delete such data promptly.</p>

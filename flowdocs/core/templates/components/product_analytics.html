@@ -1,0 +1,5 @@
+{% load static %}
+{% if product_analytics_config %}
+  {{ product_analytics_config|json_script:"product-analytics-config" }}
+  <script src="{% static 'main/js/product-analytics.js' %}"></script>
+{% endif %}

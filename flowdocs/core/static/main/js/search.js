@@ -19,6 +19,8 @@ const evidenceAnswer = document.querySelector("[data-evidence-answer]");
 const evidenceContent = document.querySelector("[data-evidence-content]");
 const evidenceClose = document.querySelector("[data-evidence-close]");
 const newQuestionButtons = document.querySelectorAll("[data-new-question]");
+const analyticsView = "workbench";
+const analyticsAdapter = window.PdfSearchAnalytics;
 let aboutReturnFocus = null;
 let evidenceReturnFocus = null;
 let shareMenuReturnFocus = null;
@@ -28,6 +30,40 @@ let requestGeneration = 0;
 let answerSequence = 0;
 const answerStore = new Map();
 const responseKinds = new Set(["small_talk", "evidence_answer", "no_evidence", "validation"]);
+
+function analyticsCall(method, args = [], fallback = null) {
+    try {
+        const operation = analyticsAdapter?.[method];
+        return typeof operation === "function" ? operation(...args) : fallback;
+    } catch (_error) {
+        return fallback;
+    }
+}
+
+function track(name, properties) {
+    return analyticsCall("track", [name, properties], false);
+}
+
+function trackCompleted({startedAt, wordCount, questionLanguage, outcome, answerKind, failureFamily, references = 0}) {
+    if (!analyticsAdapter) return;
+    track("search_completed", {
+        view: analyticsView,
+        question_language: questionLanguage,
+        word_count_bucket: analyticsCall("wordCountBucket", [wordCount], "1-5"),
+        latency_bucket: analyticsCall("durationBucket", [performance.now() - startedAt], ">=30s"),
+        reference_count_bucket: analyticsCall("countBucket", [references], "0"),
+        outcome,
+        answer_kind: answerKind,
+        failure_family: failureFamily,
+    });
+}
+
+function classifiedFailure(status) {
+    if (status === 429) return ["rate_limited", "rate_limit"];
+    if ([400, 401, 403].includes(status)) return ["invalid_request", "validation"];
+    if (status === 503) return ["provider_unavailable", "provider"];
+    return ["internal_error", "internal"];
+}
 
 function detectPerformanceProfile() {
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -109,6 +145,7 @@ function closeAbout() {
 }
 
 aboutOpens.forEach(aboutOpen => aboutOpen.addEventListener("click", () => {
+    track("search_help_opened", {view: analyticsView});
     aboutReturnFocus = aboutOpen;
     if (typeof aboutDialog.showModal === "function") aboutDialog.showModal();
     else aboutDialog.setAttribute("open", "");
@@ -130,11 +167,19 @@ async function sendMessage(){
 
     const wordCount = query.split(/\s+/).length;
     if(wordCount > 30){
-        appendErrorMessage(searchMessages.question_too_long, searchMessages.question_too_long_detail, query);
+        appendErrorMessage(searchMessages.question_too_long, searchMessages.question_too_long_detail, "", "validation");
         return;
     }
 
     appendMessage(query, 'user');
+    const startedAt = performance.now();
+    const pageLanguage = document.documentElement.lang === "mr" ? "mr" : "en";
+    const questionLanguage = analyticsCall("questionLanguage", [query, pageLanguage], pageLanguage);
+    track("search_submitted", {
+        view: analyticsView,
+        question_language: questionLanguage,
+        word_count_bucket: analyticsCall("wordCountBucket", [wordCount], "1-5"),
+    });
     userQuery.value = '';
     sendBtn.disabled = true;
     requestPending = true;
@@ -191,6 +236,15 @@ async function sendMessage(){
         if (generation !== requestGeneration) return;
         if (!response.ok) {
             typingDiv.remove();
+            const [outcome, failureFamily] = classifiedFailure(response.status);
+            trackCompleted({
+                startedAt,
+                wordCount,
+                questionLanguage,
+                outcome,
+                answerKind: "error",
+                failureFamily,
+            });
             const errorMessages = {
                 401: searchMessages.sign_in,
                 403: searchMessages.security,
@@ -202,22 +256,46 @@ async function sendMessage(){
             appendErrorMessage(
                 errorMessages[response.status] || searchMessages.request_failed,
                 data.detail,
-                query,
+                response.status >= 500 || response.status === 429 ? query : "",
+                failureFamily,
             );
             return;
         }
         if (!isValidSuccessPayload(data)) {
             typingDiv.remove();
+            trackCompleted({
+                startedAt,
+                wordCount,
+                questionLanguage,
+                outcome: "internal_error",
+                answerKind: "error",
+                failureFamily: "contract",
+            });
             appendErrorMessage(
                 searchMessages.unexpected,
                 searchMessages.request_failed,
                 query,
+                "contract",
             );
             return;
         }
         typingDiv.classList.add("search-loading--complete");
         typingDiv.setAttribute("aria-label", stages[stages.length - 1]);
         typingDiv.remove();
+        const outcome = data.kind === "evidence_answer"
+            ? "evidence"
+            : data.kind === "no_evidence"
+                ? "no_evidence"
+                : "conversational";
+        trackCompleted({
+            startedAt,
+            wordCount,
+            questionLanguage: data.language,
+            outcome,
+            answerKind: data.kind,
+            failureFamily: "none",
+            references: data.references?.length || 0,
+        });
         typeEffect(
             data.answer,
             data.references,
@@ -229,9 +307,25 @@ async function sendMessage(){
         typingDiv.remove();
         if (generation !== requestGeneration) return;
         if (err.name === "AbortError") {
-            appendErrorMessage(searchMessages.timeout, searchMessages.try_again, query);
+            trackCompleted({
+                startedAt,
+                wordCount,
+                questionLanguage,
+                outcome: "provider_timeout",
+                answerKind: "error",
+                failureFamily: "timeout",
+            });
+            appendErrorMessage(searchMessages.timeout, searchMessages.try_again, query, "timeout");
         } else {
-            appendErrorMessage(searchMessages.unexpected, searchMessages.try_later, query);
+            trackCompleted({
+                startedAt,
+                wordCount,
+                questionLanguage,
+                outcome: "internal_error",
+                answerKind: "error",
+                failureFamily: "network",
+            });
+            appendErrorMessage(searchMessages.unexpected, searchMessages.try_later, query, "network");
             console.error(err);
         }
     } finally {
@@ -343,7 +437,7 @@ function appendWelcomeMessage(text, href, label) {
     chatMain.scrollTop = 0;
 }
 
-function appendErrorMessage(title, detail, retryQuery) {
+function appendErrorMessage(title, detail, retryQuery, failureFamily = "internal") {
     const box = document.createElement('div');
     box.className = 'search-error conversation-entry conversation-entry--assistant';
     box.setAttribute('role', 'alert');
@@ -355,12 +449,15 @@ function appendErrorMessage(title, detail, retryQuery) {
     message.textContent = detail || '';
     content.append(heading, message);
 
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'search-error__retry';
-    retry.textContent = retryLabel;
-    retry.dataset.retryQuery = retryQuery || '';
-    content.appendChild(retry);
+    if (retryQuery) {
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'search-error__retry';
+        retry.textContent = retryLabel;
+        retry.dataset.retryQuery = retryQuery;
+        retry.dataset.failureFamily = failureFamily;
+        content.appendChild(retry);
+    }
     box.appendChild(content);
     chatMain.appendChild(box);
     chatMain.scrollTop = chatMain.scrollHeight;
@@ -529,6 +626,13 @@ function createReferenceCard(ref, index = 1) {
         link.href = referenceUrl;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
+        link.addEventListener("click", () => {
+            track("search_source_selected", {
+                view: analyticsView,
+                source_rank_bucket: analyticsCall("rankBucket", [index], "4+"),
+                answer_kind: "evidence_answer",
+            });
+        });
     } else {
         link.className = "ref-card__unavailable";
     }
@@ -584,6 +688,9 @@ function appendAnswerActions(parent, payload) {
     feedback.target = "_blank";
     feedback.rel = "noopener noreferrer";
     feedback.textContent = workbenchCopy.feedback;
+    feedback.addEventListener("click", () => {
+        track("search_feedback_opened", {view: analyticsView});
+    });
     actions.appendChild(feedback);
     const share = document.createElement("button");
     share.type = "button";
@@ -684,6 +791,11 @@ async function shareAnswer(button, payload) {
         url: window.location.href,
     };
     if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        track("search_share_started", {
+            view: analyticsView,
+            channel: "native",
+            answer_kind: "evidence_answer",
+        });
         try {
             await navigator.share(shareData);
             return;
@@ -691,6 +803,11 @@ async function shareAnswer(button, payload) {
             if (error?.name === "AbortError") return;
         }
     }
+    track("search_share_started", {
+        view: analyticsView,
+        channel: "menu",
+        answer_kind: "evidence_answer",
+    });
     createShareMenu(button, payload);
 }
 
@@ -753,6 +870,10 @@ function appendPromptOrRetry(event) {
     }
     const retry = event.target.closest("[data-retry-query]");
     if (retry) {
+        track("search_retry_clicked", {
+            view: analyticsView,
+            failure_family: retry.dataset.failureFamily || "internal",
+        });
         userQuery.value = retry.dataset.retryQuery;
         userQuery.dispatchEvent(new Event("input", {bubbles: true}));
         sendMessage();
@@ -760,6 +881,12 @@ function appendPromptOrRetry(event) {
     }
     const sourceTrigger = event.target.closest("[data-evidence-open]");
     if (sourceTrigger) {
+        const referenceCount = sourceTrigger.closest(".answer-sources")?.querySelectorAll(".ref-card").length || 1;
+        track("search_sources_opened", {
+            view: analyticsView,
+            reference_count_bucket: analyticsCall("countBucket", [referenceCount], "1"),
+            answer_kind: "evidence_answer",
+        });
         openEvidence(sourceTrigger);
         return;
     }

@@ -79,10 +79,16 @@ from .configuration_registry import build_configuration_groups
 from .search_ui import (
     SEARCH_VIEW_DEFINITIONS,
     get_primary_search_view,
-    resolve_search_view,
     search_template_for,
     set_primary_search_view,
     supported_search_view,
+)
+from .product_analytics import (
+    PRODUCT_ANALYTICS_DISABLED,
+    PRODUCT_ANALYTICS_ENABLED,
+    build_public_analytics_config,
+    get_product_analytics_mode,
+    set_product_analytics_mode,
 )
 from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultConfigurationError
 from .metrics import metrics_view
@@ -1494,16 +1500,27 @@ LEGAL_PAGE_DEFINITIONS = {
 }
 
 
-def _public_view_context(request):
+def _public_view_context(request, *, include_analytics=False):
     """Resolve one allowlisted public presentation and preserve valid previews."""
     requested_view = supported_search_view(request.GET.get("view"))
-    search_view = resolve_search_view(request.GET.get("view"))
+    primary_view = get_primary_search_view()
+    search_view = requested_view or primary_view
     view_query = f"?view={requested_view}" if requested_view else ""
     return {
         "search_view": search_view,
         "public_view_query": view_query,
         "public_home_url": f"{reverse('home')}{view_query}",
         "public_current_url": f"{request.path}{view_query}",
+        "product_analytics_config": (
+            build_public_analytics_config(
+                request,
+                search_view=search_view,
+                primary_view=primary_view,
+                override_used=bool(requested_view and requested_view != primary_view),
+            )
+            if include_analytics
+            else None
+        ),
     }
 
 
@@ -2023,8 +2040,8 @@ def search_query(request):
             if requested_view:
                 redirect_target = f"{redirect_target}?view={requested_view}"
             return redirect(redirect_target, permanent=True)
-        search_view = resolve_search_view(request.GET.get("view"))
-        public_view = _public_view_context(request)
+        public_view = _public_view_context(request, include_analytics=True)
+        search_view = public_view["search_view"]
         searchable_scope = visible_pdfs(
             request.user,
             public=not request.user.is_authenticated,
@@ -2549,6 +2566,11 @@ def settings_view(request):
         "env_fields": env_fields,
         "primary_search_view": get_primary_search_view(),
         "search_view_options": SEARCH_VIEW_DEFINITIONS,
+        "product_analytics_mode": get_product_analytics_mode(),
+        "product_analytics_options": (
+            (PRODUCT_ANALYTICS_DISABLED, gettext("Disabled")),
+            (PRODUCT_ANALYTICS_ENABLED, gettext("Enabled on approved stage host")),
+        ),
         "title": "Settings & Configuration",
         "breadcrumb_items": [
             {"label": gettext("Dashboard"), "url": reverse("dashboard")},
@@ -2607,5 +2629,26 @@ def save_search_ui(request):
         request,
         gettext("Primary public search view changed to %(view)s.")
         % {"view": selected_label},
+    )
+    return redirect("settings")
+
+
+@superadmin_required
+@require_POST
+def save_product_analytics(request):
+    """Enable or disable the stage-only Umami browser adapter."""
+
+    try:
+        selected = set_product_analytics_mode(
+            request.POST.get("product_analytics_mode"),
+            updated_by=request.user,
+        )
+    except ValueError:
+        messages.error(request, gettext("Choose Enabled or Disabled."))
+        return redirect("settings")
+
+    messages.success(
+        request,
+        gettext("Product analytics changed to %(mode)s.") % {"mode": selected},
     )
     return redirect("settings")

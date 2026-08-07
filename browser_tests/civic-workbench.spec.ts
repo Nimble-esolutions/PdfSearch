@@ -18,6 +18,14 @@ async function mockSearch(page: Page, payload: object = {
   });
 }
 
+async function installThrowingAnalyticsAdapter(page: Page) {
+  await page.addInitScript(() => {
+    (window as any).PdfSearchAnalytics = new Proxy({}, {
+      get: () => () => { throw new Error('analytics adapter failure'); },
+    });
+  });
+}
+
 test.describe('Civic Knowledge Workbench', () => {
   test('empty state exposes a clear journey and keeps the composer ready', async ({ page }) => {
     await page.goto('/?view=workbench');
@@ -57,6 +65,18 @@ test.describe('Civic Knowledge Workbench', () => {
     await expect(page.locator('.answer-sources')).toContainText('Maharashtra Cooperative Societies Act');
     await expect(page.locator('.answer-sources .ref-card')).toContainText('Page 42');
     await expect(page.locator('[data-evidence-answer]')).not.toHaveAttribute('hidden');
+  });
+
+  test('keeps search functional when every analytics method throws', async ({ page }) => {
+    await installThrowingAnalyticsAdapter(page);
+    await mockSearch(page);
+    await page.goto('/?view=workbench');
+    await page.locator('#userQuery').fill('What is the society audit procedure?');
+    await page.locator('#sendBtn').click();
+
+    await expect(page.locator('.conversation-entry--assistant').last()).toContainText(answer);
+    await expect(page.locator('#userQuery')).toBeVisible();
+    await expect(page.locator('#userQuery')).toBeEditable();
   });
 
   test('keeps answer order and composer continuity across immediate sequential searches', async ({ page }) => {

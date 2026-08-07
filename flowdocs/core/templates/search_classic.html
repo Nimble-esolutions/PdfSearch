@@ -180,6 +180,7 @@
   {{ search_messages|json_script:"classic-search-messages" }}
   {{ source_documents_label|json_script:"classic-source-documents-label" }}
   {{ retry_label|json_script:"classic-retry-label" }}
+  {% include "components/product_analytics.html" %}
   <script src="{% static 'main/js/search-classic.js' %}"></script>
 </body>
 </html>

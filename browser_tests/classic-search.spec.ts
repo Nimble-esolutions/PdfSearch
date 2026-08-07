@@ -23,6 +23,14 @@ async function mockSearch(page: Page, payload: object = {
   });
 }
 
+async function installThrowingAnalyticsAdapter(page: Page) {
+  await page.addInitScript(() => {
+    (window as any).PdfSearchAnalytics = new Proxy({}, {
+      get: () => () => { throw new Error('analytics adapter failure'); },
+    });
+  });
+}
+
 test.describe('Classic public search', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('cookieConsent', 'accepted'));
@@ -98,6 +106,18 @@ test.describe('Classic public search', () => {
     await expect(response).not.toContainText('Rejected source');
     await expect(response).not.toContainText('Rejected same-origin source');
     await expect(response).toContainText('Page 42');
+  });
+
+  test('keeps search functional when every analytics method throws', async ({ page }) => {
+    await installThrowingAnalyticsAdapter(page);
+    await mockSearch(page);
+    await page.goto('/');
+    await page.locator('#userQuery').fill('What is the society audit procedure?');
+    await page.locator('#sendBtn').click();
+
+    await expect(page.locator('.classic-message--assistant').last()).toContainText(answer);
+    await expect(page.locator('#userQuery')).toBeVisible();
+    await expect(page.locator('#userQuery')).toBeEditable();
   });
 
   test('formats long answers, keeps the transcript scrollable, and supports another search', async ({ page }) => {
