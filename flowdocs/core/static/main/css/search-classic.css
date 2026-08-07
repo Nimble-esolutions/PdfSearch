@@ -355,6 +355,12 @@ body.classic-search {
   font-size: 17px;
 }
 
+/* The field is a compound control: its parent owns the single focus ring. */
+.classic-composer__field input:focus-visible {
+  outline: 0;
+  outline-offset: 0;
+}
+
 .classic-composer__field input::placeholder { color: #85878a; opacity: 1; }
 
 .classic-composer__submit {
