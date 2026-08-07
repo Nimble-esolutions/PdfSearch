@@ -1,4 +1,4 @@
-Status: Proposed
+Status: Implementation candidate in PR #192; self-hosted service deployment pending
 Audience: Product owner, privacy owner, developer, operator
 Owner: FlowDocs maintainers
 Last verified: 2026-08-07
@@ -21,10 +21,41 @@ features would replace other tools; those overlapping features are unnecessary
 for the current pilot. PostHog EU Cloud Free remains a valid cloud benchmark,
 not the default recommendation. Do not self-host PostHog for this application.
 
-The pilot remains optional and blocked on the privacy, retention, and ownership
-decision. It must not block search, document processing, backup, restore,
-activation, or readiness. This recommendation selects a technical fit; it does
-not authorize deployment or production capture.
+The operator selected self-hosted Umami and supplied the stage tracker endpoint
+and browser website ID. PR #192 now contains the application-side integration,
+disabled by default. The operator will deploy Umami manually as an independent
+stack on the same server. Stage collection must remain disabled until that
+service, its 30-day maximum pilot retention, dashboard access, backup/restore,
+and deletion authority are verified. Production capture remains unapproved.
+
+## Implemented application boundary
+
+The integration deliberately adds no environment variables and no backend call:
+
+- `core.product_analytics` stores one `enabled|disabled` runtime choice in the
+  existing `SiteSetting` table and fails closed to disabled;
+- the supplied website ID is allowed only on `2026.ai-sahakar.net`; localhost,
+  the legacy production host, and future production load no tracker;
+- a superadmin can change the stage mode from Settings without restart;
+- `product-analytics.js` queues at most 32 in-memory events, loads the external
+  script asynchronously after the usable page, and drops the queue on failure;
+- the final `beforeSend` hook rejects pageviews, identity calls, unknown events,
+  unknown properties, and raw browser metadata, replacing the URL with a fixed
+  `/product-events/classic|workbench` path;
+- Classic and Workbench emit the same bounded search/evidence event contract.
+
+This browser sanitizer governs authored payload fields, not network metadata.
+With direct browser ingestion, the self-hosted Umami server observes the request
+IP address and user agent and derives a cookieless session hash from those values
+plus the website ID. Umami may classify browser, operating system, device, and
+country for that pseudonymous session. PdfSearch sends no account identity or
+explicit stable visitor ID, but the pilot still requires approval of this
+pseudonymous processing. See Umami's [session model](https://docs.umami.is/docs/sessions).
+
+The current implementation covers public search only. Intake, maintenance, and
+data-protection events remain recommendations until each workflow gets its own
+payload-leakage tests. The Umami application/PostgreSQL stack, DNS, TLS, image,
+database, retention, and backups remain user-managed and outside this PR.
 
 ## Category correction
 
@@ -50,18 +81,31 @@ Use separate Umami website records for stage and production. Protect the
 dashboard with its own authentication and expose only the documented tracker
 and event-ingestion surface required by browsers.
 
-```text
-PdfSearch browser
-  -> HTTPS manual allowlisted event
-     -> independent Umami application
-        -> dedicated PostgreSQL volume
+```mermaid
+flowchart LR
+    B[Classic or Workbench browser] --> A[Local allowlist adapter]
+    A -->|manual bounded event over HTTPS| U[Independent Umami service]
+    U --> P[(Dedicated PostgreSQL)]
+    A -. blocked, disabled, DNT, or unavailable .-> C[Search continues unchanged]
+    U -. never queried by PdfSearch backend .-> C
 ```
 
 PdfSearch must not join the analytics Docker network, mount its volumes, query
-its database, or make analytics a backend/readiness dependency. The shared
-vendor-neutral adapter changes transport only (`disabled`, `umami`, or an
-explicitly approved alternative); event names and property schemas remain
-identical. Analytics failure stays invisible and fail-open.
+its database, or make analytics a backend/readiness dependency. The event
+vocabulary and property schemas are transport-neutral; the current browser
+adapter is intentionally Umami-specific. A tracker/network failure is fail-open
+inside the browser. Because both stacks share one physical server, resource
+exhaustion is still a shared failure domain and must be bounded operationally.
+
+The remote tracker is executable third-party-origin JavaScript with the same
+DOM access as other scripts on the public page. The payload allowlist does not
+contain a compromised or unexpectedly upgraded tracker. Pin the Umami image,
+record and review the served `script.js` SHA-256 before enablement and after
+every upgrade, and allow only the exact analytics origin in `script-src` and
+`connect-src` when the application CSP is introduced. Subresource Integrity is
+recommended only after the tracker URL is made version-stable and the release
+process can update the reviewed hash atomically; attaching an SRI hash to a
+mutable endpoint would otherwise cause silent analytics outages after upgrade.
 
 ## Self-hosted comparison
 
@@ -137,10 +181,13 @@ and [OpenTelemetry metrics](https://opentelemetry.io/docs/concepts/signals/metri
 Use one internal analytics adapter that rejects unknown events and properties;
 application code must not call a vendor SDK directly. The adapter must fail
 open and load after the usable UI. Across every transport: manual events only,
-no automatic pageviews/performance/exceptions, no replay, no identity, no raw
-URL/query string, respect Do Not Track, and run a final payload rejection hook.
+no automatic pageviews/performance/exceptions, no replay, no application account
+identity or explicit stable visitor ID, no raw URL/query string, respect Do Not
+Track, and run a final payload rejection hook. Direct browser ingestion still
+uses Umami's documented pseudonymous session hash; do not describe it as having
+no session processing.
 
-For Umami, configure the deferred tracker with `data-auto-track="false"`,
+For Umami, configure the asynchronously loaded tracker with `data-auto-track="false"`,
 `data-do-not-track="true"`, the exact allowed domain, and `data-before-send`;
 emit events only through the validated adapter. See the official
 [tracker configuration](https://docs.umami.is/docs/tracker-configuration) and
@@ -163,10 +210,15 @@ mask_all_element_attributes=true
 
 Never call identify/alias/person-merge APIs. Never capture raw questions,
 answers, prompt/context text, PDF text, titles, filenames, source URLs, route
-parameters, query strings, document IDs, user/account/session IDs, usernames,
-emails, roles, IP-derived identity, dataset/profile/bucket/generation names,
+parameters, query strings, document IDs, application user/account/session IDs,
+usernames, emails, roles, explicit distinct IDs, dataset/profile/bucket/generation names,
 manifest digests, credentials, auth data, or recovery identifiers. Session
 replay and PostHog LLM observability remain disabled, not merely masked.
+
+The Umami service will necessarily observe request network metadata. It must not
+log, export, or retain raw IP addresses beyond what the pinned version requires
+to derive its documented session hash. Proxy access logs must follow the same
+30-day maximum and access controls.
 
 The browser project token may be public; personal API keys never enter browser
 code. Cookieless operation still requires an updated privacy notice and the
@@ -189,36 +241,47 @@ Every event may contain only bounded enums/buckets:
 
 | Journey | Events | Additional bounded properties |
 | --- | --- | --- |
-| Public search | `search_viewed`, `search_submitted`, `search_completed`, `search_retry_clicked` | `view`, `question_language`, word/latency/reference-count bucket, `outcome`, `cache_path`, `failure_family` |
+| Public search | `search_viewed`, `search_submitted`, `search_completed`, `search_retry_clicked` | `view`, `question_language`, word/latency/reference-count bucket, `outcome`, `answer_kind`, `failure_family` |
 | Evidence use | `search_sources_opened`, `search_source_selected`, `search_share_started`, `search_feedback_opened`, `search_help_opened` | source-rank/count bucket, `channel`, `answer_kind`; never source identity or content |
 | Theme continuity | `search_view_override_used` | bounded `from_view`, `to_view` |
 | Intake | `upload_batch_started`, `upload_batch_completed`, `document_processing_completed`, `indexing_completed` | file/size/page/document-count/duration buckets, `native_text` or `ocr_fallback`, outcome/failure family |
 | Maintenance | `maintenance_preview_created`, `maintenance_action_submitted`, `maintenance_action_completed`, `maintenance_action_blocked`, `admin_guidance_opened` | bounded operation/scope/outcome/blocker/count/duration enums |
 | Data protection | `data_protection_step_completed` | bounded step/outcome/duration only; no storage or recovery-point identity |
 
-Search outcomes are strict enums: `evidence`, `no_evidence`,
+Search outcomes are strict enums: `evidence`, `no_evidence`, `conversational`,
 `provider_timeout`, `provider_unavailable`, `rate_limited`, `invalid_request`,
 or `internal_error`. Use duration buckets (`<1s`, `1–3s`, `3–10s`, `10–30s`,
 `>=30s`) rather than high-cardinality raw values.
 
-Capture all failures and high-value workflow outcomes. After baseline, sample
-successful performance events at 10–20%. Alert at 70% of the monthly quota and
-disable low-value sampled events at 90%; never drop authored failure events.
+Capture all failures and high-value workflow outcomes during the bounded pilot.
+Monitor event rate, PostgreSQL growth, free bytes/inodes, and retention-purge
+lag. Alert when purge evidence is more than 24 hours old or projected storage
+headroom falls below 30 days. Sampling is a later code change, not an operator
+toggle; do not silently drop authored failure events.
 
 ## Release gate
 
 Before stage capture:
 
-1. Privacy owner approves notice/consent posture and the independent Umami
-   retention, backup, restore, and deletion schedule. If PostHog EU Cloud is
-   selected instead, approve its region and provider retention explicitly.
-2. Unit tests reject every forbidden property and unknown event.
-3. Browser tests inspect emitted payloads for both themes and admin journeys;
+1. The privacy notice and cookie policy disclose the cookieless stage pilot;
+   before enabling it, the operator verifies the independent Umami retention,
+   backup, restore, and deletion schedule.
+2. Unit tests reject every forbidden property and unknown event. **Implemented
+   for the public-search adapter in PR #192.**
+3. Browser tests inspect emitted payloads for both themes and future admin journeys;
    sentinel questions, answers, filenames, URLs, and identities must be absent.
+   **Adapter-level payload rejection is implemented in PR #192.**
 4. Analytics blocked/unreachable tests prove no UI or backend failure, delay,
-   retry, or readiness degradation.
+   retry, or readiness degradation. **Adapter-level fail-open behavior is
+   implemented; both enabled themes still require the operator outage rehearsal
+   against the deployed service.**
 5. Stage uses one project with a bounded `deployment_tier`; production capture
    remains disabled until the two-week evidence review.
+6. Privacy approval explicitly covers Umami's IP/user-agent-derived pseudonymous
+   session hash, device/browser/OS/country classification, and proxy metadata.
+7. Security approval records the pinned Umami image digest, served tracker
+   SHA-256, exact CSP origins, upgrade owner, and emergency disable procedure;
+   a remote-script compromise is treated as a public-page security incident.
 
 Do not use feature flags for authentication, authorization, source selection,
 indexing, backup, restore, activation, or other safety-critical behavior.

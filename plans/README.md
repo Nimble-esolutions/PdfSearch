@@ -51,7 +51,7 @@ they do not override the living handoff's observed state.
 | 029 | Harden mobile search against dynamic viewport changes | P2 | S/M | — | TODO |
 | 030 | Make browser tests own a source-backed runtime | P1 | S/M | — | TODO |
 | 031 | Treat retrieved documents as untrusted model evidence | P1 | S | 025 | TODO |
-| 032 | Pilot privacy-first product analytics on stage | P2 | M | privacy decision | BLOCKED |
+| 032 | Pilot privacy-first product analytics on stage | P2 | M | operator Umami deployment | IN PROGRESS |
 | 033 | Prewarm and measure the signed search corpus | P1 | M | 027 | TODO |
 | 008 | Separate object custody; adopt PostgreSQL only if its gate passes | P1 | L | 011, 012 | TODO |
 | 009 | Normalize document/retrieval architecture and benchmark hybrid search | P1 | L | 011, 012; 008 if PostgreSQL wins | TODO |
@@ -101,8 +101,9 @@ they do not override the living handoff's observed state.
 test ownership are independent. Plan 031 follows 025 so timeout/failure and
 prompt-contract changes are certified together without another cache rotation.
 Plan 033 follows 027 so prewarm and any optional memory-map spike are driven by
-measured cold latency and RSS. Plan 032 is independent and cannot enter a
-runtime PR until its privacy/consent/retention decision is recorded.
+measured cold latency and RSS. Plan 032 remains outside the search hot path;
+its disabled-by-default public-search adapter is in PR #192, while independent
+Umami deployment, retention, and restore proof remain operator work.
 ```
 
 Plan 011 comes before database replacement because recovery must not depend on

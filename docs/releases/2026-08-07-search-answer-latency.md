@@ -141,6 +141,28 @@ This branch does not merge the two frontend implementations. It adds equivalent
 sequential-query and retryable-error guarantees to the Workbench while leaving
 Classic as the default.
 
+## Product analytics boundary added during review
+
+The same PR now contains the requested application integration for the
+operator-managed Umami service. It remains outside the search hot path:
+
+- the browser adapter is absent by default and only renders on the exact
+  `2026.ai-sahakar.net` host after a superadmin enables it;
+- the remote tracker loads asynchronously after the usable page and failure
+  drops a bounded in-memory queue without changing requests, retries, or
+  readiness;
+- automatic pageviews, performance, query strings, hashes, identity, replay,
+  and browser storage are disabled;
+- a compile-time event/property schema and final transport sanitizer reject
+  raw questions, answers, document/source details, users, URLs, titles, and
+  referrers; and
+- Classic and Workbench emit the same aggregate event names while keeping their
+  existing templates and controller code isolated.
+
+Umami/PostgreSQL deployment, TLS, dashboard authentication, retention,
+deletion, and database recovery remain operator work. Production collection is
+not enabled by this branch.
+
 ## Verification and rollout gate
 
 Before merge:
@@ -151,11 +173,17 @@ Before merge:
    browser tests with Playwright's matching headless shell.
 3. Run Python compilation, JavaScript syntax, locale, migration/test-isolation,
    operator-language, documentation, Compose, and repository whitespace gates.
-4. Render and validate the updated Mermaid source.
+4. Run the product-analytics Django and browser leakage/fail-open tests.
+5. Render and validate the updated Mermaid source.
 
-The focused source-backed browser gate ran on an isolated local Django service,
-not the stale container previously occupying port 8000: 76 Workbench/motion and
-40 Classic tests passed across desktop, laptop, tablet, and mobile projects.
+The source-backed browser gate ran on an isolated, migrated temporary Django
+database and port, not a stale container: 140 Classic, Workbench, motion,
+legal-page, accessibility, long-answer scrolling, and composer-continuity tests
+passed across desktop, laptop, tablet, and mobile. The isolated analytics suite
+adds 20 payload-rejection, fail-open, language-bucketing, Do Not Track, Global
+Privacy Control, and hostname-rejection tests. The configured application
+selection passes 444 core and 220 DataOps tests;
+the source-only PR contract passes 82 tests.
 
 After a green merge and stage image rollout:
 

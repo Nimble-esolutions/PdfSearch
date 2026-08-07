@@ -40,7 +40,8 @@ Supersedes: None
 - [PRODUCT_ANALYTICS_RECOMMENDATION.md](PRODUCT_ANALYTICS_RECOMMENDATION.md) —
   ranked Umami/Tianji/Aptabase/Plausible/OpenPanel/Rybbit/PostHog comparison,
   Parseable/DataLens category boundary, event allowlist, forbidden data, and
-  stage-pilot release gate; proposed, not enabled.
+  stage-pilot release gate; the disabled-by-default public-search adapter is in
+  PR #192 while the independent service deployment remains operator-managed.
 
 This index routes readers by task. The metadata at the top of each maintained
 document identifies its status, audience, owner, verification date, canonical
