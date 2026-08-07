@@ -201,8 +201,8 @@
         return;
       }
 
-      const orderedMatch = line.match(/^\d+[.)]\s+(.+)$/u);
-      const unorderedMatch = line.match(/^[-*]\s+(.+)$/u);
+      const orderedMatch = line.match(/^(\d+)[.)]\s*(.+)$/u);
+      const unorderedMatch = line.match(/^[\-*+•·◦▪▫➤➢⦿‣]\s*(.+)$/u);
       const listMatch = orderedMatch || unorderedMatch;
       if (listMatch) {
         flushParagraph();
@@ -212,7 +212,7 @@
           parent.appendChild(list);
         }
         const item = document.createElement("li");
-        appendInlineFormatting(item, listMatch[1]);
+        appendInlineFormatting(item, orderedMatch ? orderedMatch[2] : listMatch[1]);
         list.appendChild(item);
         return;
       }
