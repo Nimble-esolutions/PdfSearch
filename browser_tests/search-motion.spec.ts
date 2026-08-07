@@ -48,13 +48,15 @@ async function mockAnswer(page: Page, answer = 'A concise answer from the offici
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ answer, references: [] }),
+      body: JSON.stringify({
+        kind: 'no_evidence', language: 'en', answer, references: [],
+      }),
     });
   });
 }
 
 test.describe('Search Desk motion profiles', () => {
-  test('uses full mode for a capable connection and renders a short answer progressively', async ({ page }) => {
+  test('uses full mode and renders a completed short answer without a typewriter delay', async ({ page }) => {
     await setProfile(page);
     await mockAnswer(page);
     await page.goto('/?view=workbench');
@@ -62,9 +64,12 @@ test.describe('Search Desk motion profiles', () => {
     await expect(page.locator('body')).toHaveAttribute('data-motion-mode', 'full');
     await page.locator('#userQuery').fill('What does Section 10 cover?');
     await page.locator('#sendBtn').click();
-    await expect(page.locator('.gpt-msg').last()).toBeVisible();
-    await expect(page.locator('.gpt-msg').last()).toHaveAttribute('aria-live', 'off');
-    await expect(page.locator('.gpt-msg .visually-hidden')).toHaveText('A concise answer from the official source.', { timeout: 10000 });
+    const response = page.locator('.gpt-msg').last();
+    await expect(response).toBeVisible();
+    await expect(response).toHaveAttribute('aria-live', 'off');
+    await expect(response).toHaveClass(/answer-complete/, { timeout: 1000 });
+    await expect(response.locator('.answer-body')).toHaveText('A concise answer from the official source.');
+    await expect(response.locator('.visually-hidden')).toHaveText('Answer ready');
   });
 
   test('selects light mode for Save-Data and low-capability devices', async ({ page }) => {
@@ -88,7 +93,7 @@ test.describe('Search Desk motion profiles', () => {
     await page.locator('#userQuery').fill('Explain cooperative society elections.');
     await page.locator('#sendBtn').click();
     const answer = page.locator('.gpt-msg').last();
-    await expect(answer.locator('.visually-hidden')).toHaveText(longAnswer, { timeout: 10000 });
+    await expect(answer.locator('.visually-hidden')).toHaveText('Answer ready', { timeout: 1000 });
     await expect(answer).toHaveClass(/answer-complete/);
     await expect(answer.locator('[aria-live="polite"]')).toHaveCount(1);
   });

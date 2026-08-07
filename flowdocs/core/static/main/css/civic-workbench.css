@@ -168,6 +168,23 @@ body.public-search {
 .workspace-heading__copy { min-width: 0; }
 .workspace-heading h1 { margin: 0; color: var(--civic-ink); font-size: clamp(1.2rem, 2vw, 1.65rem); line-height: 1.15; }
 .workspace-heading__support { max-width: 62ch; margin: .45rem 0 0; color: var(--civic-muted); font-size: .78rem; line-height: 1.45; }
+.workspace-new-question {
+    display: none;
+    min-height: 40px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: .4rem;
+    padding: .5rem .7rem;
+    color: var(--civic-maroon);
+    background: var(--civic-panel);
+    border: 1px solid var(--civic-maroon);
+    font-size: .72rem;
+    font-weight: 800;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.workspace-new-question:hover { color: var(--civic-paper); background: var(--civic-maroon); }
+.workspace-new-question span { font-size: 1rem; font-weight: 400; line-height: 1; }
 .workspace-status { display: inline-flex; flex: 0 0 auto; align-items: flex-start; gap: .5rem; min-width: 9rem; padding: .2rem 0 .2rem .8rem; color: var(--civic-muted); border-left: 2px solid var(--civic-green); font-size: .72rem; }
 .workspace-status i { width: .45rem; height: .45rem; border-radius: 50%; background: var(--civic-green); }
 .workspace-status span { display: grid; gap: .18rem; }
@@ -311,6 +328,8 @@ body.public-search {
     .workbench-header { grid-template-columns: minmax(0, 1fr) auto; gap: .8rem; }
     .workbench-product { display: none; }
     .knowledge-rail { display: none; }
+    .workspace-new-question { display: inline-flex; }
+    .workspace-status { display: none; }
     .workbench { display: block; height: auto; min-height: 0; }
     .conversation-workspace { height: calc(100dvh - 76px); min-height: 0; }
     .evidence-rail { display: block; border-top: 1px solid var(--civic-line); border-left: 0; }
@@ -367,7 +386,7 @@ body.public-search {
 @media (max-width: 430px) {
     .workspace-heading { display: block; }
     .workspace-heading__support { max-width: 38ch; }
-    .workspace-status { display: none; }
+    .workspace-new-question { margin-top: .75rem; }
     .composer-controls { grid-template-columns: minmax(0, 1fr); }
     .composer-submit { width: 100%; }
 }

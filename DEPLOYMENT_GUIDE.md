@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-08-06
+Last verified: 2026-08-07
 Canonical source: DEPLOYMENT_GUIDE.md
 Supersedes: None
 
@@ -27,8 +27,13 @@ safe to delete/recreate the project or run `down -v`.
 | Container port | `8000` |
 | Application health | `/livez` and `/readyz` |
 | Persistent data mount | `/app/data` |
+| Persistent control mount | `/app/data-control` |
 | Legacy custody mount | `/mnt/legacy` read-only quarantine |
 | Public TLS | Configured in Dokploy UI / Traefik |
+
+This table is the 2026 Compose contract. Today it applies to the active stage
+application. It will apply to production only after that separate application
+is created and its traffic cutover is approved.
 
 Do not configure undocumented host bind paths. They are not part of the
 application contract.
@@ -69,7 +74,9 @@ historical evidence.
 5. Configure HTTPS/Let's Encrypt in Dokploy.
 6. Add environment variables from `.env.example` through the Dokploy UI.
 7. Store secrets as protected environment values where supported; never paste them into Git or an incident record.
-8. Set `PDFSEARCH_IMAGE` to the exact image digest for the release.
+8. For production, set `PDFSEARCH_IMAGE` to the exact approved image digest.
+   Stage may use its approved compatibility channel, but record the resolved
+   running digest after the pull.
 9. Confirm the Compose application resolves the web service to container port `8000` and the external `dokploy-network` is attached.
 10. Confirm the configured domain and TLS route point to this Compose application, not a static application.
 11. Deploy only after the pre-deployment checklist passes.
@@ -81,7 +88,9 @@ deployment, verify both the running immutable image digest and the actual
 
 ## GitHub/Dokploy Source Of Truth
 
-Production deployment is controlled by the GitHub-connected Dokploy application.
+The active 2026 stage is controlled by a GitHub-connected Dokploy application;
+the future production application must use the same source-of-truth pattern
+when it is created.
 The server checkout under `/etc/dokploy/compose/.../code` and its ignored `.env`
 are generated deployment state, not a place to make normal fixes.
 
@@ -228,25 +237,32 @@ ALLOWED_HOSTS=*
 database user. Rotate existing admin credentials through Django admin or a
 reviewed management-command password change.
 
+DataOps v3 is the only supported recovery operator UI/contract. The installed
+VaultOps URLs and models remain internal compatibility/control/activation
+infrastructure. Legacy profile, sync, retention, GC, and mutation controls are
+default-off code-removal debt; do not enable them as an alternate deployment
+workflow.
+
 ## Backup Policy
 
-The application startup backup is only a local safety net. It is not a
-replacement for Dokploy volume backups or off-host backups.
+Use DataOps v3 from the Data protection workbench for normal application
+backup. A v3 recovery point has one complete signed manifest while transferring
+only content-addressed objects that changed. Its authoritative payload is a
+consistent SQLite snapshot plus uploaded media/PDFs; compatible FAISS, Chroma,
+and cache artifacts may be included or explicitly marked rebuild-required.
+Control databases, Redis, secrets, local backup history, and restore workspaces
+are not recovery-point payloads.
 
-Back up the following together:
+Preserve the paired `flowdocs_data` and `flowdocs_control` volume identities,
+the active/previous signed pointer evidence, exact application image digest,
+Git SHA, Compose configuration, and recovery receipt in the release record.
+This operational evidence is paired even though the control database is not
+copied into a portable DataOps recovery point.
 
-- `flowdocs_data` volume
-- SQLite consistent snapshot
-- media files
-- FAISS indexes
-- Chroma data
-- active image digest
-- Git SHA
-- Compose configuration
-- current release record and any available checksums
-
-For SQLite, use SQLite's `.backup` operation rather than copying the live file
-while writes are active. A simple operator-controlled snapshot is:
+The application startup/local backup is only a break-glass safety net. It is
+not a replacement for a verified DataOps v3 recovery point or approved off-host
+volume protection. If DataOps is unavailable during an incident, use SQLite's
+`.backup` operation rather than copying the live file while writes are active:
 
 ```bash
 docker compose -f docker-compose.yml exec -T web \
@@ -254,10 +270,10 @@ docker compose -f docker-compose.yml exec -T web \
   ".backup '/app/data/backups/db_backup_manual.sqlite3'"
 ```
 
-Then copy or archive the volume through the approved Dokploy/host backup
-process. If a consistent whole-volume archive requires quiescing writers, stop
-the web service first and record the maintenance window. Never copy a snapshot
-back over the live database as part of a backup script.
+Then preserve it through the approved Dokploy/host incident process. If a
+consistent whole-volume archive requires quiescing writers, stop the web
+writer first and record the maintenance window. Never copy a snapshot back
+over the live database as part of a backup script.
 
 Retention must protect the active release, the previous known-good release, and
 all backups referenced by an open incident. Apply the organization retention
@@ -271,13 +287,16 @@ volumes. Use `stop`, an approved Dokploy backup, and an isolated restore target.
 
 At least monthly, restore into a disposable Dokploy application or volume:
 
-1. Restore into a disposable Dokploy application or uniquely named volume, never the active `flowdocs_data` volume.
-2. Deploy the matching image digest and set the disposable application to use only the restored data volume.
-3. Run `PRAGMA integrity_check`.
-4. Verify PDF row count and media file count.
-5. Load FAISS/Chroma indexes.
-6. Run a representative search.
-7. Verify `/readyz` and the public HTTPS route.
+1. Select an exact DataOps v3 recovery point and choose **Test recovery**.
+2. Restore into disposable, uniquely named data/control roots; never target the
+   active `flowdocs_data` or `flowdocs_control` volumes.
+3. Deploy or bind the matching image-generation pair to the disposable target.
+4. Verify manifest signatures and object digests, then run SQLite integrity and
+   foreign-key checks.
+5. Reconcile database rows with media and load or rebuild compatible indexes.
+6. Run representative English, Marathi, and Hindi retrieval/search checks.
+7. Verify isolated readiness evidence. Test recovery must never activate or
+   mutate the live runtime pointer.
 8. Record the result, image digests, Git SHA, paired data/control volume
    identities, generation and manifest digests, custody snapshot/checksum
    references, and current release record.
@@ -309,13 +328,18 @@ volumes, exposes only a localhost port, and retains failed targets.
 
 ## Post-Deployment Verification
 
+For the currently deployed 2026 stage:
+
 ```bash
-curl -fsS https://ai-sahakar.net/livez
-curl -fsS https://ai-sahakar.net/readyz
-curl -fsS https://www.ai-sahakar.net/livez
-curl -fsS https://www.ai-sahakar.net/readyz
-curl -fsS https://<configured-domain>/
+curl -fsS https://2026.ai-sahakar.net/livez
+curl -fsS https://2026.ai-sahakar.net/readyz
+curl -fsS https://2026.ai-sahakar.net/
 ```
+
+Only after the future production cutover, run the same checks for both
+`https://ai-sahakar.net` and `https://www.ai-sahakar.net`. Until then those
+hostnames do not prove deployment of the 2026 application, and legacy
+`www.ai-sahakar.net` must remain unchanged.
 
 Then verify one authenticated login, one PDF listing with the recorded PDF
 count, one FAISS count, one representative search, and one static asset. Do not
@@ -326,7 +350,9 @@ treat a root HTTP 200 alone as proof of readiness.
 In the Dokploy application, verify the deployment has:
 
 - the intended Git revision and Compose file path;
-- `PDFSEARCH_IMAGE` set to the immutable digest;
+- production `PDFSEARCH_IMAGE` set to the immutable digest, or stage set to
+  its approved compatibility reference with the resolved running digest
+  recorded separately;
 - container port `8000` and the intended domain/TLS route;
 - a healthy Redis dependency and web container;
 - the intended `/app/data` volume and read-only `/mnt/legacy` quarantine mount;

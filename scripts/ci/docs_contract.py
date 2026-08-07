@@ -233,6 +233,19 @@ def resolve_mermaid_browser() -> tuple[str, str]:
     return "", ""
 
 
+def subprocess_failure_detail(result: subprocess.CompletedProcess) -> str:
+    """Keep the actionable start and end of a failed compiler diagnostic."""
+    lines = [
+        line.strip()
+        for line in (result.stderr or result.stdout).splitlines()
+        if line.strip()
+    ]
+    if not lines:
+        return "no compiler output"
+    selected = lines if len(lines) <= 10 else [*lines[:6], "...", *lines[-4:]]
+    return " | ".join(selected)[:1200]
+
+
 def compile_mermaid(
     *, label: str, source: str, failures: list[str], compiler=MERMAID_CLI
 ) -> None:
@@ -279,9 +292,11 @@ def compile_mermaid(
             fail(f"{label}: Mermaid compilation timed out", failures)
             return
         if result.returncode or not output_path.is_file():
-            detail = (result.stderr or result.stdout).strip().splitlines()
-            safe_detail = detail[-1][:300] if detail else "no compiler output"
-            fail(f"{label}: Mermaid compilation failed: {safe_detail}", failures)
+            fail(
+                f"{label}: Mermaid compilation failed: "
+                f"{subprocess_failure_detail(result)}",
+                failures,
+            )
 
 
 def check_mermaid(
@@ -379,12 +394,10 @@ def compile_mermaid_batch(
             or not output_path.is_file()
             or len(rendered) != len(sources)
         ):
-            detail = (result.stderr or result.stdout).strip().splitlines()
-            safe_detail = detail[-1][:300] if detail else "no compiler output"
             fail(
                 "Mermaid batch compilation failed "
                 f"({len(rendered)}/{len(sources)} diagrams rendered): "
-                f"{safe_detail}",
+                f"{subprocess_failure_detail(result)}",
                 failures,
             )
 

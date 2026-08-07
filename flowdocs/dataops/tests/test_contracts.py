@@ -112,7 +112,11 @@ class DataOpsEnvironmentContractTests(unittest.TestCase):
         self.assertTrue(env_doc.is_file())
         self.assertTrue(heal_doc.is_file())
         text = env_doc.read_text() + heal_doc.read_text()
-        self.assertIn("ENV → DB → default", text)
+        normalized_text = " ".join(text.split())
+        self.assertIn("Resolution is deterministic", normalized_text)
+        self.assertIn("stored primary connection", normalized_text)
+        self.assertIn("temporary bootstrap connection", normalized_text)
+        self.assertIn("safe defaults from `APP_ENV`", normalized_text)
         self.assertIn("never log", text.lower())
         self.assertNotIn("AKIA", text)
 

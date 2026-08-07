@@ -17,6 +17,8 @@
   const retryLabel = readJson("classic-retry-label", "Try again");
   const csrfToken = form.querySelector("input[name='csrfmiddlewaretoken']")?.value || "";
   const language = form.querySelector("input[name='language']")?.value || "en";
+  const analyticsView = "classic";
+  const analyticsAdapter = window.PdfSearchAnalytics;
   let activeController = null;
   let stageTimer = null;
   const responseKinds = new Set(["small_talk", "evidence_answer", "no_evidence", "validation"]);
@@ -34,6 +36,40 @@
   function wordsIn(value) {
     const valueTrimmed = value.trim();
     return valueTrimmed ? valueTrimmed.split(/\s+/u).length : 0;
+  }
+
+  function analyticsCall(method, args = [], fallback = null) {
+    try {
+      const operation = analyticsAdapter?.[method];
+      return typeof operation === "function" ? operation(...args) : fallback;
+    } catch (_error) {
+      return fallback;
+    }
+  }
+
+  function track(name, properties) {
+    return analyticsCall("track", [name, properties], false);
+  }
+
+  function trackCompleted({startedAt, wordCount, questionLanguage, outcome, answerKind, failureFamily, references = 0}) {
+    if (!analyticsAdapter) return;
+    track("search_completed", {
+      view: analyticsView,
+      question_language: questionLanguage,
+      word_count_bucket: analyticsCall("wordCountBucket", [wordCount], "1-5"),
+      latency_bucket: analyticsCall("durationBucket", [performance.now() - startedAt], ">=30s"),
+      reference_count_bucket: analyticsCall("countBucket", [references], "0"),
+      outcome,
+      answer_kind: answerKind,
+      failure_family: failureFamily,
+    });
+  }
+
+  function classifiedFailure(status, payload) {
+    if (status === 429 || payload?.error === "rate_limited") return ["rate_limited", "rate_limit"];
+    if ([400, 401, 403].includes(status)) return ["invalid_request", "validation"];
+    if (status === 503) return ["provider_unavailable", "provider"];
+    return ["internal_error", "internal"];
   }
 
   function updateComposerState() {
@@ -106,8 +142,8 @@
       const heading = document.createElement("h2");
       heading.textContent = `📚 ${sourceDocumentsLabel}`;
       referencesRegion.appendChild(heading);
-      safeReferences.forEach(reference => {
-        const card = createReferenceCard(reference);
+      safeReferences.forEach((reference, index) => {
+        const card = createReferenceCard(reference, index + 1);
         if (card) referencesRegion.appendChild(card);
       });
       if (referencesRegion.childElementCount > 1) message.appendChild(referencesRegion);
@@ -202,7 +238,7 @@
     });
   }
 
-  function createReferenceCard(reference) {
+  function createReferenceCard(reference, rank = 1) {
     const href = safeReferenceUrl(reference);
     if (!href) return null;
     const card = document.createElement("a");
@@ -210,6 +246,13 @@
     card.href = href;
     card.target = "_blank";
     card.rel = "noopener noreferrer";
+    card.addEventListener("click", () => {
+      track("search_source_selected", {
+        view: analyticsView,
+        source_rank_bucket: analyticsCall("rankBucket", [rank], "4+"),
+        answer_kind: "evidence_answer",
+      });
+    });
 
     const copy = document.createElement("span");
     const title = document.createElement("strong");
@@ -254,7 +297,7 @@
     }
   }
 
-  function appendError(title, detail, retryQuery) {
+  function appendError(title, detail, retryQuery, failureFamily = "internal") {
     const message = document.createElement("article");
     message.className = "classic-message classic-message--assistant classic-message--error";
     message.setAttribute("role", "alert");
@@ -271,6 +314,10 @@
       retry.disabled = Boolean(activeController);
       retry.addEventListener("click", () => {
         if (activeController) return;
+        track("search_retry_clicked", {
+          view: analyticsView,
+          failure_family: failureFamily,
+        });
         userQuery.value = retryQuery;
         updateComposerState();
         form.requestSubmit();
@@ -301,12 +348,30 @@
   }
 
   function isValidSuccessPayload(payload) {
-    return Boolean(
+    if (!Boolean(
       payload
       && typeof payload === "object"
       && responseKinds.has(payload.kind)
       && typeof payload.answer === "string"
-      && payload.answer.trim(),
+      && payload.answer.trim()
+      && Array.isArray(payload.references)
+      && ["en", "mr"].includes(payload.language)
+    )) return false;
+    if (payload.kind === "evidence_answer") {
+      return payload.references.length > 0 && payload.references.every(isValidReference);
+    }
+    return payload.references.length === 0;
+  }
+
+  function isValidReference(reference) {
+    const pdfId = Number(reference?.pdf_id);
+    return Boolean(
+      reference
+      && typeof reference === "object"
+      && !Array.isArray(reference)
+      && typeof reference.title === "string"
+      && reference.title.trim()
+      && ((Number.isSafeInteger(pdfId) && pdfId > 0) || safeReferenceUrl(reference))
     );
   }
 
@@ -326,6 +391,14 @@
     }
 
     appendMessage("user", query);
+    const startedAt = performance.now();
+    const pageLanguage = language === "mr" ? "mr" : "en";
+    const questionLanguage = analyticsCall("questionLanguage", [query, pageLanguage], pageLanguage);
+    track("search_submitted", {
+      view: analyticsView,
+      question_language: questionLanguage,
+      word_count_bucket: analyticsCall("wordCountBucket", [count], "1-5"),
+    });
     userQuery.value = "";
     activeController = new AbortController();
     chatMain.setAttribute("aria-busy", "true");
@@ -352,15 +425,47 @@
       }
       if (!response.ok || payload?.error) {
         const [title, detail] = errorCopy(response.status, payload);
+        const [outcome, failureFamily] = classifiedFailure(response.status, payload);
+        trackCompleted({
+          startedAt,
+          wordCount: count,
+          questionLanguage,
+          outcome,
+          answerKind: "error",
+          failureFamily,
+        });
         appendError(
           title,
           detail,
           response.status >= 500 || response.status === 429 ? query : "",
+          failureFamily,
         );
       } else if (!isValidSuccessPayload(payload)) {
         const [title, detail] = errorCopy(502, null);
-        appendError(title, detail, query);
+        trackCompleted({
+          startedAt,
+          wordCount: count,
+          questionLanguage,
+          outcome: "internal_error",
+          answerKind: "error",
+          failureFamily: "contract",
+        });
+        appendError(title, detail, query, "contract");
       } else {
+        const outcome = payload.kind === "evidence_answer"
+          ? "evidence"
+          : payload.kind === "no_evidence"
+            ? "no_evidence"
+            : "conversational";
+        trackCompleted({
+          startedAt,
+          wordCount: count,
+          questionLanguage: payload.language,
+          outcome,
+          answerKind: payload.kind,
+          failureFamily: "none",
+          references: payload.references?.length || 0,
+        });
         appendAnswer(
           payload.answer,
           payload.kind === "evidence_answer" ? (payload.references || []) : [],
@@ -370,10 +475,19 @@
       }
     } catch (error) {
       const timedOut = error?.name === "AbortError";
+      trackCompleted({
+        startedAt,
+        wordCount: count,
+        questionLanguage,
+        outcome: timedOut ? "provider_timeout" : "internal_error",
+        answerKind: "error",
+        failureFamily: timedOut ? "timeout" : "network",
+      });
       appendError(
         timedOut ? (messages.timeout || "Search is taking longer than expected") : (messages.unexpected || "Something went wrong"),
         timedOut ? (messages.try_again || "Please try again.") : (messages.request_failed || "Please try again later."),
         query,
+        timedOut ? "timeout" : "network",
       );
     } finally {
       window.clearTimeout(timeout);
@@ -392,6 +506,13 @@
 
   form.addEventListener("submit", submitSearch);
   updateComposerState();
+
+  document.querySelector(".classic-message--welcome a")?.addEventListener("click", () => {
+    track("search_help_opened", {view: analyticsView});
+  });
+  document.querySelector(".classic-icon-link--feedback")?.addEventListener("click", () => {
+    track("search_feedback_opened", {view: analyticsView});
+  });
 
   const cookieNotice = document.getElementById("cookieConsent");
   const cookieAccept = document.querySelector("[data-cookie-accept]");

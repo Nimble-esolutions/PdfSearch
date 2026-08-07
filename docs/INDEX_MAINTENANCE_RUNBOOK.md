@@ -8,7 +8,7 @@ Last reviewed: 2026-08-02
 
 Use **Operations → Search maintenance**. This section changes or checks
 local content/search artifacts; it never publishes, promotes, restores, or
-moves remote Vault authority.
+moves remote DataOps recovery authority.
 
 ## 2026 migration indexing evidence
 
@@ -40,7 +40,7 @@ stable reason code. Codes include `runtime_read_only`,
 
 The Dashboard only summarizes local maintenance under **Active Work** and
 **Needs attention**. Use those links to enter this Workbench. The Dashboard
-does not publish Vault generations, inspect remote manifests, or directly
+does not publish DataOps recovery points, inspect remote manifests, or directly
 cancel/retry jobs.
 
 ## Readiness and local-development posture
@@ -141,14 +141,11 @@ unsafe file, insufficient evidence, or reused idempotency key fails closed.
 Preparation does not activate the runtime. **Review typed activation** enters
 the existing signed activation and rollback flow, which creates a fresh
 pre-activation recovery set and preserves the current and previous runtimes.
-The local generation always retains Vault state `unknown`; it cannot be
-promoted into remote Vault authority. Publication creates a separate verified
-Vault generation.
-
-Successful reindexing makes the prior Vault generation stale. Publish and
-verify a new immutable Vault candidate before remote authority reflects the
-new searchable artifacts. Publication and promotion are separate explicit
-operations.
+The local generation is activation evidence, not a remote recovery point.
+After successful reindexing, use DataOps v3 backup to publish and verify a new
+immutable recovery point before remote recovery storage reflects the changed
+search artifacts. Backup publication and signed runtime activation remain
+separate explicit operations; neither one silently promotes the other.
 
 ## Local artifact cleanup
 
@@ -182,8 +179,9 @@ before each deletion it refreshes control-plane protection state and requires
 the path, size, reason, and relationship basis to remain identical; a newly
 active or otherwise protected artifact stops before that item is removed.
 
-The Workbench reports local recovery health, verified Vault generation count,
-maintenance candidate state, the latest persisted restore-rehearsal result,
-held/prunable bytes, and the current byte/inode reserve independently. Restore,
-maintenance workspace creation, and activation use phase-aware capacity plans;
-an insufficient reserve blocks the risky operation before mutation.
+The Workbench reports local recovery health, verified DataOps recovery-point
+count, maintenance candidate state, the latest persisted restore-rehearsal
+result, held/prunable bytes, and the current byte/inode reserve independently.
+Restore, maintenance workspace creation, and activation use phase-aware
+capacity plans; an insufficient reserve blocks the risky operation before
+mutation.

@@ -1,7 +1,7 @@
 Status: Active
 Audience: Operator
 Owner: FlowDocs maintainers
-Last verified: 2026-08-06
+Last verified: 2026-08-07
 Canonical source: DEPLOYMENT_GUIDE.md
 Supersedes: None
 
@@ -9,22 +9,25 @@ Supersedes: None
 
 ## Canonical Deployment
 
-FlowDocs is deployed through Dokploy as a Docker Compose application. The
-canonical production entrypoint is `docker-compose.yml`, not a host bind mount
-and not a hand-run `docker run` command.
+The 2026 FlowDocs application is deployed through Dokploy as a Docker Compose
+application. `docker-compose.yml` is the canonical deployment template for the
+active stage and the future production application; it is not evidence that
+the future 2026 production project exists. Do not replace it with a host bind
+mount or hand-run `docker run` command.
 
 The container image provides immutable application code under `/app/flowdocs`.
 The Dokploy-managed `flowdocs_data` volume provides mutable data under
 `/app/data`.
 
-Legacy production remains `www.ai-sahakar.net`. `2026.ai-sahakar.net` is the
-current non-production 2026 stage/rehearsal host; it is not production and must
-not be described as a completed cutover. The future 2026 production domains
-will be `ai-sahakar.net` and `www.ai-sahakar.net` only after separately approved
-traffic changes. The merged source baseline and current release must be
-recorded from Dokploy at cutover. Production must pull exact image digests with
-`pull_policy: always`; a tag or stale local `latest` image is not valid release
-evidence.
+Legacy `www.ai-sahakar.net` remains the authoritative production service.
+`2026.ai-sahakar.net` is the active non-production 2026 stage/rehearsal host.
+The future 2026 production project has not been deployed; its intended
+`ai-sahakar.net` / `www.ai-sahakar.net` routing requires a separately approved
+cutover. Record the merged source baseline and resolved image digest at that
+time. Production must pull an exact image digest with `pull_policy: always`;
+a tag or stale local `latest` image is not release evidence. Stage may track
+the approved compatibility channel, but its running digest must still be
+recorded after each deployment.
 
 ## Development
 
@@ -56,9 +59,14 @@ development data/control and RustFS volumes.
   FAISS fingerprint validation, and explicit promotion.
 - Verify restores, not only backup creation.
 
-DataOps v3 uses an environment-owned RustFS connection for complete immutable
-recovery points, explicit foreign-dataset import/rebind, and isolated restore
-candidates. It never performs automatic cross-environment synchronization.
+DataOps v3 is the sole supported operator UI and lifecycle contract. It uses
+one environment-owned RustFS connection for complete immutable recovery
+points, automatically chooses same-dataset restore or foreign-dataset
+import/rebind, and prepares isolated restore candidates. It never performs
+automatic cross-environment synchronization. VaultOps remains installed only
+as internal compatibility/control/activation infrastructure; its legacy APIs
+and profile choreography are default-off removal debt, not an alternate
+operator workflow.
 Use [`docs/HANDOFF.md`](docs/HANDOFF.md) for the currently verified dataset,
 bucket, generation, and receipt evidence.
 

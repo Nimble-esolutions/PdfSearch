@@ -1,16 +1,25 @@
 flowchart TD
-    incident["Incident detected"] --> evidence["Preserve logs, digests, volumes, checksums"]
-    evidence --> record["Create control-plane recovery record"]
-    record --> isolate["Isolate paired disposable data/control target"]
-    isolate --> integrity["SQLite integrity and migration checks"]
-    integrity --> counts["PDF count and FAISS count"]
-    counts --> indexes["FAISS fingerprint and load validation"]
-    indexes --> search["Representative search"]
-    search --> intent["Signed intent binds exact generation + manifest"]
-    intent --> coordinate["Coordinate web + maintenance; CAS pointer"]
-    coordinate --> endpoints["/livez and exact /readyz proof"]
-    endpoints --> decision{"Restore passes?"}
-    decision -- "no" --> retain["Retain failed target; do not promote"]
-    decision -- "yes" --> receipt["Signed activation result + recovery receipt"]
-    decision -- "runtime failure" --> rollback["Restore previous pointer; sign rollback result"]
-    receipt --> approve["Explicit traffic decision, if separately authorized"]
+    incident["Incident or readiness failure"] --> contain["Contain writes and preserve evidence<br/>logs · image digest · volume IDs · pointer documents"]
+    contain --> classify{"Failure boundary"}
+
+    classify -->|Image/runtime only| image_pair["Select verified previous<br/>image-generation pair"]
+    classify -->|Data/index/unknown| point["Select exact immutable<br/>DataOps v3 recovery point"]
+
+    point --> isolate["Restore to disposable data/control roots<br/>never active or legacy volumes"]
+    isolate --> verify["Manifest/object digests<br/>SQLite integrity/FK/migrations<br/>media/index reconciliation"]
+    verify --> behavior["Representative multilingual search<br/>source-link · PDF · readiness proof"]
+    behavior --> approved{"Recovery approved?"}
+    approved -->|No| retain["Retain failed target and evidence<br/>active pointer unchanged"]
+    approved -->|Yes| image_pair
+
+    image_pair --> intent["Signed recovery/activation intent<br/>exact image + generation + manifest"]
+    intent --> coordinate["Web + maintenance acknowledgements"]
+    coordinate --> cas["CAS active pointer<br/>retain previous pointer"]
+    cas --> readiness{"/livez and exact /readyz pass?"}
+    readiness -->|Yes| receipt["Signed result + incident recovery receipt"]
+    readiness -->|No| rollback["CAS previous pointer back<br/>signed rollback result"]
+    rollback --> retain
+
+    receipt --> traffic{"Separate traffic decision required?"}
+    traffic -->|Stage| observe["Observe stage; legacy production unchanged"]
+    traffic -->|Future production| cutover["Independent security, data, DNS/TLS<br/>and rollback approval"]

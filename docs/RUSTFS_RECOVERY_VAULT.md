@@ -1,11 +1,18 @@
-Status: Active, constrained
-Audience: Recovery, Operator, Developer
+Status: Historical v2 rehearsal evidence; do not use as the operator contract
+Audience: Recovery maintainer, Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-03
-Canonical source: docs/RUSTFS_RECOVERY_VAULT.md
+Last verified: 2026-08-07
+Canonical replacement: docs/dataops/V3_ARCHITECTURE.md
 Supersedes: Earlier claims that S3 restore or scheduled backup is automatic
 
 # RustFS Recovery Vault
+
+This file preserves the 2026 legacy-to-stage rehearsal evidence and the safety
+lessons that led to DataOps v3. References below to profiles, generations,
+Vault Workbench, or Active Sync describe the retired v2 operator workflow.
+For current backup, import, restore, test-recovery, and activation behavior use
+[DataOps v3 architecture](dataops/V3_ARCHITECTURE.md) and the living
+[handoff](HANDOFF.md).
 
 ## Current rehearsal status
 

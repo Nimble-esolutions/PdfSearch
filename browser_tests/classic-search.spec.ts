@@ -23,6 +23,14 @@ async function mockSearch(page: Page, payload: object = {
   });
 }
 
+async function installThrowingAnalyticsAdapter(page: Page) {
+  await page.addInitScript(() => {
+    (window as any).PdfSearchAnalytics = new Proxy({}, {
+      get: () => () => { throw new Error('analytics adapter failure'); },
+    });
+  });
+}
+
 test.describe('Classic public search', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('cookieConsent', 'accepted'));
@@ -98,6 +106,18 @@ test.describe('Classic public search', () => {
     await expect(response).not.toContainText('Rejected source');
     await expect(response).not.toContainText('Rejected same-origin source');
     await expect(response).toContainText('Page 42');
+  });
+
+  test('keeps search functional when every analytics method throws', async ({ page }) => {
+    await installThrowingAnalyticsAdapter(page);
+    await mockSearch(page);
+    await page.goto('/');
+    await page.locator('#userQuery').fill('What is the society audit procedure?');
+    await page.locator('#sendBtn').click();
+
+    await expect(page.locator('.classic-message--assistant').last()).toContainText(answer);
+    await expect(page.locator('#userQuery')).toBeVisible();
+    await expect(page.locator('#userQuery')).toBeEditable();
   });
 
   test('formats long answers, keeps the transcript scrollable, and supports another search', async ({ page }) => {
@@ -191,7 +211,7 @@ test.describe('Classic public search', () => {
       kind: 'small_talk',
       language: 'mr',
       answer: 'नमस्कार! मी तुम्हाला कशी मदत करू शकतो?',
-      references,
+      references: [],
     });
     await page.goto('/');
     await page.locator('#userQuery').fill('नमस्कार!');
@@ -217,6 +237,35 @@ test.describe('Classic public search', () => {
     await expect(response.locator('.classic-retry')).toBeEnabled();
     await expect(page.locator('#userQuery')).toBeVisible();
     await expect(page.locator('#userQuery')).toBeFocused();
+  });
+
+  test('rejects impossible response-kind, language, and reference combinations', async ({ page }) => {
+    const invalidPayloads = [
+      { kind: 'evidence_answer', language: 'en', answer, references: [] },
+      { kind: 'small_talk', language: 'en', answer: 'Hello', references },
+      { kind: 'evidence_answer', language: 'hi', answer, references },
+      { kind: 'evidence_answer', language: 'en', answer, references: [null] },
+      { kind: 'evidence_answer', language: 'en', answer, references: [{ title: 'Missing identity' }] },
+    ];
+    let currentPayload = invalidPayloads[0];
+    await page.route('**/search/**', async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(currentPayload),
+      });
+    });
+    await page.goto('/');
+
+    for (const [index, payload] of invalidPayloads.entries()) {
+      currentPayload = payload;
+      await page.locator('#userQuery').fill(`Invalid contract ${index + 1}`);
+      await page.locator('#sendBtn').click();
+      await expect(page.locator('.classic-message--error')).toHaveCount(index + 1);
+      await expect(page.locator('.classic-message--assistant[data-response-kind]')).toHaveCount(0);
+      await expect(page.locator('#userQuery')).toBeEditable();
+    }
   });
 
   test('keeps the 30-word contract and authored error state', async ({ page }) => {

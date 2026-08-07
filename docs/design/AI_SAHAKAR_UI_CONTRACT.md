@@ -135,8 +135,7 @@ Cockpit** and prioritises:
 - operational summary metrics;
 - Category Yard and recent intake;
 - indexing/readiness and maintenance status;
-- role-appropriate Configuration, Vault, Settings, Users, and Operations
-  actions;
+- role-appropriate Configuration, Settings, Users, and Operations actions;
 - explicit confirmation for destructive category/document actions.
 
 Routine local document care and advanced data custody are separate operator

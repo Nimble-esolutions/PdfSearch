@@ -214,7 +214,7 @@ VaultOps profiles are compatibility evidence and must not be presented as the
 normal DataOps v3 connection path.
 
 Local development enables validation, stored-index repair, and sandboxed
-reindexing independently of remote Vault authority. The development Compose
+reindexing independently of remote DataOps recovery authority. The development Compose
 stack also enables `VAULT_MUTATION_TRACKING_ENABLED=1`: repair and reindex
 create mutable candidates and must remain disabled when the worker cannot prove
 that source documents stayed consistent while preparing them. Read-only

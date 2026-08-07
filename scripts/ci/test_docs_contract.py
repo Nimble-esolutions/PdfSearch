@@ -287,6 +287,28 @@ class DocumentationContractTests(unittest.TestCase):
 
         self.assertEqual(failures, ["example: Mermaid compilation timed out"])
 
+    def test_mermaid_failure_detail_preserves_actionable_head_and_tail(self):
+        result = subprocess.CompletedProcess(
+            [],
+            1,
+            "",
+            "\n".join(
+                [
+                    "Error: Failed to launch browser",
+                    "cause: missing executable dependency",
+                    *[f"stack line {index}" for index in range(12)],
+                    "final hint",
+                ]
+            ),
+        )
+
+        detail = docs_contract.subprocess_failure_detail(result)
+
+        self.assertIn("Error: Failed to launch browser", detail)
+        self.assertIn("cause: missing executable dependency", detail)
+        self.assertIn("final hint", detail)
+        self.assertIn("...", detail)
+
     def test_mermaid_batch_uses_one_compiler_process_for_all_diagrams(self):
         with tempfile.TemporaryDirectory() as directory:
             compiler = Path(directory) / "mmdc"

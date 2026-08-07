@@ -1,11 +1,13 @@
 # Public Search Theme Engine Handoff
 
-**Updated:** 2026-08-06
-**Status:** Historical delivery handoff; living state is in [`../HANDOFF.md`](../HANDOFF.md)
-**Merged:** PRs #185–#190
-**Last verified stage artifact:** `ghcr.io/nimble-esolutions/pdfsearch/shakar-frontend@sha256:8649af368c2ba84f272942d7ab969055f0c2eaa502b4032f7bd52aa955cc52cc`
-**Rollout boundary:** PRs #185–#186 were stage-canary verified on that artifact;
-the integrated PRs #187–#190 image still requires certification and stage canary
+**Updated:** 2026-08-07
+**Status:** Historical / completed delivery handoff
+**Superseded by:** [`../HANDOFF.md`](../HANDOFF.md) for current deployment
+evidence and [`../design/AI_SAHAKAR_UI_CONTRACT.md`](../design/AI_SAHAKAR_UI_CONTRACT.md)
+for the active UI contract
+
+This file records why the dual-theme delivery was shaped as it was. It contains
+no current image, rollout, or pending-release authority.
 
 ## Classic long-answer regression (2026-08-06)
 
@@ -40,9 +42,8 @@ and serious/critical accessibility findings across the browser viewport
 matrix. The required image smoke gate includes Classic search so this primary
 public journey cannot be skipped again.
 
-The repair merged in PR #189 and the living handoff was updated by PR #190. Do
-not claim it as deployed until the resulting image is running on stage and the
-long-answer plus second-query canary succeeds there.
+The repair was completed in the theme-engine delivery. Use the living handoff
+to determine whether a particular image and stage canary include it.
 
 ## Delivered
 
@@ -61,48 +62,42 @@ long-answer plus second-query canary succeeds there.
 - The shared backend resolves answer language from each question and both
   themes apply the returned `language` as accessible DOM metadata; changing the
   primary theme cannot change answer language.
-- PR #187 added public policy/information pages using the active or
-  explicitly previewed theme through a standalone visitor shell. They do not
-  inherit admin UI assets; integrated stage deployment remains pending.
+- Public policy/information pages use the active or explicitly previewed theme
+  through a standalone visitor shell. They do not inherit admin UI assets.
 
-## Verification evidence
+## Representative verification evidence at delivery
 
-Completed locally in the isolated development Compose stack:
+The following are representative delivery checks, not the complete current
+route or test inventory. Consult the exact workflow and tests at the revision
+being released.
 
 - Django system check: pass.
-- Targeted Django theme/SEO/search/language/auth tests: 39 pass for PR #187.
+- Targeted Django theme/SEO/search/language/auth tests: pass.
 - Migration drift: none.
 - Marathi catalog compile/fuzzy check and operator-language validation: pass.
-- Classic/Workbench/motion Playwright matrix: 72 pass across desktop, laptop,
-  tablet, and mobile.
-- Public information Playwright matrix: 16 pass across five routes, both
-  themes, four viewport classes, canonical/asset isolation, responsive
-  overflow, allowlisted preview propagation, and zero serious/critical Axe
-  findings.
+- Classic/Workbench/motion Playwright coverage across desktop, laptop, tablet,
+  and mobile: pass.
+- Public-information coverage across both themes includes canonical/asset
+  isolation, responsive overflow, allowlisted preview propagation, and
+  serious/critical accessibility checks.
 - Visual review: Classic 1920×1080, Classic 390×844, Workbench 1440×900.
 
 ## Deployment and rollback
 
-PRs #185 and #186 were verified on stage. Existing databases required no migration. Classic
-is the default unless a superadmin saves Workbench, and either view remains
-available through its request-only `?view=` override.
+Existing databases required no theme-engine migration. Classic is the default
+unless a superadmin saves Workbench, and either view remains available through
+its request-only `?view=` override.
 
 Rollback by selecting Workbench in Settings, or by reverting the feature PR.
 Neither action changes documents, indexes, search sources, backups, or runtime
 generations.
 
-PRs #187–#190 are merged but not proven on the last verified stage artifact. Do
-not claim their public-information shell, macOS docs-rendering fix, or Classic
-continuity behavior as deployed until one integrated image revision is running
-on both stage web and maintenance and the complete canary passes.
+## Historical language evidence
 
-## Current evidence
-
-PR #186 replaced substring conversational matching with normalized exact intent,
-question-derived answer language, provider-output validation, and one bounded
-repair attempt. On stage, both themes returned HTTP 200. A Marathi document
-question submitted with an English client locale returned a Marathi/Devanagari
-`evidence_answer` with three references; the inverse English question submitted
-with a Marathi client locale returned an English/Latin `evidence_answer` with
-three references. The signed active generation and indexing ratio remained
-unchanged.
+The delivery replaced substring conversational matching with normalized exact
+intent, question-derived answer language, provider-output validation, and one
+bounded repair attempt. A stage rehearsal showed a Marathi document question
+with an English client locale returning a Marathi/Devanagari evidence answer,
+and the inverse English question with a Marathi client locale returning an
+English/Latin evidence answer. This dated observation is not current deployment
+evidence; use [`../HANDOFF.md`](../HANDOFF.md) for that.

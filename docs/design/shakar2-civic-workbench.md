@@ -58,9 +58,10 @@ menu, Escape and outside-click dismissal, focus restoration, and arrow-key
 navigation. The native Web Share path remains the preferred mobile behavior
 because the user chooses the final messaging application and recipient.
 
-The client answer payload cache is bounded and reset by “New question”.
-Structured answers skip progressive raw-text reveal so Markdown markers never
-flash before final formatting.
+The client answer payload cache is bounded and reset by “New question”. Every
+completed JSON answer renders immediately through the safe formatter. The UI
+does not add a character-by-character delay after the server has finished, and
+Markdown markers never flash before final formatting.
 
 The Dockerfile no longer depends on downloading an unpinned external Dockerfile
 frontend during source validation. Cache mounts were build accelerators rather

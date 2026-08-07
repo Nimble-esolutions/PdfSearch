@@ -5,14 +5,15 @@ from __future__ import annotations
 import os
 import json
 import hashlib
+import heapq
 import math
 import pathlib
 import re
 import shutil
 import subprocess
-import traceback
 import logging
 import tempfile
+import threading
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ from openai import OpenAI
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Max, TextField
+from django.db.models.functions import Cast, Length
 from .models import Folder
 from difflib import SequenceMatcher
 
@@ -49,6 +52,10 @@ class SearchDataIntegrityError(RuntimeError):
 
 class SearchAnswerLanguageError(RuntimeError):
     """Raised when the answer provider violates the requested language contract."""
+
+
+class RuntimeSearchCorpusLimitError(RuntimeError):
+    """Raised when a process-local corpus would exceed its fixed safety budget."""
 
 
 logger = logging.getLogger(__name__)
@@ -100,10 +107,17 @@ MAX_CONTEXT_WORDS = getattr(settings, "MAX_CONTEXT_WORDS", 2500)  # much smaller
 TOP_K_CHUNKS = getattr(settings, "TOP_K_CHUNKS", 5)
 MAX_SEARCH_FOLDERS = 64
 MAX_SEARCH_CANDIDATES = 128
+SEARCH_ANSWER_CONTRACT_VERSION = "2026-08-07"
+MAX_RUNTIME_CORPUS_VECTORS = 12_000
+MAX_RUNTIME_CORPUS_BYTES = 96 * 1024 * 1024
+MAX_RUNTIME_CORPUS_PDF_VECTORS = 1_000
+MAX_RUNTIME_CORPUS_PDF_EMBEDDING_JSON_BYTES = 32 * 1024 * 1024
+MAX_RUNTIME_CORPUS_PDF_CHUNK_JSON_BYTES = 8 * 1024 * 1024
 
 # Cache TTLs (seconds)
 EMBEDDING_TTL = getattr(settings, "EMBEDDING_TTL", 60 * 60 * 24 * 7)  # 7 days
 SEARCH_CACHE_TTL = getattr(settings, "SEARCH_CACHE_TTL", 60 * 10)  # 10 minutes
+QUERY_EMBEDDING_CACHE_TTL = min(EMBEDDING_TTL, SEARCH_CACHE_TTL)
 
 # ------------------ Helpers ------------------
 def transliterate_marathi_to_english(text: str) -> str:
@@ -194,6 +208,90 @@ class _StoredSearchChunk:
     uploaded_at: str | None
     text: str
     embedding: np.ndarray
+
+
+@dataclass(frozen=True)
+class _SearchChunkOwner:
+    """Stable ownership metadata for one vector in an immutable search corpus."""
+
+    pdf_id: int
+    title: str
+    folder_id: int
+    folder: str
+    uploaded_at: str | None
+    text: str
+
+
+@dataclass(frozen=True)
+class _RuntimeSearchCorpus:
+    """One process-local, immutable vector snapshot for the signed runtime."""
+
+    identity: str
+    chunks: tuple[_SearchChunkOwner, ...]
+    embeddings: np.ndarray
+    retained_payload_bytes: int
+    invalid_pdfs: int
+
+
+_runtime_search_corpus: _RuntimeSearchCorpus | None = None
+_runtime_search_corpus_lock = threading.Lock()
+_runtime_search_corpus_disabled_identity = ""
+
+
+def _cache_namespace(key: str) -> str:
+    return key.partition(":")[0] or "unknown"
+
+
+def _safe_cache_get(key: str, *, diagnostics: dict[str, int] | None = None):
+    try:
+        return cache.get(key)
+    except Exception:
+        if diagnostics is not None:
+            diagnostics["cache_errors"] = diagnostics.get("cache_errors", 0) + 1
+        logger.warning(
+            "search_cache_error operation=get namespace=%s",
+            _cache_namespace(key),
+        )
+        return None
+
+
+def _safe_cache_set(
+    key: str,
+    value: Any,
+    timeout: int,
+    *,
+    diagnostics: dict[str, int] | None = None,
+) -> None:
+    try:
+        cache.set(key, value, timeout)
+    except Exception:
+        if diagnostics is not None:
+            diagnostics["cache_errors"] = diagnostics.get("cache_errors", 0) + 1
+        logger.warning(
+            "search_cache_error operation=set namespace=%s",
+            _cache_namespace(key),
+        )
+
+
+def _safe_cache_delete(key: str, *, diagnostics: dict[str, int] | None = None) -> None:
+    try:
+        cache.delete(key)
+    except Exception:
+        if diagnostics is not None:
+            diagnostics["cache_errors"] = diagnostics.get("cache_errors", 0) + 1
+        logger.warning(
+            "search_cache_error operation=delete namespace=%s",
+            _cache_namespace(key),
+        )
+
+
+def _disable_runtime_search_corpus(identity: str, *, reason: str) -> None:
+    global _runtime_search_corpus, _runtime_search_corpus_disabled_identity
+    with _runtime_search_corpus_lock:
+        if _runtime_search_corpus is not None and _runtime_search_corpus.identity == identity:
+            _runtime_search_corpus = None
+        _runtime_search_corpus_disabled_identity = identity
+    logger.warning("signed_search_corpus_disabled reason=%s", reason)
 
 
 def _ocr_languages() -> str:
@@ -463,6 +561,268 @@ def _folder_search_chunks(
     return stored_chunks, matrix / norms
 
 
+def verified_runtime_search_identity() -> str:
+    """Return a cache identity for an exact signed runtime and mutation epoch.
+
+    Search data may be cached across requests only when activation evidence
+    and durable mutation tracking agree that no write is active. The epoch is
+    included because an activated runtime workspace remains writable.
+    """
+    runtime = getattr(settings, "ACTIVE_RUNTIME", None)
+    configured_generation = str(
+        getattr(settings, "RUNTIME_GENERATION_ID", "") or ""
+    )
+    configured_manifest = str(
+        getattr(settings, "RUNTIME_MANIFEST_DIGEST", "") or ""
+    ).lower()
+    runtime_generation = str(getattr(runtime, "generation_id", "") or "")
+    runtime_manifest = str(getattr(runtime, "manifest_digest", "") or "").lower()
+    pointer_digest = str(getattr(runtime, "pointer_digest", "") or "").lower()
+    if not (
+        runtime is not None
+        and configured_generation
+        and runtime_generation == configured_generation
+        and runtime_manifest == configured_manifest
+        and re.fullmatch(r"[0-9a-f]{64}", runtime_manifest)
+        and re.fullmatch(r"[0-9a-f]{64}", pointer_digest)
+    ):
+        return ""
+    try:
+        from vaultops.services.mutations import get_mutation_state, tracking_enabled
+
+        if not tracking_enabled():
+            return ""
+        mutation_state = get_mutation_state()
+        if (
+            int(mutation_state.active_mutations) != 0
+            or str(mutation_state.barrier_state) != "open"
+        ):
+            return ""
+        mutation_epoch = int(mutation_state.current_epoch)
+    except Exception:
+        logger.warning("search_runtime_identity_unavailable")
+        return ""
+    material = "\0".join(
+        [
+            runtime_generation,
+            runtime_manifest,
+            pointer_digest,
+            str(mutation_epoch),
+            OPENAI_EMBED_MODEL,
+        ]
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _load_runtime_search_corpus(identity: str) -> _RuntimeSearchCorpus:
+    expected_dimensions: int | None = None
+    estimated_bytes = 0
+    vector_count = 0
+    pdf_queryset = (
+        PDFFile.objects.filter(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
+        .select_related("folder")
+        .only(
+            "pk",
+            "title",
+            "folder_id",
+            "folder__name",
+            "uploaded_at",
+            "page_chunks",
+            "chunk_embeddings",
+            "lifecycle",
+        )
+        .order_by("folder_id", "pk")
+    )
+    json_limits = pdf_queryset.aggregate(
+        max_embedding_json_bytes=Max(
+            Length(Cast("chunk_embeddings", output_field=TextField()))
+        ),
+        max_chunk_json_bytes=Max(
+            Length(Cast("page_chunks", output_field=TextField()))
+        ),
+    )
+    if int(json_limits["max_embedding_json_bytes"] or 0) > (
+        MAX_RUNTIME_CORPUS_PDF_EMBEDDING_JSON_BYTES
+    ) or int(json_limits["max_chunk_json_bytes"] or 0) > (
+        MAX_RUNTIME_CORPUS_PDF_CHUNK_JSON_BYTES
+    ):
+        raise RuntimeSearchCorpusLimitError("runtime PDF JSON budget exceeded")
+
+    # Pass one validates dimensions and computes the retained-payload budget.
+    # iterator() prevents Django from caching every decoded JSON model instance.
+    for pdf in pdf_queryset.iterator(chunk_size=1):
+        pdf_chunks = _validated_pdf_search_chunks(pdf)
+        if len(pdf_chunks) > MAX_RUNTIME_CORPUS_PDF_VECTORS:
+            raise RuntimeSearchCorpusLimitError("runtime PDF vector budget exceeded")
+        dimensions = {row.embedding.shape[0] for row in pdf_chunks}
+        if len(dimensions) != 1:
+            raise SearchDataIntegrityError("contains inconsistent embedding dimensions")
+        pdf_dimensions = next(iter(dimensions))
+        if expected_dimensions is not None and pdf_dimensions != expected_dimensions:
+            raise SearchDataIntegrityError("embedding dimension differs from the runtime")
+        expected_dimensions = pdf_dimensions
+        for row in pdf_chunks:
+            estimated_bytes += int(row.embedding.nbytes) + len(row.text.encode("utf-8"))
+            vector_count += 1
+            if (
+                vector_count > MAX_RUNTIME_CORPUS_VECTORS
+                or estimated_bytes > MAX_RUNTIME_CORPUS_BYTES
+            ):
+                raise RuntimeSearchCorpusLimitError("runtime search corpus budget exceeded")
+
+    if not vector_count:
+        return _RuntimeSearchCorpus(
+            identity=identity,
+            chunks=(),
+            embeddings=np.empty((0, 0), dtype=np.float32),
+            retained_payload_bytes=0,
+            invalid_pdfs=0,
+        )
+
+    owners: list[_SearchChunkOwner] = []
+    embeddings = np.empty(
+        (vector_count, int(expected_dimensions or 0)),
+        dtype=np.float32,
+    )
+    offset = 0
+    # Pass two fills the admitted final matrix directly. Peak construction
+    # memory is one size-gated PDF plus the final matrix and bounded owners,
+    # rather than all vector arrays plus a second vstack matrix.
+    for pdf in pdf_queryset.iterator(chunk_size=1):
+        pdf_chunks = _validated_pdf_search_chunks(pdf)
+        if offset + len(pdf_chunks) > vector_count:
+            raise SearchDataIntegrityError("runtime corpus changed during load")
+        for row in pdf_chunks:
+            owners.append(
+                _SearchChunkOwner(
+                    pdf_id=row.pdf_id,
+                    title=row.title,
+                    folder_id=row.folder_id,
+                    folder=row.folder,
+                    uploaded_at=row.uploaded_at,
+                    text=row.text,
+                )
+            )
+            embeddings[offset] = row.embedding
+            offset += 1
+    if offset != vector_count:
+        raise SearchDataIntegrityError("runtime corpus changed during load")
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    if np.any(norms == 0) or not np.isfinite(norms).all():
+        raise SearchDataIntegrityError("runtime search corpus contains invalid vectors")
+    embeddings /= norms
+    embeddings.setflags(write=False)
+    return _RuntimeSearchCorpus(
+        identity=identity,
+        chunks=tuple(owners),
+        embeddings=embeddings,
+        retained_payload_bytes=estimated_bytes,
+        invalid_pdfs=0,
+    )
+
+
+def _runtime_search_corpus_for(
+    identity: str,
+) -> tuple[_RuntimeSearchCorpus | None, bool]:
+    """Load one bounded epoch corpus, or select the conservative fallback."""
+    global _runtime_search_corpus, _runtime_search_corpus_disabled_identity
+    if _runtime_search_corpus_disabled_identity == identity:
+        return None, False
+    current = _runtime_search_corpus
+    if current is not None and current.identity == identity:
+        return current, True
+    with _runtime_search_corpus_lock:
+        current = _runtime_search_corpus
+        if current is not None and current.identity == identity:
+            return current, True
+        try:
+            current = _load_runtime_search_corpus(identity)
+        except (
+            SearchDataIntegrityError,
+            RuntimeSearchCorpusLimitError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            logger.warning("signed_search_corpus_disabled reason=%s", type(exc).__name__)
+            _runtime_search_corpus = None
+            _runtime_search_corpus_disabled_identity = identity
+            return None, False
+        if verified_runtime_search_identity() != identity:
+            logger.warning("signed_search_corpus_disabled reason=mutation_during_load")
+            _runtime_search_corpus = None
+            _runtime_search_corpus_disabled_identity = identity
+            return None, False
+        _runtime_search_corpus = current
+        _runtime_search_corpus_disabled_identity = ""
+        return current, False
+
+
+def _allowed_runtime_chunk_indices(
+    corpus: _RuntimeSearchCorpus,
+    folder_scopes: list[tuple[Folder, Any]],
+) -> list[int]:
+    unrestricted_folders = {
+        int(folder.pk) for folder, pdfs in folder_scopes if pdfs is None
+    }
+    restricted_pdf_ids: set[int] = set()
+    for _folder, pdfs in folder_scopes:
+        if pdfs is not None:
+            restricted_pdf_ids.update(int(pk) for pk in pdfs.values_list("pk", flat=True))
+    return [
+        index
+        for index, row in enumerate(corpus.chunks)
+        if row.folder_id in unrestricted_folders or row.pdf_id in restricted_pdf_ids
+    ]
+
+
+def _runtime_corpus_hits(
+    corpus: _RuntimeSearchCorpus,
+    folder_scopes: list[tuple[Folder, Any]],
+    query_embedding: np.ndarray,
+) -> list[SearchHit]:
+    allowed_indices = _allowed_runtime_chunk_indices(corpus, folder_scopes)
+    if not allowed_indices:
+        if corpus.invalid_pdfs and not corpus.chunks:
+            raise SearchDataIntegrityError("Signed search corpus has no valid vectors")
+        return []
+    query = query_embedding.astype(np.float32)
+    if query.ndim != 1 or not np.isfinite(query).all() or not np.linalg.norm(query):
+        raise SearchDataIntegrityError("Query embedding is invalid")
+    if corpus.embeddings.shape[1] != query.shape[0]:
+        raise SearchDataIntegrityError(
+            f"Query dimension mismatch: query={query.shape[0]}, database={corpus.embeddings.shape[1]}"
+        )
+    normalized_query = query / np.linalg.norm(query)
+    allowed_array = np.asarray(allowed_indices, dtype=np.int64)
+    if len(allowed_indices) == len(corpus.chunks):
+        scores = corpus.embeddings @ normalized_query
+    else:
+        scores = corpus.embeddings[allowed_array] @ normalized_query
+
+    # Preserve the previous per-folder candidate bound before global ranking.
+    by_folder: dict[int, list[tuple[float, int]]] = {}
+    for position, score in zip(allowed_array, scores):
+        owner = corpus.chunks[int(position)]
+        by_folder.setdefault(owner.folder_id, []).append((float(score), int(position)))
+    candidates: list[tuple[float, int]] = []
+    per_folder_limit = TOP_K_CHUNKS * 2
+    for folder_hits in by_folder.values():
+        candidates.extend(heapq.nlargest(per_folder_limit, folder_hits))
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [
+        SearchHit(
+            pdf_id=corpus.chunks[index].pdf_id,
+            title=corpus.chunks[index].title,
+            folder_id=corpus.chunks[index].folder_id,
+            folder=corpus.chunks[index].folder,
+            uploaded_at=corpus.chunks[index].uploaded_at,
+            snippet=corpus.chunks[index].text,
+            score=score,
+        )
+        for score, index in candidates[:MAX_SEARCH_CANDIDATES]
+    ]
+
+
 def _folder_embedding_matrix(
     folder: Folder,
     pdfs=None,
@@ -483,6 +843,21 @@ def _validate_index(index: Any, chunk_count: int, dimensions: int) -> None:
         raise SearchDataIntegrityError(
             f"FAISS vector count mismatch: index={index.ntotal}, database={chunk_count}"
         )
+    if int(getattr(index, "metric_type", -1)) != int(faiss.METRIC_INNER_PRODUCT):
+        raise SearchDataIntegrityError("FAISS index metric is not inner product")
+
+
+def _index_matches_embeddings(index: Any, embeddings_matrix: np.ndarray) -> bool:
+    """Prove a loaded flat index represents the current database snapshot."""
+    try:
+        reconstructed = np.empty_like(embeddings_matrix)
+        index.reconstruct_n(0, int(index.ntotal), reconstructed)
+    except Exception:
+        return False
+    return bool(
+        reconstructed.shape == embeddings_matrix.shape
+        and np.array_equal(reconstructed, embeddings_matrix)
+    )
 
 
 def _build_or_load_faiss_index_for_folder(
@@ -490,13 +865,18 @@ def _build_or_load_faiss_index_for_folder(
     pdfs=None,
     force_rebuild: bool = False,
     promote_index=None,
+    search_snapshot: tuple[list[_StoredSearchChunk], np.ndarray] | None = None,
 ) -> Tuple[Optional[faiss.Index], List[str], np.ndarray]:
     """
     Build or load a FAISS index for a folder.
     Returns (index, chunks_flat_list, normalized_embeddings). A stored index is
     usable only when its dimensions and vector count match the database metadata.
     """
-    chunk_texts, embeddings_matrix = _folder_embedding_matrix(folder, pdfs=pdfs)
+    if search_snapshot is None:
+        chunk_texts, embeddings_matrix = _folder_embedding_matrix(folder, pdfs=pdfs)
+    else:
+        stored_chunks, embeddings_matrix = search_snapshot
+        chunk_texts = [row.text for row in stored_chunks]
     if not chunk_texts:
         return None, [], embeddings_matrix
     if not _HAS_FAISS:
@@ -527,7 +907,9 @@ def _build_or_load_faiss_index_for_folder(
             except SearchDataIntegrityError as exc:
                 logger.warning("Rebuilding stale FAISS index %s: %s", idx_path, exc)
             else:
-                return index, chunk_texts, embeddings_matrix
+                if _index_matches_embeddings(index, embeddings_matrix):
+                    return index, chunk_texts, embeddings_matrix
+                logger.warning("Rebuilding stale FAISS index %s: vector mismatch", idx_path)
 
     try:
         pathlib.Path(idx_path).parent.mkdir(parents=True, exist_ok=True)
@@ -562,6 +944,7 @@ def build_or_load_faiss_index_for_folder(
     pdfs=None,
     force_rebuild: bool = False,
     promote_index=None,
+    _search_snapshot: tuple[list[_StoredSearchChunk], np.ndarray] | None = None,
 ) -> Tuple[Optional[faiss.Index], List[str], np.ndarray]:
     if pdfs is not None:
         return _build_or_load_faiss_index_for_folder(
@@ -569,6 +952,7 @@ def build_or_load_faiss_index_for_folder(
             pdfs=pdfs,
             force_rebuild=force_rebuild,
             promote_index=promote_index,
+            search_snapshot=_search_snapshot,
         )
     from vaultops.services.mutations import mutation_scope
 
@@ -588,6 +972,7 @@ def build_or_load_faiss_index_for_folder(
         pdfs=pdfs,
         force_rebuild=force_rebuild,
         promote_index=fenced_promotion,
+        search_snapshot=_search_snapshot,
     )
 
 
@@ -745,10 +1130,45 @@ def precompute_pdf_embeddings(
 
 
 # ------------------ Search PDFs (fast path) ------------------
-def create_query_embedding(user_query: str) -> np.ndarray:
-    """Create one validated query embedding for an entire search request."""
+def create_query_embedding(
+    user_query: str,
+    *,
+    diagnostics: dict[str, int] | None = None,
+) -> np.ndarray:
+    """Create or safely reuse one validated embedding for an entire request."""
+    test_embeddings = _test_embeddings_enabled()
+    if test_embeddings:
+        provider_scope = "deterministic-test"
+    else:
+        # Match answer-cache policy: validate the effective provider before a
+        # shared cache entry can be returned after a policy or credential change.
+        _get_client()
+        from .ai_guard import get_ai_cache_scope
+        provider_scope = get_ai_cache_scope()
+    cache_material = "\0".join(
+        [provider_scope, OPENAI_EMBED_MODEL, user_query.strip()]
+    )
+    cache_digest = hashlib.sha256(cache_material.encode("utf-8")).hexdigest()
+    cache_key = f"query_embedding:v1:{cache_digest}"
+    cached = _safe_cache_get(cache_key, diagnostics=diagnostics)
+    if isinstance(cached, dict):
+        try:
+            dimension = int(cached["dimension"])
+            embedding = np.frombuffer(cached["data"], dtype=np.float32).copy()
+            if embedding.shape != (dimension,):
+                raise ValueError("cached dimension mismatch")
+            if not np.isfinite(embedding).all() or not np.linalg.norm(embedding):
+                raise ValueError("cached vector is invalid")
+        except (KeyError, TypeError, ValueError):
+            _safe_cache_delete(cache_key, diagnostics=diagnostics)
+        else:
+            if diagnostics is not None:
+                diagnostics["embedding_calls"] = 0
+                diagnostics["embedding_cache_hit"] = 1
+            return embedding
+
     try:
-        if _test_embeddings_enabled():
+        if test_embeddings:
             vector = _deterministic_embeddings([user_query])[0]
         else:
             response = _get_client().embeddings.create(
@@ -761,6 +1181,15 @@ def create_query_embedding(user_query: str) -> np.ndarray:
         raise SearchDataIntegrityError("Unable to create the query embedding") from exc
     if embedding.ndim != 1 or not np.isfinite(embedding).all() or not np.linalg.norm(embedding):
         raise SearchDataIntegrityError("Query embedding is invalid")
+    _safe_cache_set(
+        cache_key,
+        {"dimension": int(embedding.shape[0]), "data": embedding.tobytes()},
+        QUERY_EMBEDDING_CACHE_TTL,
+        diagnostics=diagnostics,
+    )
+    if diagnostics is not None:
+        diagnostics["embedding_calls"] = 0 if test_embeddings else 1
+        diagnostics["embedding_cache_hit"] = 0
     return embedding
 
 
@@ -777,27 +1206,31 @@ def retrieve_folder_hits(
     scoped_pdfs = (
         pdfs if restricted_scope else PDFFile.objects.filter(folder=folder)
     ).filter(lifecycle__in=SEARCHABLE_PDF_LIFECYCLES)
-    if not scoped_pdfs.exists():
-        return []
 
     query_embedding = (
         query_embedding if query_embedding is not None else create_query_embedding(user_query)
-    )
-    index, chunk_texts, embeddings_matrix = build_or_load_faiss_index_for_folder(
-        folder,
-        pdfs=scoped_pdfs if restricted_scope else None,
     )
     stored_chunks, stored_matrix = _folder_search_chunks(
         folder,
         pdfs=scoped_pdfs if restricted_scope else None,
     )
+    if not stored_chunks:
+        return []
+    index, chunk_texts, embeddings_matrix = build_or_load_faiss_index_for_folder(
+        folder,
+        pdfs=scoped_pdfs if restricted_scope else None,
+        _search_snapshot=(stored_chunks, stored_matrix),
+    )
     if (
         len(stored_chunks) != len(chunk_texts)
         or stored_matrix.shape != embeddings_matrix.shape
-        or not np.array_equal(stored_matrix, embeddings_matrix)
+        or (
+            embeddings_matrix is not stored_matrix
+            and not np.array_equal(stored_matrix, embeddings_matrix)
+        )
         or any(row.text != text for row, text in zip(stored_chunks, chunk_texts))
     ):
-        raise SearchDataIntegrityError("Folder search metadata changed during retrieval")
+        raise SearchDataIntegrityError("Folder search snapshot changed during retrieval")
 
     matches = _search_chunk_indices_with_faiss_or_numpy(
         query_embedding,
@@ -901,6 +1334,89 @@ def _rank_search_hits(
     return references, context
 
 
+def _search_result_cache_key(
+    *,
+    result_cache_scope: str,
+    runtime_identity: str,
+    folder_scopes: list[tuple[Folder, Any]],
+    user_query: str,
+    language: str,
+    top_n_pdfs: int,
+) -> str:
+    _get_client()
+    from .ai_guard import get_ai_cache_scope
+    folder_ids = ",".join(str(folder.pk) for folder, _pdfs in folder_scopes)
+    material = "\0".join(
+        [
+            get_ai_cache_scope(),
+            runtime_identity,
+            result_cache_scope,
+            folder_ids,
+            OPENAI_EMBED_MODEL,
+            OPENAI_CHAT_MODEL,
+            SEARCH_ANSWER_CONTRACT_VERSION,
+            language,
+            str(top_n_pdfs),
+            str(MAX_CONTEXT_WORDS),
+            str(TOP_K_CHUNKS),
+            user_query,
+        ]
+    )
+    return f"search_result:v1:{hashlib.sha256(material.encode('utf-8')).hexdigest()}"
+
+
+def _cached_references_are_visible(
+    references: list[Any],
+    folder_scopes: list[tuple[Folder, Any]],
+) -> bool:
+    """Reauthorize every cached reference against current lifecycle and scope."""
+    reference_metadata: dict[int, tuple[str, str]] = {}
+    for reference in references:
+        if not isinstance(reference, dict):
+            return False
+        pdf_id = reference.get("pdf_id")
+        if not isinstance(pdf_id, int) or pdf_id <= 0:
+            return False
+        if pdf_id in reference_metadata:
+            return False
+        reference_metadata[pdf_id] = (
+            str(reference.get("title", "")),
+            str(reference.get("folder", "")),
+        )
+    if not reference_metadata:
+        return True
+
+    unrestricted_folders = {
+        int(folder.pk) for folder, pdfs in folder_scopes if pdfs is None
+    }
+    restricted_pdf_ids: set[int] = set()
+    for _folder, pdfs in folder_scopes:
+        if pdfs is not None:
+            restricted_pdf_ids.update(int(pk) for pk in pdfs.values_list("pk", flat=True))
+    visible_metadata = {
+        int(pdf_id): (str(title), str(folder_name or ""))
+        for pdf_id, folder_id, title, folder_name in PDFFile.objects.filter(
+            pk__in=reference_metadata,
+            lifecycle__in=SEARCHABLE_PDF_LIFECYCLES,
+        ).values_list("pk", "folder_id", "title", "folder__name")
+        if int(folder_id) in unrestricted_folders or int(pdf_id) in restricted_pdf_ids
+    }
+    return visible_metadata == reference_metadata
+
+
+def _assert_runtime_search_result_current(
+    runtime_identity: str,
+    references: list[dict[str, Any]],
+    folder_scopes: list[tuple[Folder, Any]],
+) -> None:
+    """Reject evidence if its signed epoch or visibility changed mid-request."""
+    if runtime_identity and (
+        verified_runtime_search_identity() != runtime_identity
+        or not _cached_references_are_visible(references, folder_scopes)
+    ):
+        raise SearchDataIntegrityError("Search source changed during request")
+
+
 def search_pdf_folders(
     folder_scopes: list[tuple[Folder, Any]],
     user_query: str,
@@ -908,31 +1424,133 @@ def search_pdf_folders(
     folder_scores: dict[int, float] | None = None,
     top_n_pdfs: int = 3,
     language: str = "en",
+    result_cache_scope: str = "",
 ) -> tuple[str, list[dict[str, Any]], dict[str, int]]:
     """Search with one embedding and one bounded answer operation plus language repair."""
+    started_at = time.perf_counter()
     if len(folder_scopes) > MAX_SEARCH_FOLDERS:
         raise SearchDataIntegrityError("Search folder limit exceeded")
     if not folder_scopes:
         return "", [], {"folders_scanned": 0, "integrity_failures": 0, "candidates": 0}
 
-    query_embedding = create_query_embedding(user_query)
+    diagnostics: dict[str, int] = {
+        "folders_scanned": len(folder_scopes),
+        "integrity_failures": 0,
+        "candidates": 0,
+        "result_cache_hit": 0,
+        "runtime_corpus_hit": 0,
+        "embedding_cache_hit": 0,
+        "answer_cache_hit": 0,
+        "chat_failed": 0,
+        "cache_errors": 0,
+        "embedding_calls": 0,
+        "chat_calls": 0,
+        "corpus_vectors": 0,
+        "corpus_bytes": 0,
+    }
+    runtime_identity = verified_runtime_search_identity()
+    # Keep the request's original signed epoch for final evidence validation.
+    # The optimized corpus/cache identity may be cleared when we deliberately
+    # fall back to authoritative per-folder reads, but that must not disable
+    # the mutation-race guard for the answer produced by the fallback path.
+    assertion_identity = runtime_identity
+    corpus: _RuntimeSearchCorpus | None = None
+    result_cache_key = ""
+    if result_cache_scope and runtime_identity:
+        result_cache_key = _search_result_cache_key(
+            result_cache_scope=result_cache_scope,
+            runtime_identity=runtime_identity,
+            folder_scopes=folder_scopes,
+            user_query=user_query,
+            language=language,
+            top_n_pdfs=top_n_pdfs,
+        )
+        cached_result = _safe_cache_get(result_cache_key, diagnostics=diagnostics)
+        if isinstance(cached_result, dict):
+            cached_answer = cached_result.get("answer")
+            cached_references = cached_result.get("references")
+            references_visible = isinstance(
+                cached_references, list
+            ) and _cached_references_are_visible(cached_references, folder_scopes)
+            identity_is_current = (
+                verified_runtime_search_identity() == runtime_identity
+            )
+            if (
+                isinstance(cached_answer, str)
+                and isinstance(cached_references, list)
+                and (not cached_answer or _answer_uses_language(cached_answer, language))
+                and references_visible
+                and identity_is_current
+            ):
+                diagnostics.update(
+                    {
+                        "candidates": int(cached_result.get("candidates", 0)),
+                        "result_cache_hit": 1,
+                        "total_ms": round((time.perf_counter() - started_at) * 1000),
+                    }
+                )
+                return cached_answer, cached_references, diagnostics
+            _safe_cache_delete(result_cache_key, diagnostics=diagnostics)
+            if isinstance(cached_references, list) and not references_visible:
+                # A lifecycle/scope change should advance the durable mutation
+                # epoch. If it did not, fail back to authoritative per-folder
+                # reads instead of using the process-local corpus again.
+                _disable_runtime_search_corpus(
+                    runtime_identity,
+                    reason="cached_reference_not_visible",
+                )
+                corpus = None
+                runtime_identity = ""
+                result_cache_key = ""
+            elif not identity_is_current:
+                corpus = None
+                runtime_identity = ""
+                result_cache_key = ""
+
+    if runtime_identity:
+        corpus, corpus_cache_hit = _runtime_search_corpus_for(runtime_identity)
+        if corpus is not None:
+            diagnostics["runtime_corpus_hit"] = int(corpus_cache_hit)
+            diagnostics["corpus_vectors"] = len(corpus.chunks)
+            diagnostics["corpus_bytes"] = corpus.retained_payload_bytes
+        else:
+            runtime_identity = ""
+            result_cache_key = ""
+
+    embedding_started_at = time.perf_counter()
+    query_embedding = create_query_embedding(user_query, diagnostics=diagnostics)
+    diagnostics["embedding_ms"] = round(
+        (time.perf_counter() - embedding_started_at) * 1000
+    )
+    if corpus is not None and verified_runtime_search_identity() != runtime_identity:
+        corpus = None
+        runtime_identity = ""
+        result_cache_key = ""
     hits: list[SearchHit] = []
     integrity_failures = 0
     successful_scopes = 0
-    for folder, pdfs in folder_scopes:
-        try:
-            hits.extend(
-                retrieve_folder_hits(
-                    folder,
-                    user_query,
-                    pdfs=pdfs,
-                    query_embedding=query_embedding,
+    retrieval_started_at = time.perf_counter()
+    if corpus is not None:
+        hits = _runtime_corpus_hits(corpus, folder_scopes, query_embedding)
+        successful_scopes = len(folder_scopes)
+    else:
+        for folder, pdfs in folder_scopes:
+            try:
+                hits.extend(
+                    retrieve_folder_hits(
+                        folder,
+                        user_query,
+                        pdfs=pdfs,
+                        query_embedding=query_embedding,
+                    )
                 )
-            )
-            successful_scopes += 1
-        except SearchDataIntegrityError:
-            integrity_failures += 1
-            logger.warning("Search skipped invalid folder id=%s", folder.pk)
+                successful_scopes += 1
+            except SearchDataIntegrityError:
+                integrity_failures += 1
+                logger.warning("Search skipped invalid folder id=%s", folder.pk)
+    diagnostics["retrieval_ms"] = round(
+        (time.perf_counter() - retrieval_started_at) * 1000
+    )
 
     if not successful_scopes and integrity_failures:
         raise SearchDataIntegrityError("All authorized search folders failed integrity checks")
@@ -942,14 +1560,28 @@ def search_pdf_folders(
         folder_scores=folder_scores or {},
         top_n_pdfs=top_n_pdfs,
     )
-    diagnostics = {
-        "folders_scanned": len(folder_scopes),
-        "integrity_failures": integrity_failures,
-        "candidates": len(hits),
-    }
+    diagnostics["integrity_failures"] = integrity_failures
+    diagnostics["candidates"] = len(hits)
     if not references:
+        _assert_runtime_search_result_current(
+            assertion_identity,
+            references,
+            folder_scopes,
+        )
+        diagnostics["total_ms"] = round((time.perf_counter() - started_at) * 1000)
+        if (
+            result_cache_key
+            and verified_runtime_search_identity() == runtime_identity
+        ):
+            _safe_cache_set(
+                result_cache_key,
+                {"answer": "", "references": [], "candidates": len(hits)},
+                SEARCH_CACHE_TTL,
+                diagnostics=diagnostics,
+            )
         return "", [], diagnostics
 
+    answer_started_at = time.perf_counter()
     answer = generate_gpt_answer(
         user_question=user_query,
         context=context,
@@ -958,6 +1590,26 @@ def search_pdf_folders(
         language=language,
         diagnostics=diagnostics,
     )
+    diagnostics["answer_ms"] = round(
+        (time.perf_counter() - answer_started_at) * 1000
+    )
+    _assert_runtime_search_result_current(
+        assertion_identity,
+        references,
+        folder_scopes,
+    )
+    diagnostics["total_ms"] = round((time.perf_counter() - started_at) * 1000)
+    if (
+        result_cache_key
+        and not diagnostics.get("chat_failed")
+        and verified_runtime_search_identity() == runtime_identity
+    ):
+        _safe_cache_set(
+            result_cache_key,
+            {"answer": answer, "references": references, "candidates": len(hits)},
+            SEARCH_CACHE_TTL,
+            diagnostics=diagnostics,
+        )
     return answer, references, diagnostics
 
 
@@ -1002,6 +1654,8 @@ def generate_gpt_answer(
     cache_material = "\0".join(
         [
             get_ai_cache_scope(),
+            OPENAI_CHAT_MODEL,
+            SEARCH_ANSWER_CONTRACT_VERSION,
             language,
             str(max_words),
             user_question,
@@ -1011,9 +1665,14 @@ def generate_gpt_answer(
     )
     cache_digest = hashlib.sha256(cache_material.encode("utf-8")).hexdigest()
     cache_key = f"gpt_ans:v3:{cache_digest}"
-    cached = cache.get(cache_key)
+    cached = _safe_cache_get(cache_key, diagnostics=diagnostics)
     if cached and _answer_uses_language(cached, language):
+        if diagnostics is not None:
+            diagnostics["answer_cache_hit"] = 1
+            diagnostics["chat_calls"] = 0
         return cached
+    if diagnostics is not None:
+        diagnostics["answer_cache_hit"] = 0
 
     if language == "mr":
         system_msg = (
@@ -1056,8 +1715,10 @@ def generate_gpt_answer(
                 except Exception:
                     ans = str(resp)
             ans = ans.strip()
-        except Exception:
-            traceback.print_exc()
+        except Exception as exc:
+            if diagnostics is not None:
+                diagnostics["chat_failed"] = 1
+            logger.warning("search_chat_failed reason=%s", type(exc).__name__)
             return (
                 "⚠️ सध्या उत्तर तयार करता आले नाही. कृपया थोड्या वेळाने पुन्हा प्रयत्न करा."
                 if language == "mr"
@@ -1068,7 +1729,12 @@ def generate_gpt_answer(
             words = ans.split()
             if len(words) > max_words:
                 ans = " ".join(words[:max_words]) + "..."
-            cache.set(cache_key, ans, SEARCH_CACHE_TTL)
+            _safe_cache_set(
+                cache_key,
+                ans,
+                SEARCH_CACHE_TTL,
+                diagnostics=diagnostics,
+            )
             return ans
 
         logger.warning("Search answer language mismatch language=%s attempt=%s", language, attempt + 1)

@@ -39,9 +39,10 @@ overlap between legacy and active, and the databases diverge. No PDF contents
 belong in an incident record.
 
 The read-only `/mnt/legacy` mount is evidence/quarantine only. It is not a
-permission to import or merge. RustFS is an isolated recovery vault; the
-application supports explicit superadmin generation sync and staged pull, but
-never overwrites active data during either operation.
+permission to import or merge. RustFS is isolated recovery storage. DataOps v3
+supports explicit backup, read-only source import, and isolated restore
+candidate preparation; none of those operations overwrites or activates the
+current runtime.
 
 ## Required Lifecycle
 
@@ -76,17 +77,16 @@ not replace this lifecycle and must not be treated as automatic promotion.
 
 ## RustFS Handling
 
-Use the timestamped snapshots and checksums in bucket
-`ai-sahakar-prod-flowdocs-data-volume` as recovery evidence. The bucket is
-isolated from the application network; recovery is an operator-mediated restore
-through the `restore_pipeline` and `restore_workspace` modules, not a runtime
-read or automatic sync. The `object_store_capabilities` module detects and
-verifies S3-compatible storage capabilities. Explicit superadmin generation sync
-creates immutable dataset-scoped generations. The Workbench restore action
-verifies authoritative inventory and prepares an isolated, validated,
-rehearsed workspace. Promotion alone never claims that runtime bytes changed;
-require the separately confirmed signed activation path and post-cutover
-readiness evidence before treating a generation as active.
+Use approved timestamped snapshots and checksums as historical recovery
+evidence. Recovery storage is isolated from normal application traffic;
+recovery is an operator-mediated DataOps v3 import/restore into a separate
+candidate, not a runtime read or automatic sync. The
+`object_store_capabilities` module detects and verifies S3-compatible storage
+capabilities. DataOps backup creates immutable dataset-scoped recovery points,
+and restore prepares an isolated, validated, rehearsed candidate. Candidate
+readiness alone never claims that runtime bytes changed; require the separately
+confirmed signed activation path and post-cutover readiness evidence before
+treating a generation as active.
 
 ## Missing-PDF custody audit
 

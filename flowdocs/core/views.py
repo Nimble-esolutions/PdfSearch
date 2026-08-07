@@ -79,10 +79,16 @@ from .configuration_registry import build_configuration_groups
 from .search_ui import (
     SEARCH_VIEW_DEFINITIONS,
     get_primary_search_view,
-    resolve_search_view,
     search_template_for,
     set_primary_search_view,
     supported_search_view,
+)
+from .product_analytics import (
+    PRODUCT_ANALYTICS_DISABLED,
+    PRODUCT_ANALYTICS_ENABLED,
+    build_public_analytics_config,
+    get_product_analytics_mode,
+    set_product_analytics_mode,
 )
 from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultConfigurationError
 from .metrics import metrics_view
@@ -120,6 +126,7 @@ from .utils import (
     detect_folder_by_keywords,
     semantic_folder_search,
     detect_folder_by_keywords_multi,
+    verified_runtime_search_identity,
     SearchDataIntegrityError,
     SearchAnswerLanguageError,
 )
@@ -485,12 +492,27 @@ def _log_search_completed(
     integrity_failures=0,
     embedding_calls=0,
     chat_calls=0,
+    result_cache_hit=0,
+    embedding_cache_hit=0,
+    answer_cache_hit=0,
+    chat_failed=0,
+    cache_errors=0,
+    runtime_corpus_hit=0,
+    corpus_vectors=0,
+    corpus_bytes=0,
+    embedding_ms=0,
+    retrieval_ms=0,
+    answer_ms=0,
 ):
     """Record bounded search diagnostics without query or document content."""
     logger.info(
         "search_completed route=%s outcome=%s public=%s language=%s "
         "visible_folders=%s folders_scanned=%s references=%s "
-        "integrity_failures=%s embedding_calls=%s chat_calls=%s duration_ms=%s",
+        "integrity_failures=%s embedding_calls=%s chat_calls=%s "
+        "result_cache_hit=%s embedding_cache_hit=%s answer_cache_hit=%s chat_failed=%s cache_errors=%s "
+        "runtime_corpus_hit=%s corpus_vectors=%s corpus_bytes=%s "
+        "embedding_ms=%s retrieval_ms=%s answer_ms=%s "
+        "duration_ms=%s",
         route,
         outcome,
         public,
@@ -501,6 +523,17 @@ def _log_search_completed(
         integrity_failures,
         embedding_calls,
         chat_calls,
+        result_cache_hit,
+        embedding_cache_hit,
+        answer_cache_hit,
+        chat_failed,
+        cache_errors,
+        runtime_corpus_hit,
+        corpus_vectors,
+        corpus_bytes,
+        embedding_ms,
+        retrieval_ms,
+        answer_ms,
         round((time.monotonic() - started_at) * 1000),
     )
 
@@ -1467,16 +1500,27 @@ LEGAL_PAGE_DEFINITIONS = {
 }
 
 
-def _public_view_context(request):
+def _public_view_context(request, *, include_analytics=False):
     """Resolve one allowlisted public presentation and preserve valid previews."""
     requested_view = supported_search_view(request.GET.get("view"))
-    search_view = resolve_search_view(request.GET.get("view"))
+    primary_view = get_primary_search_view()
+    search_view = requested_view or primary_view
     view_query = f"?view={requested_view}" if requested_view else ""
     return {
         "search_view": search_view,
         "public_view_query": view_query,
         "public_home_url": f"{reverse('home')}{view_query}",
         "public_current_url": f"{request.path}{view_query}",
+        "product_analytics_config": (
+            build_public_analytics_config(
+                request,
+                search_view=search_view,
+                primary_view=primary_view,
+                override_used=bool(requested_view and requested_view != primary_view),
+            )
+            if include_analytics
+            else None
+        ),
     }
 
 
@@ -1996,8 +2040,8 @@ def search_query(request):
             if requested_view:
                 redirect_target = f"{redirect_target}?view={requested_view}"
             return redirect(redirect_target, permanent=True)
-        search_view = resolve_search_view(request.GET.get("view"))
-        public_view = _public_view_context(request)
+        public_view = _public_view_context(request, include_analytics=True)
+        search_view = public_view["search_view"]
         searchable_scope = visible_pdfs(
             request.user,
             public=not request.user.is_authenticated,
@@ -2090,6 +2134,7 @@ def search_query(request):
                     "timeout": gettext("Search is taking longer than expected"),
                     "try_again": gettext("Please try again."),
                     "unexpected": gettext("Something went wrong"),
+                    "answer_ready": gettext("Answer ready"),
                     "feedback": gettext("Send feedback"),
                 },
                 "display_service_footer": getattr(settings, "DISPLAY_SERVICE_FOOTER", False),
@@ -2220,6 +2265,18 @@ def search_query(request):
             visible_folders = list(
                 searchable_folders(request.user, public=public_search).order_by("pk")
             )
+            runtime_cache_identity = verified_runtime_search_identity()
+            result_cache_scope = ""
+            if runtime_cache_identity and (public_search or is_admin_user(request.user)):
+                scope_material = "\0".join(
+                    [
+                        "public" if public_search else f"admin:{request.user.pk}",
+                        ",".join(str(folder.pk) for folder in visible_folders),
+                    ]
+                )
+                result_cache_scope = hashlib.sha256(
+                    scope_material.encode("utf-8")
+                ).hexdigest()
             detected = detect_folder_by_keywords_multi(
                 query,
                 min_score_threshold=0.40,
@@ -2254,6 +2311,7 @@ def search_query(request):
                 folder_scores=folder_scores,
                 top_n_pdfs=3,
                 language=language,
+                result_cache_scope=result_cache_scope,
             )
             _log_search_completed(
                 route="keyword_ranked" if detected else "global",
@@ -2265,8 +2323,19 @@ def search_query(request):
                 folders_scanned=diagnostics["folders_scanned"],
                 references=len(refs),
                 integrity_failures=diagnostics["integrity_failures"],
-                embedding_calls=1 if folder_scopes else 0,
+                embedding_calls=diagnostics.get("embedding_calls", 0),
                 chat_calls=diagnostics.get("chat_calls", 0),
+                result_cache_hit=diagnostics.get("result_cache_hit", 0),
+                embedding_cache_hit=diagnostics.get("embedding_cache_hit", 0),
+                answer_cache_hit=diagnostics.get("answer_cache_hit", 0),
+                chat_failed=diagnostics.get("chat_failed", 0),
+                cache_errors=diagnostics.get("cache_errors", 0),
+                runtime_corpus_hit=diagnostics.get("runtime_corpus_hit", 0),
+                corpus_vectors=diagnostics.get("corpus_vectors", 0),
+                corpus_bytes=diagnostics.get("corpus_bytes", 0),
+                embedding_ms=diagnostics.get("embedding_ms", 0),
+                retrieval_ms=diagnostics.get("retrieval_ms", 0),
+                answer_ms=diagnostics.get("answer_ms", 0),
             )
             if refs:
                 return JsonResponse({
@@ -2497,6 +2566,11 @@ def settings_view(request):
         "env_fields": env_fields,
         "primary_search_view": get_primary_search_view(),
         "search_view_options": SEARCH_VIEW_DEFINITIONS,
+        "product_analytics_mode": get_product_analytics_mode(),
+        "product_analytics_options": (
+            (PRODUCT_ANALYTICS_DISABLED, gettext("Disabled")),
+            (PRODUCT_ANALYTICS_ENABLED, gettext("Enabled on approved stage host")),
+        ),
         "title": "Settings & Configuration",
         "breadcrumb_items": [
             {"label": gettext("Dashboard"), "url": reverse("dashboard")},
@@ -2555,5 +2629,26 @@ def save_search_ui(request):
         request,
         gettext("Primary public search view changed to %(view)s.")
         % {"view": selected_label},
+    )
+    return redirect("settings")
+
+
+@superadmin_required
+@require_POST
+def save_product_analytics(request):
+    """Enable or disable the stage-only Umami browser adapter."""
+
+    try:
+        selected = set_product_analytics_mode(
+            request.POST.get("product_analytics_mode"),
+            updated_by=request.user,
+        )
+    except ValueError:
+        messages.error(request, gettext("Choose Enabled or Disabled."))
+        return redirect("settings")
+
+    messages.success(
+        request,
+        gettext("Product analytics changed to %(mode)s.") % {"mode": selected},
     )
     return redirect("settings")

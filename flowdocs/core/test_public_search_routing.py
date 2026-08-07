@@ -183,7 +183,9 @@ class SearchFolderOrchestrationTests(SimpleTestCase):
         self.assertEqual(answer, "answer")
         self.assertEqual([item["pdf_id"] for item in references], [20, 10])
         self.assertEqual(diagnostics["folders_scanned"], 2)
-        create_embedding.assert_called_once_with("question")
+        create_embedding.assert_called_once()
+        self.assertEqual(create_embedding.call_args.args, ("question",))
+        self.assertIs(create_embedding.call_args.kwargs["diagnostics"], diagnostics)
         self.assertEqual(retrieve_hits.call_count, 2)
         generate_answer.assert_called_once()
         context = generate_answer.call_args.kwargs["context"]
@@ -453,7 +455,7 @@ class PublicSearchRoutingViewTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["kind"], "no_evidence")
         self.assertEqual(payload["language"], "mr")
-        self.assertIn("स्रोत आढळला नाही", payload["answer"])
+        self.assertIn("स्रोत सापडला नाही", payload["answer"])
 
     def test_provider_language_mismatch_returns_explicit_error(self):
         with patch("core.views._public_search_rate_limited", return_value=False), patch(

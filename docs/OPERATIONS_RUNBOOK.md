@@ -879,14 +879,15 @@ incomplete.
 
 ### Trigger a manual backup
 
-```bash
-docker compose -f docker-compose.yml exec -T web python manage.py inventory_artifacts
-```
+1. Open **Operations → Data protection** (`/dashboard/data-operations/`).
+2. Run the read-only connection/health check and resolve any typed requirement.
+3. Select **Backup**, review the compiled v3 plan, then start that exact plan.
+4. Follow the operation receipt until it records the immutable recovery-point
+   ID, manifest digest, object counts, and latest-pointer evidence.
 
-Use the artifact inventory to identify the current data set, then queue an
-explicit vault generation sync from the approved operator path. Confirm the
-maintenance process has the complete vault and writer environment. The
-inventory command alone does not upload a generation.
+`python manage.py inventory_artifacts` remains a read-only diagnostic; it does
+not publish a backup. Do not use the retired Vault Active Sync or profile/job
+controls to perform a normal backup.
 
 ### Verify backup integrity
 

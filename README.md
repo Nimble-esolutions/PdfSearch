@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-06
+Last verified: 2026-08-07
 Canonical source: README.md
 Supersedes: None
 
@@ -16,11 +16,12 @@ supports English, Marathi, and Hindi document processing: native PDF extraction
 is preferred, with bounded local Tesseract OCR for scanned pages, followed by
 the existing embedding and retrieval workflow.
 
-> **Current operational state:** stage serves the signed 242-document runtime,
-> all readiness checks pass, real English/Marathi search and manual
-> backup/recovery rehearsal are proven, and the legacy production service is
-> unchanged. Read the living [project handoff](docs/HANDOFF.md) before operating
-> recovery, deployment, or persistent-data workflows.
+> **Current operational state:** `https://2026.ai-sahakar.net` is the active
+> non-production stage/rehearsal host and serves a signed runtime. Legacy
+> `https://www.ai-sahakar.net` remains the authoritative production service and
+> is unchanged. The future 2026 production deployment has not been created or
+> cut over. Read the living [project handoff](docs/HANDOFF.md) for exact current
+> generations, counts, image digests, and recovery evidence.
 
 ## Start Here
 
@@ -31,7 +32,7 @@ Use the route that matches the work:
 - Dokploy data persistence and safe redeploys: [`docs/DOKPLOY_DATA_PERSISTENCE.md`](docs/DOKPLOY_DATA_PERSISTENCE.md)
 - Release promotion: [`docs/BUILD_AND_RELEASE_ROADMAP.md`](docs/BUILD_AND_RELEASE_ROADMAP.md)
 - Production baseline: [`docs/PRODUCTION_BASELINE.md`](docs/PRODUCTION_BASELINE.md)
-- Data custody and recovery: [`docs/DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md), [`docs/RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md), [`docs/INTERNAL_VAULT_MIGRATION.md`](docs/INTERNAL_VAULT_MIGRATION.md), and [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
+- Data custody and recovery: [`docs/dataops/V3_ARCHITECTURE.md`](docs/dataops/V3_ARCHITECTURE.md), [`docs/DATA_CUSTODY_AND_PROMOTION.md`](docs/DATA_CUSTODY_AND_PROMOTION.md), [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md), and the historical [`docs/RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md) rehearsal evidence
 - FAISS compatibility: [`docs/FAISS_COMPATIBILITY.md`](docs/FAISS_COMPATIBILITY.md)
 - Incident response: [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
 - Client usage: [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md)
@@ -39,6 +40,7 @@ Use the route that matches the work:
 - Developer UI guide: [`docs/AI_SAHAKAR_DEVELOPER_GUIDE.md`](docs/AI_SAHAKAR_DEVELOPER_GUIDE.md)
 - Admin user guide: [`docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md`](docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md)
 - Multi-file intake and document lifecycle: [`docs/DOCUMENT_INTAKE_WORKBENCH.md`](docs/DOCUMENT_INTAKE_WORKBENCH.md)
+- Privacy-bounded product analytics and self-hosted Umami boundary: [`docs/PRODUCT_ANALYTICS_RECOMMENDATION.md`](docs/PRODUCT_ANALYTICS_RECOMMENDATION.md), [`plans/032-pilot-privacy-first-product-analytics.md`](plans/032-pilot-privacy-first-product-analytics.md)
 - `dev` cleanup scope: [`docs/DEV_CLEANUP_SCOPE.md`](docs/DEV_CLEANUP_SCOPE.md)
 - Environment impact guide and reviewed examples: [`docs/ENVIRONMENT_CONFIGURATION_GUIDE.md`](docs/ENVIRONMENT_CONFIGURATION_GUIDE.md), [`docs/environments/`](docs/environments/)
 - Contribution and dev-to-release workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md)
@@ -126,10 +128,17 @@ The deployed system has four cooperating boundaries:
    embedding provider under the configured side-effect policy. Original PDFs
    never leave custody because OCR is local.
 
-Visual sources:
-[legacy-to-stage-2026.mmd](docs/diagrams/legacy-to-stage-2026.mmd),
-[stage-recovery-state.mmd](docs/diagrams/stage-recovery-state.mmd), and
-[ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd). Public UI and
+Current visual sources:
+[runtime-topology.mmd](docs/diagrams/runtime-topology.mmd),
+[data-custody-promotion.mmd](docs/diagrams/data-custody-promotion.mmd),
+[deployment-flow.mmd](docs/diagrams/deployment-flow.mmd), and
+[ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd). Dated
+legacy-to-stage evidence is intentionally separate in
+[legacy-to-stage-2026.mmd](docs/diagrams/legacy-to-stage-2026.mmd) and
+[stage-recovery-state.mmd](docs/diagrams/stage-recovery-state.mmd). The current
+search request/cache boundary is shown in
+[search-answer-hot-path.mmd](docs/diagrams/search-answer-hot-path.mmd) and its
+[rendered SVG](docs/diagrams/search-answer-hot-path.svg). Public UI and
 change-control views are available as editable Mermaid sources and rendered
 SVGs: [public shell source](docs/diagrams/ui-shell-and-evidence.mmd),
 [public shell visual](docs/diagrams/ui-shell-and-evidence.svg),
@@ -167,6 +176,8 @@ flowchart LR
   D --> Q["SQLite + media + FAISS + Chroma"]
   V --> X["flowdocs_control<br/>control DB + signed evidence"]
   W --> C["Redis<br/>cache + queue"]
+  D --> H["Signed epoch search corpus<br/>one bounded matrix per worker"]
+  H --> C
   M --> C
   T["scripts + browser_tests + integration_tests"] --> W
 ```
@@ -178,6 +189,22 @@ installed and tested. They are implementation details and cleanup debt, not a
 second workbench or a configuration path that operators should assemble. The
 retired `/dashboard/operations/vault/` page redirects to the current DataOps
 workbench.
+
+### Search hot path
+
+Public search checks an exact, access-scoped result cache before paying for an
+embedding, vector retrieval, or answer-generation request. When signed
+activation and the existing durable mutation tracker agree, each web worker
+parses and normalizes one bounded corpus for the current mutation epoch, then
+filters that matrix to the caller's authorized folder/PDF scope. Unsigned,
+untracked, changing, oversized, or corrupt data retains the conservative
+per-folder snapshot path. Cached references are reauthorized; failures in the
+search-result/embedding/answer caches degrade speed, while the separate public
+rate limiter remains fail-closed. Query embeddings and generated answers are
+provider-scoped;
+cache keys also bind the models, language, runtime, answer-contract version,
+and authorization scope. See the
+[latency root-cause and impact record](docs/releases/2026-08-07-search-answer-latency.md).
 
 ### Project structure
 
@@ -256,14 +283,15 @@ See [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md) for the ful
 
 ## Production Contract
 
-Canonical production is `https://ai-sahakar.net` with
-`https://www.ai-sahakar.net` as the canonical alias. It is deployed through
-Dokploy as the Compose application defined by [`docker-compose.yml`](docker-compose.yml).
-The current non-production rehearsal host is
-https://2026.ai-sahakar.net. It serves a signed 242-document runtime and remains
-outside production traffic. Runtime/search readiness and the separate backup
-rehearsal are reported independently: a disposable stage backup receipt is
-valuable recovery evidence, but it is not an availability prerequisite.
+Legacy `https://www.ai-sahakar.net` is the current authoritative production
+service. `https://2026.ai-sahakar.net` is the active non-production
+stage/rehearsal deployment of this repository. The future 2026 production
+Compose application and its intended `ai-sahakar.net` / `www.ai-sahakar.net`
+cutover do not exist yet; [`docker-compose.yml`](docker-compose.yml) is their
+deployment template, not proof of a completed deployment. Runtime/search
+readiness and backup rehearsal evidence are independent: a disposable stage
+backup receipt is useful recovery proof, but is not an availability
+prerequisite unless policy explicitly requires it.
 
 - Container port: `8000`
 - Liveness: `/livez` proves process liveness
@@ -295,50 +323,33 @@ enabling autodeploy or pressing Deploy.
 
 ## Current Data-Custody Boundary
 
-As of 2026-08-03, the legacy source boundary is unchanged: prod_flowdocs
-contains 242 PDFs, 46 folders, 7 users, and 29 migrations. The verified
-RustFS v2 source generation is legacy-20260802T085639Z-86288855; the stage
-clone is clone-legacy-20260802T085639Z-86288855 with 416 objects totaling
-1,093,501,777 bytes. The stage-owned import is now bound to a
-signature-verified runtime pointer and serves 242/242 indexed documents.
+The legacy production volume remains read-only evidence. DataOps v3 is the
+only supported operator contract for publishing complete recovery points,
+importing foreign or legacy sources, restoring to quarantine, testing recovery,
+and requesting stage activation. It uses one environment-owned recovery
+connection and decides same-dataset restore versus foreign import/rebind from
+verified provenance. Activation remains a separate signed compare-and-swap
+operation; failed readiness restores the previous signed pointer.
 
-Stage is reachable at https://2026.ai-sahakar.net; healthy containers and a
-root response do not replace `/readyz`. The deployed readiness code projects
-the valid v3 pointer, exact generation, manifest, and indexing ratio. Manual
-stage backup and isolated rehearsal have also succeeded. Use
-[docs/HANDOFF.md](docs/HANDOFF.md) for current evidence.
-
-The old July reconciliation numbers below are retained as historical baseline
-evidence, not as the current 2026 migration inventory. See
-docs/HANDOFF.md and docs/LEGACY_VS_CURRENT_STATE.md.
-
-## Historical reconciliation baseline
-
-Post-reconciliation (2026-07-22): 253 PDF rows, 242 recovered PDF files, 53 folders,
-8 users, and 51 rebuilt FAISS indexes with 8,753 vectors at dimension 1536. Eleven
-target-only PDF rows remain preserved but unrecovered.
-
-RustFS bucket `ai-sahakar-prod-flowdocs-data-volume` contains timestamped active
-and legacy snapshots and checksums. Application-level S3 integration is implemented
-through the artifact vault adapter, dataset registration, global writer fencing,
-namespace-scoped keys, object store capability probing, and a full restore pipeline
-(download→validate→sanitize→rehearse→activate).
-
-The 2026-07-26 audit verified those primitives against disposable MinIO, but
-also confirmed that the normal admin/worker path and startup entrypoints are
-not yet connected to one end-to-end restore orchestrator. Scheduled backup is
-not currently reliable, and a fresh volume does not auto-pull from RustFS.
-Treat the bucket as an explicit operator recovery component and read
-[`RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md) before depending on
-it for a deploy, restore, or disaster-recovery decision.
+Stage is reachable at `https://2026.ai-sahakar.net`; healthy containers and a
+root response do not replace `/readyz`. Exact counts, lineage identifiers,
+manifest digests, backup receipts, and the running image are intentionally kept
+out of this active architecture summary. Use [docs/HANDOFF.md](docs/HANDOFF.md)
+for living evidence and the dated status/incident documents for historical
+observations. The original Vault/RustFS rehearsal remains historical evidence
+in [`RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md), not current
+operator instructions.
 
 ## Verification Gates
 
 Every documentation or release change must pass the applicable link/path scan,
-Mermaid validation, `docker compose -f docker-compose.yml config`, `/livez`,
-`/readyz`, PDF count, FAISS count, and representative search gates. Record the
-source SHA, exact image digests, Compose evidence, data snapshot/checksum
-references, and explicit promotion decision.
+Mermaid validation, and change-specific checks. Representative deployment
+gates include `docker compose -f docker-compose.yml config`, `/livez`,
+`/readyz`, database/media/index reconciliation, and multilingual search. This
+is not an exhaustive test inventory; use the exact CI workflow and running
+image for the complete gate set. Record the source SHA, exact image digests,
+Compose evidence, data snapshot/checksum references, and explicit promotion
+decision.
 
 ## Security and Recovery Warnings
 

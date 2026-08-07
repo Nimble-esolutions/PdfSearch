@@ -1,7 +1,7 @@
 Status: Active, living handoff
 Audience: Maintainer, Operator, Developer, AI agent, Reviewer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-06
+Last verified: 2026-08-07
 Canonical source: docs/HANDOFF.md
 Supersedes: docs/STATUS-2026-08-03.md for current operational state
 Update trigger: Every merged runtime/release/data/operations change, deployment, incident, rollback, or material blocker decision
@@ -20,7 +20,7 @@ how the current state was reached, but they do not override this handoff.
 Detailed contracts remain in their owning runbooks; this page links to them
 instead of duplicating their procedures.
 
-Evidence on this page was refreshed on 2026-08-06 (Asia/Kolkata). A live system
+Evidence on this page was refreshed on 2026-08-07 (Asia/Kolkata). A live system
 can change after that time, so repeat the read-only checks in
 [Resume checks](#resume-checks) before a mutation.
 
@@ -43,7 +43,9 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains merge `a110913bb5c4699e8cb330f946379c332047ce49` | PRs #185–#190 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, and Classic long-answer continuity are integrated |
+| Repository integration baseline | `dev` contains merge `51f0dd7` (PR #191) | PRs #185–#191 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, and the repository-truth audit are integrated |
+| Search latency work | PR #192 remains open for review and is not deployed | Local gates pass (664 configured core/DataOps Django tests, 26 focused product-analytics/search-theme tests, 140 source-backed Classic/Workbench/motion/legal-page browser tests across four viewport projects, 20 isolated analytics privacy tests across the same viewport matrix, and the 82-test PR contract). Pre-change stage baseline was 23,738 ms uncached and 12,910 ms on an immediate repeat; the PR moves exact caching before retrieval, binds a bounded worker corpus to the signed mutation epoch, reauthorizes references before and after model work (including conservative fallback), makes result/embedding/answer cache failures non-fatal (the public rate limiter remains fail-closed), caches provider-scoped query embeddings, adds phase telemetry, removes Workbench reveal delay, validates response-kind/language/reference invariants before either theme mutates the DOM, redacts provider exception details, cancels stale in-flight answers when a new conversation starts, and records measured follow-up plans without adding runtime services |
+| Product analytics decision | PR #192 contains a disabled-by-default, stage-only Umami browser adapter; no analytics service is deployed by this PR | The supplied `analytics.ai-sahakar.net` endpoint and public website ID are restricted to `2026.ai-sahakar.net`. A superadmin kill switch uses `SiteSetting`, not a new environment variable. Manual allowlisted events, DNT/GPC, hostname rejection, question-language bucketing, final payload rejection, and adapter-level fail-open behavior are browser-tested across four viewport projects. The operator will deploy Umami/PostgreSQL separately and must approve its pseudonymous session processing and prove secure first boot, pinned image/tracker hash, shared-host limits, scheduled 30-day purge, deletion evidence, backup/restore, enabled-theme outage behavior, and rollback before collection. Production remains disabled. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
@@ -127,7 +129,6 @@ and indexing remained `1.0`.
 | #178 | Unified operator-workbench truth, scale behavior, and stage image policy |
 | #179 | Added pre-merge maintenance lifecycle certification |
 | #180 | Added reviewed multi-file intake for up to 50 PDFs with queued processing |
-| #181 | Safely applies recovery-backed additive migrations to an activated runtime |
 | #182 | Recorded and closed the activated-runtime migration incident |
 | #183 | Corrected Compose volume-ownership recovery guidance |
 | #184 | Established this enforced living project handoff |
@@ -147,27 +148,43 @@ no ownership warning.
 
 ## Open decisions and next actions
 
-There is no data-readiness or search-language blocker. Remaining operational
-work is decision-driven:
+There is no data-readiness or search-language blocker. Search latency remains a
+measured release task until the current branch is reviewed, merged, deployed,
+and canaried. Remaining work is:
 
-1. **Current integrated rollout:** certify an image from current `dev` containing
+1. **Search latency PR:** PR #192 is open into `dev`; finish the combined
+   backend/browser/documentation gates, push the reviewed commits, and keep it
+   unmerged until required checks and human review pass. Plans 025–033 record
+   the measured follow-up sequence without expanding this PR into a rewrite.
+2. **Search latency stage canary:** after the merged image reaches stage, prove
+   the unchanged signed generation and both themes; compare uncached/repeat
+   duration, phase telemetry, corpus bytes/vectors, and web-worker RSS. Roll
+   back the image if authorization, continuity, latency, or memory headroom
+   regresses.
+3. **Current integrated rollout:** certify an image from current `dev` containing
    merged PRs #187–#190, deploy stage web and maintenance without touching volumes, and
    canary all five public-information routes in both themes, both
    mismatched-locale answer directions, and Classic long-answer continuity.
-2. **Future production project:** create and validate the dedicated 2026
+4. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
-3. **Production rehearsal:** before traffic changes, select an immutable image,
+5. **Production rehearsal:** before traffic changes, select an immutable image,
    validate rendered Compose and key-only environment posture, restore into
    isolated production-candidate volumes, run search/PDF/auth smoke checks, and
    record rollback image and generation.
-4. **Production cutover:** remains out of scope until separately authorized.
+6. **Production cutover:** remains out of scope until separately authorized.
    Do not change legacy service routing or `prod_flowdocs` while preparing it.
-5. **Stage recovery retest:** run another manual backup and disposable restore
+7. **Stage recovery retest:** run another manual backup and disposable restore
    only when recovery/data contracts change or when explicitly requested.
-6. **Local development:** start the native development stack and rerun focused
+8. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
+9. **Stage product analytics:** deploy the independent pinned Umami/PostgreSQL
+   stack manually, verify `https://analytics.ai-sahakar.net/script.js`, TLS,
+   dashboard authentication, 30-day maximum retention, deletion, and database
+   restore, then enable **Stage Umami collection** from superadmin Settings.
+   Confirm only bounded events arrive and rehearse an analytics outage. Never
+   add analytics to application readiness or enable production before review.
 
 ## Known traps that must not recur
 
@@ -192,6 +209,12 @@ work is decision-driven:
   include domain words containing short conversational tokens.
 - Both public themes must preserve the backend response `kind`; a friendly
   answer without evidence must not be presented as a document-backed answer.
+- Validate the complete success envelope before mutating either theme's DOM:
+  evidence answers require valid sources, non-evidence outcomes forbid them,
+  and only English/Marathi response languages are accepted.
+- A Playwright pass is not source evidence when an unrelated process owns its
+  base URL. Use an isolated source-backed service or an explicit deployed
+  canary, and record which one was tested.
 - `overflow: auto` does not make a transcript scrollable unless every grid/flex
   ancestor gives it a bounded height and `min-height: 0`. Long-answer tests must
   prove transcript scroll ownership, a visible composer, protected sources,
@@ -202,6 +225,15 @@ work is decision-driven:
 - The page/session locale is a presentation preference, not proof of question
   language. Derive answer language from the question, expose it in the API and
   DOM, and never cache a provider response that fails the script check.
+- Do not cache search results across mutable or unsigned data, authorization
+  scopes, provider policies, models, languages, or answer-contract versions.
+  Signed activation alone is not immutable: bind reusable corpora and exact
+  results to the durable mutation epoch, reject reuse during active writes or
+  barriers, and reauthorize every cached reference at the response boundary.
+  Cache failure must reduce speed, never search availability.
+- Do not simulate token streaming after a completed JSON response. Both public
+  themes must format the completed answer immediately and announce only a
+  concise completion status to assistive technology.
 - Do not deploy a migration to an activated SQLite runtime unless the safe
   runtime migration classifier accepts it as recovery-backed and additive.
 - Do not resurrect VaultOps as a parallel product surface. DataOps v3 replaced

@@ -1,0 +1,35 @@
+flowchart LR
+  Q["Public or authorized search request"] --> I{"Complete small-talk intent?"}
+  I -->|Yes| S["Localized small-talk response"]
+  I -->|No| A["Resolve authorized folder scope"]
+
+  A --> V{"Signed runtime + durable mutation epoch?<br/>No active write or barrier"}
+  V -->|Yes| R{"Exact result cache<br/>epoch + access scope"}
+  V -->|No| E
+  R -->|Hit| J["Typed JSON response"]
+  R -->|Miss| E{"Provider-scoped<br/>query embedding cache"}
+  R -->|Stale reference / cache error| E
+  E -->|Hit or create| B{"Complete epoch corpus<br/>within fixed memory budget?"}
+  B -->|Yes| C{"Worker epoch corpus cache"}
+  B -->|No| X["Conservative per-folder snapshot<br/>+ exact FAISS validation"]
+
+  C -->|Cold| L["Load and normalize bounded<br/>runtime vectors once"]
+  L --> F["Filter authorized vectors<br/>and preserve folder bounds"]
+  C -->|Warm| F
+
+  X --> F
+
+  F --> K["Rank bounded candidates<br/>and protected references"]
+  K --> G{"Provider-scoped<br/>answer cache"}
+  G -->|Miss| P["Generate and validate<br/>question-language answer"]
+  G -->|Hit| W["Recheck epoch + store exact result"]
+  P --> W
+  W --> J
+
+  J --> D{"Selected public theme"}
+  D -->|Classic default| CL["Immediate safe formatting<br/>scroll-owned transcript + fixed composer"]
+  D -->|Workbench preview| WB["Immediate safe formatting<br/>concise live announcement"]
+
+  T["Secret-free diagnostics:<br/>phase ms · cache flags · corpus bytes"] -.-> E
+  T -.-> F
+  T -.-> G

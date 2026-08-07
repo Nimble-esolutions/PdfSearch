@@ -3,7 +3,7 @@
 **Status:** Active
 **Audience:** Developer, Operator
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-08-06
+**Last verified:** 2026-08-07
 **Canonical source:** docs/ARCHITECTURE_OVERVIEW.md
 
 Primary knowledge transfer artifact for the PdfSearch system. Read this first.
@@ -40,6 +40,34 @@ are historical evidence and do not define the current architecture.
 
 The runtime pointer is the authority. A RustFS object, quarantine workspace,
 database row, or container health status cannot activate a generation alone.
+
+### Public search hot path
+
+The public and authenticated search views share one backend contract while
+retaining separate Classic and Workbench presentation stacks:
+
+1. classify complete small-talk intents and resolve the caller's visible
+   folders/PDFs;
+2. for an exact signed runtime and explicit public/admin access scope, consult
+   the full-result cache before any provider or retrieval work;
+3. create or reuse a provider-scoped query embedding;
+4. when signed activation and the durable mutation tracker agree, search one
+   bounded process-local normalized corpus for the exact mutation epoch,
+   filtered to the authorized scope; unsigned, untracked, active-write,
+   oversized, or corrupt data uses a coherent per-folder snapshot and validates
+   any persistent FAISS vectors against it;
+5. rank the same bounded candidates/references and create or reuse the
+   provider-scoped, language-validated answer; and
+6. return typed JSON, which both public themes format immediately without
+   interpreting provider HTML.
+
+Cache identity binds the signed generation/pointer, durable mutation epoch,
+access scope, provider policy, models, language, ranking/context settings, and
+answer-contract version. Cached references are reauthorized before return;
+cache failures fall through to search. Per-worker matrix byte/vector counts,
+cache errors, and phase timings are logged without query or document content.
+The complete RCA and rollout gate are in
+[2026-08-07-search-answer-latency.md](releases/2026-08-07-search-answer-latency.md).
 
 ---
 
@@ -94,8 +122,7 @@ fails closed with an explicit mismatch error.
 ## 2.1 Repository structure
 
     flowdocs/
-      core/       intake, lifecycle, environment, safety, activation, restore
-      data/       PDF lifecycle, native extraction, OCR, embeddings, indexes
+      core/       application, intake, PDF/OCR, embeddings, indexes, lifecycle, safety
       dataops/    operator workbench and v3 backup/import/restore lifecycle
       vaultops/   internal compatibility schema, maintenance API, activation bridge
       flowdocs/   Django settings, URLs, WSGI/ASGI, runtime paths
@@ -364,7 +391,11 @@ Runtime supervisor
 | `/health/lease/` | Writer lease status (minimal, public) | Public |
 | `/health/metrics/` | Prometheus text-format metrics | Public |
 
-### Management Commands
+### Representative management commands
+
+This table highlights operator-relevant commands; it is not a complete command
+inventory. Run `python manage.py help` from the exact image for exhaustive
+discovery.
 
 | Command | Purpose |
 |---------|---------|
@@ -432,7 +463,10 @@ generation. Path validation rejects the active generation as a restore target.
 | `docker-compose.recovery-cert.yml` | Disposable paired-volume recovery certification | Separate data/control targets and isolated readiness proof |
 | `docker-compose.yml` | Production template | `APP_ENV=production`, `BACKUP_ROLE=disabled` by default, `pull_policy: always`, Traefik network |
 
-### CI Scripts
+### Representative CI and browser gates
+
+This is a navigation list, not the complete test inventory. The workflow files
+and collected test suite at the exact revision remain authoritative.
 
 | Script | Purpose |
 |--------|---------|
@@ -450,26 +484,34 @@ generation. Path validation rejects the active generation as a restore target.
 
 ---
 
-## 9. Production Deployment
+## 9. Deployed and future topology
 
-### Architecture
+### Current deployment boundary
 
 ```
-Internet
-  │
-  ▼
-Traefik (:80/:443, Let's Encrypt)
-  │
-  ├── ai-sahakar.net, www.ai-sahakar.net
-  │
-  ▼
-Dokploy-managed Compose stack
-  ├── web (Gunicorn :8000, bound 127.0.0.1)
-  ├── maintenance (worker, single instance)
-  └── redis (Redis 7, internal network)
+legacy production (authoritative and unchanged)
+  https://www.ai-sahakar.net
+  original legacy service + original data volume
+
+active 2026 stage/rehearsal
+  https://2026.ai-sahakar.net
+  Traefik / Dokploy ingress
+    -> web (Gunicorn :8000)
+    -> maintenance (same immutable application image)
+    -> Redis (internal network)
+    -> separate data and control volumes
+    -> external RustFS through DataOps v3
+
+future 2026 production
+  not deployed; ai-sahakar.net / www.ai-sahakar.net cutover requires
+  independent image, data, recovery, routing, and operator approval
 ```
 
-### Required Production Environment Variables
+`docker-compose.yml` is the production-capable template used by the current
+stage shape; its presence does not mean the future production project or DNS
+cutover exists.
+
+### Future production template posture
 
 | Variable | Example | Notes |
 |----------|---------|-------|
@@ -509,38 +551,32 @@ CREATE_SUPERUSER=0
 
 ---
 
-## 10. Current State
+## 10. Evidence and change boundary
 
-| Metric | Value |
-|--------|-------|
-| Repository revision | Use the current reviewed PR/release SHA; do not copy this living document as release identity |
-| Project migration files | 47 across core, dataops, and vaultops |
-| Stage PDF rows/files | 242 / 242 |
-| Stage folders | 46 |
-| Stage users | 7 |
-| Stage indexing ratio | 1.0 |
-| OCR input languages | English + Marathi + Hindi |
-| Admin UI languages | English (Indian) + Marathi |
-| Stage recovery | Signed activation, real backup, and isolated restore passed |
-| Production cutover | Out of scope; legacy production remains authoritative |
+This active architecture intentionally omits moving revision IDs, deployed
+digests, record counts, migration counts, generation names, and pending PR
+gates. Current values belong in [HANDOFF.md](HANDOFF.md); dated status,
+release, and incident documents preserve historical observations.
 
-### What's Verified
+Stable verified capabilities are:
 
-- Signed stage runtime serves 242/242 indexed documents.
-- DataOps v3 stage backup and isolated restore rehearsal completed.
-- `/readyz` reports signed generation, manifest evidence, and ratio 1.0.
-- English and Marathi searches return real-provider answers and references.
-- Dashboard readiness parity, 46-category maintenance scope, 105-document
-  pagination, 320px overflow, keyboard controls, and Axe checks pass locally.
-- Django system check and focused core/DataOps contract suites pass.
+- DataOps v3 is the only supported backup/import/restore/test-recovery operator
+  contract.
+- Stage activation uses an exact signed intent, compare-and-swap pointer,
+  readiness evidence, and previous-pointer rollback.
+- Web and maintenance share one application image and lifecycle-critical
+  environment while keeping data and control volumes distinct.
+- Document intelligence—including native extraction, bounded local
+  English/Marathi/Hindi OCR, embedding, and FAISS/Chroma handling—belongs to
+  `flowdocs/core/`.
+- The installed `vaultops` package remains internal compatibility, control, and
+  activation infrastructure. Its authenticated read/maintenance/activation
+  callers remain real; legacy profile/sync/mutation APIs are default-off
+  removal debt, not a supported second workbench and not deleted code.
+- Legacy production remains authoritative; the active 2026 host is stage and
+  the future 2026 production project is not deployed.
 
-### What's Planned / In Progress
-
-- Keep exact merge, release, and stage rollout state in `HANDOFF.md`; do not use
-  this architectural overview as transient deployment evidence.
-- Keep automatic stage backup disabled unless the operator explicitly enables
-  it after a bounded scheduling review.
-- Certify an immutable image digest separately before any future production
-  promotion.
-- Department-scoped admin roles (phase 2 authorization)
-- Docker secrets migration for credential management
+Any production activation implementation, automatic backup scheduling, legacy
+API removal, split-image build, or cross-environment automation requires its
+own impact analysis and certification. Do not infer those capabilities from
+this overview.

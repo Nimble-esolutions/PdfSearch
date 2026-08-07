@@ -55,6 +55,8 @@ the bootstrap records the internal `env://ARTIFACT_VAULT` reference and only
 the worker resolves it at execution time. Stored connections also support an
 approved file-backed server-side credential reference. The browser, plan,
 receipt, audit event, and diagnostics never receive secret values.
+Never log credential values or document contents; record only the redacted
+credential reference and operation evidence identifiers.
 
 Before publication, the connection check proves bucket access, dataset
 ownership, read/write capability, conditional writes, and the required object

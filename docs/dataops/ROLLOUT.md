@@ -1,76 +1,83 @@
-# Data Operations rollout
+Status: Active
+Audience: Operator
+Owner: FlowDocs maintainers
+Last verified: 2026-08-07
+Canonical source: docs/dataops/V3_ARCHITECTURE.md
+Supersedes: profile-driven v2 rollout instructions in this file
 
-> Current evidence and exact pending decisions are maintained in
-> [HANDOFF.md](../HANDOFF.md). The dated status page linked below is historical
-> evidence. This page is the procedure, not live deployment state.
+# Data Operations v3 rollout
 
-## As-of 2026-08-03
+This is the reusable rollout procedure. Exact deployments, generations,
+counts, digests, receipts, and current decisions belong in
+[HANDOFF.md](../HANDOFF.md); dated status documents remain historical evidence.
 
-Completed:
+## Current environment boundary
 
-- v2 source bucket and dataset were used for a verified legacy snapshot.
-- Clone/rebind created clone-legacy-20260802T085639Z-86288855 in the separate
-  stage dataset with 416 objects and 1,093,501,777 bytes.
-- Quarantine restore, migrations through 0027, bilingual OCR fallback, and
-  document-scoped indexing completed for all 242 PDFs.
-- The 2026 HTTPS route is live and web, maintenance, and Redis are healthy.
-- The signed stage pointer serves 242/242 indexed documents.
-- Manual stage backup and isolated recovery rehearsal have succeeded.
-- The public-authentication exception was explicitly approved for this stage
-  rehearsal; protected ownership/monitoring/rollback details remain in the
-  deployment and audit records, not this repository.
+- Legacy `https://www.ai-sahakar.net` remains authoritative production and must
+  not be changed by a 2026 stage operation.
+- `https://2026.ai-sahakar.net` is the active non-production stage/rehearsal
+  host.
+- The future 2026 production project is not deployed. Production activation is
+  currently rejected before runtime-pointer mutation.
+- The stage public-authentication exception was approved for its rehearsal.
+  That approval does not authorize production cutover, DNS changes, credential
+  disclosure, or unsandboxed email/webhook/payment effects.
 
-The PR #176 release, corrected readiness projection, stage backup, and
-disposable restore have completed. Repeat the recovery drill when storage,
-manifest, restore, activation, migration, or image/data compatibility changes;
-do not repeat it merely to satisfy this historical checklist.
+## Operator rollout
 
-The replacement is intentionally additive until the restore and reindex gates
-are green. For the 2026 stage recovery rollout:
+1. **Identify the boundary.** Record the target host, environment/dataset ID,
+   exact running web and maintenance image digests, data/control volume
+   identities, signed active/previous pointer evidence, and rollback authority.
+2. **Preserve recoverability.** Before a persistent-data change, retain a
+   recoverable paired-volume snapshot or an accepted DataOps recovery point and
+   record its receipt. Never use the active or legacy volume as a restore
+   target.
+3. **Configure one owned connection.** DataOps v3 uses the environment's
+   dataset identity and one primary RustFS connection. Bootstrap only endpoint,
+   bucket, region, prefix, and credential reference; resolve secret values in
+   the worker. Do not configure source/destination profiles, clone switches, or
+   same-dataset exceptions as operator choices.
+4. **Prove storage capability.** Let DataOps probe read, write, conditional
+   write, metadata, and ownership semantics before publication. A failed or
+   stale capability result blocks the operation without creating a trusted
+   recovery point.
+5. **Choose one intent.** Use **Back up**, **Restore**, **Import**, or **Test
+   recovery**. Preview is read-only and binds the exact plan digest and, when
+   required, confirmation token. Start rejects changed plans, stale tokens,
+   secret fields, and unsupported execution routes.
+6. **Import legacy or foreign data safely.** For an existing legacy/v2/v3
+   object-store source, select the exact source and let DataOps verify and
+   rebind foreign lineage into the owned dataset. A mounted legacy volume must
+   first be captured by the reviewed read-only migration tool; direct
+   mounted-volume execution is not exposed by the v3 start API.
+7. **Prepare an isolated candidate.** Restore into a unique quarantine/runtime
+   generation. Verify manifest signature and object digests, SQLite integrity
+   and foreign keys, migrations, media paths, embedding dimension, and derived
+   artifact compatibility. Rebuild indexes in quarantine when reuse is unsafe.
+8. **Exercise representative behavior.** Reconcile database/media/index state,
+   require the configured indexing policy, and test representative English,
+   Marathi, and Hindi retrieval, source links, and PDF access. The exact test
+   suite and workflow at the release revision are the exhaustive inventory.
+9. **Activate stage separately.** Only an explicitly confirmed stage plan may
+   schedule the signed activation bridge. The intent binds the exact image,
+   generation, manifest, and plan; supervisors coordinate web/maintenance,
+   preserve the previous pointer, apply a compare-and-swap switch, and require
+   exact `/readyz` evidence. Failure restores the previous signed pointer and
+   records a signed rollback result.
+10. **Prove recovery without activation.** Restore a selected recovery point to
+    disposable data/control roots. `Test recovery` must never import into or
+    activate the live runtime. Retain failed targets until evidence review.
+11. **Record the outcome.** Capture plan/configuration digests, source lineage,
+    recovery point and manifest digests, operation/activation receipts, image
+    digests, readiness result, and rollback reference without secrets or
+    document contents.
 
-1. Save a redacted key inventory and a recoverable snapshot of both the app and
-   control databases before changing Dokploy ENV.
-2. Create and register only the new RustFS buckets
-   `ai-sahakar-prod-flowdocs-artifact-vault-v2` and
-   `ai-sahakar-stage-2026-flowdocs-artifact-vault`; leave the historical
-   production bucket and pointer untouched.
-3. Apply the complete `.env.dataops.example` contract as one Dokploy update;
-   keep the clone control disabled until access probes pass. Do not paste root
-   credentials into the application environment.
-4. Deploy one immutable image digest to `https://2026.ai-sahakar.net` only and
-   verify web/maintenance image and lifecycle environment parity.
-5. Mount the legacy `prod_flowdocs` volume read-only in a disposable operator
-   container, create the independent paired stage data/control backup, and
-   publish a stable candidate with SQLite integrity, foreign-key, count, and
-   remote-hash evidence. Promote only that verified candidate in the new v2
-   dataset.
-6. Enable the Advanced-only `clone/rebind` control, select the exact source
-   generation, and type its confirmation phrase. Record both manifest digests,
-   parent lineage, registration, and destination pointer evidence.
-7. Restore the cloned stage generation into quarantine/new generation storage,
-   run migrations and reconciliation, reindex to `1.0`, and run English and
-   Marathi search, listing, source-link, and PDF-access checks. Activate only
-   through the existing signed atomic runtime mechanism; failures leave the
-   previous pointer and generation untouched.
-8. Publish a manual `stage_2026` backup and verify its receipt. Keep
-   `DATAOPS_BACKUP_MODE=manual`; this disposable stage does not enable a
-   schedule unless the operator later requests one.
-9. Restore that stage recovery point into separate disposable data/control
-   volumes and compare manifests, lineage, checksums, database checks, index
-   ratio, readiness, and representative searches.
+## Compatibility boundary
 
-The stage HTTPS route is reachable with `PUBLIC_SEARCH_ENABLED=1`. The operator
-has approved the production-derived authentication exception for this stage
-rehearsal. That approval does not authorize production cutover, DNS changes,
-credential disclosure, or real email/webhook/payment effects; those remain
-sandboxed and no production traffic is changed.
-
-The old control-plane records are not migrated into Data Operations. Keep the
-pre-cutover snapshot until the post-restore search and document-count checks are
-accepted by the operator.
-
-The quarantine restore primitive downloads a selected generation, verifies each
-object SHA-256 against its manifest, and writes a receipt under an isolated
-workspace. It never replaces the runtime data root or changes an authoritative
-pointer; a separate activation step must consume that verified workspace after
-operator review.
+DataOps v3 is the sole supported operator UI and lifecycle contract. The
+installed `vaultops` package still owns durable compatibility/control records,
+selected authenticated maintenance endpoints, and signed activation/runtime
+primitives. Legacy profile, sync, retention, GC, and mutation APIs remain
+default-off code-removal debt; they are neither a second workbench nor fully
+removed. Remove or reroute them only in a separately reviewed impact-analysis
+change with migration and runtime-supervisor coverage.

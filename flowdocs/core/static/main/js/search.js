@@ -18,17 +18,52 @@ const evidenceRail = document.getElementById("evidenceRail");
 const evidenceAnswer = document.querySelector("[data-evidence-answer]");
 const evidenceContent = document.querySelector("[data-evidence-content]");
 const evidenceClose = document.querySelector("[data-evidence-close]");
-const newQuestion = document.querySelector("[data-new-question]");
+const newQuestionButtons = document.querySelectorAll("[data-new-question]");
+const analyticsView = "workbench";
+const analyticsAdapter = window.PdfSearchAnalytics;
 let aboutReturnFocus = null;
 let evidenceReturnFocus = null;
 let shareMenuReturnFocus = null;
 let requestPending = false;
 let activeController = null;
-let requestTimeout = null;
-let stageTimer = null;
+let requestGeneration = 0;
 let answerSequence = 0;
 const answerStore = new Map();
-const ANSWER_REVEAL_LIMIT = 900;
+const responseKinds = new Set(["small_talk", "evidence_answer", "no_evidence", "validation"]);
+
+function analyticsCall(method, args = [], fallback = null) {
+    try {
+        const operation = analyticsAdapter?.[method];
+        return typeof operation === "function" ? operation(...args) : fallback;
+    } catch (_error) {
+        return fallback;
+    }
+}
+
+function track(name, properties) {
+    return analyticsCall("track", [name, properties], false);
+}
+
+function trackCompleted({startedAt, wordCount, questionLanguage, outcome, answerKind, failureFamily, references = 0}) {
+    if (!analyticsAdapter) return;
+    track("search_completed", {
+        view: analyticsView,
+        question_language: questionLanguage,
+        word_count_bucket: analyticsCall("wordCountBucket", [wordCount], "1-5"),
+        latency_bucket: analyticsCall("durationBucket", [performance.now() - startedAt], ">=30s"),
+        reference_count_bucket: analyticsCall("countBucket", [references], "0"),
+        outcome,
+        answer_kind: answerKind,
+        failure_family: failureFamily,
+    });
+}
+
+function classifiedFailure(status) {
+    if (status === 429) return ["rate_limited", "rate_limit"];
+    if ([400, 401, 403].includes(status)) return ["invalid_request", "validation"];
+    if (status === 503) return ["provider_unavailable", "provider"];
+    return ["internal_error", "internal"];
+}
 
 function detectPerformanceProfile() {
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -80,7 +115,13 @@ searchComposer.addEventListener("submit", event => {
     sendMessage();
 });
 
-newQuestion?.addEventListener("click", () => {
+function resetConversation() {
+    requestGeneration += 1;
+    activeController?.abort();
+    activeController = null;
+    requestPending = false;
+    sendBtn.removeAttribute("aria-busy");
+    chatMain.setAttribute("aria-busy", "false");
     chatMain.replaceChildren();
     answerStore.clear();
     answerSequence = 0;
@@ -89,7 +130,9 @@ newQuestion?.addEventListener("click", () => {
     userQuery.dispatchEvent(new Event("input", {bubbles: true}));
     userQuery.focus();
     resetEvidenceRail();
-});
+}
+
+newQuestionButtons.forEach(button => button.addEventListener("click", resetConversation));
 
 function closeAbout() {
     if (!aboutDialog) return;
@@ -102,6 +145,7 @@ function closeAbout() {
 }
 
 aboutOpens.forEach(aboutOpen => aboutOpen.addEventListener("click", () => {
+    track("search_help_opened", {view: analyticsView});
     aboutReturnFocus = aboutOpen;
     if (typeof aboutDialog.showModal === "function") aboutDialog.showModal();
     else aboutDialog.setAttribute("open", "");
@@ -123,11 +167,19 @@ async function sendMessage(){
 
     const wordCount = query.split(/\s+/).length;
     if(wordCount > 30){
-        appendErrorMessage(searchMessages.question_too_long, searchMessages.question_too_long_detail, query);
+        appendErrorMessage(searchMessages.question_too_long, searchMessages.question_too_long_detail, "", "validation");
         return;
     }
 
     appendMessage(query, 'user');
+    const startedAt = performance.now();
+    const pageLanguage = document.documentElement.lang === "mr" ? "mr" : "en";
+    const questionLanguage = analyticsCall("questionLanguage", [query, pageLanguage], pageLanguage);
+    track("search_submitted", {
+        view: analyticsView,
+        question_language: questionLanguage,
+        word_count_bucket: analyticsCall("wordCountBucket", [wordCount], "1-5"),
+    });
     userQuery.value = '';
     sendBtn.disabled = true;
     requestPending = true;
@@ -142,6 +194,7 @@ async function sendMessage(){
 
     const stages = searchLoadingStages;
     let stageIndex = 0;
+    let loadingTimer = null;
 
     function showStage() {
         typingDiv.replaceChildren();
@@ -158,7 +211,7 @@ async function sendMessage(){
         typingDiv.prepend(stage);
         stageIndex++;
         if(stageIndex < stages.length) {
-            stageTimer = setTimeout(showStage, 2000);
+            loadingTimer = setTimeout(showStage, 2000);
         }
     }
     showStage();
@@ -166,8 +219,10 @@ async function sendMessage(){
     const formData = new FormData();
     formData.append('query', query);
     formData.append('language', document.documentElement.lang === 'mr' ? 'mr' : 'en');
-    activeController = new AbortController();
-    requestTimeout = setTimeout(() => activeController.abort(), 60000);
+    const generation = ++requestGeneration;
+    const controller = new AbortController();
+    activeController = controller;
+    const timeout = setTimeout(() => controller.abort(), 60000);
 
     try {
         const response = await fetch(window.PdfSearch.searchQueryUrl, {
@@ -175,11 +230,21 @@ async function sendMessage(){
             headers: {'X-CSRFToken': window.PdfSearch.csrfToken},
             body: formData,
             credentials: "same-origin",
-            signal: activeController.signal,
+            signal: controller.signal,
         });
         const data = await response.json().catch(() => ({}));
+        if (generation !== requestGeneration) return;
         if (!response.ok) {
             typingDiv.remove();
+            const [outcome, failureFamily] = classifiedFailure(response.status);
+            trackCompleted({
+                startedAt,
+                wordCount,
+                questionLanguage,
+                outcome,
+                answerKind: "error",
+                failureFamily,
+            });
             const errorMessages = {
                 401: searchMessages.sign_in,
                 403: searchMessages.security,
@@ -191,43 +256,117 @@ async function sendMessage(){
             appendErrorMessage(
                 errorMessages[response.status] || searchMessages.request_failed,
                 data.detail,
+                response.status >= 500 || response.status === 429 ? query : "",
+                failureFamily,
+            );
+            return;
+        }
+        if (!isValidSuccessPayload(data)) {
+            typingDiv.remove();
+            trackCompleted({
+                startedAt,
+                wordCount,
+                questionLanguage,
+                outcome: "internal_error",
+                answerKind: "error",
+                failureFamily: "contract",
+            });
+            appendErrorMessage(
+                searchMessages.unexpected,
+                searchMessages.request_failed,
                 query,
+                "contract",
             );
             return;
         }
         typingDiv.classList.add("search-loading--complete");
         typingDiv.setAttribute("aria-label", stages[stages.length - 1]);
         typingDiv.remove();
-        if(data.answer){
-            typeEffect(
-                data.answer,
-                data.references || [],
-                query,
-                data.kind || "evidence_answer",
-                data.language || "",
-            );
-        } else if(data.error){
-            appendErrorMessage(searchMessages.search_unavailable, searchMessages.try_later, query);
-        }
+        const outcome = data.kind === "evidence_answer"
+            ? "evidence"
+            : data.kind === "no_evidence"
+                ? "no_evidence"
+                : "conversational";
+        trackCompleted({
+            startedAt,
+            wordCount,
+            questionLanguage: data.language,
+            outcome,
+            answerKind: data.kind,
+            failureFamily: "none",
+            references: data.references?.length || 0,
+        });
+        typeEffect(
+            data.answer,
+            data.references,
+            query,
+            data.kind,
+            data.language || "",
+        );
     } catch(err) {
         typingDiv.remove();
+        if (generation !== requestGeneration) return;
         if (err.name === "AbortError") {
-            appendErrorMessage(searchMessages.timeout, searchMessages.try_again, query);
+            trackCompleted({
+                startedAt,
+                wordCount,
+                questionLanguage,
+                outcome: "provider_timeout",
+                answerKind: "error",
+                failureFamily: "timeout",
+            });
+            appendErrorMessage(searchMessages.timeout, searchMessages.try_again, query, "timeout");
         } else {
-            appendErrorMessage(searchMessages.unexpected, searchMessages.try_later, query);
+            trackCompleted({
+                startedAt,
+                wordCount,
+                questionLanguage,
+                outcome: "internal_error",
+                answerKind: "error",
+                failureFamily: "network",
+            });
+            appendErrorMessage(searchMessages.unexpected, searchMessages.try_later, query, "network");
             console.error(err);
         }
     } finally {
-        clearTimeout(requestTimeout);
-        clearTimeout(stageTimer);
-        requestTimeout = null;
-        stageTimer = null;
-        activeController = null;
-        requestPending = false;
-        sendBtn.removeAttribute("aria-busy");
-        chatMain.setAttribute("aria-busy", "false");
-        updateSendButton();
+        clearTimeout(timeout);
+        clearTimeout(loadingTimer);
+        if (generation === requestGeneration) {
+            activeController = null;
+            requestPending = false;
+            sendBtn.removeAttribute("aria-busy");
+            chatMain.setAttribute("aria-busy", "false");
+            updateSendButton();
+        }
     }
+}
+
+function isValidSuccessPayload(payload) {
+    if (!Boolean(
+        payload
+        && typeof payload === "object"
+        && responseKinds.has(payload.kind)
+        && typeof payload.answer === "string"
+        && payload.answer.trim()
+        && Array.isArray(payload.references)
+        && ["en", "mr"].includes(payload.language)
+    )) return false;
+    if (payload.kind === "evidence_answer") {
+        return payload.references.length > 0 && payload.references.every(isValidReference);
+    }
+    return payload.references.length === 0;
+}
+
+function isValidReference(reference) {
+    const pdfId = Number(reference?.pdf_id);
+    return Boolean(
+        reference
+        && typeof reference === "object"
+        && !Array.isArray(reference)
+        && typeof reference.title === "string"
+        && reference.title.trim()
+        && ((Number.isSafeInteger(pdfId) && pdfId > 0) || safeReferenceUrl(reference))
+    );
 }
 
 function appendMessage(text, sender, isLoading=false){
@@ -298,9 +437,10 @@ function appendWelcomeMessage(text, href, label) {
     chatMain.scrollTop = 0;
 }
 
-function appendErrorMessage(title, detail, retryQuery) {
+function appendErrorMessage(title, detail, retryQuery, failureFamily = "internal") {
     const box = document.createElement('div');
     box.className = 'search-error conversation-entry conversation-entry--assistant';
+    box.setAttribute('role', 'alert');
 
     const content = document.createElement('div');
     const heading = document.createElement('strong');
@@ -309,12 +449,15 @@ function appendErrorMessage(title, detail, retryQuery) {
     message.textContent = detail || '';
     content.append(heading, message);
 
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'search-error__retry';
-    retry.textContent = retryLabel;
-    retry.dataset.retryQuery = retryQuery || '';
-    content.appendChild(retry);
+    if (retryQuery) {
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'search-error__retry';
+        retry.textContent = retryLabel;
+        retry.dataset.retryQuery = retryQuery;
+        retry.dataset.failureFamily = failureFamily;
+        content.appendChild(retry);
+    }
     box.appendChild(content);
     chatMain.appendChild(box);
     chatMain.scrollTop = chatMain.scrollHeight;
@@ -330,64 +473,28 @@ function typeEffect(text, references = [], query = "", responseKind = "evidence_
     if (["en", "mr"].includes(language)) div.lang = language;
     div.setAttribute("aria-live", "off");
     chatMain.appendChild(div);
-    let answerFormatted = false;
-
     const finish = () => {
-        if (!answerFormatted) {
-            div.replaceChildren();
-            appendFormattedAnswer(div, text);
-        }
         div.classList.add("answer-complete");
-        appendReferences(div, references);
-        appendAnswerActions(div, {answer: text, query, references});
-        updateEvidenceRail(references);
+        if (responseKind === "evidence_answer") {
+            appendReferences(div, references);
+            appendAnswerActions(div, {answer: text, query, references});
+            updateEvidenceRail(references);
+        } else {
+            resetEvidenceRail();
+        }
         const announcement = document.createElement("span");
         announcement.className = "visually-hidden";
         announcement.setAttribute("role", "status");
         announcement.setAttribute("aria-live", "polite");
-        announcement.textContent = text;
+        announcement.textContent = searchMessages.answer_ready || "Answer ready";
         div.appendChild(announcement);
     };
 
-    const hasStructuredFormatting = /(^|\n)(#{1,3}\s|[-*]\s|\d+[.)]\s)|\*\*/.test(text);
-    const renderImmediately = performanceProfile.mode !== "full"
-        || text.length > ANSWER_REVEAL_LIMIT
-        || hasStructuredFormatting;
-    if (renderImmediately) {
-        appendFormattedAnswer(div, text);
-        answerFormatted = true;
-        finish();
-        return div;
-    }
-
-    let cursor = document.createElement("span");
-    cursor.className = "cursor";
-    div.appendChild(cursor);
-
-    const segmenter = Intl.Segmenter
-        ? new Intl.Segmenter('mr', { granularity: 'grapheme' })
-        : null;
-    const graphemes = segmenter
-        ? [...segmenter.segment(text)].map(seg => seg.segment)
-        : [...text];
-
-    let i = 0;
-    function typing() {
-        if (i < graphemes.length) {
-            if (graphemes[i] === "\n") {
-                cursor.before(document.createElement("br"));
-            } else {
-                cursor.before(document.createTextNode(graphemes[i]));
-            }
-            chatMain.scrollTop = chatMain.scrollHeight;
-            i++;
-            setTimeout(typing, 8);
-        } else {
-            cursor.remove();
-            finish();
-        }
-    }
-    typing();
+    // The response is already complete when this JSON endpoint resolves.
+    // Rendering it synchronously avoids adding up to several seconds of
+    // artificial character-by-character latency after the network wait.
+    appendFormattedAnswer(div, text);
+    finish();
     return div;
 }
 
@@ -519,6 +626,13 @@ function createReferenceCard(ref, index = 1) {
         link.href = referenceUrl;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
+        link.addEventListener("click", () => {
+            track("search_source_selected", {
+                view: analyticsView,
+                source_rank_bucket: analyticsCall("rankBucket", [index], "4+"),
+                answer_kind: "evidence_answer",
+            });
+        });
     } else {
         link.className = "ref-card__unavailable";
     }
@@ -574,6 +688,9 @@ function appendAnswerActions(parent, payload) {
     feedback.target = "_blank";
     feedback.rel = "noopener noreferrer";
     feedback.textContent = workbenchCopy.feedback;
+    feedback.addEventListener("click", () => {
+        track("search_feedback_opened", {view: analyticsView});
+    });
     actions.appendChild(feedback);
     const share = document.createElement("button");
     share.type = "button";
@@ -674,6 +791,11 @@ async function shareAnswer(button, payload) {
         url: window.location.href,
     };
     if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        track("search_share_started", {
+            view: analyticsView,
+            channel: "native",
+            answer_kind: "evidence_answer",
+        });
         try {
             await navigator.share(shareData);
             return;
@@ -681,6 +803,11 @@ async function shareAnswer(button, payload) {
             if (error?.name === "AbortError") return;
         }
     }
+    track("search_share_started", {
+        view: analyticsView,
+        channel: "menu",
+        answer_kind: "evidence_answer",
+    });
     createShareMenu(button, payload);
 }
 
@@ -743,6 +870,10 @@ function appendPromptOrRetry(event) {
     }
     const retry = event.target.closest("[data-retry-query]");
     if (retry) {
+        track("search_retry_clicked", {
+            view: analyticsView,
+            failure_family: retry.dataset.failureFamily || "internal",
+        });
         userQuery.value = retry.dataset.retryQuery;
         userQuery.dispatchEvent(new Event("input", {bubbles: true}));
         sendMessage();
@@ -750,6 +881,12 @@ function appendPromptOrRetry(event) {
     }
     const sourceTrigger = event.target.closest("[data-evidence-open]");
     if (sourceTrigger) {
+        const referenceCount = sourceTrigger.closest(".answer-sources")?.querySelectorAll(".ref-card").length || 1;
+        track("search_sources_opened", {
+            view: analyticsView,
+            reference_count_bucket: analyticsCall("countBucket", [referenceCount], "1"),
+            answer_kind: "evidence_answer",
+        });
         openEvidence(sourceTrigger);
         return;
     }
