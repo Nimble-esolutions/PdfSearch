@@ -167,6 +167,7 @@
     const lines = value.replace(/\r\n?/gu, "\n").split("\n");
     let paragraphLines = [];
     let list = null;
+    let listType = null;
 
     const flushParagraph = () => {
       if (!paragraphLines.length) return;
@@ -180,6 +181,7 @@
     };
 
     const closeList = () => {
+      listType = null;
       list = null;
     };
 
@@ -201,17 +203,18 @@
         return;
       }
 
-      const orderedMatch = line.match(/^(?:\d+)[.)]\s*(.+)$/u);
-      const unorderedMatch = line.match(/^[\-*+•·◦▪▫➤➢⦿‣]\s*(.+)$/u);
+      const orderedMatch = line.match(/^\d+[.)]\s*(.+)$/u);
+      const unorderedMatch = line.match(/^[\-*+•·◦▪▫➤➢⦿‣]\s+(.+)$/u);
       const listMatch = orderedMatch || unorderedMatch;
       if (listMatch) {
         flushParagraph();
-        if (!list) {
+        if (!list || listType !== "ul") {
           list = document.createElement("ul");
           parent.appendChild(list);
+          listType = "ul";
         }
         const item = document.createElement("li");
-        appendInlineFormatting(item, orderedMatch ? orderedMatch[1] : listMatch[1]);
+        appendInlineFormatting(item, listMatch[1] || "");
         list.appendChild(item);
         return;
       }
