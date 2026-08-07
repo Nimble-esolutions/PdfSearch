@@ -45,7 +45,8 @@ the canary and compare phase telemetry.
 | Corpus admission was unbounded | Every worker could retain any signed runtime size and briefly hold a list of all vectors plus the final matrix | A large generation or concurrent worker warm-up could exhaust the 2 GiB service budget | The optimization streams two validation passes into one preallocated matrix, caps each PDF at 1,000 vectors/32 MiB embedding JSON/8 MiB chunk JSON, and admits at most 12,000 vectors and 96 MiB of retained vector-plus-text payload per worker; larger or partially corrupt corpora use the conservative path |
 | Workbench simulated streaming after completion | Completed JSON answers were revealed one grapheme every 8 ms, up to about 7.2 seconds for 900 characters | The server had finished, but the answer still looked slow | Completed answers render synchronously with safe structural formatting |
 | Workbench reset did not own the active request | “New question” cleared the DOM while the previous request could still complete, and the only reset control disappeared with the desktop rail below 901 px | A late answer could repopulate a cleared conversation and mobile users could not start over explicitly | Reset now aborts the active request, advances a request-generation guard, ignores stale completion, and exposes one visible reset control at every supported viewport |
-| Workbench trusted malformed HTTP 200 payloads | Missing or unknown response kinds could be treated as document evidence | Contract drift could present an untyped answer as verified evidence | Successful payloads now require an allowlisted kind, non-empty answer, and references array before rendering |
+| Both themes trusted incomplete HTTP 200 semantics | A syntactically valid payload could claim evidence without sources, attach sources to small talk, use an unsupported language, or contain an invalid reference | Contract drift could present false evidence or fail after partially mutating the DOM | Both themes validate kind, answer, language, cross-field rules, and every source identity before rendering; only valid evidence answers receive source controls |
+| Provider failures printed raw exception traces | Full provider exception details reached application logs even though diagnostics need only a failure class | Operational metadata could violate the documented data-minimization boundary | Search logs now record only `search_chat_failed` and the exception class; a sentinel test proves message details are absent |
 | No phase evidence | Logs reported only total request duration and call counts | Operators could not separate embedding, retrieval, model, cache, or UI delay | Secret-free phase timing and cache/corpus diagnostics are logged |
 
 ## Safety boundaries
@@ -153,8 +154,8 @@ Before merge:
 4. Render and validate the updated Mermaid source.
 
 The focused source-backed browser gate ran on an isolated local Django service,
-not the stale container previously occupying port 8000: 72 Workbench/motion and
-36 Classic tests passed across desktop, laptop, tablet, and mobile projects.
+not the stale container previously occupying port 8000: 76 Workbench/motion and
+40 Classic tests passed across desktop, laptop, tablet, and mobile projects.
 
 After a green merge and stage image rollout:
 

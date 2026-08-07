@@ -44,7 +44,7 @@ can change after that time, so repeat the read-only checks in
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
 | Repository integration baseline | `dev` contains merge `51f0dd7` (PR #191) | PRs #185–#191 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, and the repository-truth audit are integrated |
-| Search latency work | PR #192 remains open for review and is not deployed | Local gates pass (654 broad Django tests, 25 focused mutation/cache/memory/FAISS tests, 108 source-backed Classic/Workbench browser tests across four viewport projects, and the 81-test PR contract). Pre-change stage baseline was 23,738 ms uncached and 12,910 ms on an immediate repeat; the PR moves exact caching before retrieval, binds a bounded worker corpus to the signed mutation epoch, reauthorizes references before and after model work (including conservative fallback), makes result/embedding/answer cache failures non-fatal (the public rate limiter remains fail-closed), caches provider-scoped query embeddings, adds phase telemetry, removes Workbench reveal delay, rejects malformed successful envelopes, and cancels stale in-flight answers when a new conversation starts |
+| Search latency work | PR #192 remains open for review and is not deployed | Local gates pass (655 broad Django tests, 26 focused mutation/cache/memory/FAISS/log-redaction tests, 116 source-backed Classic/Workbench browser tests across four viewport projects, and the 81-test PR contract). Pre-change stage baseline was 23,738 ms uncached and 12,910 ms on an immediate repeat; the PR moves exact caching before retrieval, binds a bounded worker corpus to the signed mutation epoch, reauthorizes references before and after model work (including conservative fallback), makes result/embedding/answer cache failures non-fatal (the public rate limiter remains fail-closed), caches provider-scoped query embeddings, adds phase telemetry, removes Workbench reveal delay, validates response-kind/language/reference invariants before either theme mutates the DOM, redacts provider exception details, and cancels stale in-flight answers when a new conversation starts |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
@@ -151,8 +151,10 @@ There is no data-readiness or search-language blocker. Search latency remains a
 measured release task until the current branch is reviewed, merged, deployed,
 and canaried. Remaining work is:
 
-1. **Search latency PR:** complete local/backend/browser/documentation gates,
-   open a PR into `dev`, and merge only after required checks and review pass.
+1. **Search latency PR:** PR #192 is open into `dev`; finish the combined
+   backend/browser/documentation gates, push the reviewed commits, and keep it
+   unmerged until required checks and human review pass. Plans 025–031 record
+   the measured follow-up sequence without expanding this PR into a rewrite.
 2. **Search latency stage canary:** after the merged image reaches stage, prove
    the unchanged signed generation and both themes; compare uncached/repeat
    duration, phase telemetry, corpus bytes/vectors, and web-worker RSS. Roll
@@ -200,6 +202,12 @@ and canaried. Remaining work is:
   include domain words containing short conversational tokens.
 - Both public themes must preserve the backend response `kind`; a friendly
   answer without evidence must not be presented as a document-backed answer.
+- Validate the complete success envelope before mutating either theme's DOM:
+  evidence answers require valid sources, non-evidence outcomes forbid them,
+  and only English/Marathi response languages are accepted.
+- A Playwright pass is not source evidence when an unrelated process owns its
+  base URL. Use an isolated source-backed service or an explicit deployed
+  canary, and record which one was tested.
 - `overflow: auto` does not make a transcript scrollable unless every grid/flex
   ancestor gives it a bounded height and `min-height: 0`. Long-answer tests must
   prove transcript scroll ownership, a visible composer, protected sources,
