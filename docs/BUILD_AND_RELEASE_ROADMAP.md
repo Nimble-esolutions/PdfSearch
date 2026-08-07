@@ -1,7 +1,7 @@
 Status: Active
 Audience: Release
 Owner: FlowDocs maintainers
-Last verified: 2026-08-06
+Last verified: 2026-08-07
 Canonical source: docs/BUILD_AND_RELEASE_ROADMAP.md
 Supersedes: docs/DOCKER_IMAGE_OPTIMIZATION.md
 
@@ -15,11 +15,11 @@ the living handoff before use.
 
 ## Current Baseline
 
-The current production web image is multi-stage, cache-enabled, and built from
-the hashed `requirements-web.lock` dependency set. The complete OCR/ML graph
-remains in `requirements.txt` for the future worker image. The earlier complete
-image was observed near 10 GB; that measurement is historical, not the current
-web-image size target.
+The current application image is multi-stage, cache-enabled, and built from the
+hashed `requirements-web.lock` dependency set. Web and maintenance run the same
+immutable image through different entrypoints so application, migration, OCR,
+embedding, and index contracts cannot drift between processes. Historical
+image-size observations belong in dated release evidence, not this roadmap.
 
 Legacy production remains `https://www.ai-sahakar.net`.
 `https://2026.ai-sahakar.net` is the current non-production stage/rehearsal
@@ -30,103 +30,97 @@ exact application and infrastructure image digests and
 Use [HANDOFF.md](HANDOFF.md) for the current `dev` merge and deployed artifact;
 stable architecture documents do not hard-code a moving branch head.
 
-## Target Image Topology
+## Current image and artifact topology
 
 ```text
-pdfsearch-web
-  Django, Gunicorn, query/retrieval code, Redis client, index loader
+one immutable application image
+  web entrypoint: Django, Gunicorn, retrieval, public/admin UI
+  maintenance entrypoint: queued intake, extraction, local OCR, embedding, indexing
 
-pdfsearch-worker
-  Celery, PDF extraction, OCR, Torch, spaCy, Chroma/FAISS indexing
+runtime data volume
+  SQLite, uploaded media, PDF cache, FAISS/Chroma, projected generations
 
-artifacts
-  versioned models, OCR language packs, FAISS/Chroma releases, planned manifests
+paired control volume
+  control SQLite, leases, signed activation intent/results, active/previous pointers
+
+RustFS recovery storage
+  complete DataOps v3 manifests and content-addressed objects
 ```
 
-## Delivery Phases
+Splitting web and maintenance into different images is an optional future
+optimization, not current architecture. It requires measured image/startup
+benefit plus compatibility proof for OCR, migrations, embedding dimensions,
+index formats, and activation before adoption.
 
-### Phase A — Measure
+## Optimization backlog
+
+### Measure first
 
 - Produce an import graph for web startup and worker paths.
 - Record image layer sizes and build timings.
 - Identify CPU-only versus CUDA dependencies.
 - Record current model and index formats.
 
-### Phase B — CPU Runtime
+### Reduce runtime weight safely
 
 - Test CPU-only Torch/EasyOCR wheels.
 - Remove CUDA/NVIDIA packages from the web runtime.
-- Keep a complete worker image until all indexing tests pass.
+- Keep web and maintenance on the same image until split-image compatibility
+  and rollback are certified.
 - Enforce a temporary image budget in CI.
 
-### Phase C — Split Services
+### Bound asynchronous work
 
-- Add a Dokploy worker service.
-- Move upload/OCR/embedding work behind a durable task queue.
+- Keep upload/OCR/embedding work behind the existing durable maintenance queue.
 - Keep web requests bounded and responsive.
 - Add retries, idempotency, and task status to the database.
 
-### Phase D — Versioned Artifacts
+### Strengthen versioned artifacts
 
-- Publish model and index artifacts separately from application images.
-- Attach SHA-256 checksums and compatibility metadata.
+- Keep DataOps recovery manifests and content-addressed objects separate from
+  application images.
+- Extend compatibility metadata only when restore/rebuild decisions need it.
 - Validate artifacts before activation.
 - Keep the active and previous known-good release.
 
-### Phase E — Promotion
+### Certify promotion
 
-- Build and test web and worker images independently.
-- Run synthetic PDF ingestion and search tests.
-- Promote image digest plus artifact release together.
+- Test web and maintenance entrypoints from the same exact image digest.
+- Run representative PDF ingestion, OCR, retrieval, and search tests.
+- Promote the exact image-generation-manifest tuple together.
 - Roll back both when compatibility is broken.
 
 ## Current CI and Release Evidence
 
-The current workflow reports or verifies:
+The current workflow reports or verifies, depending on event and changed paths:
 
 - source Git SHA;
 - image digest;
 - image size;
 - short SHA, `dev`, and `latest` compatibility image tags;
 - SBOM and max provenance settings;
-  - image smoke tests, `pip check`, non-blocking Trivy scan/report, and image-size budget.
+- source, documentation, Compose, release-integrity, startup, browser, recovery,
+  and runtime contracts;
+- image smoke tests, `pip check`, non-blocking Trivy reporting, and image-size budget.
 
-The current workflow does not emit a dependency lock digest, model/index
-manifest, persistent-data manifest, or data-release artifact. Treat those as
-operator-recorded evidence or future targets, not as generated release output.
-
-Recent release records:
-
-- [`releases/2026-07-22-admin-operations-cockpit.md`](releases/2026-07-22-admin-operations-cockpit.md)
-  records PR #37, merge commit `1962e127e1ebcff0b8b0ba08622656d8eeaacaae`,
-  and the published `dev` image digest for the Admin Operations Cockpit work.
-- PRs #42 through #53 delivered 16 new core modules (environment, side_effects,
-  ai_guard, activate, activation_journal, restore_pipeline, restore_workspace,
-  global_writer, registration, backup_policy, sanitize, rehearsal, lease,
-  compatibility, metrics, namespace, object_store_capabilities), new health
-  endpoints (`/health/data/`, `/health/lease/`, `/health/metrics/`), new
-  management commands (`config_inspect`, `verify_object_store_capabilities`,
-  `inventory_artifacts`, `validate_data_release`), operations dashboard, user
-  management, PDF lifecycle, and generation lifecycle UI. PR #53 merged the
-  data release pipeline at `2e1ca38`.
+The release workflow does not make a mutable tag authoritative and does not
+turn a successful image build into a data promotion. DataOps v3 separately
+records recovery manifests, object digests, candidates, and activation
+evidence. Exact historical PRs, revisions, image digests, and rollout results
+belong in dated release records and [HANDOFF.md](HANDOFF.md), not this active
+roadmap.
 
 ## GitHub Actions Release Policy
 
-- Phase one keeps existing full pull-request validation and adds the bounded
-  `PR contract`; the fast check is supplemental feedback, not certification.
-- The protected `dev` merge queue runs full validation for the exact merge-group
-  SHA. It does not receive package-write permission or publish to GHCR.
-  `Pre-merge certification` fails unless full validation succeeds.
+- Pull requests receive the bounded `PR contract`; it is supplemental feedback,
+  not full release certification.
+- Merge-group validation certifies the exact proposed `dev` merge without
+  package-write permission or GHCR publication.
 - The protected final `dev` push rebuilds, publishes, and certifies its exact
   image SHA. This rebuild is intentionally unavoidable until a separately
   reviewed candidate-reuse design proves merge-group and final SHA identity.
-- Merge queue and the required `PR contract` / `Pre-merge certification`
-  checks are repository settings; workflow files do not enforce those settings.
-  Do not enable the fast-only PR path until those settings are active and proven
-  by a queued test PR. That phase-two change must be a separate PR.
-- Initial queue settings must use build concurrency/group size 1, an ALLGREEN
-  merge policy, and a 120-minute status-check timeout, which is strictly longer
-  than the full job's 90-minute timeout.
+- Required-check and merge-queue enforcement lives in repository settings;
+  workflow files alone cannot prove those controls are enabled.
 - Require CODEOWNER approval for workflows, Docker entrypoints, dependency
   locks, and CI scripts; dismiss stale approvals and restrict bypasses.
 - Do not universally require the path-filtered documentation workflow context;
@@ -160,24 +154,21 @@ Recent release records:
 
 ## Current Versus Planned
 
-Current: immutable application release, Redis-enabled runtime, operator-recorded
-data custody, manual restore/promotion gates, environment identity in CI
+Current: immutable application release, Redis-enabled runtime, DataOps v3
+recovery manifests/receipts, signed restore/activation gates, environment identity in CI
 (`APP_ENV`, `PRODUCTION_SOURCE_ID`, `AUTHORITATIVE_DATASET_ID`, `DATASET_ID`,
 `BACKUP_ROLE`, `EXTERNAL_SIDE_EFFECTS_MODE`, `DATA_MODE`), global writer fencing,
 dataset registration, restore pipeline with compatibility checks, sanitization,
 migration rehearsal, activation journal, writer lease, backup policy, object
 store capabilities, namespace, metrics, and the data release contract
-(`inventory_artifacts`, `validate_data_release`). The Workbench and
-maintenance worker now connect authoritative publication to isolated,
-validated restore preparation and separately confirmed signed runtime
-activation; CI proves one exact generation and manifest through readiness and
-bilingual search.
+(`inventory_artifacts`, `validate_data_release`). The Data protection workbench
+and maintenance worker connect immutable publication to isolated, validated
+candidate preparation and separately confirmed signed stage activation.
+Representative CI gates prove exact generation/manifest readiness and
+multilingual search; the workflow remains the exhaustive gate inventory.
 
-Planned: separately published versioned data artifacts, automatic FAISS recovery,
-and automatic cross-environment synchronization. The restore pipeline and
-activation journal provide the foundation for these; full automation of artifact
-publishing and cross-environment sync remains a future target. Startup restore
-policies remain a fail-closed empty-database posture check rather than
-automatic restore orchestration. Accumulated-volume redeploy, genuinely fresh
-volume recovery, and production RustFS certification remain Plan 003
-deployment proofs; see the audited vault guide.
+Future candidates: measured image/runtime reductions, broader derived-index
+rebuild automation, and production RustFS/deployment certification. Automatic
+cross-environment synchronization is intentionally not a target operator
+workflow. Startup restore policies remain fail-closed posture checks rather
+than automatic restore orchestration.

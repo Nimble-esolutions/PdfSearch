@@ -1,11 +1,31 @@
 flowchart LR
-    A[Admin sign-in] --> B[Operations Cockpit]
-    B --> C[Category Yard]
-    C --> D[PDF intake]
-    D --> E[Queued maintenance/indexing]
-    E --> F{Search readiness}
-    F -->|Ready| G[Public AI Sahakar search]
-    F -->|Needs attention| H[Maintenance Jobs / Operations]
-    H --> E
-    B --> I[Users / Settings / Data protection]
-    I --> J[Role-aware controls and redacted audit evidence]
+    admin["Admin / superadmin sign-in"] --> cockpit["Operations Cockpit"]
+
+    subgraph documents["Document intelligence — flowdocs/core"]
+        folders["Categories and documents"] --> intake["Reviewed multi-file intake"]
+        intake --> queue["Durable maintenance job"]
+        queue --> extract["Native extraction / local OCR"]
+        extract --> index["Embeddings + compatible indexes"]
+        index --> search_ready{"Search readiness"}
+        search_ready -->|Ready| public["Classic / Workbench public search"]
+        search_ready -->|Needs attention| maintenance["Preview validation / repair / reindex"]
+        maintenance --> queue
+    end
+
+    subgraph protection["Data protection — DataOps v3"]
+        actions["Back up · Restore · Import · Test recovery"] --> preview["Read-only deterministic preview"]
+        preview --> confirmed["Plan-bound confirmation when required"]
+        confirmed --> operation["Resumable operation + redacted audit evidence"]
+        operation --> candidate["Immutable recovery point or isolated candidate"]
+        candidate --> activation["Separate signed stage activation"]
+    end
+
+    cockpit --> folders
+    cockpit --> maintenance
+    cockpit --> actions
+    cockpit --> users["Users and public-theme settings"]
+    operation --> readiness["Shared DataOps readiness projection"]
+    readiness --> cockpit
+    readiness --> readyz["/readyz"]
+
+    legacy_api["Legacy VaultOps profile/sync/mutation APIs"] -. "internal, default-off removal debt" .-> protection

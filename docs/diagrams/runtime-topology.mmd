@@ -1,19 +1,42 @@
 flowchart LR
-    users["Users"] --> traefik["Traefik / Dokploy route"]
-    traefik --> web["FlowDocs web\nimmutable image"]
-    worker["Maintenance worker\nsame immutable image"] --> data
-    web --> data["flowdocs_data\n/app/data"]
-    web --> control["flowdocs_control\n/app/data-control"]
-    worker --> control
-    web --> redis["Redis\ncache and queue"]
+    public["Public and authenticated users"] --> ingress["Traefik / Dokploy<br/>external dokploy-network"]
+
+    subgraph app["Active 2026 stage application"]
+        direction TB
+        web["Web / Gunicorn :8000<br/>immutable application image"]
+        worker["Maintenance worker<br/>same immutable application image"]
+        dataops["DataOps v3<br/>sole operator lifecycle contract"]
+        bridge["Internal VaultOps bridge<br/>control + signed activation"]
+    end
+
+    subgraph private["Internal Compose network"]
+        redis["Redis<br/>cache + queue"]
+    end
+
+    subgraph volumes["Separate persistent custody"]
+        data[("flowdocs_data<br/>SQLite · media · cache · indexes<br/>runtime generations · quarantine")]
+        control[("flowdocs_control<br/>control SQLite · leases · journals<br/>signed intent/results · active/previous pointers")]
+    end
+
+    rustfs[("External RustFS<br/>immutable DataOps v3 recovery points")]
+
+    ingress --> web
+    web --> redis
     worker --> redis
-    legacy["prod_flowdocs\nread-only quarantine"] -.->|operator-controlled evidence| web
-    legacy -.->|same read-only mount| worker
-    web --> ingress["dokploy-network\nexternal ingress only"]
-    web --> internal["internal network"]
-    worker --> internal
-    redis --> internal
-    worker --> dataops["DataOps v3\nbackup · import · restore"]
-    dataops --> rustfs["RustFS\nimmutable recovery points"]
-    dataops --> bridge["Internal signed-activation bridge"]
+    web --> data
+    worker --> data
+    web --> control
+    worker --> control
+    web --> dataops
+    worker --> dataops
+    dataops --> rustfs
+    dataops --> bridge
     bridge --> control
+
+    legacy["Legacy authoritative production<br/>www.ai-sahakar.net<br/>original service and volume unchanged"]
+    legacy_volume[("prod_flowdocs<br/>read-only evidence mount")]
+    legacy --> legacy_volume
+    legacy_volume -. "dated/operator-controlled capture only" .-> dataops
+
+    future["Future 2026 production<br/>not deployed"]
+    app -. "separate approval and cutover required" .-> future

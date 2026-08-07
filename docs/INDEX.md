@@ -32,12 +32,21 @@ Supersedes: None
 - [dataops/V3_ARCHITECTURE.md](dataops/V3_ARCHITECTURE.md) — canonical
   operator-facing backup/import/restore architecture and the explicit internal
   compatibility boundary.
+- [dataops/ROLLOUT.md](dataops/ROLLOUT.md) — reusable DataOps v3 rollout and
+  recovery-test procedure without environment-specific profiles or moving
+  deployment evidence.
 - [dataops/V3_IMPACT_ANALYSIS.md](dataops/V3_IMPACT_ANALYSIS.md) — completed
   cutover impact plus the remaining VaultOps dependency-removal backlog.
 
 This index routes readers by task. The metadata at the top of each maintained
 document identifies its status, audience, owner, verification date, canonical
 source, and supersession relationship.
+
+Deployment names are explicit throughout current documentation:
+`www.ai-sahakar.net` is legacy authoritative production,
+`2026.ai-sahakar.net` is the active 2026 stage/rehearsal host, and the future
+2026 production project is not deployed. Exact live evidence stays in
+[HANDOFF.md](HANDOFF.md).
 
 The complete environment variable tables and environment-specific examples are
 maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
@@ -61,8 +70,10 @@ maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
 - [`environment`](../flowdocs/core/environment.py) — APP_ENV, PRODUCTION_SOURCE_ID, AUTHORITATIVE_DATASET_ID, DATASET_ID, BACKUP_ROLE, EXTERNAL_SIDE_EFFECTS_MODE, DATA_MODE
 - [`side_effects`](../flowdocs/core/side_effects.py) — external side-effect safety gating
 - [`ai_guard`](../flowdocs/core/ai_guard.py) — AI operation authorization
-- [`activate`](../flowdocs/core/activate.py) — activation entry point
-- [`activation_journal`](../flowdocs/core/activation_journal.py) — activation audit trail
+- [`activate`](../flowdocs/core/activate.py) — legacy core activation
+  compatibility primitive; not the DataOps v3 operator entry point
+- [`activation_journal`](../flowdocs/core/activation_journal.py) — legacy core
+  activation crash-recovery journal retained for compatibility
 - [`global_writer`](../flowdocs/core/global_writer.py) — global writer fencing
 - [`registration`](../flowdocs/core/registration.py) — dataset registration
 - [`backup_policy`](../flowdocs/core/backup_policy.py) — backup policy enforcement
@@ -177,11 +188,12 @@ Historical documents remain for context and are not deployment instructions:
 - [`ui-shell-and-evidence.mmd`](diagrams/ui-shell-and-evidence.mmd) / [`SVG`](diagrams/ui-shell-and-evidence.svg) — Classic, Workbench, public-information shell, and question-language backend boundaries
 - [`ui-change-control.mmd`](diagrams/ui-change-control.mmd) / [`SVG`](diagrams/ui-change-control.svg) — impact analysis, verification, PR, release, stage-canary, and audit flow
 - [`admin-operator-workflow.mmd`](diagrams/admin-operator-workflow.mmd) — admin document-to-search readiness flow
+- [`ocr-index-lifecycle.mmd`](diagrams/ocr-index-lifecycle.mmd) — core-owned native extraction, bounded local OCR, embedding, index, candidate, and activation lifecycle
 - [`search-answer-hot-path.mmd`](diagrams/search-answer-hot-path.mmd) / [`SVG`](diagrams/search-answer-hot-path.svg) — signed-runtime search corpus, provider/result caches, authorization, and isolated frontend rendering paths
 
 ## Document Lifecycle
 
-Current lifecycle diagram:
+Representative lifecycle diagram:
 
 - [ocr-index-lifecycle.mmd](diagrams/ocr-index-lifecycle.mmd)
 
@@ -202,8 +214,10 @@ automation claims. RustFS is current as DataOps v3 recovery storage. DataOps
 publishes complete immutable recovery points and prepares isolated candidates;
 signed activation remains separate. Automatic cross-environment sync is not a
 normal operator contract. The `vaultops` package is still installed for
-selected maintenance and activation/runtime compatibility, but its former
-workbench and profile choreography are not supported operator surfaces.
+selected authenticated maintenance endpoints, durable control records, and
+activation/runtime compatibility. Legacy profile/sync/mutation APIs are
+default-off removal debt; the former workbench and profile choreography are not
+supported operator surfaces, and the package has not been fully removed.
 
 When a document is superseded, retain the old file only when its historical
 context is useful, change its status to `Historical`, and add a prominent link

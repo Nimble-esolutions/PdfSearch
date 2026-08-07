@@ -1,11 +1,21 @@
 flowchart TD
-    source["Reviewed merge to dev"] --> ci["Contract, package, browser, recovery, and Compose gates"]
-    ci --> digest["Immutable application image digest"]
-    infra["Separately resolved Redis / RustFS infrastructure images"] --> dokploy
-    digest --> dokploy["Dokploy Compose\nweb + maintenance use same app image"]
-    dokploy --> pull["pull_policy always"]
-    pull --> health["worker heartbeat + /livez + /readyz"]
-    health --> data["signed generation, manifest, PDF/index counts, representative search"]
-    data --> stage["Stage canary and evidence"]
-    stage --> promote["Separately approved production promotion"]
-    tag["latest or dev tag"] -. "not release identity" .-> dokploy
+    source["Reviewed source change"] --> pr["Pull request to dev"]
+    pr --> checks["Path-appropriate contracts<br/>source · docs · Compose · browser · recovery"]
+    checks --> candidate["Build and certify immutable<br/>application image digest"]
+    candidate --> aliases["dev / latest compatibility aliases<br/>never release identity"]
+
+    candidate --> stage_pull["Active stage deploy<br/>pull_policy: always"]
+    aliases -. "stage may track approved channel" .-> stage_pull
+    stage_pull --> parity["Web + maintenance resolve same image<br/>lifecycle-critical environment parity"]
+    parity --> preserve["Retain separate data/control volumes<br/>and previous signed runtime pair"]
+    preserve --> stage_gate["Worker heartbeat · /livez · exact /readyz<br/>representative multilingual search"]
+    stage_gate --> evidence["Record Git SHA, running digest, Compose hash<br/>volume IDs, generation/manifest, rollback"]
+
+    legacy["Legacy www production<br/>authoritative and unchanged"]
+    future["Future 2026 production project<br/>not deployed"]
+    evidence --> approval{"Separate production approval?"}
+    approval -->|No| keep["Keep stage isolated<br/>no DNS or production traffic change"]
+    approval -->|Future implementation certified| future
+    future --> prod_digest["Deploy approved immutable digest<br/>with production data/recovery evidence"]
+    prod_digest --> cutover["Independent DNS/TLS/traffic cutover<br/>with rollback authority"]
+    legacy -. "continues serving until approved cutover" .-> cutover

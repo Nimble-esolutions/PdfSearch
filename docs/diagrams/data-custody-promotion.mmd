@@ -1,18 +1,32 @@
 flowchart TD
-    local["Owned dataset"] --> plan["Deterministic DataOps v3 plan"]
-    foreign["Foreign dataset"] --> plan
-    plan --> route{"Dataset ownership"}
-    route -- "same" --> restore["Restore selected immutable recovery point"]
-    route -- "foreign" --> rebind["Import/rebind with parent lineage"]
-    restore --> quarantine["Unique restore-quarantine candidate"]
-    rebind --> quarantine
-    quarantine --> verify["Object digests · SQLite · migrations · media · indexes"]
-    verify --> search["Representative search and readiness evidence"]
-    search --> decision{"Signed staging activation approved?"}
-    decision -- "no" --> retain["Retain candidate and evidence"]
-    decision -- "yes" --> intent["Signed exact generation + manifest intent"]
-    intent --> pointer["Compare-and-swap runtime pointer"]
-    pointer --> ready{"Exact readiness passes?"}
-    ready -- "yes" --> receipt["Signed result; previous pointer retained"]
-    ready -- "no" --> rollback["Automatic previous-pointer rollback"]
-    direct["Direct copy, silent merge, or active target"] -. "prohibited" .-> pointer
+    intent{"DataOps v3 operator intent"}
+    intent -->|Back up| snapshot["Consistent application snapshot"]
+    intent -->|Restore| select["Select exact recovery point"]
+    intent -->|Import| inspect["Inspect readable legacy / v2 / v3 object-store source"]
+    intent -->|Test recovery| test_select["Select exact owned recovery point"]
+
+    snapshot --> complete["Complete signed manifest<br/>incremental content transfer"]
+    complete --> backup_point[("Owned backup recovery point")]
+
+    inspect --> verify_source["Verify signature/layout, objects, lineage, ownership"]
+    verify_source --> rebind["Copy missing blobs and rebind foreign lineage"]
+    rebind --> imported_point[("Target-owned imported recovery point")]
+
+    select --> ownership{"Recovery-point dataset owner"}
+    ownership -->|Local| quarantine["Unique restore-quarantine candidate"]
+    ownership -->|Foreign| rebind
+    imported_point --> quarantine
+    backup_point -. "available for a later exact selection" .-> select
+    test_select --> disposable["Disposable data + control roots<br/>activation forbidden"]
+
+    quarantine --> gates["Digest · SQLite · migration · media<br/>embedding/index · multilingual search gates"]
+    gates --> approval{"Explicit stage activation approved?"}
+    approval -->|No| receipt["Candidate/rehearsal receipt<br/>active pointer unchanged"]
+    approval -->|Yes| signed["Signed intent binds plan + image<br/>generation + manifest"]
+    signed --> cas["Compare-and-swap active pointer<br/>preserve previous pointer"]
+    cas --> ready{"Exact /readyz evidence passes?"}
+    ready -->|Yes| result["Signed activation result"]
+    ready -->|No| rollback["Restore previous signed pointer<br/>signed rollback result"]
+
+    prohibited["Direct copy · silent merge<br/>active-volume restore"] -. "prohibited" .-> quarantine
+    mounted["Read-only mounted legacy volume"] -. "capture first with reviewed migration tool" .-> inspect

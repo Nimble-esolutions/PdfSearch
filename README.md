@@ -1,7 +1,7 @@
 Status: Active
 Audience: Developer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-06
+Last verified: 2026-08-07
 Canonical source: README.md
 Supersedes: None
 
@@ -16,11 +16,12 @@ supports English, Marathi, and Hindi document processing: native PDF extraction
 is preferred, with bounded local Tesseract OCR for scanned pages, followed by
 the existing embedding and retrieval workflow.
 
-> **Current operational state:** stage serves the signed 242-document runtime,
-> all readiness checks pass, real English/Marathi search and manual
-> backup/recovery rehearsal are proven, and the legacy production service is
-> unchanged. Read the living [project handoff](docs/HANDOFF.md) before operating
-> recovery, deployment, or persistent-data workflows.
+> **Current operational state:** `https://2026.ai-sahakar.net` is the active
+> non-production stage/rehearsal host and serves a signed runtime. Legacy
+> `https://www.ai-sahakar.net` remains the authoritative production service and
+> is unchanged. The future 2026 production deployment has not been created or
+> cut over. Read the living [project handoff](docs/HANDOFF.md) for exact current
+> generations, counts, image digests, and recovery evidence.
 
 ## Start Here
 
@@ -126,10 +127,14 @@ The deployed system has four cooperating boundaries:
    embedding provider under the configured side-effect policy. Original PDFs
    never leave custody because OCR is local.
 
-Visual sources:
-[legacy-to-stage-2026.mmd](docs/diagrams/legacy-to-stage-2026.mmd),
-[stage-recovery-state.mmd](docs/diagrams/stage-recovery-state.mmd), and
-[ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd). The current
+Current visual sources:
+[runtime-topology.mmd](docs/diagrams/runtime-topology.mmd),
+[data-custody-promotion.mmd](docs/diagrams/data-custody-promotion.mmd),
+[deployment-flow.mmd](docs/diagrams/deployment-flow.mmd), and
+[ocr-index-lifecycle.mmd](docs/diagrams/ocr-index-lifecycle.mmd). Dated
+legacy-to-stage evidence is intentionally separate in
+[legacy-to-stage-2026.mmd](docs/diagrams/legacy-to-stage-2026.mmd) and
+[stage-recovery-state.mmd](docs/diagrams/stage-recovery-state.mmd). The current
 search request/cache boundary is shown in
 [search-answer-hot-path.mmd](docs/diagrams/search-answer-hot-path.mmd) and its
 [rendered SVG](docs/diagrams/search-answer-hot-path.svg). Public UI and
@@ -277,14 +282,15 @@ See [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md) for the ful
 
 ## Production Contract
 
-Canonical production is `https://ai-sahakar.net` with
-`https://www.ai-sahakar.net` as the canonical alias. It is deployed through
-Dokploy as the Compose application defined by [`docker-compose.yml`](docker-compose.yml).
-The current non-production rehearsal host is
-https://2026.ai-sahakar.net. It serves a signed 242-document runtime and remains
-outside production traffic. Runtime/search readiness and the separate backup
-rehearsal are reported independently: a disposable stage backup receipt is
-valuable recovery evidence, but it is not an availability prerequisite.
+Legacy `https://www.ai-sahakar.net` is the current authoritative production
+service. `https://2026.ai-sahakar.net` is the active non-production
+stage/rehearsal deployment of this repository. The future 2026 production
+Compose application and its intended `ai-sahakar.net` / `www.ai-sahakar.net`
+cutover do not exist yet; [`docker-compose.yml`](docker-compose.yml) is their
+deployment template, not proof of a completed deployment. Runtime/search
+readiness and backup rehearsal evidence are independent: a disposable stage
+backup receipt is useful recovery proof, but is not an availability
+prerequisite unless policy explicitly requires it.
 
 - Container port: `8000`
 - Liveness: `/livez` proves process liveness
@@ -316,44 +322,33 @@ enabling autodeploy or pressing Deploy.
 
 ## Current Data-Custody Boundary
 
-As of 2026-08-03, the legacy source boundary is unchanged: prod_flowdocs
-contains 242 PDFs, 46 folders, 7 users, and 29 migrations. The verified
-RustFS v2 source generation is legacy-20260802T085639Z-86288855; the stage
-clone is clone-legacy-20260802T085639Z-86288855 with 416 objects totaling
-1,093,501,777 bytes. The stage-owned import is now bound to a
-signature-verified runtime pointer and serves 242/242 indexed documents.
+The legacy production volume remains read-only evidence. DataOps v3 is the
+only supported operator contract for publishing complete recovery points,
+importing foreign or legacy sources, restoring to quarantine, testing recovery,
+and requesting stage activation. It uses one environment-owned recovery
+connection and decides same-dataset restore versus foreign import/rebind from
+verified provenance. Activation remains a separate signed compare-and-swap
+operation; failed readiness restores the previous signed pointer.
 
-Stage is reachable at https://2026.ai-sahakar.net; healthy containers and a
-root response do not replace `/readyz`. The deployed readiness code projects
-the valid v3 pointer, exact generation, manifest, and indexing ratio. Manual
-stage backup and isolated rehearsal have also succeeded. Use
-[docs/HANDOFF.md](docs/HANDOFF.md) for current evidence.
-
-The old July reconciliation numbers below are retained as historical baseline
-evidence, not as the current 2026 migration inventory. See
-docs/HANDOFF.md and docs/LEGACY_VS_CURRENT_STATE.md.
-
-## Historical reconciliation baseline
-
-Post-reconciliation (2026-07-22): 253 PDF rows, 242 recovered PDF files, 53 folders,
-8 users, and 51 rebuilt FAISS indexes with 8,753 vectors at dimension 1536. Eleven
-target-only PDF rows remain preserved but unrecovered.
-
-The 2026-07-26 audit also verified the original Vault/RustFS primitives against
-disposable MinIO and exposed the orchestration gaps that motivated DataOps v3.
-Those v2 findings remain in
-[`RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md) as historical
-evidence, not current operating instructions. Current instances use one owned
-recovery connection and intent-driven DataOps v3 backup, import, restore, and
-test-recovery plans; activation remains a separate signed atomic operation.
+Stage is reachable at `https://2026.ai-sahakar.net`; healthy containers and a
+root response do not replace `/readyz`. Exact counts, lineage identifiers,
+manifest digests, backup receipts, and the running image are intentionally kept
+out of this active architecture summary. Use [docs/HANDOFF.md](docs/HANDOFF.md)
+for living evidence and the dated status/incident documents for historical
+observations. The original Vault/RustFS rehearsal remains historical evidence
+in [`RUSTFS_RECOVERY_VAULT.md`](docs/RUSTFS_RECOVERY_VAULT.md), not current
+operator instructions.
 
 ## Verification Gates
 
 Every documentation or release change must pass the applicable link/path scan,
-Mermaid validation, `docker compose -f docker-compose.yml config`, `/livez`,
-`/readyz`, PDF count, FAISS count, and representative search gates. Record the
-source SHA, exact image digests, Compose evidence, data snapshot/checksum
-references, and explicit promotion decision.
+Mermaid validation, and change-specific checks. Representative deployment
+gates include `docker compose -f docker-compose.yml config`, `/livez`,
+`/readyz`, database/media/index reconciliation, and multilingual search. This
+is not an exhaustive test inventory; use the exact CI workflow and running
+image for the complete gate set. Record the source SHA, exact image digests,
+Compose evidence, data snapshot/checksum references, and explicit promotion
+decision.
 
 ## Security and Recovery Warnings
 
