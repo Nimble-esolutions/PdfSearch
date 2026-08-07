@@ -44,7 +44,8 @@ can change after that time, so repeat the read-only checks in
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
 | Repository integration baseline | `dev` contains merge `51f0dd7` (PR #191) | PRs #185–#191 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, and the repository-truth audit are integrated |
-| Search latency work | PR #192 remains open for review and is not deployed | Local gates pass (655 broad Django tests, 26 focused mutation/cache/memory/FAISS/log-redaction tests, 116 source-backed Classic/Workbench browser tests across four viewport projects, and the 81-test PR contract). Pre-change stage baseline was 23,738 ms uncached and 12,910 ms on an immediate repeat; the PR moves exact caching before retrieval, binds a bounded worker corpus to the signed mutation epoch, reauthorizes references before and after model work (including conservative fallback), makes result/embedding/answer cache failures non-fatal (the public rate limiter remains fail-closed), caches provider-scoped query embeddings, adds phase telemetry, removes Workbench reveal delay, validates response-kind/language/reference invariants before either theme mutates the DOM, redacts provider exception details, and cancels stale in-flight answers when a new conversation starts |
+| Search latency work | PR #192 remains open for review and is not deployed | Local gates pass (655 broad Django tests, 26 focused mutation/cache/memory/FAISS/log-redaction tests, 116 source-backed Classic/Workbench browser tests across four viewport projects, and the 81-test PR contract). Pre-change stage baseline was 23,738 ms uncached and 12,910 ms on an immediate repeat; the PR moves exact caching before retrieval, binds a bounded worker corpus to the signed mutation epoch, reauthorizes references before and after model work (including conservative fallback), makes result/embedding/answer cache failures non-fatal (the public rate limiter remains fail-closed), caches provider-scoped query embeddings, adds phase telemetry, removes Workbench reveal delay, validates response-kind/language/reference invariants before either theme mutates the DOM, redacts provider exception details, cancels stale in-flight answers when a new conversation starts, and records measured follow-up plans without adding runtime services |
+| Product analytics decision | No analytics transport is implemented or deployed | The reviewed recommendation ranks an independent Umami + PostgreSQL stack first, Tianji second only for intentional monitoring consolidation, and PostHog EU Cloud as an optional privacy-approved benchmark. Parseable is operational observability and DataLens is BI, not product-event collection. Plan 032 remains blocked on privacy, retention, and accountable ownership approval. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
@@ -153,7 +154,7 @@ and canaried. Remaining work is:
 
 1. **Search latency PR:** PR #192 is open into `dev`; finish the combined
    backend/browser/documentation gates, push the reviewed commits, and keep it
-   unmerged until required checks and human review pass. Plans 025–031 record
+   unmerged until required checks and human review pass. Plans 025–033 record
    the measured follow-up sequence without expanding this PR into a rewrite.
 2. **Search latency stage canary:** after the merged image reaches stage, prove
    the unchanged signed generation and both themes; compare uncached/repeat
@@ -178,6 +179,10 @@ and canaried. Remaining work is:
 8. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
+9. **Optional product analytics:** if the privacy owner authorizes a stage
+   pilot, execute Plan 032 with an independent pinned Umami/PostgreSQL stack,
+   manual allowlisted events, leakage tests, and fail-open behavior. Do not add
+   analytics to application readiness or production until the two-week review.
 
 ## Known traps that must not recur
 

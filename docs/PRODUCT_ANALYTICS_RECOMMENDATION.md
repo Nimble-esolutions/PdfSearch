@@ -11,14 +11,35 @@ Supersedes: None
 
 Product analytics must remain separate from operational search telemetry. Keep
 search latency, provider timing, corpus state, cache behavior, and readiness in
-content-free structured logs/OpenTelemetry metrics. If product analytics is
-approved, pilot **PostHog EU Cloud Free on stage only** for two weeks using
-manual allowlisted events. Do not self-host PostHog on the application server.
+content-free structured logs/OpenTelemetry metrics.
 
-The pilot is optional and must not block search, document processing, backup,
-restore, activation, or readiness. The no-external-cloud fallback is Umami with
-an explicit retention/deletion policy; it adds a PostgreSQL service and should
-not be deployed merely to avoid making the privacy decision.
+For an operator-custodied product-analytics pilot, choose **Umami self-hosted
+in an independent stack**. Its application-plus-PostgreSQL footprint is the
+smallest option that still covers the bounded page, journey, funnel, and custom
+events required here. Tianji is the runner-up when its uptime/status/survey
+features would replace other tools; those overlapping features are unnecessary
+for the current pilot. PostHog EU Cloud Free remains a valid cloud benchmark,
+not the default recommendation. Do not self-host PostHog for this application.
+
+The pilot remains optional and blocked on the privacy, retention, and ownership
+decision. It must not block search, document processing, backup, restore,
+activation, or readiness. This recommendation selects a technical fit; it does
+not authorize deployment or production capture.
+
+## Category correction
+
+The compared products do not all solve the same problem:
+
+| Category | Candidates | Correct use here |
+| --- | --- | --- |
+| Product/web analytics | Umami, Tianji, Aptabase, Plausible CE, OpenPanel, Rybbit, Matomo, PostHog | Measure allowlisted, content-free user outcomes |
+| Observability | Parseable, OpenTelemetry-compatible backends | Search latency, errors, traces, logs, and infrastructure health |
+| Business intelligence | DataLens | Build dashboards over an existing database; it does not collect browser events |
+
+Parseable and DataLens therefore cannot replace the selected product-analytics
+collector. They may be considered later as independent operational telemetry or
+BI projects, but combining them into this pilot would add services without
+closing a product-measurement gap.
 
 ## Recommended self-hosted topology
 
@@ -38,24 +59,68 @@ PdfSearch browser
 
 PdfSearch must not join the analytics Docker network, mount its volumes, query
 its database, or make analytics a backend/readiness dependency. The shared
-vendor-neutral adapter changes transport only (`disabled`, `umami`, or approved
-`posthog_eu`); event names and property schemas remain identical. Analytics
-failure stays invisible and fail-open.
+vendor-neutral adapter changes transport only (`disabled`, `umami`, or an
+explicitly approved alternative); event names and property schemas remain
+identical. Analytics failure stays invisible and fail-open.
 
-OpenPanel is the nearest self-hosted PostHog-style alternative, but its basic
-stack requires PostgreSQL, Redis, ClickHouse, API/dashboard services, and
-workers. Adopt it only if measured product needs require cohorts, experiments,
-or richer funnels that Umami cannot supply. See the official
-[OpenPanel self-hosting requirements](https://openpanel.dev/docs/self-hosting/environment-variables).
+## Self-hosted comparison
+
+The operational footprint below is based on each project's current official
+self-hosting documentation or Compose example. "Low" still means an additional
+public service, database lifecycle, security boundary, backups, upgrades,
+monitoring, and incident ownership.
+
+| Candidate | Primary capability | Current self-hosted footprint | Fit for the allowlisted journeys | Main trade-off | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| **Umami** | Privacy-first web and product analytics, custom events, journeys, funnels | Application + PostgreSQL | High | Less experimentation/user-level depth than PostHog-class systems | **Recommended pilot** |
+| **Tianji** | Website analytics plus uptime, server status, telemetry, surveys, and feeds | Application + PostgreSQL | High | Overlaps existing operational monitoring and broadens the failure/security surface | Runner-up only if its extra modules replace existing tools |
+| **Aptabase** | Anonymous app-event and session analytics | Application + PostgreSQL + ClickHouse | Medium-high | ClickHouse operations; deliberately cannot provide user-level MAU/retention because it has no stable identity | Event-first alternative if anonymous session timelines become essential |
+| **Plausible CE** | Privacy-focused public web traffic, goals, and custom events | Application + PostgreSQL + ClickHouse | Medium | Heavier data layer and more website/traffic-oriented than operator workflow analytics | Good public-site analytics, not first choice here |
+| **OpenPanel** | PostHog-style product analytics, funnels, identity, replay, revenue | API/dashboard/workers + PostgreSQL + ClickHouse + Redis | High feature fit, low scale fit | Most relevant features exceed the approved no-identity/no-replay contract | Defer until a measured need exceeds Umami |
+| **Rybbit** | Web/product analytics, funnels, goals, performance, replay | Client/backend + PostgreSQL + ClickHouse; optional proxy | Medium-high | Heavier stack; replay and self-telemetry require explicit disable/retention review | Promising richer alternative, not the low-operations choice |
+| **Matomo On-Premise** | Mature broad web analytics and plugin ecosystem | PHP/web tier + database + scheduled archiving | Medium | Largest administration and plugin/security lifecycle for the small event set | Reject for this scale |
+| **PostHog self-hosted** | Full product analytics platform | Multi-service stack including ClickHouse and Kafka-class components | High feature fit, very low operations fit | Officially unsupported, continuously shipped, and currently documents a 4-vCPU/16-GB baseline | Reject |
+| **Parseable** | Logs, metrics, traces, APM, alerting | Single binary for small use; object storage/distributed roles at scale | Not a product-analytics replacement | Event schemas and product funnels would need to be built and governed manually | Evaluate separately for operational telemetry only |
+| **DataLens** | BI datasets, SQL connectors, and dashboards | Multi-service UI/backend/auth/metadata stack over PostgreSQL/ClickHouse sources | Not an event collector | Requires a separate ingestion/data model and is much larger than the desired dashboard | Reject for collection; optional future BI layer only |
+
+Official evidence: [Umami installation](https://docs.umami.is/docs/install),
+[Tianji Compose and scope](https://github.com/msgbyte/tianji),
+[Aptabase self-hosting](https://github.com/aptabase/self-hosting),
+[Aptabase privacy limits](https://aptabase.com/),
+[Plausible CE](https://github.com/plausible/community-edition),
+[OpenPanel self-hosting](https://openpanel.dev/docs/self-hosting/self-hosting),
+[Rybbit self-hosting](https://rybbit.com/docs/self-hosting),
+[Matomo On-Premise](https://matomo.org/guide/installation-maintenance/matomo-on-premise-self-hosted/),
+[PostHog self-hosting](https://posthog.com/docs/self-host),
+[Parseable architecture](https://www.parseable.com/docs/architecture), and
+[DataLens architecture](https://github.com/datalens-tech/datalens).
+
+## Decision logic
+
+```text
+Need product journey evidence?
+  no  -> keep analytics disabled
+  yes -> must all event data remain operator-custodied?
+           yes -> need only bounded anonymous journeys/funnels?
+                    yes -> Umami
+                    no  -> prove the missing capability with a two-week gap log,
+                           then compare Aptabase/OpenPanel/Rybbit
+           no  -> PostHog EU Cloud may be piloted after privacy approval
+
+Need logs, traces, or latency evidence? -> OpenTelemetry backend, possibly Parseable
+Need arbitrary SQL dashboards?         -> DataLens only after a governed data source exists
+```
 
 ## Options
 
 | Option | Fit | Operational/privacy cost | Recommendation |
 | --- | --- | --- | --- |
-| PostHog EU Cloud Free | Funnels and bounded product events across Classic, Workbench, intake, and maintenance | Event data leaves the server; free plan currently has one-year retention and quota limits | Recommended stage pilot after privacy approval |
+| Umami self-hosted | Bounded anonymous journeys and custom events across Classic, Workbench, intake, and maintenance | Independent application/PostgreSQL operations and a new retention/backup boundary | Recommended stage pilot after privacy approval |
+| PostHog EU Cloud Free | Richer funnels and bounded product events without self-hosting | Event data leaves the server; provider retention and quota limits require approval | Optional cloud benchmark |
 | PostHog self-hosted | Same product surface under operator custody | PostHog documents self-hosting as unsupported; the stack is heavy relative to this application | Reject |
-| Umami self-hosted | Lightweight aggregate/custom-event analytics without cookies or cross-site tracking | Adds PostgreSQL, upgrades, backup, restore, and explicit retention work | Best no-cloud fallback |
-| Plausible | Strong aggregate public-site analytics | Cloud is not permanently free and admin workflow funnels are not its main strength | Secondary public-site option |
+| Tianji self-hosted | Similar low-footprint website/custom telemetry plus monitoring and survey modules | Adds overlapping features and responsibilities beyond the pilot | Runner-up when consolidation is intentional |
+| Aptabase self-hosted | Anonymous event-first app analytics | Adds PostgreSQL and ClickHouse; no stable-user analytics by design | Conditional event-timeline alternative |
+| Plausible CE | Strong aggregate public-site analytics | Adds PostgreSQL and ClickHouse; admin workflow funnels are not its main strength | Secondary public-site option |
 | OpenTelemetry plus existing metrics | Vendor-neutral operational latency and failure evidence | Needs a metrics/traces backend, but no product identity model | Adopt for search operations, not product analytics |
 
 Primary references: [PostHog pricing](https://posthog.com/pricing),
@@ -71,7 +136,17 @@ and [OpenTelemetry metrics](https://opentelemetry.io/docs/concepts/signals/metri
 
 Use one internal analytics adapter that rejects unknown events and properties;
 application code must not call a vendor SDK directly. The adapter must fail
-open and load after the usable UI. The default client posture is:
+open and load after the usable UI. Across every transport: manual events only,
+no automatic pageviews/performance/exceptions, no replay, no identity, no raw
+URL/query string, respect Do Not Track, and run a final payload rejection hook.
+
+For Umami, configure the deferred tracker with `data-auto-track="false"`,
+`data-do-not-track="true"`, the exact allowed domain, and `data-before-send`;
+emit events only through the validated adapter. See the official
+[tracker configuration](https://docs.umami.is/docs/tracker-configuration) and
+[manual event API](https://docs.umami.is/docs/track-events).
+
+If PostHog EU Cloud is explicitly selected instead, map the same contract to:
 
 ```text
 autocapture=false
@@ -134,9 +209,9 @@ disable low-value sampled events at 90%; never drop authored failure events.
 
 Before stage capture:
 
-1. Privacy owner approves cloud region, notice/consent posture, and one-year
-   provider retention or selects the independent Umami no-cloud stack with an
-   explicit database backup and deletion schedule.
+1. Privacy owner approves notice/consent posture and the independent Umami
+   retention, backup, restore, and deletion schedule. If PostHog EU Cloud is
+   selected instead, approve its region and provider retention explicitly.
 2. Unit tests reject every forbidden property and unknown event.
 3. Browser tests inspect emitted payloads for both themes and admin journeys;
    sentinel questions, answers, filenames, URLs, and identities must be absent.
