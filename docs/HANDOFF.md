@@ -44,8 +44,8 @@ can change after that time, so repeat the read-only checks in
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
 | Repository integration baseline | `dev` contains merge `20a7653` (PR #192) | PRs #185–#192 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, search-latency hardening, Umami integration, and the repository-truth audit are integrated |
-| Classic focus-ring fix | PR #193 is open into `dev` and is not deployed | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
-| Product analytics decision | PR #192 contains a disabled-by-default, stage-only Umami browser adapter; no analytics service is deployed by this PR | The supplied `analytics.ai-sahakar.net` endpoint and public website ID are restricted to `2026.ai-sahakar.net`. A superadmin kill switch uses `SiteSetting`, not a new environment variable. Manual allowlisted events, DNT/GPC, hostname rejection, question-language bucketing, final payload rejection, and adapter-level fail-open behavior are browser-tested across four viewport projects. The operator will deploy Umami/PostgreSQL separately and must approve its pseudonymous session processing and prove secure first boot, pinned image/tracker hash, shared-host limits, scheduled 30-day purge, deletion evidence, backup/restore, enabled-theme outage behavior, and rollback before collection. Production remains disabled. |
+| Classic focus-ring fix | PR #193 is merged into `dev`; not yet deployed to stage | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
+| Product analytics decision | PR #192 merged a disabled-by-default, stage-only Umami browser adapter; the independent service remains operator-managed | The supplied `analytics.ai-sahakar.net` endpoint and public website ID are restricted to `2026.ai-sahakar.net`. A superadmin kill switch uses `SiteSetting`, not a new environment variable. Manual allowlisted events, DNT/GPC, hostname rejection, question-language bucketing, final payload rejection, and adapter-level fail-open behavior are browser-tested. Production remains disabled. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
@@ -139,6 +139,7 @@ and indexing remained `1.0`.
 | #189 | Keeps the Classic composer reachable after long answers, safely formats structured responses, validates typed payloads and PDF references, and gates continuity across the viewport matrix |
 | #190 | Updated the living handoff after the Classic continuity merge |
 | #193 | Removes the duplicate Classic composer focus outline and adds a browser regression gate; awaiting review and required checks |
+| #194 | Redesigns Settings & Configuration around truthful runtime controls, validation, confirmations, and read-only deployment posture; awaiting review |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -153,33 +154,36 @@ There is no data-readiness or search-language blocker. Search latency remains a
 measured release task until the current branch is reviewed, merged, deployed,
 and canaried. Remaining work is:
 
-1. **Classic focus-ring PR:** PR #193 is open into `dev`; finish the required
-   checks and human review before merge, then canary the Marathi input focus
-   state after the merged image reaches stage.
+1. **Classic focus-ring rollout:** PR #193 is merged into `dev`; after the
+   merged image reaches stage, canary the Marathi input focus state.
 2. **Search latency stage canary:** after the merged image reaches stage, prove
    the unchanged signed generation and both themes; compare uncached/repeat
    duration, phase telemetry, corpus bytes/vectors, and web-worker RSS. Roll
    back the image if authorization, continuity, latency, or memory headroom
    regresses.
-3. **Current integrated rollout:** certify an image from current `dev` containing
+3. **Settings control-center PR:** PR #194 is open; finish the separate Settings & Configuration
+   redesign branch. Verify grouped runtime controls, server-side validation,
+   high-impact confirmation, read-only deployment posture, and live runtime
+   override behavior before opening its PR.
+4. **Current integrated rollout:** certify an image from current `dev` containing
    merged PRs #187–#190, deploy stage web and maintenance without touching volumes, and
    canary all five public-information routes in both themes, both
    mismatched-locale answer directions, and Classic long-answer continuity.
-4. **Future production project:** create and validate the dedicated 2026
+5. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
-5. **Production rehearsal:** before traffic changes, select an immutable image,
+6. **Production rehearsal:** before traffic changes, select an immutable image,
    validate rendered Compose and key-only environment posture, restore into
    isolated production-candidate volumes, run search/PDF/auth smoke checks, and
    record rollback image and generation.
-6. **Production cutover:** remains out of scope until separately authorized.
+7. **Production cutover:** remains out of scope until separately authorized.
    Do not change legacy service routing or `prod_flowdocs` while preparing it.
-7. **Stage recovery retest:** run another manual backup and disposable restore
+8. **Stage recovery retest:** run another manual backup and disposable restore
    only when recovery/data contracts change or when explicitly requested.
-8. **Local development:** start the native development stack and rerun focused
+9. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
-9. **Stage product analytics:** deploy the independent pinned Umami/PostgreSQL
+10. **Stage product analytics:** deploy the independent pinned Umami/PostgreSQL
    stack manually, verify `https://analytics.ai-sahakar.net/script.js`, TLS,
    dashboard authentication, 30-day maximum retention, deletion, and database
    restore, then enable **Stage Umami collection** from superadmin Settings.
@@ -236,6 +240,11 @@ and canaried. Remaining work is:
   concise completion status to assistive technology.
 - Do not deploy a migration to an activated SQLite runtime unless the safe
   runtime migration classifier accepts it as recovery-backed and additive.
+- Do not expose deployment-only environment identity, data lineage, backup
+  posture, or credentials as editable database settings. If a UI control cannot
+  affect the running request path safely, it must be read-only and explain the
+  reviewed deployment path. High-impact runtime changes require explicit
+  acknowledgement and server-side validation.
 - Do not resurrect VaultOps as a parallel product surface. DataOps v3 replaced
   its operator workbench to reduce operator and code complexity. Do not claim
   that the package was deleted: its internal compatibility API, control schema,

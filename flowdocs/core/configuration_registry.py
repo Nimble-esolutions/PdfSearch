@@ -15,20 +15,57 @@ class ConfigurationDefinition:
     secret: bool = False
 
 
+@dataclass(frozen=True)
+class RuntimeSettingDefinition:
+    key: str
+    label: str
+    group: str
+    description: str
+    input_type: str = "text"
+    choices: tuple[tuple[str, str], ...] = ()
+    minimum: int | None = None
+    maximum: int | None = None
+    high_impact: bool = False
+
+
+RUNTIME_SETTING_DEFINITIONS = (
+    RuntimeSettingDefinition(
+        "PUBLIC_SEARCH_ENABLED", "Public search", "Public search", "Allow visitors to search published documents.", "select",
+        (("1", "Enabled"), ("0", "Disabled")), high_impact=True,
+    ),
+    RuntimeSettingDefinition(
+        "DISPLAY_SERVICE_FOOTER", "Service footer", "Public search", "Show the service attribution and policy links on public search.", "select",
+        (("1", "Visible"), ("0", "Hidden")),
+    ),
+    RuntimeSettingDefinition(
+        "PUBLIC_SEARCH_MAX_WORDS", "Maximum question words", "Search limits", "Reject questions above this word count before expensive search work begins.", "number",
+        minimum=1, maximum=100,
+    ),
+    RuntimeSettingDefinition(
+        "PUBLIC_SEARCH_RATE_LIMIT", "Requests per window", "Search limits", "Maximum public search requests allowed per visitor in the configured window.", "number",
+        minimum=1, maximum=600,
+    ),
+    RuntimeSettingDefinition(
+        "PUBLIC_SEARCH_RATE_WINDOW", "Rate-limit window (seconds)", "Search limits", "Length of the rolling public-search rate-limit window.", "number",
+        minimum=10, maximum=86_400,
+    ),
+)
+
+
 CONFIGURATION_DEFINITIONS = (
     ConfigurationDefinition("PUBLIC_SEARCH_ENABLED", "Public search", "Search policy", True, False),
     ConfigurationDefinition("PUBLIC_SEARCH_ALL_FOLDERS", "All folders searchable", "Search policy"),
-    ConfigurationDefinition("PUBLIC_SEARCH_MAX_WORDS", "Maximum query words", "Search policy"),
-    ConfigurationDefinition("PUBLIC_SEARCH_RATE_LIMIT", "Requests per window", "Search policy"),
-    ConfigurationDefinition("PUBLIC_SEARCH_RATE_WINDOW", "Rate window seconds", "Search policy"),
+    ConfigurationDefinition("PUBLIC_SEARCH_MAX_WORDS", "Maximum query words", "Search policy", True, False),
+    ConfigurationDefinition("PUBLIC_SEARCH_RATE_LIMIT", "Requests per window", "Search policy", True, False),
+    ConfigurationDefinition("PUBLIC_SEARCH_RATE_WINDOW", "Rate window seconds", "Search policy", True, False),
     ConfigurationDefinition("OPENAI_EMBED_MODEL", "Embedding model", "Search runtime"),
     ConfigurationDefinition("OPENAI_CHAT_MODEL", "Chat model", "Search runtime"),
-    ConfigurationDefinition("EXTERNAL_AI_MODE", "AI provider mode", "Search runtime", True, False),
+    ConfigurationDefinition("EXTERNAL_AI_MODE", "AI provider mode", "Search runtime"),
     ConfigurationDefinition("DISPLAY_SERVICE_FOOTER", "Service footer", "Runtime controls", True, False),
-    ConfigurationDefinition("MAINTENANCE_SCHEDULER_ENABLED", "Maintenance scheduler", "Runtime controls", True, False),
-    ConfigurationDefinition("BACKUP_SYNC_MODE", "Backup sync mode", "Runtime controls", True, False),
-    ConfigurationDefinition("DATA_MODE", "Data mode", "Runtime controls", True, False),
-    ConfigurationDefinition("EXTERNAL_SIDE_EFFECTS_MODE", "External side effects", "Runtime controls", True, False),
+    ConfigurationDefinition("MAINTENANCE_SCHEDULER_ENABLED", "Maintenance scheduler", "Runtime controls"),
+    ConfigurationDefinition("BACKUP_SYNC_MODE", "Backup sync mode", "Runtime controls"),
+    ConfigurationDefinition("DATA_MODE", "Data mode", "Runtime controls"),
+    ConfigurationDefinition("EXTERNAL_SIDE_EFFECTS_MODE", "External side effects", "Runtime controls"),
     ConfigurationDefinition("SETTINGS_EDIT_ENABLED", "Settings editing", "Runtime controls"),
     ConfigurationDefinition("REDIS_URL", "Redis backend", "Infrastructure", secret=True),
     ConfigurationDefinition("MAX_FILE_SIZE_MB", "Maximum upload size (MB)", "Document processing"),
@@ -109,3 +146,33 @@ def build_configuration_groups(settings_obj, db_values=None):
     for name, rows in grouped.items():
         groups.append({"name": name, "rows": rows})
     return groups
+
+
+def build_runtime_setting_groups(settings_obj, db_values=None):
+    """Build editable controls for settings that the request path reads live."""
+    db_values = db_values or {}
+    grouped = {}
+    for definition in RUNTIME_SETTING_DEFINITIONS:
+        db_value = db_values.get(definition.key)
+        if db_value not in (None, ""):
+            current, source = db_value, "database override"
+        elif definition.key in os.environ:
+            current, source = os.environ[definition.key], "environment"
+        else:
+            current, source = getattr(settings_obj, definition.key, ""), "application default"
+        if isinstance(current, bool):
+            current = "1" if current else "0"
+        row = {
+            "key": definition.key,
+            "label": definition.label,
+            "description": definition.description,
+            "current": str(current),
+            "source": source,
+            "input_type": definition.input_type,
+            "choices": definition.choices,
+            "minimum": definition.minimum,
+            "maximum": definition.maximum,
+            "high_impact": definition.high_impact,
+        }
+        grouped.setdefault(definition.group, []).append(row)
+    return [{"name": name, "rows": rows} for name, rows in grouped.items()]
