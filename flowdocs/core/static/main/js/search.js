@@ -525,7 +525,7 @@ function appendFormattedAnswer(parent, text) {
             return;
         }
         const heading = trimmed.match(/^#{1,3}\s+(.+)$/);
-        const ordered = trimmed.match(/^(\d+)[.)]\s*(.+)$/u);
+        const ordered = trimmed.match(/^(?:\d+)[.)]\s*(.+)$/u);
         const unordered = trimmed.match(/^[\-*+•·◦▪▫➤➢⦿‣]\s*(.+)$/u);
         if (heading) {
             closeList();
@@ -535,7 +535,7 @@ function appendFormattedAnswer(parent, text) {
             return;
         }
         if (ordered || unordered) {
-            const nextType = ordered ? "ol" : "ul";
+            const nextType = "ul";
             if (!list || listType !== nextType) {
                 closeList();
                 listType = nextType;
@@ -543,7 +543,7 @@ function appendFormattedAnswer(parent, text) {
                 body.appendChild(list);
             }
             const item = document.createElement("li");
-            appendInlineFormatting(item, ordered ? ordered[2] : unordered[1]);
+            appendInlineFormatting(item, ordered ? ordered[1] : unordered[1]);
             list.appendChild(item);
             return;
         }

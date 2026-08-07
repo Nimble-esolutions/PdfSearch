@@ -201,18 +201,17 @@
         return;
       }
 
-      const orderedMatch = line.match(/^(\d+)[.)]\s*(.+)$/u);
+      const orderedMatch = line.match(/^(?:\d+)[.)]\s*(.+)$/u);
       const unorderedMatch = line.match(/^[\-*+•·◦▪▫➤➢⦿‣]\s*(.+)$/u);
       const listMatch = orderedMatch || unorderedMatch;
       if (listMatch) {
         flushParagraph();
-        const listTag = orderedMatch ? "ol" : "ul";
-        if (!list || list.tagName.toLowerCase() !== listTag) {
-          list = document.createElement(listTag);
+        if (!list) {
+          list = document.createElement("ul");
           parent.appendChild(list);
         }
         const item = document.createElement("li");
-        appendInlineFormatting(item, orderedMatch ? orderedMatch[2] : listMatch[1]);
+        appendInlineFormatting(item, orderedMatch ? orderedMatch[1] : listMatch[1]);
         list.appendChild(item);
         return;
       }
