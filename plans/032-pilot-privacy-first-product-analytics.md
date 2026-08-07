@@ -1,13 +1,15 @@
 # Plan 032: Historical cookieless stage-pilot analytics record
-
-> **Status: superseded for execution.** This plan preserves the original
-> provider-selection and cookieless-pilot rationale. The consent-led persistent
-> analytics candidate and Plan 038 now define the current implementation path.
-> Do not use this historical plan to configure a tracker or approve collection.
-
+> **Status: superseded for execution.** This plan preserves the earlier
+> stage-only, cookieless proposal. The active consent-led persistent analytics
+> contract is in
+> [`docs/PERSISTENT_ANALYTICS_OPERATIONS.md`](../docs/PERSISTENT_ANALYTICS_OPERATIONS.md).
+> Do not use this plan to configure or validate the current implementation.
+>
 > **Historical executor instructions**: The sequence below is retained as a
-> record. For current work, read Plan 038 and the current analytics operations
-> contract first. Do not enable stage collection until
+> record. For current work, read the persistent analytics contract first. Do not
+> enable stage collection until retention, backup/restore, deletion authority,
+> TLS, and dashboard access are verified; production remains a separate
+> decision.
 > retention, backup/restore, deletion authority, TLS, and dashboard access are
 > verified; production remains a separate decision.
 >

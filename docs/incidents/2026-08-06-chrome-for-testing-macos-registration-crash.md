@@ -1,7 +1,7 @@
 Status: Resolved local-tooling incident
 Audience: Developer, CI maintainer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-06
+Last verified: 2026-08-07
 Canonical source: docs/incidents/2026-08-06-chrome-for-testing-macos-registration-crash.md
 Supersedes: None
 
@@ -116,13 +116,24 @@ This is consistent with Playwright's documented separation between regular
 Chromium for headed operation and Chromium headless shell for headless mode:
 <https://playwright.dev/docs/browsers#chromium-headless-shell>.
 
+### 2026-08-07 sandbox distinction
+
+The same headless shell aborts when an automation command is confined by the
+local macOS sandbox: `bootstrap_check_in ... MachPortRendezvousServer` returns
+permission denied before a browser page exists. The exact analytics and public
+error suites subsequently passed unchanged when run in the reviewed host
+context. Therefore the actionable distinction is **sandbox process registration
+versus application/browser behavior**; do not alter application tests or mark
+them flaky because of the denied sandbox launch.
+
 ## Prevention rule
 
 On this macOS host, do not launch the GUI Google Chrome for Testing binary for
 headless documentation or diagram work. Prefer the already-installed
 `chrome-headless-shell`. If a future browser process again fails in
-`_RegisterApplication` / `TransformProcessType`, classify the browser launch
-separately from application behavior, preserve the command's real result, and
-rerun only with a reviewed headless executable. Never weaken browser,
-accessibility, or documentation assertions to work around this host-level
-startup failure.
+`_RegisterApplication` / `TransformProcessType` or
+`MachPortRendezvousServer`, classify the browser launch separately from
+application behavior, preserve the command's real result, and rerun the same
+headless command in the approved host context when sandbox registration is the
+cause. Never weaken browser, accessibility, or documentation assertions to
+work around this host-level startup failure.

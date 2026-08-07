@@ -10,10 +10,6 @@ const policyPages = [
 ];
 
 test.describe('Theme-aware public policy pages', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem('cookieConsent', 'accepted'));
-  });
-
   for (const theme of ['classic', 'workbench'] as const) {
     test(`${theme} treatment remains consistent across every policy page`, async ({ page }) => {
       for (const policy of policyPages) {

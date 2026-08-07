@@ -513,20 +513,4 @@
   document.querySelector(".classic-icon-link--feedback")?.addEventListener("click", () => {
     track("search_feedback_opened", {view: analyticsView});
   });
-
-  const cookieNotice = document.getElementById("cookieConsent");
-  const cookieAccept = document.querySelector("[data-cookie-accept]");
-  try {
-    if (cookieNotice && !window.localStorage.getItem("cookieConsent")) cookieNotice.hidden = false;
-  } catch (_error) {
-    if (cookieNotice) cookieNotice.hidden = false;
-  }
-  cookieAccept?.addEventListener("click", () => {
-    if (cookieNotice) cookieNotice.hidden = true;
-    try {
-      window.localStorage.setItem("cookieConsent", "accepted");
-    } catch (_error) {
-      // The notice can still be dismissed for this page when storage is unavailable.
-    }
-  });
 })();

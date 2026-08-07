@@ -1,0 +1,247 @@
+/* Public recovery pages deliberately inherit the active public theme. */
+
+.public-error__skip:not(:focus-visible) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.public-error__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.public-error__skip {
+  position: fixed;
+  top: .75rem;
+  left: .75rem;
+  z-index: 100;
+  min-height: 44px;
+  padding: .65rem .8rem;
+  color: #fff;
+  background: var(--civic-maroon, #430913);
+  text-decoration: none;
+}
+
+.public-error__skip:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.public-error__main {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  padding: clamp(1.5rem, 5vw, 5rem) clamp(1rem, 4vw, 3rem);
+}
+
+.public-error__panel {
+  width: min(100%, 46rem);
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+}
+
+.public-error__kicker,
+.public-error__code,
+.public-error__summary,
+.public-error__support {
+  margin: 0;
+}
+
+.public-error__kicker {
+  font-size: .74rem;
+  font-weight: 800;
+}
+
+.public-error__kicker:lang(en) {
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.public-error__code {
+  margin-top: .6rem;
+  font-size: clamp(3.5rem, 11vw, 7.5rem);
+  font-weight: 800;
+  letter-spacing: -.08em;
+  line-height: .88;
+  font-variant-numeric: tabular-nums;
+}
+
+.public-error h1 {
+  max-width: 16ch;
+  margin: 1rem 0 0;
+  text-wrap: balance;
+}
+
+.public-error__summary {
+  max-width: 54ch;
+  margin-top: 1rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.public-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-top: 1.5rem;
+}
+
+.public-error__primary-action,
+.public-error__secondary-action {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: .7rem 1rem;
+  font-weight: 800;
+  text-decoration: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.public-error__primary-action:focus-visible,
+.public-error__secondary-action:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+}
+
+.public-error__support {
+  max-width: 58ch;
+  margin-top: 1.5rem;
+  font-size: .84rem;
+  line-height: 1.55;
+}
+
+.public-error__footer {
+  flex: 0 0 auto;
+}
+
+.public-error--classic .public-error__main {
+  min-height: 0;
+  overflow: auto;
+  background: var(--classic-canvas);
+}
+
+.public-error--classic .public-error__skip { background: var(--classic-topbar); }
+
+.public-error--classic .public-error__panel {
+  color: var(--classic-ink);
+  background: var(--classic-paper);
+  border: 1px solid var(--classic-line);
+  border-top: 4px solid var(--classic-orange);
+  box-shadow: var(--classic-shadow);
+}
+
+.public-error--classic .public-error__kicker,
+.public-error--classic .public-error__code {
+  color: #a94700;
+}
+
+.public-error--classic h1 { color: var(--classic-ink); }
+.public-error--classic .public-error__summary,
+.public-error--classic .public-error__support { color: var(--classic-muted); }
+
+.public-error--classic .public-error__primary-action {
+  color: #fff;
+  background: #a94700;
+  border: 1px solid #a94700;
+}
+
+.public-error--classic .public-error__primary-action:hover { background: #7d3400; }
+
+.public-error--classic .public-error__secondary-action {
+  color: var(--classic-ink);
+  background: var(--classic-paper);
+  border: 1px solid var(--classic-line);
+}
+
+.public-error--classic .public-error__secondary-action:hover {
+  background: #f2f3f5;
+  border-color: #96999d;
+}
+
+.public-error--workbench .public-error__main {
+  flex: 1 1 auto;
+  background: var(--civic-canvas);
+}
+
+.public-error--workbench .public-error__panel {
+  color: var(--civic-ink);
+  background: var(--civic-paper);
+  border: 1px solid var(--civic-line);
+  border-top: 4px solid var(--civic-maroon);
+  box-shadow: 0 14px 32px rgba(33, 29, 29, .12);
+}
+
+.public-error--workbench .public-error__kicker,
+.public-error--workbench .public-error__code { color: var(--civic-maroon); }
+.public-error--workbench h1 { color: var(--civic-ink); }
+.public-error--workbench .public-error__summary,
+.public-error--workbench .public-error__support { color: var(--civic-muted); }
+
+.public-error--workbench .public-error__primary-action {
+  color: var(--civic-paper);
+  background: var(--civic-maroon);
+  border: 1px solid var(--civic-maroon);
+}
+
+.public-error--workbench .public-error__primary-action:hover { background: var(--civic-maroon-deep); }
+
+.public-error--workbench .public-error__secondary-action {
+  color: var(--civic-maroon);
+  background: var(--civic-panel);
+  border: 1px solid var(--civic-line);
+}
+
+.public-error--workbench .public-error__secondary-action:hover {
+  color: var(--civic-paper);
+  background: var(--civic-maroon);
+  border-color: var(--civic-maroon);
+}
+
+.public-error__primary-action:active,
+.public-error__secondary-action:active { transform: translateY(1px); }
+
+.public-error__footer--workbench {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .8rem clamp(1rem, 3vw, 3rem);
+  color: var(--civic-muted);
+  background: var(--civic-paper);
+  border-top: 1px solid var(--civic-line);
+}
+
+.public-error__footer--workbench > div { display: grid; gap: .12rem; }
+.public-error__footer--workbench strong { color: var(--civic-maroon); font-size: .78rem; }
+.public-error__footer--workbench small,
+.public-error__footer--workbench a { color: var(--civic-muted); font-size: .72rem; }
+.public-error__footer--workbench nav { display: flex; flex-wrap: wrap; gap: .75rem; }
+
+@media (max-width: 640px) {
+  .public-error__main { padding: 1.25rem .85rem; }
+  .public-error__panel { padding: 1.4rem 1.15rem; }
+  .public-error__actions { display: grid; }
+  .public-error__primary-action,
+  .public-error__secondary-action { width: 100%; }
+  .public-error__footer--workbench { align-items: flex-start; flex-direction: column; }
+  .public-error--classic .classic-footer__inner { align-items: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-error *,
+  .public-error *::before,
+  .public-error *::after { scroll-behavior: auto !important; }
+}

@@ -36,6 +36,29 @@ flowchart TD
 
 The effective value shows its source: database override, environment, or application default. A database override is intentionally visible so an operator can tell why the running behavior differs from the deployment file.
 
+## Consent-led analytics control
+
+The **Product analytics** card is deliberately narrower than the configuration
+inventory. It displays the exact host, deployment tier, collection mode, and
+Website-ID source before a superadmin can change anything:
+
+| Host | Website-ID rule | Enablement rule |
+| --- | --- | --- |
+| `2026.ai-sahakar.net` | Approved built-in stage ID or a saved stage-specific ID | Superadmin may enable/disable for new page requests |
+| `ai-sahakar.net` | A separately saved production UUID is required; stage is never inherited | Superadmin may enable/disable only after that ID is valid |
+| Local, preview, test, `www` | No profile and no editable control | Hard-disabled; no tracker configuration can be saved or emitted |
+
+The Website ID is a public Umami site identifier, not a credential. The tracker
+endpoint, access keys, database, retention, and DNS remain deployment-owned
+and are intentionally not editable from the web UI. A saved enabled state means
+only that future public page responses may offer collection after visitor
+consent; it does not prove the remote script, tenant, or event ingestion is
+live. Confirm those separately with the browser canary procedure in
+[PERSISTENT_ANALYTICS_OPERATIONS.md](PERSISTENT_ANALYTICS_OPERATIONS.md).
+
+Disabling collection removes configuration from new public page responses. It
+does not delete Umami data already retained by the independent service.
+
 ## What stays read-only
 
 `DATA_MODE`, `RESTORE_SOURCE_DATASET_ID`, `DATASET_ID`, `AUTHORITATIVE_DATASET_ID`, backup role/sync posture, image identity, release identity, S3/RustFS endpoint and credential state remain in the configuration inventory. They define data lineage, trust boundaries, or process startup posture; changing a database row cannot safely reconfigure an already-running process. Change them through the reviewed deployment workflow and verify `/readyz` afterward.

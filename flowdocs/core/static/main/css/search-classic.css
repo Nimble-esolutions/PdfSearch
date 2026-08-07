@@ -444,32 +444,6 @@ body.classic-search {
 .classic-footer nav a { color: var(--classic-muted); }
 .classic-footer img { width: 95px; height: 40px; object-fit: contain; }
 
-.classic-cookie {
-  position: fixed;
-  right: 16px;
-  bottom: max(16px, env(safe-area-inset-bottom));
-  z-index: 50;
-  width: min(420px, calc(100% - 32px));
-  padding: 14px;
-  color: var(--classic-ink);
-  background: var(--classic-paper);
-  border: 1px solid var(--classic-line);
-  border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, .18);
-  font-size: 13px;
-}
-
-.classic-cookie p { margin: 0 0 9px; }
-.classic-cookie div { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
-.classic-cookie button {
-  min-height: 40px;
-  padding: 7px 14px;
-  color: #fff;
-  background: var(--classic-topbar);
-  border: 0;
-  border-radius: 5px;
-}
-
 @media (max-width: 768px) {
   body.classic-search { font-size: 15px; }
   .classic-utility { font-size: 13px; }

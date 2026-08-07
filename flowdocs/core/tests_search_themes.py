@@ -1,11 +1,18 @@
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.cache import cache
-from django.test import Client, TestCase
+from django.db import DatabaseError
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
+from unittest.mock import patch
 
 from core.models import SiteSetting
 from core.search_ui import PRIMARY_SEARCH_VIEW_SETTING
+from core.views import (
+    public_bad_request,
+    public_permission_denied,
+    public_server_error,
+)
 
 
 class SearchThemeResolutionTests(TestCase):
@@ -20,7 +27,7 @@ class SearchThemeResolutionTests(TestCase):
         self.assertEqual(response.context["search_view"], "classic")
         self.assertContains(response, "search-classic.css")
         self.assertContains(response, "search-classic.js")
-        self.assertContains(response, "cookie-consent__accept")
+        self.assertNotContains(response, "cookieConsent")
         self.assertNotContains(response, "civic-workbench.css")
         self.assertNotContains(response, 'main/js/search.js')
         self.assertNotContains(response, "bootstrap")
@@ -150,6 +157,147 @@ class SearchThemeResolutionTests(TestCase):
         self.assertContains(response, '<html lang="mr">')
         self.assertContains(response, '<article class="legal-document" lang="en">')
         self.assertContains(response, 'value="/privacy/?view=workbench"')
+
+
+@override_settings(DEBUG=False)
+class PublicNotFoundThemeTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.factory = RequestFactory()
+
+    def test_not_found_uses_the_safe_classic_public_shell_by_default(self):
+        response = self.client.get("/not-a-public-route/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTemplateUsed(response, "public_error.html")
+        self.assertEqual(response.context["search_view"], "classic")
+        self.assertContains(response, 'class="classic-search public-error public-error--classic"', status_code=404)
+        self.assertContains(response, 'class="classic-banner"', status_code=404)
+        self.assertContains(response, 'href="/"', status_code=404)
+        self.assertContains(response, 'href="/login/"', status_code=404)
+        self.assertContains(response, '<meta name="robots" content="noindex, nofollow, noarchive">', html=True, status_code=404)
+        self.assertNotContains(response, 'rel="canonical"', status_code=404)
+        self.assertContains(response, 'class="public-error__sr-only">Error 404</span>', status_code=404)
+        self.assertNotContains(response, 'class="public-error__code" aria-label=', status_code=404)
+        self.assertNotContains(response, "not-a-public-route", status_code=404)
+        self.assertNotContains(response, "product-analytics-config", status_code=404)
+        self.assertNotContains(response, "search-classic.js", status_code=404)
+
+    def test_not_found_honors_the_allowlisted_workbench_preview(self):
+        response = self.client.get("/not-a-public-route/?view=workbench")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.context["search_view"], "workbench")
+        self.assertContains(response, 'class="public-search public-error public-error--workbench"', status_code=404)
+        self.assertContains(response, 'class="workbench-header"', status_code=404)
+        self.assertContains(response, 'href="/?view=workbench"', status_code=404)
+        self.assertNotContains(response, "not-a-public-route", status_code=404)
+        self.assertNotContains(response, "product-analytics.js", status_code=404)
+        self.assertNotContains(response, "main/js/search.js", status_code=404)
+
+    def test_related_public_errors_use_the_same_safe_theme_shell(self):
+        handlers = {
+            400: lambda request: public_bad_request(request, Exception()),
+            403: lambda request: public_permission_denied(request, Exception()),
+            500: public_server_error,
+        }
+
+        for status, handler in handlers.items():
+            with self.subTest(status=status):
+                request = self.factory.get(
+                    "/failed-request/?view=workbench",
+                    HTTP_HOST="testserver",
+                )
+                response = handler(request)
+
+                self.assertEqual(response.status_code, status)
+                self.assertContains(
+                    response,
+                    'class="public-search public-error public-error--workbench"',
+                    status_code=status,
+                )
+                self.assertContains(response, f">{status}</span>", status_code=status)
+                self.assertNotContains(response, "failed-request", status_code=status)
+                self.assertNotContains(response, "product-analytics-config", status_code=status)
+                self.assertNotContains(response, "main/js/search.js", status_code=status)
+
+    def test_project_routes_all_standard_error_handlers_to_the_public_renderer(self):
+        from flowdocs import urls as project_urls
+
+        self.assertEqual(project_urls.handler400, "core.views.public_bad_request")
+        self.assertEqual(project_urls.handler403, "core.views.public_permission_denied")
+        self.assertEqual(project_urls.handler404, "core.views.public_page_not_found")
+        self.assertEqual(project_urls.handler500, "core.views.public_server_error")
+
+    @override_settings(ROOT_URLCONF="core.error_test_urls")
+    def test_unhandled_server_error_uses_the_safe_public_renderer(self):
+        self.client.raise_request_exception = False
+
+        response = self.client.get("/intentional-server-error/?view=workbench")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertTemplateUsed(response, "public_error.html")
+        self.assertContains(
+            response,
+            'class="public-search public-error public-error--workbench"',
+            status_code=500,
+        )
+        self.assertContains(response, 'href="/login/"', status_code=500)
+        self.assertContains(response, 'action="/i18n/setlang/"', status_code=500)
+        self.assertContains(response, 'href="/privacy/?view=workbench"', status_code=500)
+        self.assertNotContains(response, "intentional public error renderer test", status_code=500)
+        self.assertNotContains(response, "product-analytics-config", status_code=500)
+
+    def test_not_found_uses_the_persisted_workbench_primary_view(self):
+        SiteSetting.objects.create(
+            key=PRIMARY_SEARCH_VIEW_SETTING,
+            value="workbench",
+        )
+        cache.clear()
+
+        response = self.client.get("/another-missing-route/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.context["search_view"], "workbench")
+        self.assertContains(response, 'class="workbench-header"', status_code=404)
+        self.assertContains(response, 'href="/"', status_code=404)
+
+    def test_not_found_remains_recoverable_if_persisted_theme_lookup_fails(self):
+        with patch("core.views.get_primary_search_view", side_effect=DatabaseError):
+            response = self.client.get("/another-missing-route/?view=workbench")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.context["search_view"], "workbench")
+        self.assertContains(response, 'class="workbench-header"', status_code=404)
+        self.assertNotContains(response, "product-analytics-config", status_code=404)
+
+    def test_not_found_uses_a_static_public_header_for_signed_in_visitors(self):
+        user = get_user_model().objects.create_superuser(
+            "error-page-user",
+            "error-page-user@example.test",
+            "Test@123",
+            role="superadmin",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/another-missing-route/?view=workbench")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertContains(response, "Admin login", status_code=404)
+        self.assertNotContains(response, "error-page-user", status_code=404)
+        self.assertNotContains(response, ">Dashboard<", status_code=404)
+
+    def test_not_found_translates_its_recovery_controls_for_both_marathi_shells(self):
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "mr"
+
+        for view in ("classic", "workbench"):
+            with self.subTest(view=view):
+                response = self.client.get(f"/another-missing-route/?view={view}")
+
+                self.assertEqual(response.status_code, 404)
+                self.assertContains(response, '<html lang="mr">', status_code=404)
+                self.assertContains(response, "सेवा सूचना", status_code=404)
+                self.assertContains(response, "दस्तऐवज शोधाकडे परत जा", status_code=404)
 
 
 class SearchThemeAdminTests(TestCase):

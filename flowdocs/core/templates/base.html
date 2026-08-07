@@ -140,13 +140,7 @@
     <div class="admin-footer__legal">
       <strong>{% trans "Registrar Co-operative Societies, Maharashtra" %}</strong>
       <small>{% trans "All rights reserved." %}</small>
-      <nav aria-label="{% trans 'Legal links' %}">
-          <a href="{% url 'privacy' %}{{ public_view_query }}">{% trans "Privacy" %}</a> |
-          <a href="{% url 'terms' %}{{ public_view_query }}">{% trans "Terms" %}</a> |
-          <a href="{% url 'data_policy' %}{{ public_view_query }}">{% trans "Data Policy" %}</a> |
-          <a href="{% url 'cookie_policy' %}{{ public_view_query }}">{% trans "Cookies" %}</a> |
-          <a href="{% url 'disclaimer' %}{{ public_view_query }}">{% trans "Disclaimer" %}</a>
-      </nav>
+      {% include "components/public/legal_links.html" with legal_link_separators=True %}
     </div>
     <div class="admin-footer__credit">
       <small>{% trans "Technology partner" %}</small>
@@ -157,23 +151,6 @@
     {% block technology_partners %}{% endblock %}
   </div>
 </footer>
-
-<div id="cookieConsent" class="cookie-consent d-none" role="region" aria-label="{% trans 'Cookie notice' %}">
-  <div class="cookie-consent__inner">
-    <div class="cookie-consent__copy">
-      <strong>{% trans "Essential cookies" %}</strong>
-      <p>{% trans "This website uses essential cookies for security, authentication, and language preferences. No tracking or advertising cookies are used." %}</p>
-    </div>
-    <div class="cookie-consent__actions">
-      <a href="{% url 'cookie_policy' %}{{ public_view_query }}">{% trans "Cookie Policy" %}</a>
-      <a href="{% url 'privacy' %}{{ public_view_query }}">{% trans "Privacy Policy" %}</a>
-      <button type="button" class="cookie-consent__accept" onclick="document.getElementById('cookieConsent').classList.add('d-none');localStorage.setItem('cookieConsent','accepted')">{% trans "Accept" %}</button>
-    </div>
-  </div>
-</div>
-<script>
-if (!localStorage.getItem('cookieConsent')) document.getElementById('cookieConsent').classList.remove('d-none');
-</script>
 
 <script src="{% static 'vendor/bootstrap/5.3.0/js/bootstrap.bundle.min.js' %}"></script>
 {% block extra_js %}{% endblock %}

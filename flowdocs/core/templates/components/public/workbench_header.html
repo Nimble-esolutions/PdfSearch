@@ -16,12 +16,14 @@
     {% if not public_policy_page %}<button type="button" data-about-open aria-controls="aboutDialog">{% trans "Help" %}</button>{% endif %}
     <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" target="_blank" rel="noopener noreferrer">{% trans "Official website" %}</a>
     <a href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">{% trans "Locate us" %}</a>
-    <form action="{% url 'set_language' %}" method="post">
+    <form action="{{ public_set_language_url }}" method="post">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ public_current_url }}">
       {% if request.LANGUAGE_CODE == 'en' %}<input type="hidden" name="language" value="mr"><button type="submit">मराठी</button>{% else %}<input type="hidden" name="language" value="en"><button type="submit">English</button>{% endif %}
     </form>
-    {% if user.is_authenticated %}
+    {% if error_safe_public %}
+      <a class="workbench-nav__admin" href="{{ error_login_url }}">{% trans "Admin login" %}</a>
+    {% elif user.is_authenticated %}
       <a class="workbench-nav__account" href="{% url 'dashboard' %}">{% trans "Dashboard" %}<span>{{ user.username }}</span></a>
       <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">{% trans "Logout" %}</button></form>
     {% else %}

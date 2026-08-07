@@ -29,6 +29,7 @@ urlpatterns = [
         views.save_product_analytics,
         name='save_product_analytics',
     ),
+    path('analytics/preference/', views.analytics_preference, name='analytics_preference'),
     path('robots.txt', views.robots_txt, name='robots_txt'),
     path('sitemap.xml', views.sitemap_xml, name='sitemap_xml'),
 

@@ -1,7 +1,9 @@
 {% load static i18n %}
 <nav class="classic-utility" aria-label="{% trans 'Public service links' %}">
   <div class="classic-utility__inner">
-    {% if user.is_authenticated %}
+    {% if error_safe_public %}
+      <a href="{{ error_login_url }}">{% trans "Admin Login" %}</a>
+    {% elif user.is_authenticated %}
       <a href="{% url 'dashboard' %}">{% trans "Dashboard" %}</a>
     {% else %}
       <a href="{% url 'login' %}">{% trans "Admin Login" %}</a>
@@ -15,7 +17,7 @@
     <span aria-hidden="true">|</span>
     <a href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">{% trans "Locate Us" %}</a>
     <span aria-hidden="true">|</span>
-    <form action="{% url 'set_language' %}" method="post">
+    <form action="{{ public_set_language_url }}" method="post">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ public_current_url }}">
       {% if request.LANGUAGE_CODE == 'en' %}
@@ -26,7 +28,7 @@
         <button type="submit">English</button>
       {% endif %}
     </form>
-    {% if user.is_authenticated %}
+    {% if not error_safe_public and user.is_authenticated %}
       <span aria-hidden="true">|</span>
       <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">{% trans "Logout" %}</button></form>
     {% endif %}

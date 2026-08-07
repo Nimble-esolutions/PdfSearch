@@ -68,7 +68,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.db.models import Count, Max, Q
 from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST, require_GET
-from django.urls import reverse
+from django.urls import get_script_prefix, reverse
 from django.utils.translation import gettext, override as override_language
 from django.utils import timezone
 
@@ -90,9 +90,19 @@ from .search_ui import (
 from .product_analytics import (
     PRODUCT_ANALYTICS_DISABLED,
     PRODUCT_ANALYTICS_ENABLED,
+    analytics_profile_for_request,
+    apply_pending_identity_cookie,
     build_public_analytics_config,
+    clear_identity_cookie,
     get_product_analytics_mode,
+    get_product_analytics_website_id,
+    global_privacy_control_enabled,
+    product_analytics_status,
+    rotate_identity_cookie,
+    set_consent_cookie,
     set_product_analytics_mode,
+    CONSENT_DECLINED,
+    CONSENT_GRANTED,
 )
 from .artifact_vault import ArtifactVault, ArtifactVaultError, ArtifactVaultConfigurationError
 from .metrics import metrics_view
@@ -1506,6 +1516,29 @@ LEGAL_PAGE_DEFINITIONS = {
 }
 
 
+_PUBLIC_LEGAL_LINK_PATHS = {
+    "public_privacy_url": ("privacy", "privacy/"),
+    "public_terms_url": ("terms", "terms/"),
+    "public_data_policy_url": ("data_policy", "data-policy/"),
+    "public_cookie_policy_url": ("cookie_policy", "cookies/"),
+    "public_disclaimer_url": ("disclaimer", "disclaimer/"),
+}
+
+
+def _public_legal_link_context(view_query, *, script_prefix=None):
+    """Build legal-link URLs for normal pages or a route-independent error page."""
+
+    if script_prefix is None:
+        return {
+            context_key: f"{reverse(route_name)}{view_query}"
+            for context_key, (route_name, _fallback_path) in _PUBLIC_LEGAL_LINK_PATHS.items()
+        }
+    return {
+        context_key: f"{script_prefix}{fallback_path}{view_query}"
+        for context_key, (_route_name, fallback_path) in _PUBLIC_LEGAL_LINK_PATHS.items()
+    }
+
+
 def _public_view_context(request, *, include_analytics=False):
     """Resolve one allowlisted public presentation and preserve valid previews."""
     requested_view = supported_search_view(request.GET.get("view"))
@@ -1516,6 +1549,9 @@ def _public_view_context(request, *, include_analytics=False):
         "search_view": search_view,
         "public_view_query": view_query,
         "public_home_url": f"{reverse('home')}{view_query}",
+        "public_set_language_url": reverse("set_language"),
+        "error_login_url": reverse("login"),
+        **_public_legal_link_context(view_query),
         "public_current_url": f"{request.path}{view_query}",
         "product_analytics_config": (
             build_public_analytics_config(
@@ -1528,6 +1564,125 @@ def _public_view_context(request, *, include_analytics=False):
             else None
         ),
     }
+
+
+_PUBLIC_ERROR_COPY = {
+    400: {
+        "error_title": "We could not understand that request",
+        "error_description": (
+            "The link or form may be incomplete. Return to document search and try again."
+        ),
+        "error_support": "Your search and account information have not been changed.",
+    },
+    403: {
+        "error_title": "This page is not available",
+        "error_description": (
+            "You do not have access to this page from here. Sign in with an authorized "
+            "account if you need the administration console."
+        ),
+        "error_support": "Public document search remains available without signing in.",
+    },
+    404: {
+        "error_title": "This page is not available",
+        "error_description": (
+            "The address may be outdated, incomplete, or no longer in service. Your "
+            "search and account information have not been changed."
+        ),
+        "error_support": (
+            "If you followed a saved link, return to search and look for the relevant Act, "
+            "Rule, circular, or procedure."
+        ),
+    },
+    500: {
+        "error_title": "Service is temporarily unavailable",
+        "error_description": (
+            "The service could not complete this request. Return to document search and "
+            "try again shortly."
+        ),
+        "error_support": "Your search and account information have not been changed.",
+    },
+}
+
+
+def _render_public_error(request, *, status):
+    """Render a plain-language public error without reflecting a failed address."""
+
+    try:
+        public_view = _public_view_context(request)
+    except Exception:
+        # The public error response must remain recoverable even if the optional
+        # persisted-theme lookup is temporarily unavailable (for example, while
+        # its database is being recovered). The URL override is still safe
+        # because the resolver only accepts the two known public presentations.
+        # Do not reverse the named home route here: an error can be caused by a
+        # partial or broken root URL configuration, and a recovery page must not
+        # recurse into another 500 while trying to construct its return link.
+        requested_view = supported_search_view(request.GET.get("view"))
+        view_query = f"?view={requested_view}" if requested_view else ""
+        script_prefix = get_script_prefix()
+        fallback_home_url = f"{script_prefix}{view_query}"
+        logger.warning(
+            "Public error context unavailable; using the route-independent fallback"
+        )
+        public_view = {
+            "search_view": requested_view or "classic",
+            "public_view_query": view_query,
+            "public_home_url": fallback_home_url,
+            "public_current_url": fallback_home_url,
+            # These are deliberately plain, script-prefixed paths. The safe
+            # error header never resolves named auth/i18n routes because a
+            # partially loaded URL configuration can be the original fault.
+            "public_set_language_url": f"{script_prefix}i18n/setlang/",
+            "error_login_url": f"{script_prefix}login/",
+            **_public_legal_link_context(view_query, script_prefix=script_prefix),
+            "product_analytics_config": None,
+        }
+    # A missing address is not a navigation destination. Header locale controls
+    # must take visitors to the matching public search home, never reflect the
+    # failed path in a hidden field or subsequent request.
+    public_view["public_current_url"] = public_view["public_home_url"]
+    copy = _PUBLIC_ERROR_COPY.get(status, _PUBLIC_ERROR_COPY[500])
+    return render(
+        request,
+        "public_error.html",
+        {
+            **public_view,
+            "public_policy_page": True,
+            # Header partials avoid resolving request.user on an error response:
+            # an authenticated session lookup can depend on the very database
+            # failure that brought a visitor here.
+            "error_safe_public": True,
+            "locate_us_url": PUBLIC_LOCATE_US_URL,
+            "error_status": status,
+            "error_code_label": gettext("Error %(status)s") % {"status": status},
+            **{key: gettext(value) for key, value in copy.items()},
+        },
+        status=status,
+    )
+
+
+def public_bad_request(request, exception=None):
+    """Render a safe, theme-consistent bad-request page."""
+
+    return _render_public_error(request, status=400)
+
+
+def public_permission_denied(request, exception=None):
+    """Render a safe, theme-consistent permission page."""
+
+    return _render_public_error(request, status=403)
+
+
+def public_page_not_found(request, exception=None):
+    """Render a safe, recoverable not-found page."""
+
+    return _render_public_error(request, status=404)
+
+
+def public_server_error(request):
+    """Render a safe, theme-consistent internal-error page."""
+
+    return _render_public_error(request, status=500)
 
 
 def _render_legal_page(request, page_key):
@@ -2052,7 +2207,7 @@ def search_query(request):
             request.user,
             public=not request.user.is_authenticated,
         )
-        return render(
+        response = render(
             request,
             search_template_for(search_view),
             {
@@ -2155,6 +2310,8 @@ def search_query(request):
                 "total_count": searchable_scope.count(),
             },
         )
+        apply_pending_identity_cookie(response, request)
+        return response
 
     if request.method == "POST":
         request_started_at = time.monotonic()
@@ -2579,10 +2736,10 @@ def settings_view(request):
         "env_fields": env_fields,
         "primary_search_view": get_primary_search_view(),
         "search_view_options": SEARCH_VIEW_DEFINITIONS,
-        "product_analytics_mode": get_product_analytics_mode(),
+        "product_analytics_status": product_analytics_status(request),
         "product_analytics_options": (
             (PRODUCT_ANALYTICS_DISABLED, gettext("Disabled")),
-            (PRODUCT_ANALYTICS_ENABLED, gettext("Enabled on approved stage host")),
+            (PRODUCT_ANALYTICS_ENABLED, gettext("Enabled for this approved host")),
         ),
         "title": "Settings & Configuration",
         "breadcrumb_items": [
@@ -2681,19 +2838,73 @@ def save_search_ui(request):
 @superadmin_required
 @require_POST
 def save_product_analytics(request):
-    """Enable or disable the stage-only Umami browser adapter."""
+    """Set this exact deployment host's consent-led Umami collection posture."""
 
     try:
+        profile = analytics_profile_for_request(request)
+        requested_mode = request.POST.get("product_analytics_mode")
+        if (
+            requested_mode == PRODUCT_ANALYTICS_ENABLED
+            and request.POST.get("confirm_persistent_analytics") != "yes"
+        ):
+            raise ValueError("Confirm persistent analytics before enabling it.")
         selected = set_product_analytics_mode(
-            request.POST.get("product_analytics_mode"),
+            requested_mode,
             updated_by=request.user,
+            profile=profile,
+            website_id=request.POST.get("product_analytics_website_id"),
         )
-    except ValueError:
-        messages.error(request, gettext("Choose Enabled or Disabled."))
+    except ValueError as exc:
+        messages.error(request, str(exc) or gettext("Choose Enabled or Disabled."))
         return redirect("settings")
 
     messages.success(
         request,
-        gettext("Product analytics changed to %(mode)s.") % {"mode": selected},
+        gettext(
+            "Product analytics for %(host)s changed to %(mode)s. "
+            "The new posture applies to new public-page requests."
+        )
+        % {"host": profile.hostname, "mode": selected},
     )
     return redirect("settings")
+
+
+@require_POST
+def analytics_preference(request):
+    """Record an explicit public analytics preference without tracking content."""
+
+    profile = analytics_profile_for_request(request)
+    if (
+        profile is None
+        or get_product_analytics_mode(profile) != PRODUCT_ANALYTICS_ENABLED
+        or not get_product_analytics_website_id(profile)
+    ):
+        raise Http404
+
+    destination = request.POST.get("next", "")
+    if not (
+        destination.startswith("/")
+        and not destination.startswith("//")
+        and url_has_allowed_host_and_scheme(
+            destination,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        )
+    ):
+        destination = reverse("home")
+
+    action = request.POST.get("action", "")
+    response = redirect(destination)
+    if action in {"accept", "reset"}:
+        if global_privacy_control_enabled(request):
+            set_consent_cookie(response, CONSENT_DECLINED)
+            clear_identity_cookie(response)
+            return response
+        set_consent_cookie(response, CONSENT_GRANTED)
+        rotate_identity_cookie(response)
+    elif action in {"decline", "revoke"}:
+        set_consent_cookie(response, CONSENT_DECLINED)
+        clear_identity_cookie(response)
+    else:
+        raise Http404
+    return response

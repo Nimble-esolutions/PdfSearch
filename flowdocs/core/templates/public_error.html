@@ -1,0 +1,55 @@
+{% load static i18n %}
+<!doctype html>
+<html lang="{{ request.LANGUAGE_CODE|default:'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ error_title }} | Sahakar AI</title>
+  <meta name="description" content="{{ error_description }}">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="theme-color" content="{% if search_view == 'classic' %}#24282b{% else %}#5c0f1b{% endif %}">
+  <link rel="icon" href="{% static 'main/images/favicon.ico' %}">
+  {% if search_view == "classic" %}
+    <link rel="stylesheet" href="{% static 'main/css/search-classic.css' %}">
+  {% else %}
+    <link rel="stylesheet" href="{% static 'main/css/search.css' %}">
+    <link rel="stylesheet" href="{% static 'main/css/civic-workbench.css' %}">
+  {% endif %}
+  <link rel="stylesheet" href="{% static 'main/css/public-error.css' %}">
+</head>
+<body class="{% if search_view == 'classic' %}classic-search public-error public-error--classic{% else %}public-search public-error public-error--workbench{% endif %}">
+  <a class="public-error__skip" href="#publicErrorContent">{% trans "Skip to page message" %}</a>
+
+  {% if search_view == "classic" %}
+    {% include "components/public/classic_header.html" %}
+  {% else %}
+    {% include "components/public/workbench_header.html" %}
+  {% endif %}
+
+  <main class="public-error__main" id="publicErrorContent" tabindex="-1">
+    <section class="public-error__panel" aria-labelledby="publicErrorTitle" aria-describedby="publicErrorSummary">
+      <p class="public-error__kicker">{% trans "Service notice" %}</p>
+      <p class="public-error__code"><span class="public-error__sr-only">{{ error_code_label }}</span><span aria-hidden="true">{{ error_status }}</span></p>
+      <h1 id="publicErrorTitle">{{ error_title }}</h1>
+      <p id="publicErrorSummary" class="public-error__summary">{{ error_description }}</p>
+      <div class="public-error__actions">
+        <a class="public-error__primary-action" href="{{ public_home_url }}">{% trans "Return to document search" %}</a>
+        <a class="public-error__secondary-action" href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" target="_blank" rel="noopener noreferrer">{% trans "Visit the official website" %}</a>
+      </div>
+      <p class="public-error__support">{{ error_support }}</p>
+    </section>
+  </main>
+
+  {% if search_view == "classic" %}
+    {% include "components/public/classic_footer.html" with footer_class="public-error__footer" %}
+  {% else %}
+    <footer class="public-error__footer public-error__footer--workbench">
+      <div>
+        <strong>{% trans "Registrar Co-operative Societies, Maharashtra" %}</strong>
+        <small>{% trans "Public information service" %}</small>
+      </div>
+      {% include "components/public/legal_links.html" %}
+    </footer>
+  {% endif %}
+</body>
+</html>

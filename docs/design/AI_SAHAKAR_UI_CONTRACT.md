@@ -3,7 +3,7 @@
 **Status:** Active and protected
 **Audience:** Product, design, frontend, QA, and coding agents
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-08-06
+**Last verified:** 2026-08-07
 **Canonical source:** This document
 **Supersedes:** Untracked visual proposals and active-looking historical UI plans
 
@@ -124,6 +124,18 @@ Canonical URLs omit preview queries. Policy article text remains explicitly
 `lang="en"` until reviewed translations exist; a Marathi shell must not falsely
 label English legal copy as Marathi. Tables keep captions, scoped headings, and
 a keyboard-focusable horizontal scroll region on narrow screens.
+
+The standard public 400, 403, 404, and 500 responses use the same allowlisted
+Classic/Workbench resolver and an equivalent header/footer language, but they
+are recovery pages rather than search pages. They must never load the composer,
+search JavaScript, analytics configuration/tracker, Bootstrap, or the
+authenticated admin shell. They use noindex metadata, a skip link, a clear
+status/action pair, and a safe return-to-search target. Failed paths and queries
+must not be reflected into visible content, hidden fields, or navigation. Error
+headers use static script-prefixed public return/login/language/legal paths
+rather than resolving `request.user` or named routes in fallback mode, so an
+error response remains available if session/database lookup, the theme store,
+or part of URL resolution is the fault.
 
 ## Admin console composition
 

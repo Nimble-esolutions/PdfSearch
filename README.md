@@ -41,7 +41,7 @@ Use the route that matches the work:
 - Admin user guide: [`docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md`](docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md)
 - Settings operations: [`docs/SETTINGS_OPERATIONS.md`](docs/SETTINGS_OPERATIONS.md)
 - Multi-file intake and document lifecycle: [`docs/DOCUMENT_INTAKE_WORKBENCH.md`](docs/DOCUMENT_INTAKE_WORKBENCH.md)
-- Privacy-bounded product analytics and self-hosted Umami boundary: [`docs/PRODUCT_ANALYTICS_RECOMMENDATION.md`](docs/PRODUCT_ANALYTICS_RECOMMENDATION.md), [`plans/032-pilot-privacy-first-product-analytics.md`](plans/032-pilot-privacy-first-product-analytics.md)
+- Consent-led persistent analytics, independent self-hosted Umami, canonical-host rules, and public-error behaviour: [`docs/PERSISTENT_ANALYTICS_OPERATIONS.md`](docs/PERSISTENT_ANALYTICS_OPERATIONS.md). The historical product comparison is retained in [`docs/PRODUCT_ANALYTICS_RECOMMENDATION.md`](docs/PRODUCT_ANALYTICS_RECOMMENDATION.md).
 - `dev` cleanup scope: [`docs/DEV_CLEANUP_SCOPE.md`](docs/DEV_CLEANUP_SCOPE.md)
 - Environment impact guide and reviewed examples: [`docs/ENVIRONMENT_CONFIGURATION_GUIDE.md`](docs/ENVIRONMENT_CONFIGURATION_GUIDE.md), [`docs/environments/`](docs/environments/)
 - Contribution and dev-to-release workflow: [`CONTRIBUTING.md`](CONTRIBUTING.md)

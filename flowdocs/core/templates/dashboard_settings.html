@@ -132,14 +132,29 @@
   </section>
 
   <section class="mb-4" aria-labelledby="product-analytics-heading">
-    <h3 id="product-analytics-heading" class="border-bottom pb-2 mb-3">{% trans "Privacy-bounded product analytics" %}</h3>
+    <h3 id="product-analytics-heading" class="border-bottom pb-2 mb-3">{% trans "Consent-led product analytics" %}</h3>
     <div class="row">
       <div class="col-lg-8">
         <section class="admin-panel" aria-labelledby="product-analytics-mode-heading">
           <div class="border-bottom pb-2 mb-3">
-            <h4 id="product-analytics-mode-heading" class="h6 mb-1">{% trans "Stage Umami collection" %}</h4>
-            <p class="text-muted small mb-0">{% trans "Enable manual, content-free search events only after the independent analytics service is healthy. This never changes search readiness and does not require a deployment restart." %}</p>
+            <h4 id="product-analytics-mode-heading" class="h6 mb-1">{% trans "Analytics collection for this host" %}</h4>
+            <p class="text-muted small mb-0">{% trans "Collection requires visitor consent, uses only manual content-free events, and never changes search readiness. Stage and production use separate Website IDs; production never inherits the stage identifier." %}</p>
           </div>
+          <dl class="row small mb-4">
+            <dt class="col-sm-4">{% trans "Current host" %}</dt>
+            <dd class="col-sm-8"><code>{{ product_analytics_status.hostname }}</code></dd>
+            <dt class="col-sm-4">{% trans "Collection tier" %}</dt>
+            <dd class="col-sm-8">{{ product_analytics_status.deployment_tier }}</dd>
+            <dt class="col-sm-4">{% trans "Website ID source" %}</dt>
+            <dd class="col-sm-8">
+              {% if product_analytics_status.website_id_source == "saved_host_setting" %}{% trans "Saved for this host" %}
+              {% elif product_analytics_status.website_id_source == "built_in_stage_default" %}{% trans "Approved stage default" %}
+              {% else %}{% trans "Not configured" %}{% endif %}
+            </dd>
+            <dt class="col-sm-4">{% trans "Current status" %}</dt>
+            <dd class="col-sm-8"><span class="badge {% if product_analytics_status.collection_available %}bg-success{% else %}bg-secondary{% endif %}">{% if product_analytics_status.collection_available %}{% trans "Enabled for new page requests" %}{% elif product_analytics_status.website_id_configured %}{% trans "Disabled by this host's setting" %}{% else %}{% trans "Website ID needed" %}{% endif %}</span></dd>
+          </dl>
+          {% if product_analytics_status.approved_host %}
           <form method="post" action="{% url 'save_product_analytics' %}">
             {% csrf_token %}
             <fieldset>
@@ -147,17 +162,33 @@
               <div class="d-flex flex-column gap-2">
                 {% for value, label in product_analytics_options %}
                   <label class="d-flex gap-2 align-items-center" for="product-analytics-{{ value }}">
-                    <input id="product-analytics-{{ value }}" class="form-check-input" type="radio" name="product_analytics_mode" value="{{ value }}"{% if product_analytics_mode == value %} checked{% endif %}>
+                    <input id="product-analytics-{{ value }}" class="form-check-input" type="radio" name="product_analytics_mode" value="{{ value }}"{% if product_analytics_status.mode == value %} checked{% endif %}>
                     <span>{{ label }}</span>
                   </label>
                 {% endfor %}
               </div>
             </fieldset>
+            <div class="mt-3">
+              <label class="form-label" for="product-analytics-website-id">{% trans "Umami Website ID for this host" %}</label>
+              <input id="product-analytics-website-id" class="form-control font-monospace" type="text" name="product_analytics_website_id" value="{{ product_analytics_status.website_id }}" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="product-analytics-website-id-help">
+              <div id="product-analytics-website-id-help" class="form-text">{% trans "Use the UUID from the separate Umami website created for the exact host shown above. This is a public identifier, not an access key. Do not copy the stage ID into production." %}</div>
+            </div>
+            <label class="form-check mt-3" for="confirm-persistent-analytics">
+              <input id="confirm-persistent-analytics" class="form-check-input" type="checkbox" name="confirm_persistent_analytics" value="yes">
+              <span class="form-check-label">{% trans "Required only when enabling: I confirm that this host has its own Umami website record and that visitor consent is required before collection." %}</span>
+            </label>
             <div class="d-flex align-items-center gap-3 mt-3">
               <button type="submit" class="btn btn-primary">{% trans "Save analytics mode" %}</button>
-              <span class="text-muted small">{% trans "The tracker is restricted to 2026.ai-sahakar.net and remains absent from local development and production." %}</span>
+              <span class="text-muted small">{% trans "Changing this setting applies to new page requests immediately; it does not require a deployment restart." %}</span>
             </div>
           </form>
+          {% else %}
+            <div class="alert alert-secondary mb-0" role="status">
+              <strong>{% trans "Hard-disabled on this host." %}</strong>
+              {% trans "Only the approved stage host and canonical production host can collect. Local development, previews, and unapproved hosts do not receive an analytics configuration or analytics cookies." %}
+            </div>
+          {% endif %}
+          <p class="text-muted small mt-3 mb-0">{% trans "Saving this setting does not prove the tracker is reachable. After enabling, verify the browser request and the matching Umami website record. In the future 2026 production app, the www alias redirects to ai-sahakar.net before sessions or analytics run, keeping one visitor population." %}</p>
         </section>
       </div>
     </div>
