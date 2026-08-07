@@ -43,8 +43,8 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains merge `51f0dd7` (PR #191) | PRs #185–#191 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, and the repository-truth audit are integrated |
-| Search latency work | PR #192 remains open for review and is not deployed | Local gates pass (664 configured core/DataOps Django tests, 26 focused product-analytics/search-theme tests, 140 source-backed Classic/Workbench/motion/legal-page browser tests across four viewport projects, 20 isolated analytics privacy tests across the same viewport matrix, and the 82-test PR contract). Pre-change stage baseline was 23,738 ms uncached and 12,910 ms on an immediate repeat; the PR moves exact caching before retrieval, binds a bounded worker corpus to the signed mutation epoch, reauthorizes references before and after model work (including conservative fallback), makes result/embedding/answer cache failures non-fatal (the public rate limiter remains fail-closed), caches provider-scoped query embeddings, adds phase telemetry, removes Workbench reveal delay, validates response-kind/language/reference invariants before either theme mutates the DOM, redacts provider exception details, cancels stale in-flight answers when a new conversation starts, and records measured follow-up plans without adding runtime services |
+| Repository integration baseline | `dev` contains merge `20a7653` (PR #192) | PRs #185–#192 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, search-latency hardening, Umami integration, and the repository-truth audit are integrated |
+| Classic focus-ring fix | PR #193 is open into `dev` and is not deployed | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
 | Product analytics decision | PR #192 contains a disabled-by-default, stage-only Umami browser adapter; no analytics service is deployed by this PR | The supplied `analytics.ai-sahakar.net` endpoint and public website ID are restricted to `2026.ai-sahakar.net`. A superadmin kill switch uses `SiteSetting`, not a new environment variable. Manual allowlisted events, DNT/GPC, hostname rejection, question-language bucketing, final payload rejection, and adapter-level fail-open behavior are browser-tested across four viewport projects. The operator will deploy Umami/PostgreSQL separately and must approve its pseudonymous session processing and prove secure first boot, pinned image/tracker hash, shared-host limits, scheduled 30-day purge, deletion evidence, backup/restore, enabled-theme outage behavior, and rollback before collection. Production remains disabled. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
@@ -138,6 +138,7 @@ and indexing remained `1.0`.
 | #188 | Made local macOS documentation rendering honor an explicit Puppeteer browser and select Playwright's matching headless shell instead of launching the crashing GUI Chrome-for-Testing app |
 | #189 | Keeps the Classic composer reachable after long answers, safely formats structured responses, validates typed payloads and PDF references, and gates continuity across the viewport matrix |
 | #190 | Updated the living handoff after the Classic continuity merge |
+| #193 | Removes the duplicate Classic composer focus outline and adds a browser regression gate; awaiting review and required checks |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -152,10 +153,9 @@ There is no data-readiness or search-language blocker. Search latency remains a
 measured release task until the current branch is reviewed, merged, deployed,
 and canaried. Remaining work is:
 
-1. **Search latency PR:** PR #192 is open into `dev`; finish the combined
-   backend/browser/documentation gates, push the reviewed commits, and keep it
-   unmerged until required checks and human review pass. Plans 025–033 record
-   the measured follow-up sequence without expanding this PR into a rewrite.
+1. **Classic focus-ring PR:** PR #193 is open into `dev`; finish the required
+   checks and human review before merge, then canary the Marathi input focus
+   state after the merged image reaches stage.
 2. **Search latency stage canary:** after the merged image reaches stage, prove
    the unchanged signed generation and both themes; compare uncached/repeat
    duration, phase telemetry, corpus bytes/vectors, and web-worker RSS. Roll
