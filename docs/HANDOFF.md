@@ -43,7 +43,7 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains merge `20a7653` (PR #192) | PRs #185–#192 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, search-latency hardening, Umami integration, and the repository-truth audit are integrated |
+| Repository integration baseline | `dev` contains `df9085c` (PR #194) | PRs #185–#194 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, search-latency hardening, Umami integration, the repository-truth audit, the Classic focus-ring fix, and the Settings control center are integrated |
 | Classic focus-ring fix | PR #193 is merged into `dev`; not yet deployed to stage | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
 | Product analytics decision | PR #192 merged a disabled-by-default, stage-only Umami browser adapter; the independent service remains operator-managed | The supplied `analytics.ai-sahakar.net` endpoint and public website ID are restricted to `2026.ai-sahakar.net`. A superadmin kill switch uses `SiteSetting`, not a new environment variable. Manual allowlisted events, DNT/GPC, hostname rejection, question-language bucketing, final payload rejection, and adapter-level fail-open behavior are browser-tested. Production remains disabled. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
@@ -138,8 +138,8 @@ and indexing remained `1.0`.
 | #188 | Made local macOS documentation rendering honor an explicit Puppeteer browser and select Playwright's matching headless shell instead of launching the crashing GUI Chrome-for-Testing app |
 | #189 | Keeps the Classic composer reachable after long answers, safely formats structured responses, validates typed payloads and PDF references, and gates continuity across the viewport matrix |
 | #190 | Updated the living handoff after the Classic continuity merge |
-| #193 | Removes the duplicate Classic composer focus outline and adds a browser regression gate; awaiting review and required checks |
-| #194 | Redesigns Settings & Configuration around truthful runtime controls, validation, confirmations, and read-only deployment posture; awaiting review |
+| #193 | Removes the duplicate Classic composer focus outline and adds a browser regression gate; merged into `dev` |
+| #194 | Redesigns Settings & Configuration around truthful runtime controls, validation, confirmations, and read-only deployment posture; merged into `dev` |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -161,10 +161,10 @@ and canaried. Remaining work is:
    duration, phase telemetry, corpus bytes/vectors, and web-worker RSS. Roll
    back the image if authorization, continuity, latency, or memory headroom
    regresses.
-3. **Settings control-center PR:** PR #194 is open; finish the separate Settings & Configuration
-   redesign branch. Verify grouped runtime controls, server-side validation,
-   high-impact confirmation, read-only deployment posture, and live runtime
-   override behavior before opening its PR.
+3. **Settings control-center rollout:** PR #194 is merged into `dev`; after the
+   merged image reaches stage, verify grouped runtime controls, server-side
+   validation, high-impact confirmation, read-only deployment posture, and live
+   runtime override behavior without changing persistent data or production.
 4. **Current integrated rollout:** certify an image from current `dev` containing
    merged PRs #187–#190, deploy stage web and maintenance without touching volumes, and
    canary all five public-information routes in both themes, both
