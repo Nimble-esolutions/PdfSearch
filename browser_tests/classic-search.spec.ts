@@ -66,6 +66,30 @@ test.describe('Classic public search', () => {
     await expect(page.locator('link[href*="bootstrap"]')).toHaveCount(0);
   });
 
+  test('uses one accessible focus ring for the compound composer field', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#userQuery').focus();
+
+    const focusStyles = await page.evaluate(() => {
+      const input = document.getElementById('userQuery');
+      const field = input?.closest('.classic-composer__field');
+      if (!input || !field) throw new Error('Classic composer field is incomplete');
+      const inputStyle = getComputedStyle(input);
+      const fieldStyle = getComputedStyle(field);
+      return {
+        inputOutlineStyle: inputStyle.outlineStyle,
+        inputOutlineWidth: inputStyle.outlineWidth,
+        fieldBorderColor: fieldStyle.borderColor,
+        fieldBoxShadow: fieldStyle.boxShadow,
+      };
+    });
+
+    expect(focusStyles.inputOutlineStyle).toBe('none');
+    expect(focusStyles.inputOutlineWidth).toBe('0px');
+    expect(focusStyles.fieldBorderColor).toBe('rgb(7, 94, 150)');
+    expect(focusStyles.fieldBoxShadow).not.toBe('none');
+  });
+
   test('renders answers and protected source evidence without HTML injection', async ({ page }) => {
     await mockSearch(page, {
       kind: 'evidence_answer',
