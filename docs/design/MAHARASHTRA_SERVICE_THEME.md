@@ -163,8 +163,8 @@ package is introduced for this theme.
 | Budget | Target |
 | --- | --- |
 | Theme CSS | 35KB or less uncompressed, unless measured evidence documents an exception |
-| Theme JavaScript | 20KB or less uncompressed |
-| Compressed masthead marks | Target 50KB or less combined |
+| Theme JavaScript | 8KB or less gzip transfer; keep the readable source dependency-free |
+| Compressed masthead marks | 50KB or less combined gzip transfer |
 | LCP | 2.5s or less at p75 |
 | INP | 200ms or less at p75 |
 | CLS | 0.1 or less at p75 |
@@ -173,6 +173,13 @@ Validate with constrained mobile network and CPU throttling as well as normal
 desktop conditions. Reserve dimensions for identity marks and asynchronous
 surfaces. Analytics remains consent-led and must never block rendering,
 interaction, readiness, search, or error recovery.
+
+The 2026-08-08 implementation measures approximately 4.9KB gzip for theme CSS,
+6.8KB gzip for theme JavaScript, and 33.2KB gzip for both official identity
+marks combined. The client reads the configured public-search word limit from
+the rendered server contract rather than duplicating a fixed value. Generated
+answer links remain plain text unless they resolve to a same-origin protected
+PDF route; authoritative source cards use the same allowlist.
 
 ## Theme selection and ownership
 

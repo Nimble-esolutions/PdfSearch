@@ -45,6 +45,12 @@ used** folio instead of a permanent side rail.
 - Respect reduced motion. Animate only opacity and transform, under 300ms.
 - Keep Classic, Workbench, Maharashtra, admin, legal, and safe-error selectors
   isolated. A theme must load only its own search CSS and JavaScript.
+- Read operational limits, including the maximum question length, from the
+  rendered server contract; do not duplicate environment-backed values in CSS
+  or JavaScript.
+- Treat generated answer text as untrusted. Build structured output with DOM
+  APIs, cap renderable payloads, and make only same-origin protected PDF routes
+  clickable. Unknown model-generated URLs remain visible plain text.
 
 ## Deliberate exclusions
 
