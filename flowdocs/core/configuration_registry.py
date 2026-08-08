@@ -26,6 +26,8 @@ class RuntimeSettingDefinition:
     minimum: int | None = None
     maximum: int | None = None
     high_impact: bool = False
+    editable_roles: tuple[str, ...] = ("superadmin",)
+    lifecycle: str = "active"
 
 
 RUNTIME_SETTING_DEFINITIONS = (
@@ -35,11 +37,11 @@ RUNTIME_SETTING_DEFINITIONS = (
     ),
     RuntimeSettingDefinition(
         "DISPLAY_SERVICE_FOOTER", "Service footer", "Public search", "Show the service attribution and policy links on public search.", "select",
-        (("1", "Visible"), ("0", "Hidden")),
+        (("1", "Visible"), ("0", "Hidden")), editable_roles=("admin", "superadmin"),
     ),
     RuntimeSettingDefinition(
         "PUBLIC_SEARCH_MAX_WORDS", "Maximum question words", "Search limits", "Reject questions above this word count before expensive search work begins.", "number",
-        minimum=1, maximum=100,
+        minimum=1, maximum=100, editable_roles=("admin", "superadmin"),
     ),
     RuntimeSettingDefinition(
         "PUBLIC_SEARCH_RATE_LIMIT", "Requests per window", "Search limits", "Maximum public search requests allowed per visitor in the configured window.", "number",
@@ -66,7 +68,6 @@ CONFIGURATION_DEFINITIONS = (
     ConfigurationDefinition("BACKUP_SYNC_MODE", "Backup sync mode", "Runtime controls"),
     ConfigurationDefinition("DATA_MODE", "Data mode", "Runtime controls"),
     ConfigurationDefinition("EXTERNAL_SIDE_EFFECTS_MODE", "External side effects", "Runtime controls"),
-    ConfigurationDefinition("SETTINGS_EDIT_ENABLED", "Settings editing", "Runtime controls"),
     ConfigurationDefinition("REDIS_URL", "Redis backend", "Infrastructure", secret=True),
     ConfigurationDefinition("MAX_FILE_SIZE_MB", "Maximum upload size (MB)", "Document processing"),
     ConfigurationDefinition(
@@ -127,10 +128,10 @@ def build_configuration_groups(settings_obj, db_values=None):
     grouped = {}
     for definition in CONFIGURATION_DEFINITIONS:
         db_value = db_values.get(definition.key)
-        if definition.editable and db_value not in (None, ""):
-            raw_value, source = db_value, "database"
-        elif definition.key in os.environ:
-            raw_value, source = os.environ.get(definition.key), "environment"
+        if definition.key in os.environ:
+            raw_value, source = os.environ.get(definition.key), "environment override"
+        elif definition.editable and db_value not in (None, ""):
+            raw_value, source = db_value, "saved override"
         else:
             raw_value, source = getattr(settings_obj, definition.key, ""), "default"
         row = {
@@ -141,6 +142,8 @@ def build_configuration_groups(settings_obj, db_values=None):
             "editable": definition.editable,
             "restart_required": definition.restart_required,
             "secret": definition.secret,
+            "environment_locked": definition.key in os.environ,
+            "configured": raw_value not in (None, ""),
         }
         grouped.setdefault(definition.group, []).append(row)
     for name, rows in grouped.items():
@@ -148,16 +151,16 @@ def build_configuration_groups(settings_obj, db_values=None):
     return groups
 
 
-def build_runtime_setting_groups(settings_obj, db_values=None):
+def build_runtime_setting_groups(settings_obj, db_values=None, *, role="superadmin"):
     """Build editable controls for settings that the request path reads live."""
     db_values = db_values or {}
     grouped = {}
     for definition in RUNTIME_SETTING_DEFINITIONS:
         db_value = db_values.get(definition.key)
-        if db_value not in (None, ""):
-            current, source = db_value, "database override"
-        elif definition.key in os.environ:
-            current, source = os.environ[definition.key], "environment"
+        if definition.key in os.environ:
+            current, source = os.environ[definition.key], "environment override"
+        elif db_value not in (None, ""):
+            current, source = db_value, "saved override"
         else:
             current, source = getattr(settings_obj, definition.key, ""), "application default"
         if isinstance(current, bool):
@@ -173,6 +176,10 @@ def build_runtime_setting_groups(settings_obj, db_values=None):
             "minimum": definition.minimum,
             "maximum": definition.maximum,
             "high_impact": definition.high_impact,
+            "lifecycle": definition.lifecycle,
+            "environment_locked": definition.key in os.environ,
+            "can_edit": definition.key not in os.environ and role in definition.editable_roles,
+            "editable_roles": definition.editable_roles,
         }
         grouped.setdefault(definition.group, []).append(row)
     return [{"name": name, "rows": rows} for name, rows in grouped.items()]

@@ -5582,56 +5582,24 @@ msgid "The service could not complete this request. Return to document search an
 msgstr "सेवा ही विनंती पूर्ण करू शकली नाही. दस्तऐवज शोधाकडे परत जा आणि थोड्या वेळाने पुन्हा प्रयत्न करा."
 
 #: core/templates/components/product_analytics.html
-msgid "Analytics is off for this browser"
-msgstr "या ब्राउझरसाठी विश्लेषण बंद आहे"
+msgid "Cookies & privacy"
+msgstr "कुकीज आणि गोपनीयता"
 
 #: core/templates/components/product_analytics.html
-msgid "Your browser's Global Privacy Control preference prevents optional analytics. Search remains fully available."
-msgstr "तुमच्या ब्राउझरच्या ग्लोबल प्रायव्हसी कंट्रोल पसंतीमुळे पर्यायी विश्लेषण रोखले आहे. शोध पूर्णपणे उपलब्ध राहील."
+msgid "Essential cookies keep the service secure. With your choice, optional analytics cookies help us count service use without sending your question, answer, document, or account details."
+msgstr "आवश्यक कुकीज सेवा सुरक्षित ठेवतात. तुमच्या निवडीने, पर्यायी विश्लेषण कुकीज तुमचा प्रश्न, उत्तर, दस्तऐवज किंवा खाते तपशील न पाठवता सेवा वापर मोजण्यास मदत करतात."
 
 #: core/templates/components/product_analytics.html
-msgid "Read the cookie policy"
-msgstr "कुकी धोरण वाचा"
+msgid "Essential only"
+msgstr "केवळ आवश्यक"
 
 #: core/templates/components/product_analytics.html
-msgid "Help improve Sahakar AI"
-msgstr "सहकार AI सुधारण्यासाठी मदत करा"
+msgid "Accept optional analytics"
+msgstr "पर्यायी विश्लेषण स्वीकारा"
 
 #: core/templates/components/product_analytics.html
-msgid "With your permission, we collect a small set of content-free service-use events. We never send your question, answer, source document, or account details."
-msgstr "तुमच्या परवानगीने आम्ही मजकूरविरहित सेवा-वापर घटनांचा लहान संच गोळा करतो. तुमचा प्रश्न, उत्तर, स्रोत दस्तऐवज किंवा खाते तपशील कधीही पाठवले जात नाहीत."
-
-#: core/templates/components/product_analytics.html
-msgid "An HTTPS-only pseudonymous browser ID helps count returning visitors for up to 90 days. It is created only after you allow analytics. Global Privacy Control always prevents collection."
-msgstr "HTTPS-पुरता छद्मनामी ब्राउझर आयडी 90 दिवसांपर्यंत परत येणाऱ्या अभ्यागतांची संख्या मोजण्यास मदत करतो. तुम्ही विश्लेषणाला परवानगी दिल्यानंतरच तो तयार होतो. ग्लोबल प्रायव्हसी कंट्रोल नेहमी संकलन रोखतो."
-
-#: core/templates/components/product_analytics.html
-msgid "No thanks"
-msgstr "नको, धन्यवाद"
-
-#: core/templates/components/product_analytics.html
-msgid "Allow analytics"
-msgstr "विश्लेषणास अनुमती द्या"
-
-#: core/templates/components/product_analytics.html
-msgid "Analytics preference"
-msgstr "विश्लेषणाची पसंती"
-
-#: core/templates/components/product_analytics.html
-msgid "Analytics is enabled with a pseudonymous browser ID. You can reset that ID or turn analytics off at any time."
-msgstr "छद्मनामी ब्राउझर आयडीसह विश्लेषण सुरू आहे. तुम्ही हा आयडी रीसेट करू शकता किंवा कधीही विश्लेषण बंद करू शकता."
-
-#: core/templates/components/product_analytics.html
-msgid "Reset ID"
-msgstr "आयडी रीसेट करा"
-
-#: core/templates/components/product_analytics.html
-msgid "Turn off"
-msgstr "बंद करा"
-
-#: core/templates/components/product_analytics.html
-msgid "Analytics is off for this browser."
-msgstr "या ब्राउझरसाठी विश्लेषण बंद आहे."
+msgid "Cookie policy"
+msgstr "कुकी धोरण"
 
 #: core/templates/dashboard_settings.html
 msgid "Consent-led product analytics"

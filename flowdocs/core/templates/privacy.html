@@ -45,7 +45,7 @@
       </tr>
       <tr>
         <td>Optional consent-led product analytics</td>
-        <td>Only after an explicit Allow analytics choice on an approved host: content-free events such as interface presentation, language, result outcome, source-opening outcome, and coarse latency range. A signed consent cookie lasts 180 days and an HTTPS-only, HttpOnly opaque browser token lasts 90 days. The token is never exposed to JavaScript or sent to Umami; the application sends only a one-way pseudonymous alias. Questions, answers, document names, source URLs, account data, raw page URLs, query strings, referrers, session replay, and performance traces are excluded.</td>
+        <td>Only after an explicit Accept optional analytics choice in the normal cookie notice on an approved host: content-free events such as interface presentation, language, result outcome, source-opening outcome, and coarse latency range. A signed consent cookie lasts 180 days and an HTTPS-only, HttpOnly opaque browser token lasts 90 days. The token is never exposed to JavaScript or sent to Umami; the application sends only a one-way pseudonymous alias. Questions, answers, document names, source URLs, account data, raw page URLs, query strings, referrers, session replay, and performance traces are excluded.</td>
         <td>Optional service improvement after explicit consent; Global Privacy Control blocks collection</td>
       </tr>
     </tbody>
@@ -103,8 +103,8 @@
     <li>The manner in which Data Principals may exercise their rights (Section 10 below).</li>
     <li>The procedure for filing grievances (Section 11 below).</li>
   </ul>
-  <p>Public search works without optional analytics. Where optional analytics is available, it begins only after the separate Allow analytics action and can be reset from the public search page. Search queries and technical data are processed as necessary to provide and protect the requested service, subject to applicable law.</p>
-  <p>You may withdraw consent for optional analytics at any time through that control or browser settings. For admin users, withdrawal of consent may affect account access where processing is required for authorized account administration.</p>
+  <p>Public search works without optional analytics. Where optional analytics is available, it begins only after the visitor accepts it in the normal cookie notice. The visitor can withdraw that browser choice by clearing the site's cookies; Global Privacy Control also blocks collection. Search queries and technical data are processed as necessary to provide and protect the requested service, subject to applicable law.</p>
+  <p>You may withdraw consent for optional analytics at any time through browser cookie settings. For admin users, withdrawal of consent may affect account access where processing is required for authorized account administration.</p>
 
   <h2>6. Disclosure and Transfer of Personal Data</h2>
 
@@ -136,8 +136,8 @@
       <tr><td>Uploaded government documents</td><td>Until explicit removal, deprecation, or archival by an authorized administrator</td></tr>
       <tr><td>Session cookies (admin)</td><td>Until logout or session expiry (2 weeks of inactivity)</td></tr>
       <tr><td>Language preference cookie</td><td>Until cleared by the user via browser settings</td></tr>
-      <tr><td>Optional analytics consent record</td><td>180 days in the browser, unless cleared or reset earlier</td></tr>
-      <tr><td>Optional analytics opaque browser token</td><td>90 days in the browser, unless cleared, reset, or blocked by Global Privacy Control</td></tr>
+      <tr><td>Optional analytics consent record</td><td>180 days in the browser, unless cleared earlier</td></tr>
+      <tr><td>Optional analytics opaque browser token</td><td>90 days in the browser, unless cleared or blocked by Global Privacy Control</td></tr>
       <tr><td>Optional self-hosted analytics events</td><td>According to the separately approved Umami retention and deletion policy; the application does not claim or enforce a fixed event-retention period</td></tr>
     </tbody>
   </table>
@@ -149,7 +149,7 @@
     <li><strong>Session Cookie:</strong> Used to maintain authenticated sessions for admin users. This cookie is HttpOnly and transmitted over secure channels. It does not track public users.</li>
     <li><strong>CSRF Token Cookie:</strong> Used as a security measure to prevent cross-site request forgery attacks. This cookie does not contain personal data.</li>
     <li><strong>Language Preference Cookie:</strong> Stores your preferred interface language (English or Marathi).</li>
-    <li><strong>Optional analytics consent and identity cookies:</strong> Only after Allow analytics on an approved host, the Platform stores a signed consent record and a random HTTPS-only, HttpOnly browser token. The token is converted server-side to a one-way alias for allowed self-hosted analytics events; it is not a PdfSearch account identity.</li>
+    <li><strong>Optional analytics consent and identity cookies:</strong> Only after Accept optional analytics in the normal cookie notice on an approved host, the Platform stores a signed consent record and a random HTTPS-only, HttpOnly browser token. The token is converted server-side to a one-way alias for allowed self-hosted analytics events; it is not a PdfSearch account identity.</li>
   </ul>
   <p>We <strong>do not use</strong> advertising, social-media, or third-party tracking cookies, and we do not use optional analytics for behavioural profiling. Automatic page views, raw URLs, query strings, referrers, page titles, session replay, performance traces, search text, answer text, and document details are disabled. The direct connection to the self-hosted analytics service can expose ordinary connection metadata such as IP address and user agent to that service. Global Privacy Control blocks optional collection; the search service continues normally if analytics is disabled or unavailable. For full details, see our <a href="{% url 'cookie_policy' %}{{ public_view_query }}">Cookie Policy</a>.</p>
 

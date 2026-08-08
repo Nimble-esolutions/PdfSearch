@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import os
 import re
 import secrets
 import uuid
@@ -120,6 +121,9 @@ def get_product_analytics_mode(profile: AnalyticsProfile | None) -> str:
 
     if profile is None:
         return PRODUCT_ANALYTICS_DISABLED
+    if PRODUCT_ANALYTICS_MODE_SETTING in os.environ:
+        environment_mode = str(os.environ.get(PRODUCT_ANALYTICS_MODE_SETTING, "")).strip().lower()
+        return environment_mode if environment_mode in PRODUCT_ANALYTICS_MODES else PRODUCT_ANALYTICS_DISABLED
     stored = _site_setting_value(_setting_key(PRODUCT_ANALYTICS_MODE_SETTING, profile))
     if not stored and profile.hostname == "2026.ai-sahakar.net":
         stored = _site_setting_value(PRODUCT_ANALYTICS_MODE_SETTING)
@@ -147,6 +151,8 @@ def get_product_analytics_website_id(profile: AnalyticsProfile | None) -> str:
 
     if profile is None:
         return ""
+    if PRODUCT_ANALYTICS_WEBSITE_ID_SETTING in os.environ:
+        return _valid_website_id(os.environ.get(PRODUCT_ANALYTICS_WEBSITE_ID_SETTING, ""))
     # Deliberately do not read an unscoped Website ID.  A stale stage value
     # must never become a production tenant identifier after a data restore.
     stored = _site_setting_value(_setting_key(PRODUCT_ANALYTICS_WEBSITE_ID_SETTING, profile))
@@ -164,6 +170,8 @@ def product_analytics_website_id_source(profile: AnalyticsProfile | None) -> str
 
     if profile is None:
         return "unavailable"
+    if PRODUCT_ANALYTICS_WEBSITE_ID_SETTING in os.environ:
+        return "environment_override"
     stored = _valid_website_id(
         _site_setting_value(_setting_key(PRODUCT_ANALYTICS_WEBSITE_ID_SETTING, profile))
     )
@@ -193,6 +201,10 @@ def product_analytics_status(request) -> dict[str, object]:
             and website_id
             and mode == PRODUCT_ANALYTICS_ENABLED
         ),
+        "environment_locked": bool(
+            PRODUCT_ANALYTICS_MODE_SETTING in os.environ
+            or PRODUCT_ANALYTICS_WEBSITE_ID_SETTING in os.environ
+        ),
     }
 
 
@@ -208,6 +220,11 @@ def set_product_analytics_mode(
 
     if profile is None:
         raise ValueError("Product analytics are unavailable on this host.")
+    if (
+        PRODUCT_ANALYTICS_MODE_SETTING in os.environ
+        or PRODUCT_ANALYTICS_WEBSITE_ID_SETTING in os.environ
+    ):
+        raise ValueError("Product analytics are controlled by deployment environment overrides.")
 
     candidate = str(mode or "").strip().lower()
     if candidate not in PRODUCT_ANALYTICS_MODES:
@@ -412,7 +429,7 @@ def build_public_analytics_config(
         "deployment_tier": profile.deployment_tier,
         "surface": search_view,
         "primary_surface": primary_view,
-        "ui_language": "mr" if request.LANGUAGE_CODE.split("-", 1)[0] == "mr" else "en",
+        "ui_language": "mr" if getattr(request, "LANGUAGE_CODE", "en").split("-", 1)[0] == "mr" else "en",
         "release_version": release,
         "view_override_used": bool(override_used),
         "consent_status": state,

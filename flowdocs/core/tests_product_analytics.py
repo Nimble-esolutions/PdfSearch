@@ -1,3 +1,4 @@
+import os
 from http.cookies import SimpleCookie
 from pathlib import Path
 from unittest.mock import patch
@@ -33,12 +34,20 @@ WWW_HOST = "www.ai-sahakar.net"
 PRODUCTION_WEBSITE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 
+def remove_analytics_environment(test_case):
+    """Keep persisted-setting tests independent from operator ENV locks."""
+    keys = ("PRODUCT_ANALYTICS_MODE", "PRODUCT_ANALYTICS_WEBSITE_ID")
+    removed = {key: os.environ.pop(key) for key in keys if key in os.environ}
+    test_case.addCleanup(os.environ.update, removed)
+
+
 @override_settings(
     ALLOWED_HOSTS=["testserver", "localhost", STAGE_HOST, PRODUCTION_HOST, WWW_HOST],
     APP_RELEASE_VERSION="2026.08.07-test",
 )
 class ProductAnalyticsRenderingTests(TestCase):
     def setUp(self):
+        remove_analytics_environment(self)
         self.factory = RequestFactory()
 
     def enable(self, host=STAGE_HOST, website_id=""):
@@ -81,7 +90,7 @@ class ProductAnalyticsRenderingTests(TestCase):
         self.assertEqual(stage_config["website_id"], STAGE_UMAMI_WEBSITE_ID)
         self.assertEqual(stage_config["deployment_tier"], "stage")
         self.assertEqual(stage_config["consent_status"], "unset")
-        self.assertContains(stage_response, "Allow analytics")
+        self.assertContains(stage_response, "Accept optional analytics")
 
         production_before_setup = self.client.get(reverse("home"), HTTP_HOST=PRODUCTION_HOST)
         self.assertNotContains(production_before_setup, "product-analytics-config")
@@ -111,7 +120,8 @@ class ProductAnalyticsRenderingTests(TestCase):
         stage_response = self.client.get(reverse("home"), HTTP_HOST=STAGE_HOST)
         production_response = self.client.get(reverse("home"), HTTP_HOST=PRODUCTION_HOST)
 
-        self.assertContains(stage_response, "product-analytics-config")
+        self.assertContains(stage_response, "Accept optional analytics")
+        self.assertNotContains(stage_response, "product-analytics-config")
         self.assertNotContains(production_response, "product-analytics-config")
 
     def test_www_host_maps_to_production_profile_for_aliases(self):
@@ -281,7 +291,8 @@ class ProductAnalyticsRenderingTests(TestCase):
         self.assertFalse(config["identity_ready"])
         self.assertEqual(config["identity_alias"], "")
         self.assertEqual(response.cookies[ANALYTICS_IDENTITY_COOKIE]["max-age"], 0)
-        self.assertContains(response, "Analytics is off for this browser")
+        self.assertNotContains(response, "product-analytics-config")
+        self.assertNotContains(response, "product-analytics-preference")
 
     def test_global_privacy_control_rejects_an_analytics_opt_in(self):
         self.enable()
@@ -346,6 +357,12 @@ class ProductAnalyticsRenderingTests(TestCase):
         """Document order is deliberate: clients need the adapter at startup."""
 
         self.enable()
+        accepted = self.client.post(
+            reverse("analytics_preference"),
+            {"action": "accept", "next": "/"},
+            HTTP_HOST=STAGE_HOST,
+        )
+        cookie_header = self._cookie_header(accepted)
         cases = (
             ("workbench", "search.js"),
             ("classic", "search-classic.js"),
@@ -357,6 +374,7 @@ class ProductAnalyticsRenderingTests(TestCase):
                 response = self.client.get(
                     reverse("home") + f"?view={view}",
                     HTTP_HOST=STAGE_HOST,
+                    HTTP_COOKIE=cookie_header,
                 )
                 html = response.content.decode("utf-8")
                 client_tag = f'<script defer src="/static/main/js/{client_name}"></script>'
@@ -369,6 +387,7 @@ class ProductAnalyticsRenderingTests(TestCase):
 @override_settings(ALLOWED_HOSTS=["testserver", STAGE_HOST, PRODUCTION_HOST])
 class ProductAnalyticsAdminTests(TestCase):
     def setUp(self):
+        remove_analytics_environment(self)
         self.superadmin = get_user_model().objects.create_superuser(
             "analytics-superadmin",
             "analytics-superadmin@example.test",
@@ -386,12 +405,12 @@ class ProductAnalyticsAdminTests(TestCase):
 
         response = self.client.get(reverse("settings"), HTTP_HOST=STAGE_HOST)
 
-        self.assertContains(response, "Consent-led product analytics")
-        self.assertContains(response, "Analytics collection for this host")
+        self.assertContains(response, "Analytics & privacy")
+        self.assertContains(response, "Umami for this host")
         self.assertContains(response, STAGE_HOST)
         self.assertContains(response, STAGE_UMAMI_WEBSITE_ID)
-        self.assertContains(response, "Approved stage default")
-        self.assertContains(response, 'value="disabled" checked')
+        self.assertContains(response, "Stage default")
+        self.assertContains(response, '<option value="disabled" selected>')
 
     def test_superadmin_saves_stage_and_production_under_different_keys(self):
         self.client.force_login(self.superadmin)
@@ -401,7 +420,6 @@ class ProductAnalyticsAdminTests(TestCase):
             {
                 "product_analytics_mode": "enabled",
                 "product_analytics_website_id": STAGE_UMAMI_WEBSITE_ID,
-                "confirm_persistent_analytics": "yes",
             },
             HTTP_HOST=STAGE_HOST,
         )
@@ -411,7 +429,6 @@ class ProductAnalyticsAdminTests(TestCase):
             {
                 "product_analytics_mode": "enabled",
                 "product_analytics_website_id": PRODUCTION_WEBSITE_ID,
-                "confirm_persistent_analytics": "yes",
             },
             HTTP_HOST=PRODUCTION_HOST,
         )
@@ -430,22 +447,23 @@ class ProductAnalyticsAdminTests(TestCase):
             PRODUCTION_WEBSITE_ID,
         )
 
-    def test_enabling_requires_confirmation_and_production_id(self):
+    def test_enabling_requires_a_valid_production_id_but_not_duplicate_operator_consent(self):
         self.client.force_login(self.superadmin)
 
-        no_confirmation = self.client.post(
+        stage = self.client.post(
             reverse("save_product_analytics"),
             {"product_analytics_mode": "enabled"},
             HTTP_HOST=STAGE_HOST,
         )
-        self.assertRedirects(no_confirmation, reverse("settings"))
-        self.assertFalse(
-            SiteSetting.objects.filter(key=f"{PRODUCT_ANALYTICS_MODE_SETTING}:{STAGE_HOST}").exists()
+        self.assertRedirects(stage, reverse("settings"))
+        self.assertEqual(
+            SiteSetting.objects.get(key=f"{PRODUCT_ANALYTICS_MODE_SETTING}:{STAGE_HOST}").value,
+            "enabled",
         )
 
         no_production_id = self.client.post(
             reverse("save_product_analytics"),
-            {"product_analytics_mode": "enabled", "confirm_persistent_analytics": "yes"},
+            {"product_analytics_mode": "enabled"},
             HTTP_HOST=PRODUCTION_HOST,
         )
         self.assertRedirects(no_production_id, reverse("settings"))
@@ -457,10 +475,10 @@ class ProductAnalyticsAdminTests(TestCase):
         self.client.force_login(self.superadmin)
 
         response = self.client.get(reverse("settings"), HTTP_HOST="testserver")
-        self.assertContains(response, "Hard-disabled on this host")
+        self.assertContains(response, "Analytics is hard-disabled")
         save = self.client.post(
             reverse("save_product_analytics"),
-            {"product_analytics_mode": "enabled", "confirm_persistent_analytics": "yes"},
+            {"product_analytics_mode": "enabled"},
             HTTP_HOST="testserver",
         )
         self.assertRedirects(save, reverse("settings"))
@@ -471,9 +489,44 @@ class ProductAnalyticsAdminTests(TestCase):
 
         response = self.client.post(
             reverse("save_product_analytics"),
-            {"product_analytics_mode": "enabled", "confirm_persistent_analytics": "yes"},
+            {"product_analytics_mode": "enabled"},
             HTTP_HOST=STAGE_HOST,
         )
 
         self.assertEqual(response.status_code, 403)
         self.assertFalse(SiteSetting.objects.filter(key__startswith=PRODUCT_ANALYTICS_MODE_SETTING).exists())
+
+    @patch.dict(
+        os.environ,
+        {
+            "PRODUCT_ANALYTICS_MODE": "enabled",
+            "PRODUCT_ANALYTICS_WEBSITE_ID": STAGE_UMAMI_WEBSITE_ID,
+        },
+    )
+    def test_environment_owned_analytics_configuration_is_visible_but_locked(self):
+        self.client.force_login(self.superadmin)
+
+        page = self.client.get(reverse("settings"), HTTP_HOST=STAGE_HOST)
+        self.assertContains(page, "ENV locked")
+        response = self.client.post(
+            reverse("save_product_analytics"),
+            {"product_analytics_mode": "disabled"},
+            HTTP_HOST=STAGE_HOST,
+        )
+
+        self.assertRedirects(response, reverse("settings"))
+        self.assertFalse(SiteSetting.objects.filter(key__startswith=PRODUCT_ANALYTICS_MODE_SETTING).exists())
+
+    @patch.dict(os.environ, {"PRODUCT_ANALYTICS_MODE": ""})
+    def test_blank_environment_mode_is_a_fail_closed_lock(self):
+        SiteSetting.objects.create(
+            key=f"{PRODUCT_ANALYTICS_MODE_SETTING}:{STAGE_HOST}",
+            value="enabled",
+            updated_by=self.superadmin,
+        )
+        self.client.force_login(self.superadmin)
+
+        response = self.client.get(reverse("settings"), HTTP_HOST=STAGE_HOST)
+
+        self.assertEqual(response.context["product_analytics_status"]["mode"], "disabled")
+        self.assertTrue(response.context["product_analytics_status"]["environment_locked"])

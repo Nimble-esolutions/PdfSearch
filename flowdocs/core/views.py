@@ -76,6 +76,7 @@ DOCUMENT_PAGE_SIZE = 25
 
 from .models import ArtifactGeneration, ArtifactValidation, PDFFile, Folder, CustomUser, MaintenanceJob, MaintenanceJobItem, MaintenanceAuditEvent, SEARCHABLE_PDF_LIFECYCLES, SiteSetting
 from .configuration_registry import (
+    CONFIGURATION_DEFINITIONS,
     RUNTIME_SETTING_DEFINITIONS,
     build_configuration_groups,
     build_runtime_setting_groups,
@@ -2637,15 +2638,49 @@ def s3_operations_view(request):
     return redirect(f"{reverse('operations_panel')}?section=maintenance")
 
 
-ALLOWED_SETTING_KEYS = tuple(definition.key for definition in RUNTIME_SETTING_DEFINITIONS)
+RUNTIME_SETTING_KEYS = tuple(definition.key for definition in RUNTIME_SETTING_DEFINITIONS)
+CONFIGURATION_SETTING_KEYS = tuple(definition.key for definition in CONFIGURATION_DEFINITIONS)
+ALL_SETTING_KEYS = tuple(dict.fromkeys(RUNTIME_SETTING_KEYS + CONFIGURATION_SETTING_KEYS))
 RUNTIME_SETTING_BY_KEY = {definition.key: definition for definition in RUNTIME_SETTING_DEFINITIONS}
+SETTINGS_VAULT_STATUS_CACHE_KEY = "settings:vault-status:v1"
+SETTINGS_VAULT_STATUS_CACHE_TTL_SECONDS = 60
+SITE_SETTING_CACHE_TTL_SECONDS = 300
+SETTINGS_ANALYTICS_STATUS_CACHE_KEY = "settings:analytics-status:v1"
+SETTINGS_ANALYTICS_STATUS_CACHE_TTL_SECONDS = 20
+
+
+def _vault_status_snapshot() -> dict[str, object]:
+    """Return a cache-only vault status snapshot for fast page rendering."""
+
+    cached = cache.get(SETTINGS_VAULT_STATUS_CACHE_KEY)
+    if isinstance(cached, dict) and cached.get("fetched_at"):
+        return {
+            **cached,
+            "cached": True,
+            "age_seconds": int(time.time() - cached.get("fetched_at", time.time())),
+        }
+
+    return {
+        "enabled": False,
+        "configured": False,
+        "reachable": False,
+        "bucket_exists": False,
+        "healthy": False,
+        "error": "not_checked",
+        "cached": False,
+        "age_seconds": 0,
+        "fetched_at": time.time(),
+        "probe_ms": 0,
+    }
 
 
 def get_setting(key: str, default: str = "") -> str:
-    """Read a setting from DB → cache → env var chain."""
+    """Read a runtime setting with an explicit ENV lock when defined."""
+    if key in os.environ:
+        return os.environ[key]
     cache_key = f"sitesetting:{key}"
     value = cache.get(cache_key)
-    if value is not None:
+    if value not in (None, ""):
         return value
     try:
         obj = SiteSetting.objects.get(key=key)
@@ -2654,7 +2689,7 @@ def get_setting(key: str, default: str = "") -> str:
         return value
     except SiteSetting.DoesNotExist:
         pass
-    return os.environ.get(key, default)
+    return default
 
 
 def _runtime_bool(key: str, default: bool) -> bool:
@@ -2668,29 +2703,60 @@ def _runtime_int(key: str, default: int) -> int:
         return default
 
 
-@superadmin_required
-def settings_view(request):
-    """Superadmin settings page with safe runtime controls and read-only posture."""
+def _batch_setting_values(keys: tuple[str, ...]) -> dict[str, str]:
+    """Read many settings from cache + database in one DB query."""
+    if not keys:
+        return {}
 
-    SETTINGS_EDIT_ENABLED = os.environ.get("SETTINGS_EDIT_ENABLED", "0") == "1"
+    cache_keys = [f"sitesetting:{key}" for key in keys]
+    cached = cache.get_many(cache_keys)
+    values: dict[str, str] = {}
+    uncached_keys: list[str] = []
 
-    feature_flags = {}
-    setting_values = {}
-    for key in ALLOWED_SETTING_KEYS:
-        db_value = SiteSetting.objects.filter(key=key).values_list("value", flat=True).first()
-        env_value = os.environ.get(key, "")
-        current_value = db_value if db_value not in (None, "") else env_value
-        feature_flags[key] = {
-            "current": current_value,
-            "source": "database" if db_value not in (None, "") else "environment",
-            "env_value": env_value,
+    for key, cache_key in zip(keys, cache_keys):
+        if cache_key in cached:
+            cached_value = cached[cache_key]
+            if cached_value is not None:
+                values[key] = cached_value
+            else:
+                values[key] = ""
+            continue
+        uncached_keys.append(key)
+
+    if uncached_keys:
+        rows = SiteSetting.objects.filter(key__in=uncached_keys).values_list("key", "value")
+        for key, value in rows:
+            values[key] = value
+            cache.set(f"sitesetting:{key}", value, timeout=SITE_SETTING_CACHE_TTL_SECONDS)
+    return values
+
+
+def _vault_status_with_cache():
+    cached = cache.get(SETTINGS_VAULT_STATUS_CACHE_KEY)
+    if isinstance(cached, dict) and cached.get("fetched_at"):
+        return {
+            **cached,
+            "cached": True,
+            "age_seconds": int(time.time() - cached.get("fetched_at", time.time())),
         }
-        setting_values[key] = db_value
 
-    vault_status = {"enabled": False, "configured": False, "reachable": False, "bucket_exists": False, "healthy": False, "error": ""}
+    status = {
+        "enabled": False,
+        "configured": False,
+        "reachable": False,
+        "bucket_exists": False,
+        "healthy": False,
+        "error": "",
+        "cached": False,
+        "age_seconds": 0,
+        "fetched_at": time.time(),
+        "probe_ms": 0,
+    }
+
+    started = time.perf_counter()
     try:
         health = ArtifactVault().health_check()
-        vault_status.update({
+        status.update({
             "enabled": health.enabled,
             "configured": health.configured,
             "reachable": health.reachable,
@@ -2699,9 +2765,71 @@ def settings_view(request):
             "error": health.error_code,
         })
     except ArtifactVaultConfigurationError:
-        vault_status["error"] = "configuration_invalid"
+        status["error"] = "configuration_invalid"
     except Exception:
-        vault_status["error"] = "probe_failed"
+        status["error"] = "probe_failed"
+    status["probe_ms"] = int((time.perf_counter() - started) * 1000)
+    cache.set(SETTINGS_VAULT_STATUS_CACHE_KEY, status, timeout=SETTINGS_VAULT_STATUS_CACHE_TTL_SECONDS)
+    return status
+
+
+def _analytics_status_with_cache(request):
+    host = request.get_host().partition(":")[0].lower()
+    cache_key = f"{SETTINGS_ANALYTICS_STATUS_CACHE_KEY}:{host}"
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict) and cached.get("cached_at"):
+        return {
+            **cached,
+            "cached": True,
+            "age_seconds": int(time.time() - cached["cached_at"]),
+        }
+
+    status = product_analytics_status(request)
+    status["cached"] = False
+    status["age_seconds"] = 0
+    status["cached_at"] = time.time()
+    cache.set(cache_key, status, timeout=SETTINGS_ANALYTICS_STATUS_CACHE_TTL_SECONDS)
+    return status
+
+
+def _analytics_status_snapshot(request):
+    host = request.get_host().partition(":")[0].lower()
+    cache_key = f"{SETTINGS_ANALYTICS_STATUS_CACHE_KEY}:{host}"
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict) and cached.get("cached_at"):
+        status = {
+            **cached,
+            "cached": True,
+            "age_seconds": int(time.time() - cached["cached_at"]),
+        }
+    else:
+        status = {
+            "hostname": host,
+            "mode": PRODUCT_ANALYTICS_DISABLED,
+            "deployment_tier": "unknown",
+            "website_id": "",
+            "website_id_source": "",
+            "website_id_configured": False,
+            "approved_host": False,
+            "collection_available": False,
+            "cached": False,
+            "age_seconds": 0,
+            "cached_at": 0,
+            "error": "",
+        }
+
+    status["cached_at"] = status.get("cached_at") or time.time()
+    status["age_seconds"] = int(time.time() - status["cached_at"])
+    return status
+
+
+@admin_required
+def settings_view(request):
+    """Role-aware control room with ENV-owned values locked and explained."""
+
+    setting_values = _batch_setting_values(ALL_SETTING_KEYS)
+
+    vault_status = _vault_status_snapshot()
 
     env_fields = {}
     try:
@@ -2727,16 +2855,31 @@ def settings_view(request):
     except Exception:
         pass
 
+    configuration_groups = build_configuration_groups(settings, setting_values)
+    operator_role = getattr(request.user, "role", "")
+    runtime_setting_groups = build_runtime_setting_groups(
+        settings,
+        setting_values,
+        role=operator_role,
+    )
+    analytics_status = product_analytics_status(request)
     context = {
-        "settings_edit_enabled": SETTINGS_EDIT_ENABLED,
-        "feature_flags": feature_flags,
-        "configuration_groups": build_configuration_groups(settings, setting_values),
-        "runtime_setting_groups": build_runtime_setting_groups(settings, setting_values),
+        "operator_role": operator_role,
+        "is_superadmin": is_superadmin_user(request.user),
+        "has_editable_runtime_settings": any(
+            row["can_edit"]
+            for group in runtime_setting_groups
+            for row in group["rows"]
+        ),
+        "configuration_groups": configuration_groups,
+        "runtime_setting_groups": runtime_setting_groups,
+        "configuration_row_count": sum(len(group["rows"]) for group in configuration_groups),
         "vault_status": vault_status,
         "env_fields": env_fields,
         "primary_search_view": get_primary_search_view(),
+        "search_ui_environment_locked": "PUBLIC_SEARCH_PRIMARY_VIEW" in os.environ,
         "search_view_options": SEARCH_VIEW_DEFINITIONS,
-        "product_analytics_status": product_analytics_status(request),
+        "product_analytics_status": analytics_status,
         "product_analytics_options": (
             (PRODUCT_ANALYTICS_DISABLED, gettext("Disabled")),
             (PRODUCT_ANALYTICS_ENABLED, gettext("Enabled for this approved host")),
@@ -2750,18 +2893,41 @@ def settings_view(request):
     return render(request, "dashboard_settings.html", context)
 
 
-@superadmin_required
+@admin_required
+@require_GET
+def settings_status_refresh(request):
+    """Ajax endpoint for settings page live status cards."""
+
+    force = request.GET.get("force", "1").strip().lower() not in {"0", "false", "no"}
+    vault_status = _vault_status_with_cache() if force else _vault_status_snapshot()
+    analytics_status = (
+        _analytics_status_with_cache(request)
+        if force
+        else _analytics_status_snapshot(request)
+    )
+
+    return JsonResponse({
+        "vault_status": vault_status,
+        "product_analytics_status": analytics_status,
+        "force_refreshed": force,
+    })
+
+
+@admin_required
 @require_POST
 def save_settings(request):
     """Validate and save only settings that are read live by request paths."""
-    if os.environ.get("SETTINGS_EDIT_ENABLED", "0") != "1":
-        messages.error(request, "Settings editing is not enabled.")
-        return redirect("settings")
-
     errors = []
     changes = []
+    operator_role = getattr(request.user, "role", "")
     for key, definition in RUNTIME_SETTING_BY_KEY.items():
         if key not in request.POST:
+            continue
+        if key in os.environ:
+            errors.append(f"{definition.label} is controlled by the {key} environment override.")
+            continue
+        if operator_role not in definition.editable_roles:
+            errors.append(f"{definition.label} requires superadmin permission.")
             continue
         value = request.POST.get(key, "").strip()
         if value == "":
@@ -2782,7 +2948,11 @@ def save_settings(request):
             if definition.maximum is not None and numeric_value > definition.maximum:
                 errors.append(f"{definition.label} must be no more than {definition.maximum}.")
                 continue
-        current = get_setting(key, str(getattr(settings, key, "")))
+        current = get_setting(key, getattr(settings, key, ""))
+        if isinstance(current, bool):
+            current = "1" if current else "0"
+        else:
+            current = str(current)
         if value != current:
             changes.append((key, value, definition))
 
@@ -2805,10 +2975,17 @@ def save_settings(request):
     return redirect("settings")
 
 
-@superadmin_required
+@admin_required
 @require_POST
 def save_search_ui(request):
     """Set the default public-search presentation without deployment config."""
+
+    if "PUBLIC_SEARCH_PRIMARY_VIEW" in os.environ:
+        messages.error(
+            request,
+            gettext("Public search presentation is locked by the PUBLIC_SEARCH_PRIMARY_VIEW environment override."),
+        )
+        return redirect("settings")
 
     try:
         selected = set_primary_search_view(
@@ -2843,11 +3020,6 @@ def save_product_analytics(request):
     try:
         profile = analytics_profile_for_request(request)
         requested_mode = request.POST.get("product_analytics_mode")
-        if (
-            requested_mode == PRODUCT_ANALYTICS_ENABLED
-            and request.POST.get("confirm_persistent_analytics") != "yes"
-        ):
-            raise ValueError("Confirm persistent analytics before enabling it.")
         selected = set_product_analytics_mode(
             requested_mode,
             updated_by=request.user,

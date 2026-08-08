@@ -9,13 +9,21 @@ const adapter = readFileSync(
 const umamiScriptUrl = 'https://analytics.ai-sahakar.net/script.js';
 const websiteId = 'a947d503-2c2b-4192-8845-877e062efc38';
 const identityAlias = `v1_${'a'.repeat(43)}`;
+const approvedTestUrl = 'https://2026.ai-sahakar.net/__analytics-browser-test__';
+
+async function loadApprovedTestDocument(page: Page, content = '') {
+  await page.route(approvedTestUrl, route => route.fulfill({
+    contentType: 'text/html',
+    body: `<!doctype html><html><body>${content}</body></html>`,
+  }));
+  await page.goto(approvedTestUrl);
+}
 
 function consentedConfig(overrides: Record<string, unknown> = {}) {
   return {
     script_url: umamiScriptUrl,
     website_id: websiteId,
-    // page.setContent() runs at about:blank, whose hostname is the empty string.
-    allowed_domains: [''],
+    allowed_domains: ['2026.ai-sahakar.net'],
     deployment_tier: 'stage',
     surface: 'classic',
     primary_surface: 'classic',
@@ -39,7 +47,8 @@ async function preventDeferredVendorLoad(page: Page) {
 }
 
 async function installAdapter(page: Page, config: Record<string, unknown>, content = '') {
-  await page.setContent(
+  await loadApprovedTestDocument(
+    page,
     `${content}<script id="product-analytics-config" type="application/json">${JSON.stringify(config)}</script>`,
   );
   await preventDeferredVendorLoad(page);
@@ -111,7 +120,7 @@ test.describe('Privacy-bounded product analytics adapter', () => {
     expect(result.transport).not.toHaveProperty('referrer');
     expect(result.identity).toEqual({
       website: websiteId,
-      hostname: '',
+      hostname: '2026.ai-sahakar.net',
       id: identityAlias,
     });
     expect(result.languages).toEqual({ english: 'en', marathi: 'mr', fallback: 'mr' });
@@ -126,7 +135,8 @@ test.describe('Privacy-bounded product analytics adapter', () => {
         body: `window.__umamiEvents=[];window.umami={identify:(id)=>window.__umamiIdentity=id,track:(name,data)=>window.__umamiEvents.push({name,data})};`,
       });
     });
-    await page.setContent(
+    await loadApprovedTestDocument(
+      page,
       `<script id="product-analytics-config" type="application/json">${JSON.stringify(consentedConfig())}</script>`,
     );
     await page.addScriptTag({ content: adapter });
@@ -168,7 +178,8 @@ test.describe('Privacy-bounded product analytics adapter', () => {
   });
 
   test('allows explicit consent to override Do Not Track without exposing page content', async ({ page }) => {
-    await page.setContent(
+    await loadApprovedTestDocument(
+      page,
       `<script id="product-analytics-config" type="application/json">${JSON.stringify(consentedConfig())}</script>`,
     );
     await preventDeferredVendorLoad(page);
@@ -191,7 +202,8 @@ test.describe('Privacy-bounded product analytics adapter', () => {
   });
 
   test('honours Global Privacy Control before loading or accepting events', async ({ page }) => {
-    await page.setContent(
+    await loadApprovedTestDocument(
+      page,
       `<script id="product-analytics-config" type="application/json">${JSON.stringify(consentedConfig())}</script>`,
     );
     await page.evaluate(() => {
@@ -213,7 +225,7 @@ test.describe('Privacy-bounded product analytics adapter', () => {
   });
 
   test('rejects collection when the current hostname is not allowlisted', async ({ page }) => {
-    await installAdapter(page, consentedConfig({ allowed_domains: ['2026.ai-sahakar.net'] }));
+    await installAdapter(page, consentedConfig({ allowed_domains: ['other.ai-sahakar.net'] }));
 
     const result = await page.evaluate(() => ({
       tracked: (window as any).PdfSearchAnalytics.track('search_feedback_opened', { view: 'classic' }),

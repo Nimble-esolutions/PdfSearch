@@ -1,312 +1,247 @@
 {% extends 'base.html' %}
-{% load i18n %}
+{% load i18n static %}
 
+{% block body_class %}admin-shell settings-shell{% endblock %}
 {% block title %}{% trans "Settings & Configuration - CC & RCS Maharashtra" %}{% endblock %}
 
 {% block content %}
-<section class="container-fluid py-4" aria-labelledby="settings-page-heading">
-  <div class="admin-page-heading mb-4">
-    <p class="admin-kicker">{% trans "Superadmin" %}</p>
-    <h2 id="settings-page-heading">{% trans "Settings & Configuration" %}</h2>
-    <p>{% trans "Environment identity, data recovery status, and runtime feature flags." %}</p>
-  </div>
-
-  {% if env_fields %}
-  <section class="mb-4" aria-labelledby="environment-identity-heading">
-    <h3 id="environment-identity-heading" class="border-bottom pb-2 mb-3">{% trans "Environment Identity" %}</h3>
-    <div class="row g-3">
-      <div class="col-md-6 col-lg-4">
-        <section class="admin-panel h-100" aria-labelledby="settings-environment-heading">
-          <div class="border-bottom pb-2 mb-3">
-            <h4 id="settings-environment-heading" class="h6 mb-0">{% trans "Environment" %}</h4>
-          </div>
-          <div>
-            <dl class="row small mb-0">
-              <dt class="col-sm-5">{% trans "APP_ENV" %}</dt>
-              <dd class="col-sm-7"><span class="badge {% if env_fields.app_env == 'production' %}bg-success{% elif env_fields.app_env == 'staging' %}bg-warning{% else %}bg-secondary{% endif %}">{{ env_fields.app_env }}</span></dd>
-
-              <dt class="col-sm-5">{% trans "Dataset" %}</dt>
-              <dd class="col-sm-7 font-monospace small">{{ env_fields.dataset_id|default:"—" }}</dd>
-
-              <dt class="col-sm-5">{% trans "Authoritative" %}</dt>
-              <dd class="col-sm-7 font-monospace small">{{ env_fields.authoritative_dataset_id|default:"—" }}</dd>
-
-              <dt class="col-sm-5">{% trans "Restore Source" %}</dt>
-              <dd class="col-sm-7 font-monospace small">{{ env_fields.restore_source_dataset_id|default:"—" }}</dd>
-
-              <dt class="col-sm-5">{% trans "Production Source" %}</dt>
-              <dd class="col-sm-7 font-monospace small">{{ env_fields.production_source_id|default:"—" }}</dd>
-            </dl>
-          </div>
-        </section>
-      </div>
-
-      <div class="col-md-6 col-lg-4">
-        <section class="admin-panel h-100" aria-labelledby="settings-deployment-heading">
-          <div class="border-bottom pb-2 mb-3">
-            <h4 id="settings-deployment-heading" class="h6 mb-0">{% trans "Deployment" %}</h4>
-          </div>
-          <div>
-            <dl class="row small mb-0">
-              <dt class="col-sm-5">{% trans "Deployment ID" %}</dt>
-              <dd class="col-sm-7 font-monospace small">{{ env_fields.deployment_id|default:"—" }}</dd>
-
-              <dt class="col-sm-5">{% trans "Instance ID" %}</dt>
-              <dd class="col-sm-7 font-monospace small">{{ env_fields.instance_id|default:"—" }}</dd>
-
-              <dt class="col-sm-5">{% trans "Build Digest" %}</dt>
-              <dd class="col-sm-7 font-monospace small">{{ env_fields.build_digest|default:"—" }}</dd>
-
-              <dt class="col-sm-5">{% trans "Release" %}</dt>
-              <dd class="col-sm-7 font-monospace small">{{ env_fields.app_release|default:"—" }}</dd>
-            </dl>
-          </div>
-        </section>
-      </div>
-
-      <div class="col-md-6 col-lg-4">
-        <section class="admin-panel h-100" aria-labelledby="settings-backup-heading">
-          <div class="border-bottom pb-2 mb-3">
-            <h4 id="settings-backup-heading" class="h6 mb-0">{% trans "Backup & Data" %}</h4>
-          </div>
-          <div>
-            <dl class="row small mb-0">
-              <dt class="col-sm-5">{% trans "Backup Role" %}</dt>
-              <dd class="col-sm-7"><span class="badge {% if env_fields.backup_role == 'writer' %}bg-success{% elif env_fields.backup_role == 'reader' %}bg-info{% else %}bg-secondary{% endif %}">{{ env_fields.backup_role }}</span></dd>
-
-              <dt class="col-sm-5">{% trans "Sync Mode" %}</dt>
-              <dd class="col-sm-7">{{ env_fields.backup_sync_mode }}</dd>
-
-              <dt class="col-sm-5">{% trans "Data Mode" %}</dt>
-              <dd class="col-sm-7">{{ env_fields.data_mode }}</dd>
-
-              <dt class="col-sm-5">{% trans "Side Effects" %}</dt>
-              <dd class="col-sm-7"><span class="badge {% if env_fields.side_effects == 'enabled' %}bg-success{% elif env_fields.side_effects == 'sandbox' %}bg-warning{% else %}bg-danger{% endif %}">{{ env_fields.side_effects }}</span></dd>
-
-              <dt class="col-sm-5">{% trans "Scheduler" %}</dt>
-              <dd class="col-sm-7">{% if env_fields.scheduler_enabled %}<span class="badge bg-success">{% trans "Active" %}</span>{% else %}<span class="badge bg-secondary">{% trans "Disabled" %}</span>{% endif %}</dd>
-            </dl>
-          </div>
-        </section>
-      </div>
+<div
+  class="container-fluid settings-control-room"
+  data-settings-page
+  data-settings-status-endpoint="{% url 'settings_status_refresh' %}"
+  data-label-yes="{% trans 'Yes' %}"
+  data-label-no="{% trans 'No' %}"
+  data-label-unknown="{% trans 'Unknown' %}"
+  data-label-healthy="{% trans 'Healthy' %}"
+  data-label-attention="{% trans 'Needs attention' %}"
+  data-label-matches="{% trans 'matching settings' %}"
+  data-label-refresh-failed="{% trans 'Status refresh failed. Current saved settings were not changed.' %}"
+  aria-labelledby="settings-page-heading"
+>
+  <header class="settings-page-heading">
+    <div>
+      <p class="admin-kicker">{% if is_superadmin %}{% trans "Superadmin control room" %}{% else %}{% trans "Administrator settings" %}{% endif %}</p>
+      <h1 id="settings-page-heading">{% trans "Settings & Configuration" %}</h1>
+      <p>{% trans "Manage this host's live service behavior. A value defined by the deployment environment is visible here but stays locked." %}</p>
     </div>
-  </section>
-  {% endif %}
+    <span class="settings-role-badge">{{ operator_role|capfirst }}</span>
+  </header>
 
-  <section class="mb-4" aria-labelledby="public-search-presentation-heading">
-    <h3 id="public-search-presentation-heading" class="border-bottom pb-2 mb-3">{% trans "Public search presentation" %}</h3>
-    <div class="row">
-      <div class="col-lg-8">
-        <section class="admin-panel" aria-labelledby="primary-search-view-heading">
-          <div class="border-bottom pb-2 mb-3">
-            <h4 id="primary-search-view-heading" class="h6 mb-1">{% trans "Primary search view" %}</h4>
-            <p class="text-muted small mb-0">{% trans "Choose which public search layout opens by default. This changes presentation only; search, documents, permissions, and language behavior stay the same." %}</p>
-          </div>
-          <form method="post" action="{% url 'save_search_ui' %}">
-            {% csrf_token %}
-            <fieldset>
-              <legend class="visually-hidden">{% trans "Primary search view" %}</legend>
-              <div class="row g-3">
-                {% for option in search_view_options %}
-                <div class="col-md-6">
-                  <label class="admin-panel d-flex gap-3 align-items-start h-100 mb-0" for="search-view-{{ option.value }}">
-                    <input id="search-view-{{ option.value }}" class="form-check-input mt-1" type="radio" name="primary_search_view" value="{{ option.value }}"{% if primary_search_view == option.value %} checked{% endif %}>
-                    <span>
-                      <strong class="d-block">{{ option.label }}</strong>
-                      <span class="d-block text-muted small mt-1">{{ option.description }}</span>
-                      <a class="d-inline-block small mt-2" href="{% url 'home' %}?view={{ option.value }}" target="_blank" rel="noopener noreferrer">{% trans "Preview this view" %}<span aria-hidden="true"> ↗</span></a>
-                    </span>
-                  </label>
-                </div>
-                {% endfor %}
-              </div>
-            </fieldset>
-            <div class="d-flex align-items-center gap-3 mt-3">
-              <button type="submit" class="btn btn-primary">{% trans "Set primary view" %}</button>
-              <span class="text-muted small">{% trans "Shareable previews use ?view=classic or ?view=workbench and do not change this setting." %}</span>
-            </div>
-          </form>
-        </section>
+  <noscript>
+    <div class="alert alert-warning" role="status">{% trans "Live status refresh and configuration filtering require JavaScript. Forms and current values remain available." %}</div>
+  </noscript>
+
+  <section class="settings-overview-grid" aria-label="{% trans 'Environment overview' %}">
+    <article class="settings-dossier" aria-labelledby="environment-identity-heading">
+      <div class="settings-dossier__heading">
+        <div>
+          <p class="settings-eyebrow">{% trans "Read-only passport" %}</p>
+          <h2 id="environment-identity-heading">{% trans "Environment identity" %}</h2>
+        </div>
+        <span class="settings-source-tag settings-source-tag--locked">{% trans "Deployment owned" %}</span>
       </div>
-    </div>
+      {% if env_fields %}
+      <dl class="settings-facts">
+        <div><dt>{% trans "Environment" %}</dt><dd>{{ env_fields.app_env|default:"Unknown" }}</dd></div>
+        <div><dt>{% trans "Deployment" %}</dt><dd><code>{{ env_fields.deployment_id|default:"Not declared" }}</code></dd></div>
+        <div><dt>{% trans "Dataset" %}</dt><dd><code>{{ env_fields.dataset_id|default:"Not declared" }}</code></dd></div>
+        <div><dt>{% trans "Instance" %}</dt><dd><code>{{ env_fields.instance_id|default:"Not declared" }}</code></dd></div>
+        <div><dt>{% trans "Release" %}</dt><dd>{{ env_fields.app_release|default:"Not declared" }}</dd></div>
+        <div><dt>{% trans "Build" %}</dt><dd><code>{{ env_fields.build_digest|default:"Not declared" }}</code></dd></div>
+        <div><dt>{% trans "Data mode" %}</dt><dd>{{ env_fields.data_mode|default:"Unknown" }}</dd></div>
+        <div><dt>{% trans "Backup posture" %}</dt><dd>{{ env_fields.backup_role|default:"Unknown" }} · {{ env_fields.backup_sync_mode|default:"Unknown" }}</dd></div>
+      </dl>
+      {% else %}
+      <p class="settings-empty-state">{% trans "No validated environment identity is available for this process." %}</p>
+      {% endif %}
+    </article>
+
+    <article class="settings-dossier" aria-labelledby="recovery-status-heading">
+      <div class="settings-dossier__heading">
+        <div>
+          <p class="settings-eyebrow">{% trans "Read-only evidence" %}</p>
+          <h2 id="recovery-status-heading">{% trans "Data recovery status" %}</h2>
+        </div>
+        <span id="vault-status-pill" class="settings-health {% if vault_status.healthy %}settings-health--ok{% elif vault_status.error == 'not_checked' %}settings-health--neutral{% else %}settings-health--attention{% endif %}">
+          {% if vault_status.healthy %}{% trans "Healthy" %}{% elif vault_status.error == "not_checked" %}{% trans "Not checked" %}{% else %}{% trans "Needs attention" %}{% endif %}
+        </span>
+      </div>
+      <dl class="settings-facts settings-facts--compact">
+        <div><dt>{% trans "Recovery enabled" %}</dt><dd id="vault-enabled">{{ vault_status.enabled|yesno:_('Yes,No') }}</dd></div>
+        <div><dt>{% trans "Endpoint reachable" %}</dt><dd id="vault-reachable">{{ vault_status.reachable|yesno:_('Yes,No') }}</dd></div>
+        <div><dt>{% trans "Bucket available" %}</dt><dd id="vault-bucket-exists">{% if vault_status.bucket_exists is True %}{% trans "Yes" %}{% elif vault_status.bucket_exists is False %}{% trans "No" %}{% else %}{% trans "Unknown" %}{% endif %}</dd></div>
+        <div><dt>{% trans "Evidence age" %}</dt><dd id="vault-cache-age">{{ vault_status.age_seconds }}s</dd></div>
+      </dl>
+      <p id="vault-error" class="settings-inline-error{% if not vault_status.error or vault_status.error == 'not_checked' %} d-none{% endif %}">{{ vault_status.error|default:"" }}</p>
+      {% if is_superadmin %}
+      <button class="btn btn-outline-secondary btn-sm" type="button" data-refresh-status="vault">{% trans "Refresh recovery evidence" %}</button>
+      {% else %}
+      <p class="settings-note">{% trans "Recovery diagnostics are informative for administrators; maintenance actions remain superadmin-only." %}</p>
+      {% endif %}
+    </article>
   </section>
 
-  <section class="mb-4" aria-labelledby="product-analytics-heading">
-    <h3 id="product-analytics-heading" class="border-bottom pb-2 mb-3">{% trans "Consent-led product analytics" %}</h3>
-    <div class="row">
-      <div class="col-lg-8">
-        <section class="admin-panel" aria-labelledby="product-analytics-mode-heading">
-          <div class="border-bottom pb-2 mb-3">
-            <h4 id="product-analytics-mode-heading" class="h6 mb-1">{% trans "Analytics collection for this host" %}</h4>
-            <p class="text-muted small mb-0">{% trans "Collection requires visitor consent, uses only manual content-free events, and never changes search readiness. Stage and production use separate Website IDs; production never inherits the stage identifier." %}</p>
+  <div class="settings-workspace">
+    <nav class="settings-section-nav" aria-label="{% trans 'Settings sections' %}">
+      <p>{% trans "Control desk" %}</p>
+      <a href="#search-experience">{% trans "Search experience" %}</a>
+      <a href="#analytics-privacy">{% trans "Analytics & privacy" %}</a>
+      <a href="#deployment-reference">{% trans "Deployment reference" %}</a>
+      <span>{% blocktrans with count=configuration_row_count %}{{ count }} declared settings{% endblocktrans %}</span>
+    </nav>
+
+    <div class="settings-workspace__content">
+      <section class="settings-section" id="search-experience" aria-labelledby="search-experience-heading">
+        <header class="settings-section__heading">
+          <div>
+            <p class="settings-eyebrow">{% trans "Public service" %}</p>
+            <h2 id="search-experience-heading">{% trans "Search experience" %}</h2>
+            <p>{% trans "Presentation and request controls used by the running application. Saved changes apply to new requests; ENV-owned values stay locked." %}</p>
           </div>
-          <dl class="row small mb-4">
-            <dt class="col-sm-4">{% trans "Current host" %}</dt>
-            <dd class="col-sm-8"><code>{{ product_analytics_status.hostname }}</code></dd>
-            <dt class="col-sm-4">{% trans "Collection tier" %}</dt>
-            <dd class="col-sm-8">{{ product_analytics_status.deployment_tier }}</dd>
-            <dt class="col-sm-4">{% trans "Website ID source" %}</dt>
-            <dd class="col-sm-8">
-              {% if product_analytics_status.website_id_source == "saved_host_setting" %}{% trans "Saved for this host" %}
-              {% elif product_analytics_status.website_id_source == "built_in_stage_default" %}{% trans "Approved stage default" %}
-              {% else %}{% trans "Not configured" %}{% endif %}
-            </dd>
-            <dt class="col-sm-4">{% trans "Current status" %}</dt>
-            <dd class="col-sm-8"><span class="badge {% if product_analytics_status.collection_available %}bg-success{% else %}bg-secondary{% endif %}">{% if product_analytics_status.collection_available %}{% trans "Enabled for new page requests" %}{% elif product_analytics_status.website_id_configured %}{% trans "Disabled by this host's setting" %}{% else %}{% trans "Website ID needed" %}{% endif %}</span></dd>
-          </dl>
-          {% if product_analytics_status.approved_host %}
-          <form method="post" action="{% url 'save_product_analytics' %}">
-            {% csrf_token %}
-            <fieldset>
-              <legend class="visually-hidden">{% trans "Product analytics mode" %}</legend>
-              <div class="d-flex flex-column gap-2">
-                {% for value, label in product_analytics_options %}
-                  <label class="d-flex gap-2 align-items-center" for="product-analytics-{{ value }}">
-                    <input id="product-analytics-{{ value }}" class="form-check-input" type="radio" name="product_analytics_mode" value="{{ value }}"{% if product_analytics_status.mode == value %} checked{% endif %}>
-                    <span>{{ label }}</span>
-                  </label>
-                {% endfor %}
-              </div>
-            </fieldset>
-            <div class="mt-3">
-              <label class="form-label" for="product-analytics-website-id">{% trans "Umami Website ID for this host" %}</label>
-              <input id="product-analytics-website-id" class="form-control font-monospace" type="text" name="product_analytics_website_id" value="{{ product_analytics_status.website_id }}" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="product-analytics-website-id-help">
-              <div id="product-analytics-website-id-help" class="form-text">{% trans "Use the UUID from the separate Umami website created for the exact host shown above. This is a public identifier, not an access key. Do not copy the stage ID into production." %}</div>
-            </div>
-            <label class="form-check mt-3" for="confirm-persistent-analytics">
-              <input id="confirm-persistent-analytics" class="form-check-input" type="checkbox" name="confirm_persistent_analytics" value="yes">
-              <span class="form-check-label">{% trans "Required only when enabling: I confirm that this host has its own Umami website record and that visitor consent is required before collection." %}</span>
+        </header>
+
+        <form class="settings-control-group" method="post" action="{% url 'save_search_ui' %}">
+          {% csrf_token %}
+          <div class="settings-control-group__heading">
+            <div><h3>{% trans "Primary search view" %}</h3><p>{% trans "Choose the default public interface. Shareable ?view=classic and ?view=workbench links continue to work." %}</p></div>
+            <span class="settings-source-tag {% if search_ui_environment_locked %}settings-source-tag--locked{% else %}settings-source-tag--saved{% endif %}">{% if search_ui_environment_locked %}{% trans "ENV locked" %}{% else %}{% trans "Saved setting" %}{% endif %}</span>
+          </div>
+          <div class="settings-choice-grid">
+            {% for option in search_view_options %}
+            <label class="settings-choice{% if primary_search_view == option.value %} settings-choice--selected{% endif %}">
+              <input type="radio" name="primary_search_view" value="{{ option.value }}"{% if primary_search_view == option.value %} checked{% endif %}{% if search_ui_environment_locked %} disabled{% endif %}>
+              <span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span>
             </label>
-            <div class="d-flex align-items-center gap-3 mt-3">
-              <button type="submit" class="btn btn-primary">{% trans "Save analytics mode" %}</button>
-              <span class="text-muted small">{% trans "Changing this setting applies to new page requests immediately; it does not require a deployment restart." %}</span>
-            </div>
-          </form>
-          {% else %}
-            <div class="alert alert-secondary mb-0" role="status">
-              <strong>{% trans "Hard-disabled on this host." %}</strong>
-              {% trans "Only the approved stage host and canonical production host can collect. Local development, previews, and unapproved hosts do not receive an analytics configuration or analytics cookies." %}
-            </div>
-          {% endif %}
-          <p class="text-muted small mt-3 mb-0">{% trans "Saving this setting does not prove the tracker is reachable. After enabling, verify the browser request and the matching Umami website record. In the future 2026 production app, the www alias redirects to ai-sahakar.net before sessions or analytics run, keeping one visitor population." %}</p>
-        </section>
-      </div>
-    </div>
-  </section>
-
-  <section class="mb-4" aria-labelledby="vault-status-heading">
-    <h3 id="vault-status-heading" class="border-bottom pb-2 mb-3">{% trans "Data recovery status" %}</h3>
-    <div class="row">
-      <div class="col-md-6 col-lg-4">
-        <section class="admin-panel h-100" aria-labelledby="vault-connectivity-heading">
-          <div class="border-bottom pb-2 mb-3">
-            <h4 id="vault-connectivity-heading" class="h6 mb-0">{% trans "Object storage connectivity" %}</h4>
-          </div>
-          <div>
-            <dl class="row small mb-0">
-              <dt class="col-sm-5">{% trans "Recovery enabled" %}</dt>
-              <dd class="col-sm-7"><span class="badge {% if vault_status.enabled %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.enabled|yesno:_("Enabled,Disabled") }}</span></dd>
-
-              <dt class="col-sm-5">{% trans "Endpoint Reachable" %}</dt>
-              <dd class="col-sm-7"><span class="badge {% if vault_status.reachable %}bg-success{% else %}bg-danger{% endif %}">{{ vault_status.reachable|yesno:_("Yes,No") }}</span></dd>
-
-              <dt class="col-sm-5">{% trans "Bucket Exists" %}</dt>
-              <dd class="col-sm-7"><span class="badge {% if vault_status.bucket_exists is True %}bg-success{% elif vault_status.bucket_exists is False %}bg-danger{% else %}bg-warning text-dark{% endif %}">{% if vault_status.bucket_exists is True %}{% trans "Yes" %}{% elif vault_status.bucket_exists is False %}{% trans "No" %}{% else %}{% trans "Unknown" %}{% endif %}</span></dd>
-
-              {% if vault_status.error %}
-              <dt class="col-sm-5">{% trans "Error" %}</dt>
-              <dd class="col-sm-7"><span class="text-danger font-monospace small">{{ vault_status.error }}</span></dd>
-              {% endif %}
-            </dl>
-          </div>
-        </section>
-      </div>
-    </div>
-  </section>
-
-  <section class="settings-control-center mb-4" aria-labelledby="runtime-controls-heading">
-    <div class="settings-section-heading">
-      <div>
-        <p class="admin-kicker mb-1">{% trans "Safe runtime controls" %}</p>
-        <h3 id="runtime-controls-heading" class="mb-1">{% trans "Runtime controls" %}</h3>
-        <p class="text-muted mb-0">{% trans "Only controls that the running request path reads live are editable here. Deployment identity, data lineage, backup role, and provider credentials remain read-only below." %}</p>
-      </div>
-      <span class="settings-status-chip settings-status-chip--neutral">{% trans "Superadmin only" %}</span>
-    </div>
-
-    {% if not settings_edit_enabled %}
-    <div class="alert alert-info settings-notice" role="status">
-      <strong>{% trans "Editing is locked" %}</strong>
-      <span>{% trans "Set SETTINGS_EDIT_ENABLED=1 in the deployment environment before using these controls." %}</span>
-    </div>
-    {% endif %}
-
-    <form method="post" action="{% url 'save_settings' %}" class="settings-form" id="runtime-settings-form">
-      {% csrf_token %}
-      <div class="settings-grid">
-        {% for group in runtime_setting_groups %}
-        <fieldset class="settings-card">
-          <legend class="settings-card__title">{{ group.name }}</legend>
-          <div class="settings-card__body">
-            {% for row in group.rows %}
-            <div class="settings-control{% if row.high_impact %} settings-control--high-impact{% endif %}">
-              <div class="settings-control__copy">
-                <label class="settings-control__label" for="runtime-{{ row.key }}">{{ row.label }}</label>
-                <p class="settings-control__description">{{ row.description }}</p>
-                <span class="settings-value-meta">{% trans "Current" %}: <code>{{ row.current }}</code> · {% trans "Source" %}: {{ row.source }}</span>
-              </div>
-              {% if settings_edit_enabled %}
-                {% if row.input_type == 'select' %}
-                <select id="runtime-{{ row.key }}" name="{{ row.key }}" class="form-select settings-control__input">
-                  {% for option in row.choices %}<option value="{{ option.0 }}"{% if row.current == option.0 %} selected{% endif %}>{{ option.1 }}</option>{% endfor %}
-                </select>
-                {% else %}
-                <input id="runtime-{{ row.key }}" name="{{ row.key }}" class="form-control settings-control__input" type="{{ row.input_type }}" value="{{ row.current }}"{% if row.minimum is not None %} min="{{ row.minimum }}"{% endif %}{% if row.maximum is not None %} max="{{ row.maximum }}"{% endif %} inputmode="numeric">
-                {% endif %}
-              {% else %}
-                <span class="settings-readonly-value"><code>{{ row.current }}</code></span>
-              {% endif %}
-            </div>
             {% endfor %}
           </div>
-        </fieldset>
-        {% endfor %}
-      </div>
-      {% if settings_edit_enabled %}
-      <div class="settings-form__footer">
-        <label class="settings-confirmation" for="confirm-settings-changes">
-          <input id="confirm-settings-changes" type="checkbox" name="confirm_changes" value="yes" required>
-          <span>{% trans "I reviewed these values and understand that high-impact changes can affect public availability or request load." %}</span>
-        </label>
-        <button type="submit" class="btn btn-primary">{% trans "Save runtime changes" %}</button>
-      </div>
-      {% endif %}
-    </form>
-  </section>
+          <nav class="settings-preview-links" aria-label="{% trans 'Preview public search views' %}">
+            <span>{% trans "Preview without changing the default:" %}</span>
+            {% for option in search_view_options %}<a href="{% url 'home' %}?view={{ option.value }}" target="_blank" rel="noopener noreferrer">{{ option.label }}<span aria-hidden="true"> ↗</span></a>{% endfor %}
+          </nav>
+          {% if search_ui_environment_locked %}
+          <p class="settings-lock-note">{% trans "PUBLIC_SEARCH_PRIMARY_VIEW controls this value. Change the deployment environment to alter it." %}</p>
+          {% else %}
+          <div class="settings-form-actions"><button class="btn btn-primary" type="submit">{% trans "Save search view" %}</button></div>
+          {% endif %}
+        </form>
 
-  <section class="mb-4" aria-labelledby="configuration-inventory-heading">
-    <h3 id="configuration-inventory-heading" class="border-bottom pb-2 mb-3">{% trans "Configuration Inventory" %}</h3>
-    <p class="text-muted small">{% trans "Effective configuration posture. Secrets are never displayed. Deployment settings are read-only and may require a restart." %}</p>
-    {% for group in configuration_groups %}
-    <section class="admin-panel mb-3" aria-labelledby="configuration-group-{{ forloop.counter }}">
-      <h4 id="configuration-group-{{ forloop.counter }}" class="h6 border-bottom pb-2 mb-3">{{ group.name }}</h4>
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead><tr><th>{% trans "Setting" %}</th><th>{% trans "Effective value" %}</th><th>{% trans "Source" %}</th><th>{% trans "Lifecycle" %}</th></tr></thead>
-          <tbody>
-          {% for row in group.rows %}
-          <tr>
-            <th scope="row"><span class="font-monospace small">{{ row.key }}</span><span class="d-block text-muted small">{{ row.label }}</span></th>
-            <td><code>{{ row.value }}</code></td>
-            <td><span class="badge {% if row.source == 'database' %}bg-primary{% elif row.source == 'environment' %}bg-secondary{% else %}bg-light text-dark{% endif %}">{{ row.source }}</span></td>
-            <td>{% if row.editable %}<span class="badge bg-success">{% trans "Runtime" %}</span>{% elif row.restart_required %}<span class="badge bg-warning text-dark">{% trans "Restart required" %}</span>{% else %}<span class="badge bg-light text-dark">{% trans "Read only" %}</span>{% endif %}</td>
-          </tr>
+        <form class="settings-control-group" method="post" action="{% url 'save_settings' %}">
+          {% csrf_token %}
+          {% for group in runtime_setting_groups %}
+          <fieldset class="settings-fieldset">
+            <legend>{{ group.name }}</legend>
+            {% for row in group.rows %}
+            <div class="settings-control-row{% if row.environment_locked %} settings-control-row--locked{% endif %}">
+              <div class="settings-control-row__copy">
+                <label for="runtime-{{ row.key }}">{{ row.label }}</label>
+                <p>{{ row.description }}</p>
+                <div class="settings-control-row__meta">
+                  <code>{{ row.key }}</code>
+                  <span class="settings-source-tag {% if row.environment_locked %}settings-source-tag--locked{% elif row.source == 'saved override' %}settings-source-tag--saved{% else %}settings-source-tag--default{% endif %}">{{ row.source }}</span>
+                  {% if row.high_impact %}<span class="settings-risk-tag">{% trans "High impact" %}</span>{% endif %}
+                </div>
+              </div>
+              <div class="settings-control-row__field">
+                {% if row.can_edit %}
+                  {% if row.choices %}
+                  <select id="runtime-{{ row.key }}" name="{{ row.key }}" class="form-select">
+                    {% for value, label in row.choices %}<option value="{{ value }}"{% if row.current == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                  </select>
+                  {% else %}
+                  <input id="runtime-{{ row.key }}" name="{{ row.key }}" class="form-control" type="{{ row.input_type }}" value="{{ row.current }}"{% if row.minimum is not None %} min="{{ row.minimum }}"{% endif %}{% if row.maximum is not None %} max="{{ row.maximum }}"{% endif %} inputmode="numeric">
+                  {% endif %}
+                {% else %}
+                <output id="runtime-{{ row.key }}" class="settings-readonly-value">{{ row.current }}</output>
+                <small>{% if row.environment_locked %}{% trans "Locked by deployment ENV" %}{% else %}{% trans "View only for your role" %}{% endif %}</small>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </fieldset>
           {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-    {% endfor %}
-  </section>
-</section>
+          {% if has_editable_runtime_settings %}
+          {% if is_superadmin %}
+          <label class="settings-confirmation"><input type="checkbox" name="confirm_changes" value="yes"><span>{% trans "I reviewed any high-impact availability changes included in this save." %}</span></label>
+          {% endif %}
+          <div class="settings-form-actions"><button class="btn btn-primary" type="submit">{% trans "Save runtime controls" %}</button><span>{% trans "No restart is required for these controls." %}</span></div>
+          {% endif %}
+        </form>
+      </section>
+
+      <section class="settings-section" id="analytics-privacy" aria-labelledby="analytics-privacy-heading">
+        <header class="settings-section__heading">
+          <div>
+            <p class="settings-eyebrow">{% trans "Host-scoped collection" %}</p>
+            <h2 id="analytics-privacy-heading">{% trans "Analytics & privacy" %}</h2>
+            <p>{% trans "The normal cookie choice shown to visitors is the only analytics consent gate. Enabling this host never bypasses a visitor's choice or Global Privacy Control." %}</p>
+          </div>
+          <span id="analytics-collection-status" class="settings-health {% if product_analytics_status.collection_available %}settings-health--ok{% else %}settings-health--neutral{% endif %}">{% if product_analytics_status.collection_available %}{% trans "Ready after cookie consent" %}{% else %}{% trans "Collection off" %}{% endif %}</span>
+        </header>
+
+        <div class="settings-control-group">
+          <div class="settings-control-group__heading">
+            <div><h3>{% trans "Umami for this host" %}</h3><p><code id="analytics-hostname">{{ product_analytics_status.hostname }}</code> · {{ product_analytics_status.deployment_tier }}</p></div>
+            <span class="settings-source-tag {% if product_analytics_status.environment_locked %}settings-source-tag--locked{% else %}settings-source-tag--saved{% endif %}">{% if product_analytics_status.environment_locked %}{% trans "ENV locked" %}{% elif product_analytics_status.website_id_source == 'saved_host_setting' %}{% trans "Host setting" %}{% elif product_analytics_status.website_id_source == 'built_in_stage_default' %}{% trans "Stage default" %}{% else %}{% trans "Not configured" %}{% endif %}</span>
+          </div>
+          {% if product_analytics_status.approved_host %}
+            {% if is_superadmin and not product_analytics_status.environment_locked %}
+            <form method="post" action="{% url 'save_product_analytics' %}">
+              {% csrf_token %}
+              <div class="settings-form-grid">
+                <label><span>{% trans "Collection on this host" %}</span><select class="form-select" name="product_analytics_mode">{% for value, label in product_analytics_options %}<option value="{{ value }}"{% if product_analytics_status.mode == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                <label><span>{% trans "Umami Website ID" %}</span><input class="form-control font-monospace" name="product_analytics_website_id" value="{{ product_analytics_status.website_id }}" autocomplete="off" spellcheck="false"><small>{% trans "Public website UUID for this exact host; stage and production must use separate records." %}</small></label>
+              </div>
+              <div class="settings-form-actions"><button class="btn btn-primary" type="submit">{% trans "Save analytics configuration" %}</button><span>{% trans "Visitors still choose optional analytics in the cookie notice." %}</span></div>
+            </form>
+            {% else %}
+            <dl class="settings-facts settings-facts--compact">
+              <div><dt>{% trans "Mode" %}</dt><dd>{{ product_analytics_status.mode }}</dd></div>
+              <div><dt>{% trans "Website ID" %}</dt><dd><code>{{ product_analytics_status.website_id|default:"Not configured" }}</code></dd></div>
+            </dl>
+            <p class="settings-lock-note">{% if product_analytics_status.environment_locked %}{% trans "Deployment environment variables own this host's analytics configuration." %}{% else %}{% trans "Analytics changes require superadmin permission." %}{% endif %}</p>
+            {% endif %}
+          {% else %}
+          <p class="settings-empty-state">{% trans "Analytics is hard-disabled because this hostname has no approved Umami profile." %}</p>
+          {% endif %}
+          <p class="settings-note">{% trans "The Website ID is not a secret. Credentials and tracker administration remain outside this application. Questions, answers, document names, and source URLs are never sent as analytics properties." %}</p>
+        </div>
+      </section>
+
+      <section class="settings-section" id="deployment-reference" aria-labelledby="deployment-reference-heading">
+        <header class="settings-section__heading">
+          <div>
+            <p class="settings-eyebrow">{% trans "Effective configuration" %}</p>
+            <h2 id="deployment-reference-heading">{% trans "Deployment reference" %}</h2>
+            <p>{% trans "Read-only effective values, ownership, and restart behavior. Secret values are never rendered; only configuration status is shown." %}</p>
+          </div>
+        </header>
+        <div class="settings-inventory-tools">
+          <label for="settings-config-filter">{% trans "Find a setting" %}</label>
+          <input id="settings-config-filter" class="form-control" type="search" autocomplete="off" placeholder="{% trans 'Search by setting name or purpose' %}">
+          <span id="settings-config-count" aria-live="polite"></span>
+        </div>
+        <div data-settings-inventory>
+          {% for group in configuration_groups %}
+          <details class="settings-reference-group" data-configuration-group{% if forloop.counter <= 2 %} open{% endif %}>
+            <summary><span>{{ group.name }}</span><small>{{ group.rows|length }} {% trans "settings" %}</small></summary>
+            <div class="settings-reference-list">
+              {% for row in group.rows %}
+              <div class="settings-reference-row" data-configuration-row data-search="{{ row.key|lower }} {{ row.label|lower }} {{ group.name|lower }}">
+                <div><strong>{{ row.label }}</strong><code>{{ row.key }}</code></div>
+                <div><span class="settings-reference-value">{{ row.value }}</span>{% if row.secret %}<small>{% trans "Value is write-only and never displayed here." %}</small>{% endif %}</div>
+                <span class="settings-source-tag {% if row.environment_locked %}settings-source-tag--locked{% elif row.source == 'saved override' %}settings-source-tag--saved{% else %}settings-source-tag--default{% endif %}">{{ row.source }}</span>
+                <span class="settings-lifecycle">{% if row.restart_required %}{% trans "Restart required" %}{% else %}{% trans "Live" %}{% endif %}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </details>
+          {% endfor %}
+          <p class="settings-empty-state d-none" data-settings-empty>{% trans "No settings match this search." %}</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
 {% endblock %}
+
+{% block extra_js %}<script src="{% static 'main/js/settings-admin.js' %}" defer></script>{% endblock %}

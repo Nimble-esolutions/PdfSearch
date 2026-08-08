@@ -6,6 +6,7 @@ that selects one presentation without changing the search API.
 """
 
 from dataclasses import dataclass
+import os
 
 from django.core.cache import cache
 from django.db import transaction
@@ -63,6 +64,9 @@ def supported_search_view(value):
 def get_primary_search_view():
     """Resolve the persisted primary view, defaulting safely to Classic."""
 
+    if PRIMARY_SEARCH_VIEW_SETTING in os.environ:
+        return normalize_search_view(os.environ[PRIMARY_SEARCH_VIEW_SETTING])
+
     cached = cache.get(_CACHE_KEY)
     if cached is not None:
         return normalize_search_view(cached)
@@ -92,6 +96,9 @@ def search_template_for(view_name):
 @transaction.atomic
 def set_primary_search_view(view_name, *, updated_by):
     """Persist an allowlisted primary view for this application dataset."""
+
+    if PRIMARY_SEARCH_VIEW_SETTING in os.environ:
+        raise ValueError("Public search presentation is controlled by the deployment environment.")
 
     candidate = str(view_name or "").strip().lower()
     if candidate not in SEARCH_VIEWS:
