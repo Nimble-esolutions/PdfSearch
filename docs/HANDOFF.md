@@ -43,8 +43,8 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains `c641507` (PR #198), with PRs #185–#197 in its ancestry | Role-aware Settings ownership, unified cookie consent, redacted configuration inventory, explicit recovery refresh, and the corrected Classic viewport/long-answer continuity contract are integrated; this is repository evidence, not stage deployment proof |
-| Pending Maharashtra Service theme | Branch `feat/maharashtra-search-theme` is locally certified and is not yet merged or deployed | Adds an isolated third public-search presentation using the shared typed search contract, theme-native legal/recovery pages, responsive vector identity marks, and dedicated browser coverage. Stage continues to run the older image and cannot be used as evidence for this branch. |
+| Repository integration baseline | `dev` contains `ffdb6dfe3f4ed8081c9ae7875ae47590e132d62f` (PR #200), with PRs #185–#198 in its ancestry | Role-aware Settings ownership, unified cookie consent, corrected Classic continuity, and the isolated Maharashtra Service theme are integrated; this is repository evidence, not stage deployment proof |
+| Maharashtra Service theme | PR [#200](https://github.com/Nimble-esolutions/PdfSearch/pull/200) is merged and its `dev` release pipeline passed | Adds the third public-search presentation using the shared typed search contract, theme-native legal/recovery pages, responsive vector identity marks, and dedicated browser coverage. The certified image was published and promoted by CI; stage continues to run the older image and cannot be used as evidence for this theme. |
 | Settings and Classic corrective work | PR [#198](https://github.com/Nimble-esolutions/PdfSearch/pull/198) merged into `dev` after all required checks passed | The rejected all-`auto` Grid shell is replaced by intrinsic-height bands and a flexible conversation canvas; admin/superadmin scope, ENV locks, saved/default precedence, secret redaction, analytics ownership, and Classic empty/long-answer/second-question behavior are covered by focused tests |
 | Classic focus-ring fix | PR #193 is merged into `dev`; not yet deployed to stage | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
 | Persistent analytics integration | PRs [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) and [#198](https://github.com/Nimble-esolutions/PdfSearch/pull/198) are merged; the independent service remains operator-managed | The normal cookie notice is the single visitor-consent surface. Stage and production use separate host-scoped tenants, local collection is hard-disabled, Global Privacy Control blocks collection, and analytics mode/Website ID are ENV-owned only when either key is explicitly defined; otherwise the superadmin control is editable. This remains repository verification, not deployment proof. |
@@ -147,15 +147,17 @@ and indexing remained `1.0`.
 | #195 | Recorded the first Settings control-center merge; its integration references are now superseded by this handoff |
 | #196 | Added consent-led host-scoped analytics and themed public recovery pages; retained, with duplicate consent and settings-ownership regressions corrected on the active branch |
 | #197 | Added public-performance, responsive-masthead, and Umami capability plans; documentation only, with no runtime behavior to claim |
+| #200 | Added the isolated Maharashtra Service public-search theme, official vector identity, theme-aware legal/recovery surfaces, safe rendering contracts, responsive/browser certification, and updated architecture guidance; merged into `dev` and release-certified, but not deployed to stage |
 
-The pending `feat/maharashtra-search-theme` branch implements the approved third
-presentation without changing the search API, admin site, primary-view default,
-or existing Classic and Workbench assets. Local source-backed browser evidence
-covers desktop, mobile, a 320-pixel budget-phone viewport, long-answer document
-scroll, composer continuity, a second question, English/Marathi behavior,
-theme-aware legal/recovery pages, safe structured rendering, protected source
-links, and automated accessibility checks. It is not live evidence until its PR
-is merged, an image is deployed, and the stage canary is repeated.
+PR #200 implements the approved third presentation without changing the search
+API, admin site, primary-view default, or existing Classic and Workbench assets.
+Local source-backed browser evidence covers desktop, mobile, a 320-pixel
+budget-phone viewport, long-answer document scroll, composer continuity, a
+second question, English/Marathi behavior, theme-aware legal/recovery pages,
+safe structured rendering, protected source links, and automated accessibility
+checks. The post-merge `dev` workflow also passed source/deployment lifecycle,
+published-image startup, image-size, and release-promotion gates. It is not live
+stage evidence until that image is deployed and the stage canary is repeated.
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
