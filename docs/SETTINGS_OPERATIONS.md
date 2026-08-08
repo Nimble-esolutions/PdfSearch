@@ -1,27 +1,44 @@
 Status: Active
 Audience: Superadmins, operators, maintainers
 Owner: FlowDocs maintainers
-Last verified: 2026-08-07
+Last verified: 2026-08-08
 Canonical source: docs/SETTINGS_OPERATIONS.md
 Supersedes: None
 
 # Settings & Configuration operations
 
-The superadmin Settings page is a safety boundary, not a replacement for deployment configuration. It separates values that the running request path can read immediately from environment-owned identity, data lineage, credentials, and process topology.
+The Settings page is a role-aware safety boundary, not a replacement for
+deployment configuration. Superadmins can manage the complete allowlisted
+runtime surface. Administrators can inspect the same redacted operating record
+and change only harmless presentation and question-length controls.
+
+The effective-value precedence is always:
+
+```text
+explicit environment value > saved SiteSetting override > application default
+```
+
+An omitted runtime key remains UI-editable. Defining that key in the process
+environment makes it deployment-owned and read-only in the UI. Empty or invalid
+security-sensitive analytics environment values fail closed instead of falling
+back to a saved value.
 
 ## Decision model
 
 ```mermaid
 flowchart TD
-    A[Open Settings] --> B{What kind of value?}
-    B -->|Runtime-backed| C[Edit in grouped control]
-    B -->|Deployment identity or secret| D[Read-only inventory]
-    C --> E{High impact?}
-    E -->|Yes| F[Review acknowledgement + server confirmation]
-    E -->|No| G[Server validates type and range]
-    F --> G
-    G --> H[DB override + cache invalidation]
-    H --> I[New requests use effective value]
+    A[Open Settings] --> B{Deployment or secret fact?}
+    B -->|Yes| C[Redacted read-only evidence]
+    B -->|No| D{Environment key defined?}
+    D -->|Yes| E[Show ENV-owned value and lock field]
+    D -->|No| F{Role allowed?}
+    F -->|No| G[Show value and required role]
+    F -->|Yes| H[Validate changed fields]
+    H --> I{Changed high-impact control?}
+    I -->|Yes| J[Require explicit confirmation]
+    I -->|No| K[Save allowlisted SiteSetting]
+    J --> K
+    K --> L[Invalidate positive cache; new requests use value]
 ```
 
 ## Controls
@@ -34,7 +51,18 @@ flowchart TD
 | Search limits | `PUBLIC_SEARCH_RATE_LIMIT` | Requests per visitor per rate window | Integer `1–600` | New search requests |
 | Search limits | `PUBLIC_SEARCH_RATE_WINDOW` | Rate-window duration | Integer `10–86400` seconds | New search requests |
 
-The effective value shows its source: database override, environment, or application default. A database override is intentionally visible so an operator can tell why the running behavior differs from the deployment file.
+| Control | Administrator | Superadmin |
+| --- | --- | --- |
+| View environment, recovery evidence, and redacted inventory | View | View |
+| Service footer | Edit when not ENV-owned | Edit when not ENV-owned |
+| Maximum question words | Edit when not ENV-owned | Edit when not ENV-owned |
+| Primary Classic/Workbench view | Edit when not ENV-owned | Edit when not ENV-owned |
+| Public-search enablement and rate controls | View | Edit when not ENV-owned |
+| Host analytics mode and public Website ID | View | Edit when not ENV-owned |
+
+The effective value shows its source as `environment override`, `saved
+override`, or `application default`. A saved override is intentionally visible
+so an operator can explain behavior without reading the control database.
 
 ## Consent-led analytics control
 
@@ -45,8 +73,9 @@ Website-ID source before a superadmin can change anything:
 | Host | Website-ID rule | Enablement rule |
 | --- | --- | --- |
 | `2026.ai-sahakar.net` | Approved built-in stage ID or a saved stage-specific ID | Superadmin may enable/disable for new page requests |
-| `ai-sahakar.net` | A separately saved production UUID is required; stage is never inherited | Superadmin may enable/disable only after that ID is valid |
-| Local, preview, test, `www` | No profile and no editable control | Hard-disabled; no tracker configuration can be saved or emitted |
+| `ai-sahakar.net` | A separate production UUID is required; stage is never inherited | Superadmin may enable/disable only after that ID is valid |
+| `www.ai-sahakar.net` | Redirects to the canonical apex before application state | No parallel tenant, consent, or identity |
+| Local, preview, test | No profile and no editable control | Hard-disabled; no tracker configuration can be saved or emitted |
 
 The Website ID is a public Umami site identifier, not a credential. The tracker
 endpoint, access keys, database, retention, and DNS remain deployment-owned
@@ -58,6 +87,12 @@ live. Confirm those separately with the browser canary procedure in
 
 Disabling collection removes configuration from new public page responses. It
 does not delete Umami data already retained by the independent service.
+
+`PRODUCT_ANALYTICS_MODE` and `PRODUCT_ANALYTICS_WEBSITE_ID` are optional
+deployment overrides. If either is explicitly defined, its corresponding UI
+control is locked and the environment value wins. The Website ID is public
+configuration, but it is still host-specific and is never copied between stage
+and production.
 
 ## What stays read-only
 
@@ -77,4 +112,9 @@ Secrets are represented only as `Configured` / `Not configured`. The page never 
 
 Invalid choices, empty values, non-integers, and out-of-range numbers are rejected without writing any setting. High-impact changes without the explicit confirmation field are rejected. A failed save leaves the previous effective value and cache untouched.
 
-The page is available to superadmins only. `SETTINGS_EDIT_ENABLED=0` keeps the control center in read-only mode even for a superadmin; this is the default posture for production unless the deployment owner has intentionally enabled runtime overrides.
+The page is available to administrators and superadmins. Authorization is
+enforced per setting on the server; hiding or disabling a browser control is
+not the security boundary. Deployment identity, credentials, recovery posture,
+and unknown settings remain read-only. No global edit-enable environment flag
+exists: ownership is expressed by defining only the specific keys that must be
+deployment-controlled.

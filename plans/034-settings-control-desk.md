@@ -1,5 +1,11 @@
 # Plan 034: Make Settings & Configuration a safe operator control desk
 
+> **Process correction (2026-08-08):** implementation edits began before this
+> plan was presented for review. That sequencing was incorrect. Work was paused,
+> audited against PRs #195–#197 and the supplied Classic reference, and
+> re-planned before implementation continued. Future redesign work must publish
+> its audit, impact boundary, and acceptance contract before code changes begin.
+
 > **Executor instructions:** This plan is intentionally separate from the
 > consent-led analytics implementation. It modernizes the existing settings
 > center in small, verifiable slices; it does not create a second configuration
@@ -12,7 +18,16 @@
 - **Risk:** MED
 - **Depends on:** Plan 002 registry reconciliation; Plan 006 verification gate
 - **Planned:** 2026-08-07
-- **Roadmap status:** TODO — design and safety review required before code
+- **Roadmap status:** Implementation candidate on `feat/settings-control-room`;
+  local verification complete, PR and deployment proof pending
+
+### Merged-PR reconciliation (2026-08-08)
+
+| PR | Preserve | Correct on this branch |
+| --- | --- | --- |
+| #195 | Living-handoff discipline | Its integration snapshot became stale after later merges |
+| #196 | Host-scoped analytics, GPC, pseudonymous identity, themed error pages, Classic formatting | Remove the duplicate consent concept; restore long-answer document scrolling; make settings ownership and roles explicit |
+| #197 | Performance, responsive-masthead, and Umami capability plans | Do not claim its documentation as implemented runtime behavior |
 
 ## Why this plan exists
 
@@ -23,8 +38,8 @@ visual weight, while a save error returns to the page top through a generic
 flash message. An operator therefore has to remember where a setting was,
 whether it is live, whether it needs confirmation, and what to do next.
 
-The underlying safety model is sound: values resolve database → cache →
-environment, runtime editing is allowlisted, high-impact changes require a
+The corrected safety model is explicit environment → saved override →
+application default, runtime editing is allowlisted, high-impact changes require a
 server-side confirmation, and secrets are redacted. The experience must make
 those guarantees obvious instead of making users discover them after a failed
 submission.
@@ -105,7 +120,7 @@ preserve the focused section through a POST/redirect/GET result.
 | Change public presentation | Select a view, preview in a new tab, save, receive a local receipt showing “effective immediately.” | Preserve `set_primary_search_view`; add a scoped success/error return target. |
 | Change low-risk runtime limit | Only changed rows appear in review; submit remains enabled until the request starts; receipt states new effective value and source. | Keep current allowlist and bounds; use an optimistic revision token. |
 | Change high-impact public search switch | The changed row becomes an attention item with a plain-language consequence; confirmation appears only for that diff. | Keep server-side high-impact enforcement regardless of JavaScript. |
-| Editing locked | Show why it is locked and the exact deployment-level next step; controls remain readable rather than looking broken. | `SETTINGS_EDIT_ENABLED` remains deployment-only. |
+| Editing locked | Show why a specific field is locked and the exact deployment-level next step; controls remain readable rather than looking broken. | An explicitly defined setting ENV key owns and locks that field; there is no global edit switch. |
 | Configure analytics | Display exact host, tenant presence, mode, consent behavior, and safe status. A production Website ID is never inferred from stage. | Keep host-scoped `SiteSetting` keys; no secret entry or local collection. |
 | Inspect recovery | Show verified/not configured/unreachable with a link to the Operations workflow; no recovery mutation controls appear here. | Health remains redacted and read-only. |
 | Fix invalid/stale submission | Return to the owning section, focus the first invalid field, preserve submitted non-secret values, and explain the next step. | Field-keyed error payload; server validation and CSRF remain authoritative. |
@@ -173,7 +188,7 @@ preserve the focused section through a POST/redirect/GET result.
 | Accessibility | Heading order, skip/section navigation, keyboard focus, input labels, inline errors, `aria-live`, 44px touch targets, Marathi text. |
 | Browser | Desktop + mobile screenshots for default, locked, changed, error, success, and long-inventory states; no overlap or horizontal scroll. |
 | Regression | `python manage.py check`, migrations check, focused tests, existing dashboard/settings/theme suites, static JS syntax check, source-backed Playwright gate. |
-| Security | No setting values in analytics payloads; no secret in HTML/log/message; non-superadmin and local/unapproved hosts remain denied. |
+| Security | No setting values in analytics payloads; no secret in HTML/log/message; administrators are server-limited to harmless controls; analytics changes remain superadmin-only; local/unapproved hosts remain denied. |
 
 ## Stop conditions and non-goals
 
