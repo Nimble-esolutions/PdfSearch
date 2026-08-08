@@ -1,7 +1,7 @@
 Status: Implementation candidate — application code and documentation are under review; deployment proof is still required
 Audience: Superadmins, privacy owners, operators, maintainers
 Owner: FlowDocs maintainers
-Last verified: 2026-08-07
+Last verified: 2026-08-08
 Canonical source: docs/PERSISTENT_ANALYTICS_OPERATIONS.md
 Supersedes: The current-behaviour sections of PRODUCT_ANALYTICS_RECOMMENDATION.md and plan 032; those documents remain historical selection evidence
 
@@ -77,15 +77,20 @@ application has no way to stop a compromised remote tracker from inspecting a
 page after it is loaded, which is why the tracker origin is executable-code
 trust and requires version/source review as described below.
 
+The normal cookie/privacy notice is the only visitor choice surface. There is
+no second analytics-specific consent popup: **Essential only** records decline,
+and **Accept optional analytics** records consent. The tracker configuration and
+script are omitted until that consent exists.
+
 ### Privacy signals
 
 | Signal or action | Result |
 | --- | --- |
 | No choice yet | No tracker is loaded and no identity token is made |
-| `No thanks` / `Turn off` | Future tracker configuration is absent; the identity cookie is deleted |
-| `Reset ID` | The opaque token and HMAC alias rotate; old server-side Umami events are not retroactively deleted |
+| **Essential only** | Future tracker configuration is absent; no identity cookie is created |
+| Clear site cookies | The browser removes the consent and identity cookies; a later visit presents the normal cookie choice again. Old Umami events are not retroactively deleted |
 | `Sec-GPC: 1` / Global Privacy Control | Always blocks collection and deletes a prior identity token; the consent record remains so the visitor can choose after disabling GPC |
-| Do Not Track | Blocks collection until a visitor explicitly selects Allow analytics; explicit consent is recorded as taking precedence afterward |
+| Do Not Track | Blocks collection until a visitor explicitly selects **Accept optional analytics**; that explicit choice is recorded as taking precedence afterward |
 | Tracker timeout/outage | The queue is dropped after bounded retries; search, source opening, language changes, and readiness are unaffected |
 
 The direct browser connection means Umami/proxy infrastructure may see ordinary
@@ -134,10 +139,15 @@ Umami Website ID is host-scoped configuration.
    it does not erase historical events in Umami. Use Umami's approved retention
    or deletion procedure for data already received.
 
-No new environment variable is needed for Website IDs. This avoids a large
-environment matrix and ensures a restored stage control database cannot cause
-production to inherit stage collection: only the stage host may read the old
-unscoped compatibility toggle, and production never reads it.
+`PRODUCT_ANALYTICS_MODE` and `PRODUCT_ANALYTICS_WEBSITE_ID` are optional
+deployment overrides, not required matrix entries. When absent, a superadmin
+can save the host-scoped values in Settings & Configuration. When explicitly
+defined, the environment value wins. Because mode and Website ID form one
+validated host configuration, defining either deployment key locks the pair
+read-only in the UI; this prevents a saved half-configuration from being mixed
+with an environment-owned half. Stage and production still use separate host
+profiles and separate Website IDs; neither host can inherit the other's saved
+tenant. Blank or invalid analytics ENV values fail closed.
 
 ## Required independent Umami deployment proof
 
@@ -165,10 +175,10 @@ Run each check in Classic and Workbench after a new image or tracker release:
 | --- | --- |
 | Local / preview | No `product-analytics-config`, analytics cookie, or request even if a database setting exists |
 | Disabled approved host | No tracker script/config/cookie/request |
-| Enabled approved host, no choice | Preference is visible; no tracker script or identity cookie |
+| Enabled approved host, no choice | Cookie/privacy choice is visible; no tracker script or identity cookie |
 | Explicit allow | Secure HttpOnly consent and identity cookies; a derived alias only; valid bounded events in the matching Umami tenant |
 | Reload | Same alias for the current 90-day token; no raw token in DOM, storage, payload, or Umami record |
-| Reset / revoke | Alias rotates / identity cookie is deleted; public search remains usable |
+| Clear site cookies / enable GPC | Identity is absent and no new event is sent; public search remains usable |
 | GPC | No tracker/event; identity is deleted |
 | Stage/production | Each reaches only its own website ID and never the other's tenant |
 | Tracker unavailable | Search response and UI actions continue; analytics does not affect `/readyz` |

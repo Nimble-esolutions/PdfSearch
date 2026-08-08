@@ -3,7 +3,7 @@
 **Status:** Active and protected
 **Audience:** Product, design, frontend, QA, and coding agents
 **Owner:** FlowDocs maintainers
-**Last verified:** 2026-08-07
+**Last verified:** 2026-08-08
 **Canonical source:** This document
 **Supersedes:** Untracked visual proposals and active-looking historical UI plans
 
@@ -51,9 +51,11 @@ mismatch.
 
 ## Public search selection
 
-`PUBLIC_SEARCH_PRIMARY_VIEW` is an allowlisted `SiteSetting`, not an environment
-variable. A superadmin selects Classic or Workbench under **Settings → Public
-search presentation**. Missing or invalid values fail closed to Classic.
+`PUBLIC_SEARCH_PRIMARY_VIEW` is an allowlisted runtime setting. An administrator
+or superadmin can select Classic or Workbench in **Settings & Configuration**
+when the environment key is absent. If the key is explicitly defined, the
+environment is authoritative and the UI is read-only. Missing, blank, or
+invalid effective values fail closed to Classic.
 
 `?view=classic` and `?view=workbench` are shareable, request-only previews. They
 must not write a cookie, session value, database value, or deployment setting.
@@ -77,6 +79,18 @@ Desktop composition follows the supplied 1920×1080 reference. Mobile retains
 all utility actions, a usable single-row composer, no horizontal overflow, and
 approximately 44px controls. The optimized WebP identity and assistant images
 are approved exceptions to the Workbench's image restrictions.
+
+In the empty desktop state, utility navigation, identity banner, and footer
+keep their intrinsic height while the conversation canvas flexes to consume the
+remaining viewport. Do not implement the shell as four `auto` CSS Grid rows:
+Grid distributes surplus height across those tracks and produces oversized
+utility/footer bands. The empty state should fit one viewport; content growth,
+not track stretching, should make the document taller.
+
+Normal Classic pages use document scrolling. A long answer must not trap the
+composer or footer below a locked viewport, and a visitor must be able to ask a
+second question. Only compact landscape viewports may use a bounded transcript
+scroll region while intentionally hiding nonessential footer/status content.
 
 Classic search uses `search_classic.html`, `search-classic.css`,
 `search-classic.js`, and its own `components/public/classic_header.html`.

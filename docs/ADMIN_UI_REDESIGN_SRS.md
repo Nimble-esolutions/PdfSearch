@@ -10,6 +10,10 @@
 > Several items below were delivered or superseded by the Operations Cockpit.
 > Do not repeat its conflict-marker or dead-file cleanup instructions without
 > rechecking the target branch. Use the current replacement above.
+> In particular, the historical global edit switch and DB-over-environment
+> precedence below are obsolete. Current settings use
+> per-key ownership with `environment > saved override > application default`;
+> see [`SETTINGS_OPERATIONS.md`](SETTINGS_OPERATIONS.md).
 
 ---
 
@@ -54,7 +58,8 @@
    - Object count, last sync timestamp
    - Conditional ops supported (from `verify_object_store_capabilities`)
 
-3. **Editable feature flags** (requires `SETTINGS_EDIT_ENABLED=1` env flag):
+3. **Editable feature flags** (historical global-switch proposal; superseded by
+   per-key ENV ownership and role authorization):
    - PUBLIC_SEARCH_ENABLED (toggle)
    - DISPLAY_SERVICE_FOOTER (toggle)
    - PUBLIC_SEARCH_RATE_LIMIT (number input)
@@ -67,8 +72,9 @@
 
 4. **Save mechanism**:
    - Settings stored in Django database model `SiteSetting(key, value, updated_by, updated_at)`
-   - `SETTINGS_EDIT_ENABLED=0` (default): all controls disabled, read-only display
-   - `SETTINGS_EDIT_ENABLED=1`: controls enabled, save button active
+   - Historical proposal: one global switch disabled or enabled all controls.
+   - Current contract: each explicitly defined ENV key locks only that field;
+     server-side role authorization controls every save.
    - On save: writes to DB, triggers `django.core.cache` invalidation
    - Views read from cache, fall back to DB, fall back to env var
 
@@ -359,7 +365,7 @@ dev
 | Phase | Criteria |
 |-------|----------|
 | 0 | Git conflict removed, dead templates deleted, CI passes |
-| 1 | Settings page loads, shows env identity, feature toggles work with SETTINGS_EDIT_ENABLED flag |
+| 1 | Historical criterion superseded: Settings shows identity and enforces per-key ENV ownership plus role-scoped edits |
 | 2 | S3 vault health displays live, sync/restore work from new page, old dashboard sections removed |
 | 3 | Sidebar navigation works, includes rendered, modals single-instance, search page unified, breadcrumbs shown |
 | 4 | Privacy/Terms/Data pages accessible, cookie consent banner shows, footer links work |

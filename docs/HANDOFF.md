@@ -1,7 +1,7 @@
 Status: Active, living handoff
 Audience: Maintainer, Operator, Developer, AI agent, Reviewer
 Owner: FlowDocs maintainers
-Last verified: 2026-08-07
+Last verified: 2026-08-08
 Canonical source: docs/HANDOFF.md
 Supersedes: docs/STATUS-2026-08-03.md for current operational state
 Update trigger: Every merged runtime/release/data/operations change, deployment, incident, rollback, or material blocker decision
@@ -20,7 +20,7 @@ how the current state was reached, but they do not override this handoff.
 Detailed contracts remain in their owning runbooks; this page links to them
 instead of duplicating their procedures.
 
-Evidence on this page was refreshed on 2026-08-07 (Asia/Kolkata). A live system
+Evidence on this page was refreshed on 2026-08-08 (Asia/Kolkata). A live system
 can change after that time, so repeat the read-only checks in
 [Resume checks](#resume-checks) before a mutation.
 
@@ -43,10 +43,11 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains `df9085c` (PR #194) | PRs #185–#194 are merged; both themes, typed question-language responses, public information pages, macOS headless documentation rendering, Classic long-answer continuity, search-latency hardening, Umami integration, the repository-truth audit, the Classic focus-ring fix, and the Settings control center are integrated |
+| Repository integration baseline | `dev` contains `240214f` (PR #196), with PR #197 in its ancestry | PRs #185–#197 are merged; both themes, typed question-language responses, public information/error pages, Classic continuity, search-latency hardening, consent-led Umami integration, repository-truth documentation, and the first Settings control center are integrated |
+| Active corrective branch | `feat/settings-control-room` is local and unmerged | Hallmark settings ownership, role controls, unified cookie consent, and Classic shell continuity are implementation candidates only until this branch passes review and merges |
 | Classic focus-ring fix | PR #193 is merged into `dev`; not yet deployed to stage | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
-| Persistent analytics candidate | Draft PR [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) targets `dev`; the independent service remains operator-managed | It replaces the earlier stage-only/cookieless adapter with explicit-consent, host-scoped stage/production tenants, an HTTPS-only persistent pseudonymous browser ID, Global Privacy Control blocking, local hard-disablement, and a per-host superadmin control. The focused Django suite (70), analytics browser suite (6), and 20-run error-page browser matrix pass against an isolated local service; PR-contract and documentation/operator-language checks passed at PR opening, while source/deployment validation remains the remote merge gate. This is not deployment proof. Read [`PERSISTENT_ANALYTICS_OPERATIONS.md`](PERSISTENT_ANALYTICS_OPERATIONS.md). |
-| Public recovery-page candidate | Draft PR [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) targets `dev` | Standard 400/403/404/500 responses use the active Classic/Workbench public visual language, no tracker/search scripts, no failed-URL reflection, and a static header/footer fallback that avoids both session-user lookup and named-route recursion. The focused suite (70) includes a real unhandled-500 dispatch under a deliberately partial URL configuration; the isolated local browser check confirms responsive width and no serious/critical axe violations. No stage deployment claim is implied. |
+| Persistent analytics integration | PR [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) is merged; the independent service remains operator-managed | It provides explicit cookie consent, separate host-scoped stage/production tenants, an HTTPS-only pseudonymous browser ID, Global Privacy Control blocking, and local hard-disablement. The active settings branch removes the duplicate operator/visitor consent concept and makes mode/Website-ID ownership explicit: ENV wins when defined; otherwise the superadmin control is editable. This remains local verification, not deployment proof. |
+| Public recovery pages | PR [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) is merged | Standard 400/403/404/500 responses use the active Classic/Workbench visual language without tracker/search scripts or failed-URL reflection. No stage deployment claim is implied. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
@@ -142,6 +143,9 @@ and indexing remained `1.0`.
 | #190 | Updated the living handoff after the Classic continuity merge |
 | #193 | Removes the duplicate Classic composer focus outline and adds a browser regression gate; merged into `dev` |
 | #194 | Redesigns Settings & Configuration around truthful runtime controls, validation, confirmations, and read-only deployment posture; merged into `dev` |
+| #195 | Recorded the first Settings control-center merge; its integration references are now superseded by this handoff |
+| #196 | Added consent-led host-scoped analytics and themed public recovery pages; retained, with duplicate consent and settings-ownership regressions corrected on the active branch |
+| #197 | Added public-performance, responsive-masthead, and Umami capability plans; documentation only, with no runtime behavior to claim |
 
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
@@ -156,25 +160,23 @@ There is no data-readiness or search-language blocker. Search latency remains a
 measured release task until the current branch is reviewed, merged, deployed,
 and canaried. Remaining work is:
 
-1. **Classic focus-ring rollout:** PR #193 is merged into `dev`; after the
-   merged image reaches stage, canary the Marathi input focus state.
-2. **Search latency stage canary:** after the merged image reaches stage, prove
+1. **Settings/Classic corrective PR:** review and merge the active Hallmark
+   control-room branch only after role, ENV precedence, consent, secret-redaction,
+   empty-shell geometry, long-answer, second-question, and accessibility gates
+   are green. The rejected all-`auto` Grid shell stretched utility/footer tracks;
+   the candidate uses intrinsic-height bands plus a flexible conversation canvas.
+2. **Integrated stage rollout:** after the merged image reaches stage, prove
    the unchanged signed generation and both themes; compare uncached/repeat
    duration, phase telemetry, corpus bytes/vectors, and web-worker RSS. Roll
    back the image if authorization, continuity, latency, or memory headroom
    regresses.
-3. **Settings control-center rollout:** PR #194 is merged into `dev`; after the
-   merged image reaches stage, verify grouped runtime controls, server-side
-   validation, high-impact confirmation, read-only deployment posture, and live
-   runtime override behavior without changing persistent data or production.
-4. **Current integrated rollout:** certify an image from current `dev` containing
-   merged PRs #187–#190, deploy stage web and maintenance without touching volumes, and
-   canary all five public-information routes in both themes, both
-   mismatched-locale answer directions, and Classic long-answer continuity.
-5. **Future production project:** create and validate the dedicated 2026
+3. **Settings stage canary:** verify admin/superadmin role separation, explicit
+   ENV field locks, saved override/default sources, redacted inventory, and
+   host-specific analytics without changing persistent data or production.
+4. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
-6. **Production rehearsal:** before traffic changes, select an immutable image,
+5. **Production rehearsal:** before traffic changes, select an immutable image,
    validate rendered Compose and key-only environment posture, restore into
    isolated production-candidate volumes, run search/PDF/auth smoke checks, and
    record rollback image and generation.
@@ -185,16 +187,15 @@ and canaried. Remaining work is:
 9. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
-10. **Consent-led analytics candidate:** confirm source/deployment validation is
-   green on draft PR #196, then obtain review before deployment. After the
-   branch is deployed, verify the independent pinned Umami/PostgreSQL stack, reviewed
-   tracker version/source, TLS, dashboard authentication, retention/deletion
-   authority, and database restore. Then use the per-host Settings control and
-   run the exact browser canary in
-   [`PERSISTENT_ANALYTICS_OPERATIONS.md`](PERSISTENT_ANALYTICS_OPERATIONS.md).
-   Production collection is authorized in principle, but only for the future
-   canonical 2026 app with a separate production tenant and normal cutover
-   evidence; never add analytics to application readiness.
+10. **Consent-led analytics stage canary:** PR #196 is merged; after the current
+    corrective branch and its image are deployed, verify the independent pinned
+    Umami/PostgreSQL stack, reviewed tracker version/source, TLS, dashboard
+    authentication, retention/deletion authority, and database restore. Then use
+    the per-host Settings control and run the exact browser canary in
+    [`PERSISTENT_ANALYTICS_OPERATIONS.md`](PERSISTENT_ANALYTICS_OPERATIONS.md).
+    Production collection is authorized in principle, but only for the future
+    canonical 2026 app with a separate production tenant and normal cutover
+    evidence; never add analytics to application readiness.
 
 ## Known traps that must not recur
 
@@ -219,6 +220,10 @@ and canaried. Remaining work is:
   include domain words containing short conversational tokens.
 - Both public themes must preserve the backend response `kind`; a friendly
   answer without evidence must not be presented as a document-backed answer.
+- Do not replace the approved Classic flex shell with all-`auto` CSS Grid rows.
+  Surplus viewport space will stretch intrinsic utility/footer bands. Protect
+  both states in browser tests: empty content fits one viewport, while a long
+  answer grows the document and leaves the composer available for question two.
 - Validate the complete success envelope before mutating either theme's DOM:
   evidence answers require valid sources, non-evidence outcomes forbid them,
   and only English/Marathi response languages are accepted.
