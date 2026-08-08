@@ -9,8 +9,15 @@ from django.urls import reverse
 from unittest.mock import patch
 
 from core.models import SiteSetting
-from core.search_ui import PRIMARY_SEARCH_VIEW_SETTING, get_primary_search_view
+from core.search_ui import (
+    PRIMARY_SEARCH_VIEW_SETTING,
+    SEARCH_VIEW_DEFINITIONS,
+    get_primary_search_view,
+    resolve_search_view,
+    search_template_for,
+)
 from core.views import (
+    _public_view_context,
     public_bad_request,
     public_permission_denied,
     public_server_error,
@@ -68,6 +75,56 @@ class SearchThemeResolutionTests(TestCase):
 
         self.assertTemplateUsed(response, "search_classic.html")
 
+    def test_maharashtra_theme_is_allowlisted_with_its_public_contract(self):
+        definition = next(
+            item for item in SEARCH_VIEW_DEFINITIONS if item.value == "maharashtra"
+        )
+
+        self.assertEqual(definition.label, "Maharashtra Service")
+        self.assertEqual(definition.template_name, "search_maharashtra.html")
+        self.assertEqual(resolve_search_view(" MAHARASHTRA "), "maharashtra")
+        self.assertEqual(
+            search_template_for("maharashtra"),
+            "search_maharashtra.html",
+        )
+
+    def test_maharashtra_persisted_primary_view_is_resolved(self):
+        SiteSetting.objects.create(
+            key=PRIMARY_SEARCH_VIEW_SETTING,
+            value="maharashtra",
+        )
+        cache.clear()
+
+        self.assertEqual(get_primary_search_view(), "maharashtra")
+        self.assertEqual(resolve_search_view(None), "maharashtra")
+
+    @patch.dict(os.environ, {"PUBLIC_SEARCH_PRIMARY_VIEW": "maharashtra"})
+    def test_maharashtra_environment_primary_view_is_resolved(self):
+        SiteSetting.objects.create(
+            key=PRIMARY_SEARCH_VIEW_SETTING,
+            value="workbench",
+        )
+        cache.clear()
+
+        self.assertEqual(get_primary_search_view(), "maharashtra")
+        self.assertEqual(resolve_search_view(None), "maharashtra")
+
+    def test_maharashtra_preview_is_non_persistent_and_preserves_language_return_url(
+        self,
+    ):
+        request = RequestFactory().get("/?view=maharashtra")
+
+        context = _public_view_context(request)
+
+        self.assertEqual(context["search_view"], "maharashtra")
+        self.assertEqual(context["public_view_query"], "?view=maharashtra")
+        self.assertEqual(context["public_home_url"], "/?view=maharashtra")
+        self.assertEqual(context["public_current_url"], "/?view=maharashtra")
+        self.assertEqual(context["public_set_language_url"], reverse("set_language"))
+        self.assertFalse(
+            SiteSetting.objects.filter(key=PRIMARY_SEARCH_VIEW_SETTING).exists()
+        )
+
     def test_supplied_public_links_are_rendered_in_both_views(self):
         expected_map_id = "1MoHzbONhTORm8fQ0IAZCWG82vtUgIJU"
         expected_feedback_id = "1FAIpQLSca6zWE0E5CIwoFfT6lzdGhaqaslLFpjaSu2mK654hAQVDlSg"
@@ -91,6 +148,16 @@ class SearchThemeResolutionTests(TestCase):
         self.assertRedirects(
             response,
             reverse("home") + "?view=workbench",
+            status_code=301,
+            fetch_redirect_response=False,
+        )
+
+    def test_legacy_search_url_preserves_maharashtra_preview(self):
+        response = self.client.get(reverse("search_query") + "?view=maharashtra")
+
+        self.assertRedirects(
+            response,
+            reverse("home") + "?view=maharashtra",
             status_code=301,
             fetch_redirect_response=False,
         )
@@ -332,6 +399,9 @@ class SearchThemeAdminTests(TestCase):
         self.assertContains(response, "Primary search view")
         self.assertContains(response, 'value="classic" checked')
         self.assertContains(response, "?view=workbench")
+        self.assertContains(response, 'value="maharashtra"')
+        self.assertContains(response, "Maharashtra Service")
+        self.assertContains(response, "?view=maharashtra")
 
     def test_superadmin_can_change_primary_view_without_env_gate(self):
         self.client.force_login(self.superadmin)
@@ -346,6 +416,23 @@ class SearchThemeAdminTests(TestCase):
         self.assertEqual(setting.value, "workbench")
         self.assertEqual(setting.updated_by, self.superadmin)
         self.assertTemplateUsed(self.client.get(reverse("home")), "search.html")
+
+    def test_superadmin_can_persist_maharashtra_primary_view(self):
+        self.client.force_login(self.superadmin)
+
+        response = self.client.post(
+            reverse("save_search_ui"),
+            {"primary_search_view": "maharashtra"},
+        )
+
+        self.assertRedirects(response, reverse("settings"))
+        setting = SiteSetting.objects.get(key=PRIMARY_SEARCH_VIEW_SETTING)
+        self.assertEqual(setting.value, "maharashtra")
+        self.assertEqual(setting.updated_by, self.superadmin)
+        self.assertEqual(
+            search_template_for(get_primary_search_view()),
+            "search_maharashtra.html",
+        )
 
     def test_invalid_value_is_rejected_without_changing_primary_view(self):
         SiteSetting.objects.create(
