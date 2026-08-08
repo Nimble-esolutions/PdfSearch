@@ -1,3 +1,5 @@
+import os
+
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.cache import cache
@@ -7,7 +9,7 @@ from django.urls import reverse
 from unittest.mock import patch
 
 from core.models import SiteSetting
-from core.search_ui import PRIMARY_SEARCH_VIEW_SETTING
+from core.search_ui import PRIMARY_SEARCH_VIEW_SETTING, get_primary_search_view
 from core.views import (
     public_bad_request,
     public_permission_denied,
@@ -302,6 +304,13 @@ class PublicNotFoundThemeTests(TestCase):
 
 class SearchThemeAdminTests(TestCase):
     def setUp(self):
+        self._primary_view_env = os.environ.pop("PUBLIC_SEARCH_PRIMARY_VIEW", None)
+        if self._primary_view_env is not None:
+            self.addCleanup(
+                os.environ.__setitem__,
+                "PUBLIC_SEARCH_PRIMARY_VIEW",
+                self._primary_view_env,
+            )
         self.superadmin = get_user_model().objects.create_superuser(
             "theme-superadmin",
             "theme-superadmin@example.test",
@@ -320,7 +329,7 @@ class SearchThemeAdminTests(TestCase):
 
         response = self.client.get(reverse("settings"))
 
-        self.assertContains(response, "Public search presentation")
+        self.assertContains(response, "Primary search view")
         self.assertContains(response, 'value="classic" checked')
         self.assertContains(response, "?view=workbench")
 
@@ -357,7 +366,7 @@ class SearchThemeAdminTests(TestCase):
             "classic",
         )
 
-    def test_non_superadmin_cannot_change_primary_view(self):
+    def test_limited_admin_can_change_harmless_primary_view(self):
         self.client.force_login(self.admin)
 
         response = self.client.post(
@@ -365,10 +374,24 @@ class SearchThemeAdminTests(TestCase):
             {"primary_search_view": "workbench"},
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(
-            SiteSetting.objects.filter(key=PRIMARY_SEARCH_VIEW_SETTING).exists()
+        self.assertRedirects(response, reverse("settings"))
+        self.assertEqual(
+            SiteSetting.objects.get(key=PRIMARY_SEARCH_VIEW_SETTING).value,
+            "workbench",
         )
+
+    @patch.dict(os.environ, {"PUBLIC_SEARCH_PRIMARY_VIEW": "classic"})
+    def test_environment_owned_primary_view_is_locked(self):
+        self.client.force_login(self.superadmin)
+
+        response = self.client.post(
+            reverse("save_search_ui"),
+            {"primary_search_view": "workbench"},
+        )
+
+        self.assertRedirects(response, reverse("settings"))
+        self.assertEqual(get_primary_search_view(), "classic")
+        self.assertFalse(SiteSetting.objects.filter(key=PRIMARY_SEARCH_VIEW_SETTING).exists())
 
     def test_theme_selection_requires_csrf(self):
         csrf_client = Client(enforce_csrf_checks=True)
