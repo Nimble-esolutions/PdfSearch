@@ -1,8 +1,8 @@
 """Public-search presentation selection.
 
-The Classic and Workbench frontends intentionally have separate templates,
-stylesheets, and JavaScript. This module is the narrow server-side boundary
-that selects one presentation without changing the search API.
+Each public-search frontend intentionally has a separate template, stylesheet,
+and JavaScript bundle. This module is the narrow server-side boundary that
+selects one presentation without changing the search API.
 """
 
 from dataclasses import dataclass
@@ -41,6 +41,14 @@ SEARCH_VIEW_DEFINITIONS = (
             "Evidence-first research layout with persistent topic and source panels."
         ),
         template_name="search.html",
+    ),
+    SearchViewDefinition(
+        value="maharashtra",
+        label=_("Maharashtra Service"),
+        description=_(
+            "Official Maharashtra service layout with a wide, evidence-rich search experience."
+        ),
+        template_name="search_maharashtra.html",
     ),
 )
 SEARCH_VIEWS = {definition.value: definition for definition in SEARCH_VIEW_DEFINITIONS}
