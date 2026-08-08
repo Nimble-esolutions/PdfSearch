@@ -6,8 +6,54 @@
 evidence and [`../design/AI_SAHAKAR_UI_CONTRACT.md`](../design/AI_SAHAKAR_UI_CONTRACT.md)
 for the active UI contract
 
-This file records why the dual-theme delivery was shaped as it was. It contains
-no current image, rollout, or pending-release authority.
+This file records why the original dual-theme delivery and the later isolated
+Maharashtra Service extension were shaped as they were. It contains no current
+image, rollout, or pending-release authority.
+
+## Maharashtra Service extension (2026-08-08)
+
+The theme engine now defines three isolated presentations:
+
+- Classic remains the safe default and fail-closed recovery view;
+- Knowledge Workbench remains the evidence-led secondary view; and
+- Maharashtra Service adds the official-blue, India-first wide search view at
+  `/?view=maharashtra`.
+
+The extension reuses the existing `PUBLIC_SEARCH_PRIMARY_VIEW` contract and
+adds only the allowlisted value `maharashtra`. It adds no new environment key,
+database migration, search endpoint, PDF-authorization path, or data/recovery
+behavior. Request previews are non-persistent. ENV owns the choice when the
+existing key is explicitly defined; otherwise the role-authorized Settings
+control can persist the selection.
+
+Maharashtra Service has its own template, header, stylesheet, JavaScript, and
+optimized official identity assets. It shares only backend/security contracts.
+It combines Classic's wide conversation layout with Workbench's structured
+answer and evidence behavior, presenting sources inline rather than in a
+permanent rail. It does not include Suggested Questions, Civic Knowledge Desk,
+“Ask about Maharashtra cooperative law”, standalone WhatsApp/Feedback logos, or
+another theme's assets. Existing Help, WhatsApp, Feedback, Locate Us, policy,
+and protected-document destinations remain available as labelled theme-native
+controls.
+
+Before selecting it as primary, certify empty/loading/answer/error states, long
+answers and a second question, English/Marathi behavior, all service links,
+asset isolation, 320px and compact-landscape layouts, accessibility, constrained
+mobile performance, public information pages, and safe public errors from the
+exact release image. Record deployment evidence in the living handoff.
+
+Rollback is presentation-only: first verify `/?view=classic`, then restore
+Classic through Settings when SiteSetting-owned or through the reviewed existing
+environment key when ENV-owned. Recheck search, one protected source, locale,
+legal/error pages, and second-question continuity. Do not alter documents,
+indexes, volumes, recovery points, or signed generations to recover a theme.
+
+Canonical contracts:
+
+- [`../design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md`](../design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md)
+- [`../design/MAHARASHTRA_SERVICE_THEME.md`](../design/MAHARASHTRA_SERVICE_THEME.md)
+- [`../diagrams/public-search-three-theme-architecture.mmd`](../diagrams/public-search-three-theme-architecture.mmd)
+  ([rendered SVG](../diagrams/public-search-three-theme-architecture.svg))
 
 ## Classic long-answer regression (2026-08-06)
 
@@ -45,14 +91,15 @@ public journey cannot be skipped again.
 The repair was completed in the theme-engine delivery. Use the living handoff
 to determine whether a particular image and stage canary include it.
 
-## Delivered
+## Original two-theme delivery (historical)
 
 - Classic is the safe default and matches the approved training/24 June
   composition with optimized local WebP assets and no CDN Bootstrap or inline
   application JavaScript.
 - Workbench remains intact at `/?view=workbench`.
-- Superadmins can persist Classic or Workbench under Settings; no ENV or
-  deployment change is required.
+- At that delivery revision, superadmins could persist Classic or Workbench
+  under Settings; no ENV or deployment change was required. The current
+  allowlist also includes Maharashtra Service as described above.
 - Both views retain English/Marathi session switching and the supplied Help,
   Locate Us, and Feedback destinations.
 - Frontend files are isolated; the secured Django search/PDF contract is shared.
@@ -77,9 +124,10 @@ being released.
 - Marathi catalog compile/fuzzy check and operator-language validation: pass.
 - Classic/Workbench/motion Playwright coverage across desktop, laptop, tablet,
   and mobile: pass.
-- Public-information coverage across both themes includes canonical/asset
-  isolation, responsive overflow, allowlisted preview propagation, and
-  serious/critical accessibility checks.
+- Public-information coverage at that revision covered both then-existing themes
+  for canonical/asset isolation, responsive overflow, allowlisted preview
+  propagation, and serious/critical accessibility checks. Maharashtra Service
+  requires its own equivalent evidence before rollout.
 - Visual review: Classic 1920×1080, Classic 390×844, Workbench 1440×900.
 
 ## Deployment and rollback

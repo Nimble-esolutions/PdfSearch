@@ -9,7 +9,7 @@
 
 ## Decision
 
-AI Sahakar has two deliberately isolated public-search presentations:
+AI Sahakar has three deliberately isolated public-search presentations:
 
 - **Classic search** is the safe default and reproduces the approved
   `training.ai-sahakar.net` / `24june2026` service composition with modern,
@@ -17,11 +17,16 @@ AI Sahakar has two deliberately isolated public-search presentations:
 - **Knowledge workbench** is the secondary evidence-led research interface and
   remains available through a superadmin-selected default or the non-persistent
   `?view=workbench` URL override.
+- **Maharashtra Service** is the official-blue, India-first service interface.
+  It combines Classic's wide question-and-answer composition with Workbench's
+  structured evidence and recovery states, and remains available through the
+  non-persistent `?view=maharashtra` URL override or an authorized saved
+  selection.
 
 The authenticated admin console remains the Hallmark **Operations Cockpit**.
-The Classic and Workbench public frontends share Django search, source, locale,
-CSRF, authentication, and PDF-authorization contracts only. They do not share
-templates, presentation CSS, or application JavaScript.
+The Classic, Workbench, and Maharashtra Service frontends share Django search,
+source, locale, CSRF, authentication, and PDF-authorization contracts only.
+They do not share templates, presentation CSS, or application JavaScript.
 
 This contract is a design lock. A future change must either preserve the
 principles below as an enhancement, or carry an explicit human request that
@@ -52,15 +57,16 @@ mismatch.
 ## Public search selection
 
 `PUBLIC_SEARCH_PRIMARY_VIEW` is an allowlisted runtime setting. An administrator
-or superadmin can select Classic or Workbench in **Settings & Configuration**
+or superadmin can select Classic, Workbench, or Maharashtra Service in
+**Settings & Configuration**
 when the environment key is absent. If the key is explicitly defined, the
 environment is authoritative and the UI is read-only. Missing, blank, or
 invalid effective values fail closed to Classic.
 
-`?view=classic` and `?view=workbench` are shareable, request-only previews. They
-must not write a cookie, session value, database value, or deployment setting.
-Unknown values fall back to the configured primary view. Language switching
-preserves a valid explicit view query.
+`?view=classic`, `?view=workbench`, and `?view=maharashtra` are shareable,
+request-only previews. They must not write a cookie, session value, database
+value, or deployment setting. Unknown values fall back to the configured
+primary view. Language switching preserves a valid explicit view query.
 
 ## Classic public search composition
 
@@ -123,6 +129,34 @@ Workbench search owns `search.html`, `civic-workbench.css`, `search.css`,
 may also be used by Workbench public-information pages; it is never loaded by
 Classic.
 
+## Maharashtra Service composition
+
+Maharashtra Service is a clean public-service search desk, not a reproduction
+of the Commissionerate portal and not a renamed Workbench. It requires:
+
+- the Commissionerate blue civic palette, restrained seal gold, white document
+  surfaces, charcoal utility navigation, and semantic red only for errors;
+- a compact bilingual identity masthead and optimized, faithful official marks;
+- one wide conversation column and wide composer, with one document scroll;
+- structured answer headings, lists, tables, actions, and an inline expandable
+  **Sources used** folio instead of a permanent evidence rail;
+- theme-native text controls for How to Ask, WhatsApp contact, Feedback, and
+  Locate Us using the existing configured destinations; and
+- a composer and footer that remain reachable after long answers and repeated
+  questions on touch, keyboard, portrait, and compact-landscape viewports.
+
+The theme deliberately excludes Suggested Questions, the Civic Knowledge Desk
+label, the phrase “Ask about Maharashtra cooperative law”, standalone WhatsApp
+or Feedback logo assets, a permanent evidence rail, Bootstrap/CDN assets, and a
+new frontend framework. Official marks are faithful identity assets, not
+generative reinterpretations or decorative government-approval claims.
+
+Maharashtra Service owns `search_maharashtra.html` and its dedicated public
+header, stylesheet, JavaScript, and optimized identity assets. Its selectors or
+assets must not be loaded by Classic or Workbench. The complete design and
+performance contract is in
+[`MAHARASHTRA_SERVICE_THEME.md`](MAHARASHTRA_SERVICE_THEME.md).
+
 ## Public information composition
 
 `/terms/`, `/privacy/`, `/disclaimer/`, `/data-policy/`, and `/cookies/` use the
@@ -140,7 +174,7 @@ label English legal copy as Marathi. Tables keep captions, scoped headings, and
 a keyboard-focusable horizontal scroll region on narrow screens.
 
 The standard public 400, 403, 404, and 500 responses use the same allowlisted
-Classic/Workbench resolver and an equivalent header/footer language, but they
+three-theme resolver and an equivalent header/footer language, but they
 are recovery pages rather than search pages. They must never load the composer,
 search JavaScript, analytics configuration/tracker, Bootstrap, or the
 authenticated admin shell. They use noindex metadata, a skip link, a clear
@@ -190,7 +224,9 @@ Inter, "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif
 These tokens and restrictions apply to the Workbench and admin surfaces. Do not
 add arbitrary colours, decorative tricolour styling, government emblems, robot
 imagery, gradients, glass surfaces, fake browser frames, or large visual assets
-there. Classic uses only its approved optimized legacy identity assets. Prefer
+there. Classic uses only its approved optimized legacy identity assets.
+Maharashtra Service uses the separately defined blue civic palette and
+optimized official identity rules in `MAHARASHTRA_SERVICE_THEME.md`. Prefer
 grid, dividers, and typography over a stack of floating cards.
 Marathi must not be uppercased, letter-spaced aggressively, clipped, or mixed
 with English through concatenated fragments.
@@ -326,7 +362,8 @@ noise.
 - Support Escape-to-close and focus restoration for mobile source drawers.
 - Keep `html`/`body` horizontally safe with `overflow-x: clip`; fix layout
   tracks with `minmax(0, 1fr)` rather than hiding overflow defects.
-- Validate 320×568 through 1920×1080, mobile landscape, and 200% zoom.
+- Validate 320×568 through 1920×1080, mobile landscape, 200% zoom, reduced
+  motion, constrained networks, and budget-class Android CPU throttling.
 - Critical and serious axe violations must remain zero; core keyboard flows
   must remain unblocked.
 
@@ -338,9 +375,9 @@ preserving the contract. Before implementation, record the affected component,
 state, breakpoint, locale impact, and backend boundary. After implementation,
 update the relevant guide/tests and run the narrowest browser and Django gates.
 
-The following are prohibited without explicit human direction: merging Classic
-and Workbench frontend assets, removing either presentation, adding a frontend
-SPA framework, changing the approved identity hierarchy of either view,
+The following are prohibited without explicit human direction: merging any
+public theme's frontend assets, removing a presentation, adding a frontend SPA
+framework, changing the approved identity hierarchy of a view,
 weakening source visibility, hiding the composer, introducing decorative
 motion/assets beyond the approved Classic imagery, changing
 search/auth/CSRF/PDF contracts, or making Marathi secondary.
@@ -349,6 +386,7 @@ search/auth/CSRF/PDF contracts, or making Marathi secondary.
 
 - [Implementation design record](shakar2-civic-workbench.md)
 - [Public-search theme architecture](PUBLIC_SEARCH_THEME_ARCHITECTURE.md)
+- [Maharashtra Service theme contract](MAHARASHTRA_SERVICE_THEME.md)
 - [Developer guide](../AI_SAHAKAR_DEVELOPER_GUIDE.md)
 - [Admin user guide](../AI_SAHAKAR_ADMIN_USER_GUIDE.md)
 - [Public shell and evidence diagram](../diagrams/ui-shell-and-evidence.mmd)

@@ -1,0 +1,41 @@
+flowchart TD
+    U["Public request<br/>search · policy · safe error"] --> R{"Allowlisted view resolver"}
+    Q["Optional request preview<br/>classic · workbench · maharashtra"] --> R
+    E["Existing PUBLIC_SEARCH_PRIMARY_VIEW<br/>ENV when defined"] --> R
+    S["Saved SiteSetting<br/>when ENV is absent"] --> R
+    D["Application default<br/>Classic"] --> R
+
+    R -->|Classic| C["Classic<br/>isolated template · CSS · JS · identity"]
+    R -->|Workbench| W["Knowledge Workbench<br/>isolated template · CSS · JS · identity"]
+    R -->|Maharashtra| M["Maharashtra Service<br/>isolated template · CSS · JS · official identity"]
+    R -->|Missing or invalid| C
+
+    C --> B["Shared secured Django contracts"]
+    W --> B
+    M --> B
+
+    B --> A["Typed search answer<br/>kind · language · answer · references"]
+    B --> P["Protected PDF and service URLs"]
+    B --> L["English / Marathi locale session"]
+
+    A --> CR["Classic wide response"]
+    A --> WR["Workbench evidence workspace"]
+    A --> MR["Maharashtra wide answer<br/>inline Sources used folio"]
+
+    C -. "never loads" .-> X["Other theme assets"]
+    W -. "never loads" .-> X
+    M -. "never loads" .-> X
+
+    classDef resolver fill:#edf5f0,stroke:#2e6a4f,color:#19372b
+    classDef classic fill:#fff7e8,stroke:#a85f16,color:#2f2116
+    classDef workbench fill:#f5eee7,stroke:#6d1825,color:#251b1b
+    classDef maha fill:#f7fcff,stroke:#0262b6,color:#24282b
+    classDef shared fill:#eef4f8,stroke:#516b7a,color:#1f3039
+    classDef forbidden fill:#fff2f2,stroke:#b42318,color:#611a15
+
+    class R,Q,E,S,D resolver
+    class C,CR classic
+    class W,WR workbench
+    class M,MR maha
+    class B,A,P,L shared
+    class X forbidden
