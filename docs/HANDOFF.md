@@ -43,10 +43,10 @@ can change after that time, so repeat the read-only checks in
 
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
-| Repository integration baseline | `dev` contains `240214f` (PR #196), with PR #197 in its ancestry | PRs #185–#197 are merged; both themes, typed question-language responses, public information/error pages, Classic continuity, search-latency hardening, consent-led Umami integration, repository-truth documentation, and the first Settings control center are integrated |
-| Active corrective branch | `feat/settings-control-room` is local and unmerged | Hallmark settings ownership, role controls, unified cookie consent, and Classic shell continuity are implementation candidates only until this branch passes review and merges |
+| Repository integration baseline | `dev` contains `c641507` (PR #198), with PRs #185–#197 in its ancestry | Role-aware Settings ownership, unified cookie consent, redacted configuration inventory, explicit recovery refresh, and the corrected Classic viewport/long-answer continuity contract are integrated; this is repository evidence, not stage deployment proof |
+| Settings and Classic corrective work | PR [#198](https://github.com/Nimble-esolutions/PdfSearch/pull/198) merged into `dev` after all required checks passed | The rejected all-`auto` Grid shell is replaced by intrinsic-height bands and a flexible conversation canvas; admin/superadmin scope, ENV locks, saved/default precedence, secret redaction, analytics ownership, and Classic empty/long-answer/second-question behavior are covered by focused tests |
 | Classic focus-ring fix | PR #193 is merged into `dev`; not yet deployed to stage | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
-| Persistent analytics integration | PR [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) is merged; the independent service remains operator-managed | It provides explicit cookie consent, separate host-scoped stage/production tenants, an HTTPS-only pseudonymous browser ID, Global Privacy Control blocking, and local hard-disablement. The active settings branch removes the duplicate operator/visitor consent concept and makes mode/Website-ID ownership explicit: ENV wins when defined; otherwise the superadmin control is editable. This remains local verification, not deployment proof. |
+| Persistent analytics integration | PRs [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) and [#198](https://github.com/Nimble-esolutions/PdfSearch/pull/198) are merged; the independent service remains operator-managed | The normal cookie notice is the single visitor-consent surface. Stage and production use separate host-scoped tenants, local collection is hard-disabled, Global Privacy Control blocks collection, and analytics mode/Website ID are ENV-owned only when either key is explicitly defined; otherwise the superadmin control is editable. This remains repository verification, not deployment proof. |
 | Public recovery pages | PR [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) is merged | Standard 400/403/404/500 responses use the active Classic/Workbench visual language without tracker/search scripts or failed-URL reflection. No stage deployment claim is implied. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
@@ -156,39 +156,34 @@ no ownership warning.
 
 ## Open decisions and next actions
 
-There is no data-readiness or search-language blocker. Search latency remains a
-measured release task until the current branch is reviewed, merged, deployed,
-and canaried. Remaining work is:
+There is no data-readiness or search-language blocker. PR #198 is merged and
+locally/CI certified; search latency remains a measured release task until an
+integrated image is deployed and canaried. Remaining work is:
 
-1. **Settings/Classic corrective PR:** review and merge the active Hallmark
-   control-room branch only after role, ENV precedence, consent, secret-redaction,
-   empty-shell geometry, long-answer, second-question, and accessibility gates
-   are green. The rejected all-`auto` Grid shell stretched utility/footer tracks;
-   the candidate uses intrinsic-height bands plus a flexible conversation canvas.
-2. **Integrated stage rollout:** after the merged image reaches stage, prove
+1. **Integrated stage rollout:** after the merged image reaches stage, prove
    the unchanged signed generation and both themes; compare uncached/repeat
    duration, phase telemetry, corpus bytes/vectors, and web-worker RSS. Roll
    back the image if authorization, continuity, latency, or memory headroom
    regresses.
-3. **Settings stage canary:** verify admin/superadmin role separation, explicit
+2. **Settings stage canary:** verify admin/superadmin role separation, explicit
    ENV field locks, saved override/default sources, redacted inventory, and
    host-specific analytics without changing persistent data or production.
-4. **Future production project:** create and validate the dedicated 2026
+3. **Future production project:** create and validate the dedicated 2026
    production Dokploy project only after explicit approval. Treat
    `/root/prod-2026.env` as prepared input, not deployment evidence.
-5. **Production rehearsal:** before traffic changes, select an immutable image,
+4. **Production rehearsal:** before traffic changes, select an immutable image,
    validate rendered Compose and key-only environment posture, restore into
    isolated production-candidate volumes, run search/PDF/auth smoke checks, and
    record rollback image and generation.
-7. **Production cutover:** remains out of scope until separately authorized.
+5. **Production cutover:** remains out of scope until separately authorized.
    Do not change legacy service routing or `prod_flowdocs` while preparing it.
-8. **Stage recovery retest:** run another manual backup and disposable restore
+6. **Stage recovery retest:** run another manual backup and disposable restore
    only when recovery/data contracts change or when explicitly requested.
-9. **Local development:** start the native development stack and rerun focused
+7. **Local development:** start the native development stack and rerun focused
    local recovery/search tests when a new implementation task requires it; the
    stack is intentionally stopped now.
-10. **Consent-led analytics stage canary:** PR #196 is merged; after the current
-    corrective branch and its image are deployed, verify the independent pinned
+8. **Consent-led analytics stage canary:** PRs #196 and #198 are merged; after
+    their integrated image is deployed, verify the independent pinned
     Umami/PostgreSQL stack, reviewed tracker version/source, TLS, dashboard
     authentication, retention/deletion authority, and database restore. Then use
     the per-host Settings control and run the exact browser canary in
