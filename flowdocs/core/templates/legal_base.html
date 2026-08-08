@@ -17,6 +17,7 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="{{ title }} | Sahakar AI">
   <meta name="twitter:description" content="{{ legal_description }}">
+  <meta name="theme-color" content="{% if search_view == 'maharashtra' %}#0262b6{% elif search_view == 'classic' %}#24282b{% else %}#5c0f1b{% endif %}">
   <link rel="icon" href="{% static 'main/images/favicon.ico' %}">
   <link rel="stylesheet" href="{% static 'main/css/public-legal.css' %}">
   <script type="application/ld+json">
@@ -37,7 +38,9 @@
 <body class="public-legal public-legal--{{ search_view }}">
   <a class="public-legal__skip" href="#legalContent">{% trans "Skip to policy content" %}</a>
 
-  {% if search_view == "workbench" %}
+  {% if search_view == "maharashtra" %}
+    {% include "components/public/maharashtra_header.html" %}
+  {% elif search_view == "workbench" %}
     {% include "components/public/workbench_header.html" %}
   {% else %}
     {% include "components/public/classic_header.html" %}
@@ -47,6 +50,7 @@
     <div class="policy-nav__inner">
       <span class="policy-nav__label">{% trans "Policies and notices" %}</span>
       <div class="policy-nav__links">
+        {% if search_view == "maharashtra" %}<a class="policy-nav__home" href="{{ public_home_url }}">{% trans "Return to search" %}</a>{% endif %}
         {% for item in legal_navigation %}
           <a href="{{ item.url }}"{% if request.resolver_match.url_name == item.route %} aria-current="page"{% endif %}>{{ item.label }}</a>
         {% endfor %}

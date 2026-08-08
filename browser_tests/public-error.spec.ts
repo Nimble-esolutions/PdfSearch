@@ -4,7 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 const missingRoute = '/this-address-must-never-be-rendered/';
 
 test.describe('Theme-consistent public recovery pages', () => {
-  for (const theme of ['classic', 'workbench'] as const) {
+  for (const theme of ['classic', 'workbench', 'maharashtra'] as const) {
     test(`404 uses the ${theme} shell without loading search or analytics clients`, async ({ page }) => {
       const response = await page.goto(`${missingRoute}?view=${theme}`);
 
@@ -20,6 +20,8 @@ test.describe('Theme-consistent public recovery pages', () => {
       await expect(page.locator('script[src*="product-analytics.js"]')).toHaveCount(0);
       await expect(page.locator('script[src*="main/js/search.js"]')).toHaveCount(0);
       await expect(page.locator('script[src*="search-classic.js"]')).toHaveCount(0);
+      await expect(page.locator('script[src*="search-maharashtra.js"]')).toHaveCount(0);
+      await expect(page.locator('script[src]')).toHaveCount(0);
       await expect(page.locator('body')).not.toContainText('this-address-must-never-be-rendered');
       await expect(page.locator('.public-error__skip')).toHaveAttribute('href', '#publicErrorContent');
       await expect(page.getByRole('link', { name: 'Return to document search' })).toHaveAttribute(
@@ -30,9 +32,15 @@ test.describe('Theme-consistent public recovery pages', () => {
       if (theme === 'classic') {
         await expect(page.locator('.classic-banner')).toBeVisible();
         await expect(page.locator('.workbench-header')).toHaveCount(0);
-      } else {
+        await expect(page.locator('.maha-header')).toHaveCount(0);
+      } else if (theme === 'workbench') {
         await expect(page.locator('.workbench-header')).toBeVisible();
         await expect(page.locator('.classic-banner')).toHaveCount(0);
+        await expect(page.locator('.maha-header')).toHaveCount(0);
+      } else {
+        await expect(page.locator('.maha-header')).toBeVisible();
+        await expect(page.locator('.classic-banner')).toHaveCount(0);
+        await expect(page.locator('.workbench-header')).toHaveCount(0);
       }
 
       const widths = await page.evaluate(() => ({
@@ -52,10 +60,10 @@ test.describe('Theme-consistent public recovery pages', () => {
     await expect(page.getByRole('link', { name: 'Return to document search' })).toHaveAttribute('href', '/');
   });
 
-  test('keeps both public headers within a 320px viewport', async ({ page }) => {
+  test('keeps every public header within a 320px viewport', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 680 });
 
-    for (const theme of ['classic', 'workbench']) {
+    for (const theme of ['classic', 'workbench', 'maharashtra']) {
       await page.goto(`${missingRoute}?view=${theme}`);
       const widths = await page.evaluate(() => ({
         scroll: document.documentElement.scrollWidth,
@@ -65,8 +73,8 @@ test.describe('Theme-consistent public recovery pages', () => {
     }
   });
 
-  test('404 has no serious or critical accessibility violations in either public theme', async ({ page }) => {
-    for (const theme of ['classic', 'workbench']) {
+  test('404 has no serious or critical accessibility violations in every public theme', async ({ page }) => {
+    for (const theme of ['classic', 'workbench', 'maharashtra']) {
       await page.goto(`${missingRoute}?view=${theme}`);
       const result = await new AxeBuilder({ page }).analyze();
       expect(
