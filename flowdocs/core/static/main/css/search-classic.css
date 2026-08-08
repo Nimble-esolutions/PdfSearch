@@ -27,11 +27,11 @@ html {
 }
 
 body.classic-search {
-  display: grid;
+  display: flex;
   height: auto;
   min-height: 100dvh;
   margin: 0;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  flex-direction: column;
   overflow: visible;
   color: var(--classic-ink);
   background: var(--classic-canvas);
@@ -170,8 +170,9 @@ body.classic-search {
   display: flex;
   min-width: 0;
   min-height: 0;
+  flex: 1 0 auto;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   padding: 26px 25px max(16px, env(safe-area-inset-bottom));
   background: var(--classic-canvas);
 }
@@ -180,14 +181,29 @@ body.classic-search {
   display: flex;
   min-width: 0;
   min-height: 0;
-  flex: 1;
+  flex: 1 0 auto;
   flex-direction: column;
   gap: 12px;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  overflow: visible;
+  overscroll-behavior: auto;
   padding: 2px 1px 20px;
   scroll-behavior: smooth;
+}
+
+/* Compact landscape is the only fixed-shell mode. It deliberately gives the
+   transcript its own scrollbar so the composer remains reachable. */
+@media (max-height: 430px) {
+  .classic-chat { min-height: 0; flex: 1 1 auto; overflow: hidden; }
+  .classic-chat__messages {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .classic-composer-region { flex: 0 0 auto; }
+  .classic-composer__status,
+  .classic-footer { display: none; }
 }
 
 .classic-message {

@@ -114,6 +114,24 @@ test.describe('Classic public search', () => {
     await expect(page.locator('link[href*="civic-workbench"]')).toHaveCount(0);
     await expect(page.locator('script[src*="main/js/search.js"]')).toHaveCount(0);
     await expect(page.locator('link[href*="bootstrap"]')).toHaveCount(0);
+
+    const shell = await page.evaluate(() => {
+      const utility = document.querySelector<HTMLElement>('.classic-utility');
+      const composer = document.querySelector<HTMLElement>('#searchComposer');
+      const footer = document.querySelector<HTMLElement>('.classic-footer');
+      if (!utility || !composer || !footer) throw new Error('Classic shell is incomplete');
+      return {
+        documentHeight: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight,
+        utilityHeight: utility.getBoundingClientRect().height,
+        composerBottom: composer.getBoundingClientRect().bottom,
+        footerBottom: footer.getBoundingClientRect().bottom,
+      };
+    });
+    expect(shell.utilityHeight).toBeLessThanOrEqual(44);
+    expect(shell.documentHeight).toBeLessThanOrEqual(shell.viewportHeight + 2);
+    expect(shell.composerBottom).toBeLessThanOrEqual(shell.viewportHeight + 1);
+    expect(shell.footerBottom).toBeLessThanOrEqual(shell.viewportHeight + 1);
   });
 
   test('uses one accessible focus ring for the compound composer field', async ({ page }) => {
@@ -194,7 +212,7 @@ test.describe('Classic public search', () => {
     await expect(page.locator('#userQuery')).toBeEditable();
   });
 
-  test('formats long answers, keeps the transcript scrollable, and supports another search', async ({ page }) => {
+  test('formats long answers, keeps document scrolling available, and supports another search', async ({ page }) => {
     const longSection = Array.from({ length: 18 }, (_, index) => {
       const marker = index % 2 === 0 ? `${index + 1})` : `${index + 1}.`;
       return `${marker} **Rule ${index + 1}**: Review the cited document before relying on this guidance.`;
@@ -240,23 +258,24 @@ test.describe('Classic public search', () => {
       return {
         documentScrollHeight: document.documentElement.scrollHeight,
         viewportHeight: window.innerHeight,
-        transcriptClientHeight: transcript.clientHeight,
-        transcriptScrollHeight: transcript.scrollHeight,
+        bodyOverflow: getComputedStyle(document.body).overflowY,
         composerTop: composerRect.top,
         composerBottom: composerRect.bottom,
         overflowY: getComputedStyle(transcript).overflowY,
       };
     });
     expect(layout.documentScrollHeight).toBeGreaterThan(layout.viewportHeight);
-    expect(layout.transcriptScrollHeight).toBeGreaterThan(0);
-    expect(layout.overflowY).toBe('auto');
+    expect(layout.bodyOverflow).not.toBe('hidden');
+    expect(layout.overflowY).toBe('visible');
     expect(layout.composerTop).toBeGreaterThanOrEqual(0);
     await expect(page.locator('#userQuery')).toBeVisible();
     await expect(page.locator('#userQuery')).toBeFocused();
 
-    const transcript = page.locator('#chatMain');
-    await transcript.scrollIntoViewIfNeeded();
-    expect(await transcript.evaluate(element => element.scrollHeight)).toBeGreaterThanOrEqual(await transcript.evaluate(element => element.clientHeight));
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await expect(page.locator('#searchComposer')).toBeInViewport();
+    await page.locator('.classic-footer').scrollIntoViewIfNeeded();
+    await expect(page.locator('.classic-footer')).toBeInViewport();
     const a11y = await new AxeBuilder({ page }).analyze();
     expect(a11y.violations.filter(item => ['critical', 'serious'].includes(item.impact ?? ''))).toEqual([]);
 
@@ -264,6 +283,8 @@ test.describe('Classic public search', () => {
     await page.locator('#sendBtn').click();
     await expect(page.locator('.classic-message--assistant[data-response-kind]').last()).toContainText('Second answer remains available.');
     expect(requestCount).toBe(2);
+    await page.locator('#searchComposer').scrollIntoViewIfNeeded();
+    await expect(page.locator('#userQuery')).toBeInViewport();
   });
 
   test('renders a typed small-talk response without fabricating source evidence', async ({ page }) => {
