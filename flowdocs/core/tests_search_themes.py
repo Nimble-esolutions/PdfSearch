@@ -125,12 +125,33 @@ class SearchThemeResolutionTests(TestCase):
             SiteSetting.objects.filter(key=PRIMARY_SEARCH_VIEW_SETTING).exists()
         )
 
+    def test_maharashtra_template_is_isolated_and_uses_runtime_word_limit(self):
+        SiteSetting.objects.create(key="PUBLIC_SEARCH_MAX_WORDS", value="12")
+        cache.clear()
+
+        response = self.client.get(reverse("home") + "?view=maharashtra")
+
+        self.assertTemplateUsed(response, "search_maharashtra.html")
+        self.assertContains(response, 'class="maha-service-document"')
+        self.assertContains(response, "search-maharashtra.css")
+        self.assertContains(response, "search-maharashtra.js")
+        self.assertContains(response, "maharashtra-theme-registrar-seal.svg")
+        self.assertContains(response, "maharashtra-theme-national-emblem.svg")
+        self.assertContains(response, 'data-max-words="12"')
+        self.assertContains(response, 'data-label="words"')
+        self.assertContains(response, "0/12 words")
+        self.assertNotContains(response, "maxlength=")
+        self.assertNotContains(response, "search-classic.css")
+        self.assertNotContains(response, "civic-workbench.css")
+        self.assertNotContains(response, "Suggested Questions")
+        self.assertNotContains(response, "Civic Knowledge Desk")
+
     def test_supplied_public_links_are_rendered_in_both_views(self):
         expected_map_id = "1MoHzbONhTORm8fQ0IAZCWG82vtUgIJU"
         expected_feedback_id = "1FAIpQLSca6zWE0E5CIwoFfT6lzdGhaqaslLFpjaSu2mK654hAQVDlSg"
         expected_help_id = "1K4Z0RnRcQFXXDxxO10xFVjAbFRBXu7errbWbqtIK8qE"
 
-        for suffix in ("", "?view=workbench"):
+        for suffix in ("", "?view=workbench", "?view=maharashtra"):
             with self.subTest(suffix=suffix or "classic"):
                 response = self.client.get(reverse("home") + suffix)
                 self.assertContains(response, expected_map_id)
