@@ -44,10 +44,11 @@ can change after that time, so repeat the read-only checks in
 | Boundary | Verified state | Evidence / consequence |
 | --- | --- | --- |
 | Repository integration baseline | `dev` contains `c641507` (PR #198), with PRs #185–#197 in its ancestry | Role-aware Settings ownership, unified cookie consent, redacted configuration inventory, explicit recovery refresh, and the corrected Classic viewport/long-answer continuity contract are integrated; this is repository evidence, not stage deployment proof |
+| Pending Maharashtra Service theme | Branch `feat/maharashtra-search-theme` is locally certified and is not yet merged or deployed | Adds an isolated third public-search presentation using the shared typed search contract, theme-native legal/recovery pages, responsive vector identity marks, and dedicated browser coverage. Stage continues to run the older image and cannot be used as evidence for this branch. |
 | Settings and Classic corrective work | PR [#198](https://github.com/Nimble-esolutions/PdfSearch/pull/198) merged into `dev` after all required checks passed | The rejected all-`auto` Grid shell is replaced by intrinsic-height bands and a flexible conversation canvas; admin/superadmin scope, ENV locks, saved/default precedence, secret redaction, analytics ownership, and Classic empty/long-answer/second-question behavior are covered by focused tests |
 | Classic focus-ring fix | PR #193 is merged into `dev`; not yet deployed to stage | The Classic compound composer now owns one accessible focus ring instead of drawing a second global input outline. The disposable Docker-backed Classic suite passed all 12 desktop tests, including a computed-style regression for the Marathi input field. No stage or production change has been made. |
 | Persistent analytics integration | PRs [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) and [#198](https://github.com/Nimble-esolutions/PdfSearch/pull/198) are merged; the independent service remains operator-managed | The normal cookie notice is the single visitor-consent surface. Stage and production use separate host-scoped tenants, local collection is hard-disabled, Global Privacy Control blocks collection, and analytics mode/Website ID are ENV-owned only when either key is explicitly defined; otherwise the superadmin control is editable. This remains repository verification, not deployment proof. |
-| Public recovery pages | PR [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) is merged | Standard 400/403/404/500 responses use the active Classic/Workbench visual language without tracker/search scripts or failed-URL reflection. No stage deployment claim is implied. |
+| Public recovery pages | PR [#196](https://github.com/Nimble-esolutions/PdfSearch/pull/196) is merged; the pending Maharashtra branch extends the same contract | Standard 400/403/404/500 responses use the active public-search visual language without tracker/search scripts or failed-URL reflection. No stage deployment claim is implied. |
 | Local development | Development Compose stack is currently stopped | Do not infer local data fitness from historical round-trip evidence; start and verify it when local runtime work resumes |
 | Stage route | `https://2026.ai-sahakar.net/` returned HTTP 200 | Reachability only; `/readyz` remains authoritative |
 | Stage services | Redis, web, and maintenance are running and healthy | Same Compose project and persistent volumes remain active |
@@ -104,8 +105,8 @@ backup remains off unless the operator explicitly changes that policy.
 | Embeddings | Extracted text may reach the configured external embedding provider under the existing side-effect policy |
 | Backup cadence | Stage backup is manual; a successful receipt is recovery evidence, not a readiness prerequisite |
 | Activation | Signed runtime pointer plus exact manifest digest is required; quarantine presence and HTTP 200 are insufficient |
-| Public search presentation | Classic search is the fail-closed primary view; Knowledge Workbench remains isolated and can be selected by a superadmin or previewed with `?view=workbench` |
-| Public search response contract | Exact standalone greetings/thanks/identity prompts are `small_talk`; document questions are `evidence_answer` or `no_evidence`; `language` follows the question (`en`/`mr`), not the selected UI; both themes consume the same typed JSON contract |
+| Public search presentation | Classic search is the fail-closed primary view. Knowledge Workbench and the pending Maharashtra Service view remain isolated presentations that can be selected through the existing superadmin setting or previewed with `?view=workbench` and `?view=maharashtra`; a preview does not change the saved primary view. |
+| Public search response contract | Exact standalone greetings/thanks/identity prompts are `small_talk`; document questions are `evidence_answer` or `no_evidence`; `language` follows the question (`en`/`mr`), not the selected UI. Classic, Workbench, and Maharashtra Service consume the same typed JSON contract; the third theme adds no search backend or feature fork. |
 | Product analytics production posture | Collection is allowed for the future 2026 production app only after its dedicated Umami Website ID, canonical apex routing, independent-stack proof, and normal production canary; it is not enabled on the legacy service by this repository |
 
 PR #186 corrected the legacy substring small-talk predicate that caused words
@@ -115,8 +116,8 @@ now normalized and whole-query, responses are typed, and the backward-compatible
 the question, validated against the returned script before caching, and repaired
 once before failing explicitly.
 
-The certified release passed the disposable runtime, activation, RustFS, MinIO,
-browser, and package gates. Stage canaries then proved Classic and Workbench
+The previously certified release passed the disposable runtime, activation,
+RustFS, MinIO, browser, and package gates. Stage canaries then proved Classic and Workbench
 rendering plus both mismatched-locale directions: Marathi input posted as English
 returned Marathi/Devanagari evidence with three references, and English input
 posted as Marathi returned English/Latin evidence with three references. The
@@ -147,6 +148,15 @@ and indexing remained `1.0`.
 | #196 | Added consent-led host-scoped analytics and themed public recovery pages; retained, with duplicate consent and settings-ownership regressions corrected on the active branch |
 | #197 | Added public-performance, responsive-masthead, and Umami capability plans; documentation only, with no runtime behavior to claim |
 
+The pending `feat/maharashtra-search-theme` branch implements the approved third
+presentation without changing the search API, admin site, primary-view default,
+or existing Classic and Workbench assets. Local source-backed browser evidence
+covers desktop, mobile, a 320-pixel budget-phone viewport, long-answer document
+scroll, composer continuity, a second question, English/Marathi behavior,
+theme-aware legal/recovery pages, safe structured rendering, protected source
+links, and automated accessibility checks. It is not live evidence until its PR
+is merged, an image is deployed, and the stage canary is repeated.
+
 The stage volume warning is resolved. The three project-scoped volumes were
 copied while quiescent, digest-verified, recreated with Docker Compose's
 internal ownership labels, restored, re-verified, and restarted. No
@@ -161,7 +171,7 @@ locally/CI certified; search latency remains a measured release task until an
 integrated image is deployed and canaried. Remaining work is:
 
 1. **Integrated stage rollout:** after the merged image reaches stage, prove
-   the unchanged signed generation and both themes; compare uncached/repeat
+   the unchanged signed generation and all three themes; compare uncached/repeat
    duration, phase telemetry, corpus bytes/vectors, and web-worker RSS. Roll
    back the image if authorization, continuity, latency, or memory headroom
    regresses.
@@ -213,7 +223,7 @@ integrated image is deployed and canaried. Remaining work is:
 - Never classify conversational intent with substring matching. A small-talk
   fast path must match the complete normalized query, and regression tests must
   include domain words containing short conversational tokens.
-- Both public themes must preserve the backend response `kind`; a friendly
+- All public themes must preserve the backend response `kind`; a friendly
   answer without evidence must not be presented as a document-backed answer.
 - Do not replace the approved Classic flex shell with all-`auto` CSS Grid rows.
   Surplus viewport space will stretch intrinsic utility/footer bands. Protect
@@ -241,9 +251,18 @@ integrated image is deployed and canaried. Remaining work is:
   results to the durable mutation epoch, reject reuse during active writes or
   barriers, and reauthorize every cached reference at the response boundary.
   Cache failure must reduce speed, never search availability.
-- Do not simulate token streaming after a completed JSON response. Both public
+- Do not simulate token streaming after a completed JSON response. All public
   themes must format the completed answer immediately and announce only a
   concise completion status to assistive technology.
+- Model-authored Markdown links are untrusted output. Only same-origin,
+  allowlisted public PDF routes may become clickable source links; preserve all
+  other link labels as inert text and never use unsanitized `innerHTML`.
+- Public-search word limits belong to the server-owned runtime contract. Render
+  the effective limit into each theme instead of duplicating a JavaScript
+  constant that can drift from `PUBLIC_SEARCH_MAX_WORDS`.
+- Every public theme needs unique accessible landmark names and a valid heading
+  hierarchy. Theme isolation must not introduce duplicate navigation labels,
+  skipped headings, global CSS leakage, or a separate backend behavior fork.
 - Do not deploy a migration to an activated SQLite runtime unless the safe
   runtime migration classifier accepts it as recovery-backed and additive.
 - Do not expose deployment-only environment identity, data lineage, backup

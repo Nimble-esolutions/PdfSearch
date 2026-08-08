@@ -36,6 +36,12 @@ another theme's assets. Existing Help, WhatsApp, Feedback, Locate Us, policy,
 and protected-document destinations remain available as labelled theme-native
 controls.
 
+Its browser contract additionally requires one document scroll for long
+answers, a reachable composer and footer after every response, a server-owned
+word limit, bounded response rendering, and same-origin protected-PDF
+allowlisting for both source cards and generated answer links. Unknown answer
+URLs are displayed as text rather than made clickable.
+
 Before selecting it as primary, certify empty/loading/answer/error states, long
 answers and a second question, English/Marathi behavior, all service links,
 asset isolation, 320px and compact-landscape layouts, accessibility, constrained
