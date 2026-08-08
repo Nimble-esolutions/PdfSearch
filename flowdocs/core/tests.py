@@ -266,7 +266,7 @@ class EnvironmentContractTests(SimpleTestCase):
         }
         custody = rows["ARTIFACT_INVENTORY_MAX_MEDIA_FILE_BYTES"]
         self.assertEqual(custody["value"], "33554432")
-        self.assertEqual(custody["source"], "environment")
+        self.assertEqual(custody["source"], "environment override")
         self.assertFalse(custody["secret"])
 
     def test_config_inspect_reports_effective_custody_cap(self):
@@ -4382,6 +4382,10 @@ class LegalPageTests(TestCase):
     def setUp(self):
         super().setUp()
         django_cache.clear()
+        # Runtime-setting tests deliberately warm the shared cache while their
+        # database writes are rolled back by TestCase. Clear it again after
+        # every test so a rolled-back value cannot leak into a later class.
+        self.addCleanup(django_cache.clear)
         runtime_keys = (
             "PUBLIC_SEARCH_ENABLED",
             "DISPLAY_SERVICE_FOOTER",
