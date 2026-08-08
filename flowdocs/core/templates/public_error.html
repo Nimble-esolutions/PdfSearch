@@ -7,20 +7,24 @@
   <title>{{ error_title }} | Sahakar AI</title>
   <meta name="description" content="{{ error_description }}">
   <meta name="robots" content="noindex, nofollow, noarchive">
-  <meta name="theme-color" content="{% if search_view == 'classic' %}#24282b{% else %}#5c0f1b{% endif %}">
+  <meta name="theme-color" content="{% if search_view == 'maharashtra' %}#0262b6{% elif search_view == 'classic' %}#24282b{% else %}#5c0f1b{% endif %}">
   <link rel="icon" href="{% static 'main/images/favicon.ico' %}">
   {% if search_view == "classic" %}
     <link rel="stylesheet" href="{% static 'main/css/search-classic.css' %}">
+  {% elif search_view == "maharashtra" %}
+    <link rel="stylesheet" href="{% static 'main/css/public-legal.css' %}">
   {% else %}
     <link rel="stylesheet" href="{% static 'main/css/search.css' %}">
     <link rel="stylesheet" href="{% static 'main/css/civic-workbench.css' %}">
   {% endif %}
   <link rel="stylesheet" href="{% static 'main/css/public-error.css' %}">
 </head>
-<body class="{% if search_view == 'classic' %}classic-search public-error public-error--classic{% else %}public-search public-error public-error--workbench{% endif %}">
+<body class="{% if search_view == 'classic' %}classic-search public-error public-error--classic{% elif search_view == 'maharashtra' %}public-error public-error--maharashtra{% else %}public-search public-error public-error--workbench{% endif %}">
   <a class="public-error__skip" href="#publicErrorContent">{% trans "Skip to page message" %}</a>
 
-  {% if search_view == "classic" %}
+  {% if search_view == "maharashtra" %}
+    {% include "components/public/maharashtra_header.html" %}
+  {% elif search_view == "classic" %}
     {% include "components/public/classic_header.html" %}
   {% else %}
     {% include "components/public/workbench_header.html" %}
@@ -42,6 +46,14 @@
 
   {% if search_view == "classic" %}
     {% include "components/public/classic_footer.html" with footer_class="public-error__footer" %}
+  {% elif search_view == "maharashtra" %}
+    <footer class="public-error__footer public-error__footer--maharashtra">
+      <div>
+        <strong>{% trans "Registrar Co-operative Societies, Maharashtra" %}</strong>
+        <small>{% trans "Public information service" %}</small>
+      </div>
+      {% include "components/public/legal_links.html" %}
+    </footer>
   {% else %}
     <footer class="public-error__footer public-error__footer--workbench">
       <div>

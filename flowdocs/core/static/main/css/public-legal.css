@@ -146,6 +146,222 @@ body.public-legal {
   background: #f2eee7;
 }
 
+/* Maharashtra Service uses the department's official blue identity while
+   retaining this standalone public-information stylesheet. Search workspace
+   CSS and JavaScript must not leak into legal or recovery pages. */
+.public-legal--maharashtra,
+.public-error--maharashtra {
+  --policy-paper: #fff;
+  --policy-canvas: #eef6fc;
+  --policy-ink: #17212b;
+  --policy-muted: #4b5d6d;
+  --policy-line: #bdddf9;
+  --policy-maroon: #0262b6;
+  --policy-maroon-deep: #004a8f;
+  --policy-ochre: #8b5c08;
+  --policy-focus: #ffbf47;
+  --policy-shadow: 0 18px 44px rgba(1, 72, 132, .1);
+}
+
+body.public-error--maharashtra {
+  min-width: 320px;
+  min-height: 100dvh;
+  margin: 0;
+  overflow-x: clip;
+  color: var(--policy-ink);
+  background: var(--policy-canvas);
+  font-family: "Noto Sans Devanagari", Mangal, "Kohinoor Devanagari",
+    "Lohit Devanagari", "Segoe UI", Arial, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Header subset shared with the frontend-owned Maharashtra header partial. */
+.maha-header {
+  color: #17212b;
+  background: #fff;
+  border-bottom: 1px solid #8fc8f4;
+}
+
+.maha-utility {
+  color: #fff;
+  background: #24282b;
+}
+
+.maha-utility__inner,
+.maha-identity,
+.maha-primary-nav__inner {
+  width: min(100% - 2rem, 1180px);
+  margin-inline: auto;
+}
+
+.maha-utility__inner {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: .75rem;
+}
+
+.maha-utility__spacer { flex: 1 1 auto; }
+
+.maha-utility a,
+.maha-utility button {
+  display: inline-flex;
+  min-height: 44px;
+  padding: .3rem .15rem;
+  align-items: center;
+  border: 0;
+  color: #fff;
+  background: transparent;
+  font: inherit;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.maha-utility a:hover,
+.maha-utility button:hover { text-decoration: underline; }
+.maha-utility form { display: inline-flex; margin: 0; }
+
+.maha-identity {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto 52px;
+  min-height: 104px;
+  padding-block: .75rem;
+  align-items: center;
+  gap: clamp(.75rem, 3vw, 2rem);
+}
+
+.maha-identity__seal,
+.maha-identity__emblem {
+  min-width: 0;
+}
+
+.maha-identity__seal img,
+.maha-identity__emblem {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 78px;
+  object-fit: contain;
+}
+
+.maha-identity__title {
+  min-width: 0;
+  text-align: center;
+}
+
+.maha-identity__title p,
+.maha-identity__title strong,
+.maha-identity__title span { display: block; margin: 0; text-wrap: balance; }
+.maha-identity__title p { color: #4b5d6d; font-size: .78rem; }
+.maha-identity__title strong { color: #004a8f; font-size: clamp(1.2rem, 2.5vw, 2rem); line-height: 1.15; }
+.maha-identity__title span { margin-top: .25rem; color: #34495a; font-size: clamp(.82rem, 1.5vw, 1.05rem); }
+
+.maha-identity__product { display: inline-flex; align-items: center; gap: .5rem; }
+.maha-identity__product > span:last-child { display: grid; }
+.maha-identity__product strong { color: #004a8f; }
+.maha-identity__product small { color: #4b5d6d; }
+.maha-identity__ai {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #fff;
+  background: #0262b6;
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.maha-primary-nav { color: #fff; background: #0262b6; }
+.maha-primary-nav__inner {
+  display: flex;
+  min-height: 46px;
+  align-items: stretch;
+  gap: .15rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.maha-primary-nav a,
+.maha-primary-nav button {
+  display: inline-flex;
+  min-height: 44px;
+  padding: .65rem .8rem;
+  align-items: center;
+  border: 0;
+  color: #fff;
+  background: transparent;
+  font: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.maha-primary-nav a:hover,
+.maha-primary-nav button:hover,
+.maha-primary-nav a[aria-current="page"] { background: #004a8f; }
+.maha-primary-nav form { display: inline-flex; margin: 0; }
+
+.public-error--maharashtra .maha-header a:focus-visible,
+.public-error--maharashtra .maha-header button:focus-visible {
+  outline: 3px solid #ffbf47;
+  outline-offset: -3px;
+}
+
+/* The shared header can receive fewer optional action links on route-independent
+   recovery pages. Never leave an empty anchor in the tab order. */
+.public-legal--maharashtra .maha-primary-nav a:empty,
+.public-error--maharashtra .maha-primary-nav a:empty { display: none; }
+
+.public-legal--maharashtra .policy-nav { background: #004a8f; }
+.public-legal--maharashtra .legal-document { border-top-color: #0262b6; }
+.public-legal--maharashtra .legal-document thead { background: #e5f3ff; }
+
+.public-error--maharashtra .public-error__skip { background: #004a8f; }
+.public-error--maharashtra .public-error__main { background: var(--policy-canvas); }
+.public-error--maharashtra .public-error__panel {
+  color: var(--policy-ink);
+  border: 1px solid var(--policy-line);
+  border-top: 4px solid #0262b6;
+  background: var(--policy-paper);
+  box-shadow: var(--policy-shadow);
+}
+.public-error--maharashtra .public-error__kicker,
+.public-error--maharashtra .public-error__code,
+.public-error--maharashtra h1 { color: #004a8f; }
+.public-error--maharashtra .public-error__summary,
+.public-error--maharashtra .public-error__support { color: var(--policy-muted); }
+.public-error--maharashtra .public-error__primary-action {
+  border: 1px solid #0262b6;
+  color: #fff;
+  background: #0262b6;
+}
+.public-error--maharashtra .public-error__primary-action:hover { background: #004a8f; }
+.public-error--maharashtra .public-error__secondary-action {
+  border: 1px solid #8fc8f4;
+  color: #004a8f;
+  background: #fff;
+}
+.public-error--maharashtra .public-error__secondary-action:hover { background: #e5f3ff; }
+
+.public-error__footer--maharashtra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .8rem max(1rem, calc((100% - 1180px) / 2));
+  border-top: 1px solid var(--policy-line);
+  color: var(--policy-muted);
+  background: #fff;
+}
+.public-error__footer--maharashtra > div { display: grid; gap: .12rem; }
+.public-error__footer--maharashtra strong { color: #004a8f; font-size: .78rem; }
+.public-error__footer--maharashtra small,
+.public-error__footer--maharashtra a { color: var(--policy-muted); font-size: .72rem; }
+.public-error__footer--maharashtra nav { display: flex; flex-wrap: wrap; gap: .75rem; }
+
 .workbench-header {
   display: grid;
   grid-template-columns: minmax(250px, 1fr) auto minmax(0, 1.8fr);
@@ -408,6 +624,18 @@ body.public-legal {
   .public-legal__footer-inner { align-items: flex-start; flex-direction: column; }
   .public-legal__footer-inner { padding: 1.25rem 0; }
   .public-legal__footer nav { justify-content: flex-start; }
+  .maha-utility__inner { overflow-x: auto; }
+  .maha-utility__spacer { display: none; }
+  .maha-identity {
+    grid-template-columns: 48px minmax(0, 1fr) 40px;
+    min-height: 84px;
+    gap: .6rem;
+  }
+  .maha-identity__product { display: none; }
+  .maha-identity__seal img,
+  .maha-identity__emblem { max-height: 58px; }
+  .maha-primary-nav__inner { width: 100%; padding-inline: .5rem; }
+  .public-error__footer--maharashtra { align-items: flex-start; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -419,6 +647,7 @@ body.public-legal {
   .classic-utility,
   .classic-banner,
   .workbench-header,
+  .maha-header,
   .policy-nav,
   .public-legal__footer { display: none !important; }
   body.public-legal { background: #fff; }

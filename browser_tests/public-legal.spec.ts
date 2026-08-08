@@ -10,7 +10,7 @@ const policyPages = [
 ];
 
 test.describe('Theme-aware public policy pages', () => {
-  for (const theme of ['classic', 'workbench'] as const) {
+  for (const theme of ['classic', 'workbench', 'maharashtra'] as const) {
     test(`${theme} treatment remains consistent across every policy page`, async ({ page }) => {
       for (const policy of policyPages) {
         await page.goto(`${policy.path}?view=${theme}`);
@@ -35,10 +35,16 @@ test.describe('Theme-aware public policy pages', () => {
         if (theme === 'classic') {
           await expect(page.locator('.classic-banner')).toBeVisible();
           await expect(page.locator('.workbench-header')).toHaveCount(0);
-        } else {
+          await expect(page.locator('.maha-header')).toHaveCount(0);
+        } else if (theme === 'workbench') {
           await expect(page.locator('.workbench-header')).toBeVisible();
           await expect(page.locator('[data-about-open]')).toHaveCount(0);
           await expect(page.locator('.classic-banner')).toHaveCount(0);
+          await expect(page.locator('.maha-header')).toHaveCount(0);
+        } else {
+          await expect(page.locator('.maha-header')).toBeVisible();
+          await expect(page.locator('.classic-banner')).toHaveCount(0);
+          await expect(page.locator('.workbench-header')).toHaveCount(0);
         }
 
         const widths = await page.evaluate(() => ({
@@ -51,14 +57,14 @@ test.describe('Theme-aware public policy pages', () => {
   }
 
   test('preserves only an allowlisted preview across navigation and language switching', async ({ page }) => {
-    await page.goto('/privacy/?view=workbench');
+    await page.goto('/privacy/?view=maharashtra');
 
     await expect(page.locator('.policy-nav a', { hasText: 'Terms' })).toHaveAttribute(
       'href',
-      '/terms/?view=workbench',
+      '/terms/?view=maharashtra',
     );
     await expect(page.locator('form[action="/i18n/setlang/"] input[name="next"]')).toHaveValue(
-      '/privacy/?view=workbench',
+      '/privacy/?view=maharashtra',
     );
 
     await page.goto('/privacy/?view=untrusted-template');
@@ -68,8 +74,8 @@ test.describe('Theme-aware public policy pages', () => {
     );
   });
 
-  test('has no serious or critical accessibility violations in either treatment', async ({ page }) => {
-    for (const theme of ['classic', 'workbench']) {
+  test('has no serious or critical accessibility violations in every treatment', async ({ page }) => {
+    for (const theme of ['classic', 'workbench', 'maharashtra']) {
       await page.goto(`/privacy/?view=${theme}`);
       const result = await new AxeBuilder({ page }).analyze();
       expect(
