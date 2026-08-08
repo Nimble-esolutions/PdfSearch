@@ -3,7 +3,7 @@
   <div class="maha-utility">
     <div class="maha-utility__inner">
       <a href="https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx" target="_blank" rel="noopener noreferrer">{% trans "Official website" %}</a>
-      <a href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">{% trans "Locate us" %}</a>
+      <a href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">{% trans "Locate Us" %}</a>
       <span class="maha-utility__spacer" aria-hidden="true"></span>
       <form action="{{ public_set_language_url }}" method="post">
         {% csrf_token %}
@@ -43,7 +43,7 @@
     <img class="maha-identity__emblem" src="{% static 'main/images/maharashtra-theme-national-emblem.svg' %}" width="55" height="76" alt="{% trans 'National emblem of India' %}">
   </div>
 
-  <nav class="maha-primary-nav" aria-label="{% trans 'Public service links' %}">
+  <nav class="maha-primary-nav" aria-label="{% trans 'Primary public navigation' %}">
     <div class="maha-primary-nav__inner">
       <a class="is-current" aria-current="page" href="{{ public_home_url }}">{% trans "Home" %}</a>
       <a href="{{ welcome_help_url }}" target="_blank" rel="noopener noreferrer">{{ workbench_copy.how_to_ask }}</a>

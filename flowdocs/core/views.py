@@ -2282,6 +2282,13 @@ def search_query(request):
                 "retry_label": gettext("Try again"),
                 "about_close_label": gettext("Close"),
                 "source_documents_label": gettext("Source documents"),
+                "public_search_max_words": max(
+                    1,
+                    _runtime_int(
+                        "PUBLIC_SEARCH_MAX_WORDS",
+                        settings.PUBLIC_SEARCH_MAX_WORDS,
+                    ),
+                ),
                 "search_messages": {
                     "question_too_long": gettext("Question is too long"),
                     "question_too_long_detail": gettext("Please keep it within 30 words."),

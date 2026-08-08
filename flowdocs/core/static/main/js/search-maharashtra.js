@@ -9,14 +9,30 @@
   const liveStatus = document.getElementById("searchLiveStatus");
   if (!form || !chatMain || !userQuery || !sendButton || !wordCounter || !liveStatus) return;
 
-  const loadingStages = readJson("maha-search-loading-stages", ["Searching…"]);
-  const messages = readJson("maha-search-messages", {});
-  const sourceDocumentsLabel = readJson("maha-source-documents-label", "Source documents");
-  const retryLabel = readJson("maha-retry-label", "Try again");
+  const parsedLoadingStages = readJson("maha-search-loading-stages", ["Searching…"]);
+  const loadingStages = Array.isArray(parsedLoadingStages)
+    ? parsedLoadingStages.filter((value) => typeof value === "string" && value.trim()).slice(0, 8)
+    : ["Searching…"];
+  const parsedMessages = readJson("maha-search-messages", {});
+  const messages = parsedMessages && typeof parsedMessages === "object" && !Array.isArray(parsedMessages)
+    ? parsedMessages
+    : {};
+  const parsedSourceDocumentsLabel = readJson("maha-source-documents-label", "Source documents");
+  const sourceDocumentsLabel = typeof parsedSourceDocumentsLabel === "string"
+    ? parsedSourceDocumentsLabel
+    : "Source documents";
+  const parsedRetryLabel = readJson("maha-retry-label", "Try again");
+  const retryLabel = typeof parsedRetryLabel === "string" ? parsedRetryLabel : "Try again";
   const copyLabel = form.dataset.copyLabel || "Copy answer";
   const copiedLabel = form.dataset.copiedLabel || "Copied";
   const viewSourceLabel = form.dataset.viewSourceLabel || "View original PDF";
   const pageLabel = form.dataset.pageLabel || "Page";
+  const configuredMaxWords = Number(form.dataset.maxWords);
+  const maxWords = Number.isSafeInteger(configuredMaxWords) && configuredMaxWords > 0
+    ? configuredMaxWords
+    : 30;
+  const wordLimitDetail = document.getElementById("maha-word-limit-detail")?.textContent?.trim()
+    || `Please keep it within ${maxWords} words.`;
   const csrfToken = form.querySelector("input[name='csrfmiddlewaretoken']")?.value || "";
   const language = form.querySelector("input[name='language']")?.value === "mr" ? "mr" : "en";
   const initialConversation = [...chatMain.childNodes].map((node) => node.cloneNode(true));
@@ -85,16 +101,15 @@
   function updateComposerState() {
     const count = wordsIn(userQuery.value);
     const label = wordCounter.dataset.label || "words";
-    wordCounter.textContent = `${count}/30 ${label}`;
-    wordCounter.classList.toggle("is-over-limit", count > 30);
-    sendButton.disabled = count === 0 || count > 30 || Boolean(activeController);
+    wordCounter.textContent = `${count}/${maxWords} ${label}`;
+    wordCounter.classList.toggle("is-over-limit", count > maxWords);
+    sendButton.disabled = count === 0 || count > maxWords || Boolean(activeController);
     document.querySelectorAll(".maha-retry").forEach((button) => {
       button.disabled = Boolean(activeController);
     });
     resizeComposer();
   }
 
-  wordCounter.dataset.label = wordCounter.textContent.replace(/^0\/30\s*/u, "").trim();
   userQuery.addEventListener("input", updateComposerState);
   userQuery.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -213,7 +228,7 @@
       if (headingMatch) {
         flushParagraph();
         closeList();
-        const level = Math.min(headingMatch[1].length + 1, 4);
+        const level = Math.min(Math.max(headingMatch[1].length, 2), 4);
         const heading = document.createElement(`h${level}`);
         appendInlineFormatting(heading, headingMatch[2]);
         parent.appendChild(heading);
@@ -221,7 +236,7 @@
         continue;
       }
 
-      const orderedMatch = line.match(/^\d+[.)]\s+(.+)$/u);
+      const orderedMatch = line.match(/^(\d+)[.)]\s+(.+)$/u);
       const unorderedMatch = line.match(/^[\-*+•·◦▪▫➤➢⦿‣]\s+(.+)$/u);
       if (orderedMatch || unorderedMatch) {
         flushParagraph();
@@ -232,7 +247,13 @@
           listType = nextType;
         }
         const item = document.createElement("li");
-        appendInlineFormatting(item, (orderedMatch || unorderedMatch)[1]);
+        if (orderedMatch) {
+          const itemNumber = Number(orderedMatch[1]);
+          if (Number.isSafeInteger(itemNumber) && itemNumber > 0) item.value = itemNumber;
+          appendInlineFormatting(item, orderedMatch[2]);
+        } else {
+          appendInlineFormatting(item, unorderedMatch[1]);
+        }
         list.appendChild(item);
         index += 1;
         continue;
@@ -271,19 +292,31 @@
         parent.appendChild(strong);
       } else {
         const linkMatch = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/iu);
-        if (linkMatch) {
+        if (linkMatch && safeAnswerLinkUrl(linkMatch[2])) {
           const link = document.createElement("a");
-          link.href = linkMatch[2];
+          link.href = safeAnswerLinkUrl(linkMatch[2]);
           link.target = "_blank";
           link.rel = "noopener noreferrer";
           link.textContent = linkMatch[1];
           parent.appendChild(link);
+        } else if (linkMatch) {
+          parent.appendChild(document.createTextNode(`${linkMatch[1]} (${linkMatch[2]})`));
         }
       }
       cursor = match.index + token.length;
       match = tokenPattern.exec(value);
     }
     if (cursor < value.length) parent.appendChild(document.createTextNode(value.slice(cursor)));
+  }
+
+  function safeAnswerLinkUrl(candidate) {
+    try {
+      const parsed = new URL(candidate, window.location.origin);
+      const protectedPdf = /^\/pdf\/[1-9]\d*\/(?:public|view)\/$/u.test(parsed.pathname);
+      return parsed.origin === window.location.origin && protectedPdf ? parsed.href : "";
+    } catch (_error) {
+      return "";
+    }
   }
 
   function splitTableRow(line) {
@@ -476,8 +509,8 @@
     if (status === 429 || payload?.error === "rate_limited") {
       return [messages.search_unavailable || "Search unavailable", messages.rate_limited || messages.try_later || "Please try again later."];
     }
-    if (status === 400 || payload?.error === "query_too_long") {
-      return [messages.question_too_long || "Question is too long", messages.question_too_long_detail || messages.limit || "Please keep it within 30 words."];
+    if (payload?.error === "query_too_long") {
+      return [messages.question_too_long || "Question is too long", payload.detail || wordLimitDetail];
     }
     if (status === 503 || payload?.error === "search_unavailable") {
       return [messages.search_unavailable || "Search unavailable", messages.unavailable || messages.try_later || "Please try again later."];
@@ -522,7 +555,9 @@
       && responseKinds.has(payload.kind)
       && typeof payload.answer === "string"
       && payload.answer.trim()
+      && payload.answer.length <= 60000
       && Array.isArray(payload.references)
+      && payload.references.length <= 25
       && ["en", "mr"].includes(payload.language)
     )) return false;
     if (payload.kind === "evidence_answer") {
@@ -581,7 +616,7 @@
       userQuery.focus();
       return;
     }
-    if (wordCount > 30) {
+    if (wordCount > maxWords) {
       const [title, detail] = errorCopy(400, {error: "query_too_long"});
       appendError(title, detail, "", "validation");
       return;
@@ -598,10 +633,11 @@
     userQuery.value = "";
     const generation = ++requestGeneration;
     activeController = new AbortController();
+    const requestController = activeController;
     chatMain.setAttribute("aria-busy", "true");
     updateComposerState();
     const loading = appendLoading();
-    const timeout = window.setTimeout(() => activeController?.abort(), 60000);
+    const timeout = window.setTimeout(() => requestController.abort(), 60000);
 
     try {
       const data = new FormData();
@@ -612,7 +648,7 @@
         headers: {"X-CSRFToken": csrfToken},
         body: data,
         credentials: "same-origin",
-        signal: activeController.signal,
+        signal: requestController.signal,
       });
       let payload = null;
       try {

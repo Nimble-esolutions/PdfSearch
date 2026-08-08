@@ -1423,6 +1423,22 @@ msgstr ""
 msgid "Ask your question..."
 msgstr ""
 
+#: core/templates/search_maharashtra.html
+msgid "Ask your question…"
+msgstr ""
+
+#: core/templates/components/public/maharashtra_header.html
+msgid "Primary public navigation"
+msgstr ""
+
+#: core/templates/search_maharashtra.html
+msgid "Question composer"
+msgstr ""
+
+#: core/templates/search_maharashtra.html
+msgid "Help and contact links"
+msgstr ""
+
 #: core/templates/search.html:170
 msgid ""
 "⚠️ AI-generated answers should not be used for legal purposes. The AI may "

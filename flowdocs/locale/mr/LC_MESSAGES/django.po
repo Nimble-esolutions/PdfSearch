@@ -1461,6 +1461,22 @@ msgstr "एआय सक्षम शोध "
 msgid "Ask your question..."
 msgstr "तुमचा प्रश्न विचारा..."
 
+#: core/templates/search_maharashtra.html
+msgid "Ask your question…"
+msgstr "तुमचा प्रश्न विचारा…"
+
+#: core/templates/components/public/maharashtra_header.html
+msgid "Primary public navigation"
+msgstr "मुख्य सार्वजनिक नेव्हिगेशन"
+
+#: core/templates/search_maharashtra.html
+msgid "Question composer"
+msgstr "प्रश्न लिहिण्याची जागा"
+
+#: core/templates/search_maharashtra.html
+msgid "Help and contact links"
+msgstr "मदत आणि संपर्क दुवे"
+
 #: core/templates/search.html:170
 msgid ""
 "⚠️ AI-generated answers should not be used for legal purposes. The AI may "

@@ -1,6 +1,6 @@
 {% load static i18n %}
 <!doctype html>
-<html lang="{{ request.LANGUAGE_CODE|default:'en' }}">
+<html class="maha-service-document" lang="{{ request.LANGUAGE_CODE|default:'en' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -66,7 +66,7 @@
       <p class="maha-live-status maha-visually-hidden" id="searchLiveStatus" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="maha-composer-region" aria-label="{% trans 'Ask AI Sahakar' %}">
+    <section class="maha-composer-region" aria-label="{% trans 'Question composer' %}">
       <form
         class="maha-composer"
         id="searchComposer"
@@ -77,25 +77,26 @@
         data-copied-label="{{ workbench_copy.copied }}"
         data-view-source-label="{{ workbench_copy.view_original }}"
         data-page-label="{% trans 'Page' %}"
+        data-max-words="{{ public_search_max_words }}"
         novalidate
       >
         {% csrf_token %}
         <input type="hidden" name="language" value="{{ request.LANGUAGE_CODE|default:'en' }}">
         <div class="maha-composer__field">
           <label for="userQuery">{% trans "Ask a question in English or Marathi" %}</label>
-          <textarea id="userQuery" name="query" rows="1" maxlength="240" autocomplete="off" enterkeyhint="search" placeholder="{% trans 'Ask your question...' %}" aria-describedby="mahaComposerMeta"></textarea>
+          <textarea id="userQuery" name="query" rows="1" autocomplete="off" enterkeyhint="search" placeholder="{% trans 'Ask your question…' %}" aria-describedby="mahaComposerMeta"></textarea>
         </div>
         <button class="maha-composer__submit" id="sendBtn" type="submit" disabled>
           <span>{% trans "Search" %}</span>
           <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
         </button>
         <div class="maha-composer__meta" id="mahaComposerMeta">
-          <span id="wordCounter" aria-live="polite">0/30 {% trans "words" %}</span>
+          <span id="wordCounter" data-label="{% trans 'words' %}" aria-live="polite">0/{{ public_search_max_words }} {% trans "words" %}</span>
           <span>{% trans "Enter to search" %}</span>
         </div>
       </form>
 
-      <nav class="maha-service-actions" aria-label="{% trans 'Public service links' %}">
+      <nav class="maha-service-actions" aria-label="{% trans 'Help and contact links' %}">
         <a class="maha-service-action" href="{{ welcome_help_url }}" target="_blank" rel="noopener noreferrer" data-help-link>
           <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.4 2.4 0 0 1 4.6.9c0 1.8-2.4 2-2.4 3.7M12 17h.01"/></svg>
           <span>{{ workbench_copy.how_to_ask }}</span>
@@ -110,7 +111,7 @@
         </a>
         <a class="maha-service-action" href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">
           <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>
-          <span>{% trans "Locate us" %}</span>
+          <span>{% trans "Locate Us" %}</span>
         </a>
       </nav>
 
@@ -127,6 +128,7 @@
   {{ search_messages|json_script:"maha-search-messages" }}
   {{ source_documents_label|json_script:"maha-source-documents-label" }}
   {{ retry_label|json_script:"maha-retry-label" }}
+  <span id="maha-word-limit-detail" hidden>{% blocktrans with max_words=public_search_max_words %}Please keep it within {{ max_words }} words.{% endblocktrans %}</span>
   {% include "components/product_analytics.html" %}
   <script defer src="{% static 'main/js/search-maharashtra.js' %}"></script>
 </body>
