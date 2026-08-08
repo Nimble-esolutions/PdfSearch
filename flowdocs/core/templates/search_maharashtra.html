@@ -1,0 +1,133 @@
+{% load static i18n %}
+<!doctype html>
+<html lang="{{ request.LANGUAGE_CODE|default:'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% trans "Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search" %}</title>
+  <meta name="description" content="{% trans 'Search the Maharashtra Cooperative Societies Act, 1960, Rules, 1961, bylaws, amendments, and related official documents in English or Marathi.' %}">
+  <link rel="canonical" href="https://ai-sahakar.net/">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{% trans 'Sahakar AI | Maharashtra Cooperative Society Act, Rules & Document Search' %}">
+  <meta property="og:description" content="{% trans 'Search Maharashtra cooperative society laws, rules, bylaws, amendments, and related official documents in English or Marathi.' %}">
+  <meta property="og:url" content="https://ai-sahakar.net/">
+  <meta property="og:site_name" content="Sahakar AI">
+  <meta property="og:locale" content="{{ request.LANGUAGE_CODE|default:'en' }}">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#0262b6">
+  <link rel="icon" href="{% static 'main/images/favicon.ico' %}">
+  <link rel="stylesheet" href="{% static 'main/css/search-maharashtra.css' %}">
+  <link rel="stylesheet" href="{% static 'main/css/product-analytics.css' %}">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": "https://ai-sahakar.net/#website",
+    "name": "Sahakar AI",
+    "url": "https://ai-sahakar.net/",
+    "inLanguage": ["en", "mr"],
+    "publisher": {
+      "@type": "GovernmentOrganization",
+      "name": "Registrar Co-operative Societies, Maharashtra",
+      "url": "https://sahakarayukta.maharashtra.gov.in/Site/Home/Index.aspx"
+    }
+  }
+  </script>
+</head>
+<body class="maha-service">
+  <a class="maha-skip-link" href="#mahaSearch">{% trans "Skip to search" %}</a>
+
+  {% include "components/public/maharashtra_header.html" %}
+
+  <main class="maha-search" id="mahaSearch">
+    <section class="maha-search__intro" aria-labelledby="mahaSearchTitle">
+      <div>
+        <p class="maha-kicker">{% trans "Official document search" %}</p>
+        <h1 id="mahaSearchTitle">{% trans "Ask AI Sahakar" %}</h1>
+        <p>{% trans "Ask in English or Marathi. AI Sahakar searches official department documents and shows the sources used for the answer." %}</p>
+      </div>
+      <button class="maha-new-question" type="button" data-new-question>
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
+        <span>{{ workbench_copy.new_question }}</span>
+      </button>
+    </section>
+
+    <section class="maha-conversation" aria-label="{% trans 'AI Sahakar conversation' %}">
+      <div class="maha-conversation__messages" id="chatMain" aria-label="{% trans 'Search answers' %}" aria-busy="false">
+        <article class="maha-message maha-message--assistant maha-message--welcome">
+          <div class="maha-message__identity" aria-hidden="true">AI</div>
+          <div>
+            <p>{{ welcome_message }}</p>
+            <a href="{{ welcome_help_url }}" target="_blank" rel="noopener noreferrer" data-help-link>{{ welcome_help_label }}</a>
+          </div>
+        </article>
+      </div>
+      <p class="maha-live-status maha-visually-hidden" id="searchLiveStatus" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="maha-composer-region" aria-label="{% trans 'Ask AI Sahakar' %}">
+      <form
+        class="maha-composer"
+        id="searchComposer"
+        method="post"
+        action="{% url 'search_query' %}"
+        data-public-pdf-url="{% url 'public_view_pdf' 0 %}"
+        data-copy-label="{{ workbench_copy.copy_answer }}"
+        data-copied-label="{{ workbench_copy.copied }}"
+        data-view-source-label="{{ workbench_copy.view_original }}"
+        data-page-label="{% trans 'Page' %}"
+        novalidate
+      >
+        {% csrf_token %}
+        <input type="hidden" name="language" value="{{ request.LANGUAGE_CODE|default:'en' }}">
+        <div class="maha-composer__field">
+          <label for="userQuery">{% trans "Ask a question in English or Marathi" %}</label>
+          <textarea id="userQuery" name="query" rows="1" maxlength="240" autocomplete="off" enterkeyhint="search" placeholder="{% trans 'Ask your question...' %}" aria-describedby="mahaComposerMeta"></textarea>
+        </div>
+        <button class="maha-composer__submit" id="sendBtn" type="submit" disabled>
+          <span>{% trans "Search" %}</span>
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+        </button>
+        <div class="maha-composer__meta" id="mahaComposerMeta">
+          <span id="wordCounter" aria-live="polite">0/30 {% trans "words" %}</span>
+          <span>{% trans "Enter to search" %}</span>
+        </div>
+      </form>
+
+      <nav class="maha-service-actions" aria-label="{% trans 'Public service links' %}">
+        <a class="maha-service-action" href="{{ welcome_help_url }}" target="_blank" rel="noopener noreferrer" data-help-link>
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.4 2.4 0 0 1 4.6.9c0 1.8-2.4 2-2.4 3.7M12 17h.01"/></svg>
+          <span>{{ workbench_copy.how_to_ask }}</span>
+        </a>
+        <a class="maha-service-action" href="https://wa.me/{{ whatsapp_number|default:'919421200000' }}" target="_blank" rel="noopener noreferrer" data-whatsapp-link>
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M20 15a4 4 0 0 1-4 4H8l-5 2 1.6-4.3A7 7 0 0 1 4 14V8a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4Z"/></svg>
+          <span>{{ workbench_copy.contact_whatsapp }}</span>
+        </a>
+        <a class="maha-service-action" href="{{ feedback_url }}" target="_blank" rel="noopener noreferrer" data-feedback-link>
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m4 16-.8 4 4.2-1.4L18 8l-3-3Z"/><path d="m13.5 6.5 3 3"/></svg>
+          <span>{{ workbench_copy.feedback }}</span>
+        </a>
+        <a class="maha-service-action" href="{{ locate_us_url }}" target="_blank" rel="noopener noreferrer">
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>
+          <span>{% trans "Locate us" %}</span>
+        </a>
+      </nav>
+
+      <p class="maha-disclaimer">
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 3 2.7 20h18.6Z"/><path d="M12 9v5M12 17h.01"/></svg>
+        <span>{% trans "Answers are informational. Check the cited document before making an important decision." %}</span>
+      </p>
+    </section>
+  </main>
+
+  {% include "components/public/maharashtra_footer.html" %}
+
+  {{ search_loading_stages|json_script:"maha-search-loading-stages" }}
+  {{ search_messages|json_script:"maha-search-messages" }}
+  {{ source_documents_label|json_script:"maha-source-documents-label" }}
+  {{ retry_label|json_script:"maha-retry-label" }}
+  {% include "components/product_analytics.html" %}
+  <script defer src="{% static 'main/js/search-maharashtra.js' %}"></script>
+</body>
+</html>
