@@ -47,6 +47,7 @@ flowchart TD
 | --- | --- | --- | --- | --- |
 | Public search | `PUBLIC_SEARCH_ENABLED` | Whether unauthenticated visitors may search and open public source PDFs | `Enabled`/`Disabled`; explicit confirmation required | New requests |
 | Public search | `DISPLAY_SERVICE_FOOTER` | Public attribution and policy footer | `Visible`/`Hidden` | New page requests |
+| Public search | `PUBLIC_SEARCH_PRIMARY_VIEW` | Primary public presentation when no request preview is present | `classic`, `workbench`, or `maharashtra`; invalid values fail closed to Classic | New page requests |
 | Search limits | `PUBLIC_SEARCH_MAX_WORDS` | Maximum question size before search work starts | Integer `1–100` | New search requests |
 | Search limits | `PUBLIC_SEARCH_RATE_LIMIT` | Requests per visitor per rate window | Integer `1–600` | New search requests |
 | Search limits | `PUBLIC_SEARCH_RATE_WINDOW` | Rate-window duration | Integer `10–86400` seconds | New search requests |
@@ -56,13 +57,20 @@ flowchart TD
 | View environment, recovery evidence, and redacted inventory | View | View |
 | Service footer | Edit when not ENV-owned | Edit when not ENV-owned |
 | Maximum question words | Edit when not ENV-owned | Edit when not ENV-owned |
-| Primary Classic/Workbench view | Edit when not ENV-owned | Edit when not ENV-owned |
+| Primary Classic/Workbench/Maharashtra Service view | Edit when not ENV-owned | Edit when not ENV-owned |
 | Public-search enablement and rate controls | View | Edit when not ENV-owned |
 | Host analytics mode and public Website ID | View | Edit when not ENV-owned |
 
 The effective value shows its source as `environment override`, `saved
 override`, or `application default`. A saved override is intentionally visible
 so an operator can explain behavior without reading the control database.
+
+`PUBLIC_SEARCH_PRIMARY_VIEW` is the existing optional deployment override; the
+third theme adds the allowlisted value `maharashtra`, not a new environment
+variable. When the key is absent, an authorized operator may save the selection.
+When the key is defined, Settings displays the effective theme as ENV-owned and
+read-only. Request-only previews remain available at `/?view=classic`,
+`/?view=workbench`, and `/?view=maharashtra` and never change the saved value.
 
 ## Consent-led analytics control
 
@@ -103,10 +111,16 @@ Secrets are represented only as `Configured` / `Not configured`. The page never 
 ## Operator procedure
 
 1. Read the Environment Identity and Data Recovery sections before changing a control.
-2. Use the preview/public search link to confirm which surface is affected.
+2. Use the matching request-only preview link to confirm the complete theme,
+   legal-page shell, language switch, service links, long-answer behavior, and
+   source presentation before changing the primary selection.
 3. Change one logical group at a time; keep the review acknowledgement selected only after checking the displayed values.
 4. Treat disabling public search as an incident-control action: confirm the reason and communicate the expected user impact.
-5. Re-test a public query and `/readyz` after a high-impact change. If behavior is not correct, revert the setting or remove the database override through the normal reviewed operation.
+5. Re-test a public query and `/readyz` after a high-impact change. If behavior
+   is not correct, restore Classic as the saved primary (or correct the
+   deployment-owned existing key) and verify the previous presentation. Theme
+   rollback does not change documents, indexes, recovery points, or runtime
+   generations.
 
 ## Failure behavior
 

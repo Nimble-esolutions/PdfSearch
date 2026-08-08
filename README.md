@@ -37,6 +37,7 @@ Use the route that matches the work:
 - Incident response: [`docs/OPERATIONS_RUNBOOK.md`](docs/OPERATIONS_RUNBOOK.md)
 - Client usage: [`docs/CLIENT_USER_MANUAL.md`](docs/CLIENT_USER_MANUAL.md)
 - Public/admin design lock: [`docs/design/AI_SAHAKAR_UI_CONTRACT.md`](docs/design/AI_SAHAKAR_UI_CONTRACT.md)
+- Maharashtra Service theme system: [`docs/design/MAHARASHTRA_SERVICE_THEME.md`](docs/design/MAHARASHTRA_SERVICE_THEME.md)
 - Developer UI guide: [`docs/AI_SAHAKAR_DEVELOPER_GUIDE.md`](docs/AI_SAHAKAR_DEVELOPER_GUIDE.md)
 - Admin user guide: [`docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md`](docs/AI_SAHAKAR_ADMIN_USER_GUIDE.md)
 - Settings operations: [`docs/SETTINGS_OPERATIONS.md`](docs/SETTINGS_OPERATIONS.md)
@@ -84,12 +85,16 @@ needs to be retained.
 
 ## Product surfaces and design lock
 
-The public `/` route defaults to **Classic search**, the approved
+The public `/` route fails closed to **Classic search**, the approved
 `training.ai-sahakar.net` service composition rebuilt without CDN Bootstrap,
 inline application JavaScript, unsafe HTML insertion, or heavy bitmap assets.
 The **Knowledge Workbench** remains an isolated secondary frontend and can be
-previewed with `/?view=workbench`. A superadmin can choose the primary view in
-Settings; URL previews never persist. Both views share the same secured Django
+previewed with `/?view=workbench`. **Maharashtra Service** is a third isolated
+frontend, based on the Commissionerate's official blue civic palette, with the
+wide search composition of Classic and inline evidence presentation; preview it
+with `/?view=maharashtra`. An authorized Settings user can choose the primary
+view when the deployment has not defined `PUBLIC_SEARCH_PRIMARY_VIEW`. URL
+previews never persist. All three views share the same secured Django
 search/PDF backend and complete English/Marathi session behavior, but not
 templates, presentation CSS, or frontend JavaScript.
 
@@ -102,8 +107,9 @@ presenting a wrong-language response as successful.
 The public information pages at `/privacy/`, `/terms/`, `/data-policy/`,
 `/cookies/`, and `/disclaimer/` follow the same saved or explicitly previewed
 theme. They use a standalone public document shell—never the authenticated
-admin layout—and preserve only allowlisted `?view=classic|workbench` previews
-across policy navigation and language switching.
+admin layout—and preserve only allowlisted
+`?view=classic|workbench|maharashtra` previews across policy navigation and
+language switching.
 
 The authenticated surface remains the **Operations Cockpit** admin UI.
 Public-theme selection is the only admin change in this feature.
@@ -114,6 +120,9 @@ documentation. The tracked agent skill is
 [`skills/ai-sahakar-ui-contract/SKILL.md`](skills/ai-sahakar-ui-contract/SKILL.md).
 The isolation and selection boundary is documented in
 [`docs/design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md`](docs/design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md).
+The Maharashtra palette, identity, responsive, accessibility, performance,
+exclusion, and rollback rules are documented in
+[`docs/design/MAHARASHTRA_SERVICE_THEME.md`](docs/design/MAHARASHTRA_SERVICE_THEME.md).
 
 ## Architecture
 
@@ -143,6 +152,8 @@ search request/cache boundary is shown in
 change-control views are available as editable Mermaid sources and rendered
 SVGs: [public shell source](docs/diagrams/ui-shell-and-evidence.mmd),
 [public shell visual](docs/diagrams/ui-shell-and-evidence.svg),
+[three-theme source](docs/diagrams/public-search-three-theme-architecture.mmd),
+[three-theme visual](docs/diagrams/public-search-three-theme-architecture.svg),
 [change-control source](docs/diagrams/ui-change-control.mmd), and
 [change-control visual](docs/diagrams/ui-change-control.svg).
 

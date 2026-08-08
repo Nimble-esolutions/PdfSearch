@@ -145,7 +145,8 @@ maintained in [ENVIRONMENT_REFERENCE.md](ENVIRONMENT_REFERENCE.md).
 - [`AI_SAHAKAR_ADMIN_USER_GUIDE.md`](AI_SAHAKAR_ADMIN_USER_GUIDE.md) — Operations Cockpit and document-management workflow
 - [`DOCUMENT_INTAKE_WORKBENCH.md`](DOCUMENT_INTAKE_WORKBENCH.md) — reviewed multi-file intake, receipt states, reason-based lifecycle controls, impact, and verification
 - [`design/AI_SAHAKAR_UI_CONTRACT.md`](design/AI_SAHAKAR_UI_CONTRACT.md) — protected public/admin design and interaction contract
-- [`design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md`](design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md) — isolated Classic/Workbench selection and rollback contract
+- [`design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md`](design/PUBLIC_SEARCH_THEME_ARCHITECTURE.md) — isolated Classic/Workbench/Maharashtra Service selection and rollback contract
+- [`design/MAHARASHTRA_SERVICE_THEME.md`](design/MAHARASHTRA_SERVICE_THEME.md) — official palette, optimized identity, India-first responsive behavior, exclusions, performance budgets, validation, and rollback for the third public theme
 - [`handoffs/PUBLIC_SEARCH_THEME_ENGINE.md`](handoffs/PUBLIC_SEARCH_THEME_ENGINE.md) — historical public-theme delivery handoff; current rollout state is in `HANDOFF.md`
 - [`AI_SAHAKAR_DEVELOPER_GUIDE.md`](AI_SAHAKAR_DEVELOPER_GUIDE.md) — safe UI extension and verification workflow
 - [`DEV_CLEANUP_SCOPE.md`](DEV_CLEANUP_SCOPE.md) — read-only cleanup audit for `dev`
